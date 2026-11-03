@@ -43,6 +43,7 @@ function useVersionLabel(): (version: Pick<WorkbenchVersion, "mode" | "variantId
   const tw = useTranslations("writer");
   return (version) => {
     if (version.mode === "manual") return t("manual");
+    if (version.mode === "mcp") return t("mcp");
     if (version.mode === "polish") return POLISH_OPTIONS.find((option) => option === version.variantId) ? tw(`polish.versionLabel.${version.variantId as PolishOption}`) : tw("polish.title");
     if (version.mode === "coach_rewrite") return tw("coach.rewriteLabel");
     const known = variantLabel(version.variantId);

@@ -220,6 +220,12 @@ The removal only reaches the request row:
   ([backup-restore.md](backup-restore.md)).
 - Postgres heap and WAL can also keep it until vacuum and checkpoint.
 
+### Writing from your own AI client
+
+An MCP client you set up can read a question's material and add answer versions, with two tools that are off by default. They only
+add versions, which appear here as "From your AI client" with their own check results; what they read goes to that client's model
+provider. See [Writing answers from your client](mcp.md#writing-answers-from-your-client).
+
 ## Settings (`writer.yaml`)
 
 | Key | Default | Meaning |

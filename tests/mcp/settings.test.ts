@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { ConfigError, loadConfig, resetConfigCache } from "@/lib/config";
 import { mcpSchema } from "@/lib/config/schemas/mcp";
-import { configProblem, enabledTools, readMcpSettings } from "@/lib/mcp/settings";
+import { configProblem, enabledTools, offeredTools, readMcpSettings } from "@/lib/mcp/settings";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 
@@ -17,8 +17,22 @@ afterEach(() => {
 });
 
 describe("mcp.yaml schema", () => {
-  it("defaults to off, every tool on, 20 results and 12000 JD characters", () => {
-    expect(mcpSchema.parse({})).toEqual({ enabled: false, tools: { search_jobs: true, get_job: true, list_applications: true }, limits: { max_results: 20, max_description_chars: 12_000 } });
+  it("defaults to off, the read tools on, the writer tools off, 20 results and 12000 JD characters", () => {
+    expect(mcpSchema.parse({})).toEqual({
+      enabled: false,
+      tools: { search_jobs: true, get_job: true, list_applications: true },
+      limits: { max_results: 20, max_description_chars: 12_000 },
+    });
+  });
+  it("keeps the writer tools off for a file written before they existed", () => {
+    const tools = mcpSchema.parse({ enabled: true, tools: { search_jobs: true, get_job: true, list_applications: true } }).tools;
+    expect(enabledTools(mcpSchema.parse({ tools }))).toEqual(["search_jobs", "get_job", "list_applications"]);
+  });
+  it("offers the writer tools only with their switch and the writer both on", () => {
+    const on = mcpSchema.parse({ tools: { get_application_context: true, save_application_answer: true } });
+    expect(offeredTools(on, true)).toEqual(expect.arrayContaining(["get_application_context", "save_application_answer"]));
+    expect(offeredTools(on, false)).toEqual(["search_jobs", "get_job", "list_applications"]);
+    expect(offeredTools(mcpSchema.parse({}), true)).toEqual(["search_jobs", "get_job", "list_applications"]);
   });
   it("fills a partial tools / limits block with defaults", () => {
     const parsed = mcpSchema.parse({ enabled: true, tools: { get_job: false }, limits: { max_results: 5 } });

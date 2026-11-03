@@ -6,7 +6,6 @@
  */
 import { parseStoredBreakdown } from "@/lib/breakdown/content";
 import type { MeConfig, Story, WriterConfig } from "@/lib/config";
-import type { LengthUnit, QuestionKind } from "@/lib/config/schemas/writer";
 import type { Db } from "@/lib/db/client";
 import { getAnswerVersion, getApplicationQuestion } from "@/lib/db/repos/application-writer";
 import { getJobBreakdown, getJobForBreakdown } from "@/lib/db/repos/breakdowns";
@@ -21,7 +20,7 @@ import { writeInputFields } from "@/lib/writer/materials";
 import { COACH_REWRITE_VARIANT, EMPTY_SELECTION, type PolishOption, type QuestionSelection, type WriteMode } from "@/lib/writer/types";
 import { parseSelection } from "@/lib/writer/selection";
 import { parseStoredSentences } from "@/lib/writer/stored";
-import { buildSnapshot } from "@/lib/writer/snapshot";
+import { buildSnapshot, questionSettingsOf } from "@/lib/writer/snapshot";
 
 import { expireScrubbedRequests } from "./expire";
 import { loadQueueView } from "./queue-view";
@@ -129,14 +128,7 @@ export async function requestWriter(db: Db, input: WriterRequestInput, spec: Wri
     };
   }
   const { materials } = buildSnapshot({
-    question: {
-      text: question.text,
-      kind: question.kind as QuestionKind,
-      lengthUnit: question.lengthUnit as LengthUnit,
-      lengthValue: question.lengthValue,
-      outputLanguage: question.outputLanguage,
-      tone: question.tone,
-    },
+    question: questionSettingsOf(question),
     selection: { ...selection, useJdText: selection.useJdText && job.description !== null && job.description.trim() !== "" },
     job: { title: job.title, company: job.company },
     jdPoints: content ? jdPointsOf(content) : [],

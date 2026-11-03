@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { writerSchema } from "@/lib/config";
 import { mcpSchema, type McpConfig } from "@/lib/config/schemas/mcp";
 import type { Db } from "@/lib/db/client";
 import { formatCallLine } from "@/lib/mcp/call-log";
@@ -71,8 +72,32 @@ describe("tools/list", () => {
     expect(Object.keys((search?.inputSchema as { properties: object }).properties)).toEqual(["query", "search_in", "country", "city", "workplace", "min_rank", "min_annual_salary", "since", "until", "application_status", "sort", "limit"]);
     expect((search?.inputSchema as { additionalProperties?: unknown }).additionalProperties).toBe(false);
   });
+  describe("the writer tools", () => {
+    const on = { tools: { search_jobs: true, get_job: true, list_applications: true, get_application_context: true, save_application_answer: true } };
+    const withWriter = (enabled: boolean) => ({ ...context(on), writer: { inputs: () => ({ writer: writerSchema.parse({ enabled }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: null } });
+    const names = async (ctx: McpContext) => (await (await connect(ctx)).listTools()).tools;
+
+    it("are offered with their switch and the writer on; only the save tool says it writes, and that it destroys nothing", async () => {
+      const tools = await names(withWriter(true));
+      expect(tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_application_context", "save_application_answer"]);
+      expect(tools.find((t) => t.name === "get_application_context")?.annotations).toMatchObject({ readOnlyHint: true });
+      expect(tools.find((t) => t.name === "save_application_answer")?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: false });
+      const save = tools.find((t) => t.name === "save_application_answer");
+      expect(Object.keys((save?.inputSchema as { properties: object }).properties).sort()).toEqual(["job_id", "question_id", "sentences", "text"]);
+      expect((save?.inputSchema as { additionalProperties?: unknown }).additionalProperties).toBe(false);
+    });
+    it("are not offered while the writer is off, or without their switch", async () => {
+      expect((await names(withWriter(false))).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications"]);
+      expect((await names({ ...withWriter(true), settings: context().settings })).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications"]);
+    });
+    it("a save without a writable connection is refused before anything is read", async () => {
+      const client = await connect(withWriter(true));
+      const result = await client.callTool({ name: "save_application_answer", arguments: { job_id: 1, question_id: 1, text: "An answer." } });
+      expect(result.isError).toBe(true);
+    });
+  });
   it("leaves out a tool mcp.yaml switches off", async () => {
-    const client = await connect(context({ tools: { search_jobs: true, get_job: false, list_applications: true } }));
+    const client = await connect(context({ tools: { search_jobs: true, get_job: false, list_applications: true, get_application_context: false, save_application_answer: false } }));
     expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["search_jobs", "list_applications"]);
   });
 });
@@ -108,7 +133,7 @@ describe("invalid arguments", () => {
     expect(lines).toEqual([expect.stringMatching(new RegExp(`^\\[mcp\\] ${tool} fail invalid_input items=0 ms=\\d+$`))]);
   });
   it("a switched-off tool cannot be called", async () => {
-    const client = await connect(context({ tools: { search_jobs: true, get_job: false, list_applications: true } }));
+    const client = await connect(context({ tools: { search_jobs: true, get_job: false, list_applications: true, get_application_context: false, save_application_answer: false } }));
     const result = await client.callTool({ name: "get_job", arguments: { job_id: 1 } }).catch((error: unknown) => ({ isError: true, content: [{ type: "text", text: String(error) }] }));
     expect(result.isError).toBe(true);
   });

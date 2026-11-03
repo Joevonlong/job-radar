@@ -45,6 +45,11 @@ export function storySnapshot(story: Story): StorySnapshot {
   return { id: story.id, title: story.title, what: story.what, result: story.result ?? null, metrics: story.metrics, skills: story.skills, period: story.period ?? null };
 }
 
+/** The settings of a stored question (its text and how it is to be answered). */
+export function questionSettingsOf(row: { text: string; kind: string; lengthUnit: string; lengthValue: number; outputLanguage: string; tone: string }): QuestionSettings {
+  return { text: row.text, kind: row.kind as QuestionKind, lengthUnit: row.lengthUnit as LengthUnit, lengthValue: row.lengthValue, outputLanguage: row.outputLanguage, tone: row.tone };
+}
+
 /** The variants (style id + hint) a question of `kind` asks for: the first `variants` of writer.yaml `variants`. */
 export function variantsFor(writer: WriterConfig, kind: QuestionKind): { id: string; hint: string }[] {
   return writer.variants.slice(0, writer.questions.kinds[kind].variants).map((variant) => ({ id: variant.id, hint: variant.hint }));

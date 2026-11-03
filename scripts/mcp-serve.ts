@@ -1,6 +1,7 @@
 /**
- * The read-only MCP server over stdio (docs/mcp.md): an MCP client you configure (Claude Desktop, Claude Code, ...) starts this as a
- * child process and talks to it on stdin / stdout. No port is opened; nothing is written to the database.
+ * The MCP server over stdio (docs/mcp.md): an MCP client you configure (Claude Desktop, Claude Code, ...) starts this as a child
+ * process and talks to it on stdin / stdout. No port is opened. Nothing is written to the database, except that the tool
+ * `save_application_answer`, when switched on, adds answer versions over a connection of its own.
  *
  *   pnpm --silent mcp:serve
  *
@@ -12,11 +13,14 @@ import path from "node:path";
 
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
+import { createConnection } from "../src/lib/db/client";
 import { createReadOnlyDb } from "../src/lib/db/read-only-client";
+import { loadDatabaseEnv } from "../src/lib/env";
 import { stderrLine } from "../src/lib/mcp/call-log";
 import { buildServer, defaultContext } from "../src/lib/mcp/server";
-import { configProblem, enabledTools, readMcpSettings } from "../src/lib/mcp/settings";
+import { configProblem, offeredTools, readMcpSettings } from "../src/lib/mcp/settings";
 import { mcpTranslator } from "../src/lib/mcp/text";
+import { readWriterEnabled } from "../src/lib/writer/settings";
 
 // stdout belongs to the protocol: anything a library logs goes to stderr instead
 console.log = console.error;
@@ -45,14 +49,16 @@ function main(): void {
     stderrLine(text("serve.disabled"));
     process.exit(1);
   }
-  const tools = enabledTools(settings);
+  const tools = offeredTools(settings, readWriterEnabled());
   if (tools.length === 0) {
     stderrLine(text("serve.noTools"));
     process.exit(1);
   }
 
   const database = createReadOnlyDb();
-  const context = defaultContext(database.db, settings, { text });
+  // the one connection that can write, and only for the tool that adds answer versions
+  const writable = tools.includes("save_application_answer") ? createConnection(loadDatabaseEnv().DATABASE_URL, { max: 1 }) : null;
+  const context = defaultContext(database.db, settings, { text, writeDb: writable?.db ?? null });
   const version = packageVersion();
   const handle = serveStdio(() => buildServer(context, { version }), {
     onerror: (error) => stderrLine(`[mcp] transport error: ${error.name}`),
@@ -63,7 +69,7 @@ function main(): void {
   const stop = (code: number) => {
     if (stopping) return;
     stopping = true;
-    void Promise.allSettled([handle.close(), database.close()]).then(() => {
+    void Promise.allSettled([handle.close(), database.close(), ...(writable ? [writable.sql.end({ timeout: 5 })] : [])]).then(() => {
       stderrLine(text("serve.stopped"));
       process.exit(code);
     });

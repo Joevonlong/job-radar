@@ -232,6 +232,9 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   database a `profile_story_drafts` table (migration `0049_story_extract_drafts`), and the web image the `unpdf` dependency.
   A PDF is read in a worker thread stopped at `import.pdf_timeout_seconds` / `import.pdf_max_memory_mb`. Provider errors on this task and on `write`
   are logged and stored as their kind only. The evidence check now reads Latin magnitudes and multiples ($2M, 2.5M, 3 Mio, 10x).
+- **Application writer tools for MCP clients, off by default.** `get_application_context` reads a job's writing material;
+  `save_application_answer` adds answer versions and can never change or delete one or set the final answer. See
+  [Writing answers from your client](docs/mcp.md#writing-answers-from-your-client).
 - **Application writer: improve your own draft and a coach review.** Paste text you wrote in any language and get a new
   version in the answer's language, either fitted to the job or with only the language and wording changed (that option
   sends none of your ticked material). A version can also be reviewed: the AI rates it from 0 to 100 (marked as its
