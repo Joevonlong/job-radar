@@ -49,6 +49,8 @@ export async function acquireConfigWriteLock(url: string, options: { waitSeconds
   assertTestDatabase(url);
   const [k1, k2] = CONFIG_WRITE_LOCK_KEY;
   const waitMs = options.waitSeconds * 1000;
+  // A frozen database must not hang a save or the writers queued behind it: no query waits longer than this.
+  const queryLimitMs = Math.max(1000, waitMs);
   const sql = postgres(url, {
     max: 1,
     idle_timeout: 0,
@@ -62,7 +64,7 @@ export async function acquireConfigWriteLock(url: string, options: { waitSeconds
   let pid = 0;
   for (;;) {
     try {
-      const rows = await sql<{ ok: boolean; pid: number }[]>`select pg_try_advisory_lock(${k1}::int, ${k2}::int) as ok, pg_backend_pid() as pid`;
+      const rows = await settleWithin(sql<{ ok: boolean; pid: number }[]>`select pg_try_advisory_lock(${k1}::int, ${k2}::int) as ok, pg_backend_pid() as pid`, queryLimitMs);
       if (rows[0]?.ok === true) {
         pid = rows[0].pid;
         break;
@@ -72,7 +74,7 @@ export async function acquireConfigWriteLock(url: string, options: { waitSeconds
       throw new DbUnavailable();
     }
     if (Date.now() >= deadline) {
-      const holder = await holderOf(sql, k1, k2);
+      const holder = await settleWithin(holderOf(sql, k1, k2), queryLimitMs).catch(() => null);
       await close();
       return { acquired: false, holder };
     }
@@ -92,7 +94,7 @@ export async function acquireConfigWriteLock(url: string, options: { waitSeconds
               select 1 from pg_locks
               where locktype = 'advisory' and granted and pid = pg_backend_pid()
                 and classid = ${k1}::int::oid and objid = ${k2}::int::oid and objsubid = 2
-            ) as held`, waitMs);
+            ) as held`, queryLimitMs);
           return rows[0]?.pid === pid && rows[0]?.held === true;
         } catch {
           return false;
@@ -102,7 +104,7 @@ export async function acquireConfigWriteLock(url: string, options: { waitSeconds
         if (released) return;
         released = true;
         try {
-          await sql`select pg_advisory_unlock(${k1}::int, ${k2}::int)`;
+          await settleWithin(sql`select pg_advisory_unlock(${k1}::int, ${k2}::int)`, queryLimitMs);
         } catch {
           // closing the session below drops the lock as well
         }

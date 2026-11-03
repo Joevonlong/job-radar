@@ -113,4 +113,11 @@ describe("models:export --full", () => {
     expect(fs.readFileSync(out, "utf8")).toBe(text);
     expect(fs.existsSync(userFile())).toBe(false);
   });
+
+  it("refuses another file in the locked directories", async () => {
+    const out = path.join(path.dirname(userFile()), "ui.yaml");
+    const before = fs.existsSync(out) ? fs.readFileSync(out, "utf8") : null;
+    await expect(writeFullModels(out)).rejects.toThrow(/config or profile directory/);
+    expect(fs.existsSync(out) ? fs.readFileSync(out, "utf8") : null).toBe(before);
+  });
 });

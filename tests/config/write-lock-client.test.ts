@@ -123,6 +123,27 @@ describe("the client of the config write lock", () => {
     expect(driver.end).toHaveBeenCalledTimes(1);
   });
 
+  it("gives up on a database that stops answering the lock query", async () => {
+    driver.answer = () => new Promise<never>(() => {}) as never;
+    const error = await acquireConfigWriteLock(URL, { waitSeconds: 0 }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DbUnavailable);
+    expect(driver.end).toHaveBeenCalledTimes(1);
+  });
+
+  it("a holder lookup that never answers is an unknown holder, not a hang", async () => {
+    driver.answer = (text) => (isTry(text) ? [{ ok: false, pid: 42 }] : (new Promise<never>(() => {}) as never));
+    expect(await acquireConfigWriteLock(URL, { waitSeconds: 0 })).toEqual({ acquired: false, holder: null });
+    expect(driver.end).toHaveBeenCalledTimes(1);
+  });
+
+  it("release closes the session when the unlock never answers", async () => {
+    const result = await acquireConfigWriteLock(URL, { waitSeconds: 0 });
+    if (!result.acquired) throw new Error("expected the lock");
+    driver.answer = () => new Promise<never>(() => {}) as never;
+    await result.lock.release();
+    expect(driver.end).toHaveBeenCalledTimes(1);
+  });
+
   it("waits up to the limit, then reports the holder it can see", async () => {
     driver.answer = (text) => {
       if (isTry(text)) return [{ ok: false, pid: 42 }];

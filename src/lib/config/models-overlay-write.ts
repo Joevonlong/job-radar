@@ -24,7 +24,7 @@ import { type CatalogModel, modelsSchema } from "./schemas/models";
 import { CONFIG_EDITOR_DEFAULTS } from "./schemas/ui";
 import { CONFIG_YAML_OPTIONS } from "./yaml-options";
 import { atomicWrite, restoreFlowPadding, withFileLock } from "./write";
-import { withConfigWriteLock } from "./write-lock";
+import { isLockedConfigPath, withConfigWriteLock } from "./write-lock";
 
 const NEW_FILE_HEADER = [
   " Your additions to the model catalog. The shipped catalog (config/models.yaml) is the base: list here only the models you",
@@ -178,7 +178,10 @@ function visitPrices(node: unknown): void {
  */
 export async function writeFullModels(file: string = getUserConfigPath("models")): Promise<{ file: string; backup: string | null }> {
   const userFile = getUserConfigPath("models");
-  if (path.resolve(file) !== path.resolve(userFile)) return exportFullModels(file);
+  if (path.resolve(file) !== path.resolve(userFile)) {
+    if (isLockedConfigPath(file)) throw new Error(`--out cannot name another file in the config or profile directory: ${path.basename(file)}`);
+    return exportFullModels(file);
+  }
   return withFileLock(userFile, () =>
     withConfigWriteLock(async () => {
       const effective = reloadConfig("models");
@@ -192,7 +195,7 @@ export async function writeFullModels(file: string = getUserConfigPath("models")
   );
 }
 
-/** A copy for the user, outside the configuration: nothing reads it, so it needs neither the lock nor the database behind it. */
+/** A copy for the user, outside the configuration: nothing reads it (outside the locked directories, see writeFullModels), so it needs neither the lock nor the database. */
 async function exportFullModels(file: string): Promise<{ file: string; backup: null }> {
   await fsp.writeFile(file, renderFullModelsText(reloadConfig("models")), { mode: 0o600 });
   return { file, backup: null };

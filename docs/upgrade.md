@@ -35,6 +35,8 @@ its fingerprint is `SHA256:HHRRfExpbUjcK0/pdc5E1qf94ogkREVkt9+1VP58JQc`, also gi
 [RELEASING.md](../RELEASING.md). To check by hand:
 `git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=docs/signing-key.pub tag -v v2.0.0`.
 
+**Upgrading from a version without the config-write step:** run `git pull` (or `git fetch --tags && git checkout --detach <tag>`), then the new `scripts/ops/deploy.sh --skip-pull`. An older `deploy.sh` that pulls or switches by itself keeps running as the old script, does not recognize this target, and writes the config in its own step 4 without the gate of step 11; if that already happened, run the new script with `--skip-pull`.
+
 ### What the deploy script does
 
 In order, and it stops at the first failing step:

@@ -26,6 +26,8 @@ scripts/ops/deploy.sh --ref v2.0.0           # 正式升级
 
 部署默认不验证签名。加 `--verify` 会先对标签运行 `git verify-tag`，无效就停止。它用的是随仓库发布的维护者公钥 [`signing-key.pub`](signing-key.pub)（`allowed_signers` 格式；指纹 `SHA256:HHRRfExpbUjcK0/pdc5E1qf94ogkREVkt9+1VP58JQc`，[SECURITY.md](../SECURITY.md) 里也有）；你自己用 `git config gpg.ssh.allowedSignersFile` 设置的公钥列表优先。有签名密钥时发布会签名，见 [RELEASING.md](../RELEASING.md)。手动检查：`git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=docs/signing-key.pub tag -v v2.0.0`。
 
+**从没有 config-write 步骤的版本升级：** 先运行 `git pull`（或 `git fetch --tags && git checkout --detach <标签>`），再运行新版本的 `scripts/ops/deploy.sh --skip-pull`。旧的 `deploy.sh` 自己拉取或切换时，运行的仍是旧脚本，它不认识这个目标，会在自己的第 4 步写配置，不经过第 11 步的闸门；如果已经这样跑过，再用 `--skip-pull` 运行一次新脚本。
+
 ### 部署脚本做了什么
 
 按顺序执行，遇到第一个失败的步骤就停下：
