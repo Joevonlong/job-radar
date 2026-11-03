@@ -2,5 +2,5 @@
 # docs/development.md says. The constraint keeps every shared package at the version the image installs.
 -c requirements.txt
 -r requirements.in
-pytest==9.1.1
+pytest==9.2.0
 httpx2==2.16.0
