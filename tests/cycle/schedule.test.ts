@@ -260,7 +260,7 @@ describe("production schedule across the 2027 Europe/Berlin clock changes", () =
     scheduler.stop();
   });
 
-  it("the scheduler does not skip or repeat a slot when the clock changes while it is armed (spring, fall)", async () => {
+  it("the scheduler does not skip or repeat a slot when the clock changes while it is armed (spring)", async () => {
     // armed on Saturday evening, runs through the night of the change, then the Sunday slot fires
     vi.useFakeTimers({ now: new Date("2027-03-27T20:00:00Z") });
     const fired: string[] = [];
@@ -270,6 +270,27 @@ describe("production schedule across the 2027 Europe/Berlin clock changes", () =
     await vi.advanceTimersByTimeAsync(11 * 3600 * 1000 + 5 * 60 * 1000); // to 07:05 UTC = 09:05 CEST
     expect(fired).toEqual(["weekend@2027-03-28T07:00"]);
     scheduler.stop();
+  });
+
+  it("fall back: armed on Saturday evening, the weekend cycle and the 03:30 backup each fire once", async () => {
+    vi.useFakeTimers({ now: new Date("2027-10-30T20:00:00Z") });
+    const fired: string[] = [];
+    const only = withCycles({ weekday_morning: { enabled: false }, weekday_evening: { enabled: false }, weekend: { cron: "0 9 * * 0,6", enabled: true } });
+    const scheduler = createScheduler({ schedule: { ...only, timezone: TZ }, onTrigger: (kind) => void fired.push(`${kind}@${new Date().toISOString().slice(0, 16)}`), logger });
+    const backup = new Cron("30 3 * * *", { timezone: TZ }, () => void fired.push(`backup@${new Date().toISOString().slice(0, 16)}`));
+    await vi.advanceTimersByTimeAsync(12 * 3600 * 1000 + 5 * 60 * 1000); // to 08:05 UTC = 09:05 CET
+    expect(fired).toEqual(["backup@2027-10-31T02:30", "weekend@2027-10-31T08:00"]);
+    backup.stop();
+    scheduler.stop();
+  });
+
+  it("croner 11 interval crons run again in the repeated fall-back hour (*/30 sees 02:00-02:59 twice)", () => {
+    const job = new Cron("*/30 * * * *", { timezone: TZ, paused: true });
+    const runs: string[] = [];
+    for (let next = job.nextRun(new Date("2027-10-30T23:45:00Z")); next !== null && next < new Date("2027-10-31T02:15:00Z"); next = job.nextRun(next)) runs.push(next.toISOString().slice(11, 16));
+    job.stop();
+    // 02:00 and 02:30 CEST (00:00, 00:30 UTC) and again 02:00, 02:30 CET (01:00, 01:30 UTC)
+    expect(runs).toEqual(["00:00", "00:30", "01:00", "01:30", "02:00"]);
   });
 
   describe("catch-up after a missed run", () => {
@@ -285,7 +306,7 @@ describe("production schedule across the 2027 Europe/Berlin clock changes", () =
       expect(findMissedCycle(at("2027-03-29T05:00:00Z"), berlinSchedule, at("2027-03-28T10:00:00Z"))?.kind).toBe("weekday_morning");
     });
 
-    it("spring forward: a Friday-evening-only runner restarted in the gap hour is not yet owed a weekend run", () => {
+    it("spring forward: a Friday-evening-only runner restarted around the gap hour is still owed the Saturday weekend run", () => {
       const lastRun = at("2027-03-26T16:05:00Z"); // Friday 17:05 CET
       // Saturday 09:00 CET is the latest slot and was missed
       expect(missedCycle(at("2027-03-28T00:30:00Z"), berlinSchedule, lastRun)).toBe("weekend"); // Sunday 01:30 CET

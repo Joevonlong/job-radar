@@ -11,6 +11,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Cron times and daylight saving.** With the croner 11 update, interval crons (such as `*/30 * * * *`) may run extra in the repeated hour at fall back and skip the spring gap; fixed-time crons (07:00, 17:00, 09:00) still run once. A fixed time inside the spring gap now runs at the first valid time after it. See `docs/configuration.md`.
 - **Berlin Startup Jobs now starts by itself on existing German installs.** The new Berlin Startup Jobs channel is on by
   default for installs whose market is Germany, so the next cycle after upgrading starts reading it. To turn it off, set
   `sources.berlinstartupjobs.enabled: false` in `data/config/sources.yaml`.
