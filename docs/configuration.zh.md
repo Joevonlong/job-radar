@@ -139,7 +139,7 @@ web 和 runner 启动时会补缺，升级冻结期间跳过补缺。已有安�
 
 ### 公司背景（`research.yaml`）
 
-新文件，默认关闭（`enabled: false`）。没有这个文件的安装使用出厂默认值，打开之前什么都不变。每次请求都重新读取。加载文件时，站点列表会拒绝私有地址、本地名称和公共后缀。见 [research.zh.md](research.zh.md)。
+新文件，默认关闭（`enabled: false`）。没有这个文件的安装使用出厂默认值，打开之前什么都不变。每次请求都重新读取。加载文件时，站点列表会拒绝私有地址、本地名称和公共后缀。见 [research.zh.md](research.zh.md)。`auto` 块设置[自动调研](research.zh.md#自动调研)；没有这一块的 `research.yaml` 按 `trigger: manual` 处理，所以你已有的文件在加上这一块前不会变。
 
 ### LinkedIn Monid（`sources.yaml`）
 
@@ -226,6 +226,7 @@ pnpm config:example ai-engineering-europe            # 套用：先把要改的�
 | `notify.yaml` | `telegram.api_base_url` |
 | `sources.yaml` | 所有 `base_url`、`api_base_url`、`eu_api_base_url`，`jobspy.url`，`jobspy.proxies`，`sources.gmail.host` / `port` / `secure`，`linkedin.session.site.auth_file`，`linkedin.apify.actor_id`，`linkedin.monid.provider`，`linkedin.monid.endpoint` |
 | `resume.yaml` | `claude_command`、`claude_args`、`resume_kit_path`、`master_resume_path`、`pdf_dir`、`jd_export_dir`、`jd_export_host_dir` |
+| `salary.yaml`、`research.yaml` | `lookup.allowed_fetch_domains`；`company.allowed_domains`、`company.non_company_hosts`（AI CLI 可以在本机打开哪些主机的网页） |
 | `ui.yaml` | `web_access` 下的全部键（登录限制，见[网页访问](#网页访问可选口令监听地址和端口)） |
 
 - web 保存时，如果受保护键的值既不同于文件里的值，**也**不同于出厂默认值，就拒绝保存。写回文件里已有的值或出厂默认值（例如"恢复默认"，或旧文件还没有的键）是允许的。

@@ -8,7 +8,7 @@ import { AI_PROVIDER_CONFIG_KEYS } from "@/lib/config/ai-options";
 
 import { loadModelCatalog } from "./catalog";
 import { AiProviderError, AiUnavailableError, sanitize, type AiAttempt, type AiQuotaGuardMark } from "./errors";
-import { cooldownUntil, createMemoryHealthStore, healthDay, isCoolingDown, requestsOn, type AiHealthStore } from "./health";
+import { cooldownUntil, createMemoryHealthStore, healthDay, type AiHealthStore } from "./health";
 import {
   evaluateQuota,
   isQuotaGuarded,
@@ -19,6 +19,7 @@ import {
   type AiRequestOrigin,
 } from "./quota-guard";
 import { toJsonSchema } from "./schema-to-json";
+import { apiBudgetBlock, healthBlock, windowBlock, type GateBlock } from "./state-gate";
 import type { AiCallRecord, AiPrompt, AiProvider, AiProviderId, AiResult, AiRunOptions, AiTask } from "./types";
 import { CODEX_DEFAULT_MODEL } from "./providers/codex-cli";
 import { estimateCostUsd, estimateEquivalentUsd, roundUsd, type AiUsageStore } from "./usage";
@@ -76,22 +77,14 @@ export interface AiRouterOptions {
 }
 
 
-interface GateBlock {
-  kind: AiProviderError["kind"];
-  message: string;
-  guard?: AiQuotaGuardMark;
-}
-
 /** A provider's error can echo its input. For these tasks that input is your résumé or draft: logs and the health table get the error's kind only. */
 const TASKS_WITH_PRIVATE_INPUT: ReadonlySet<AiTask> = new Set<AiTask>(["write", "story_extract"]);
-
-const clock = (at: Date, timeZone: string): string => new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit" }).format(at);
 
 export interface AiRouter {
   /** The providers that would be tried for `task`, in order (configured or not). */
   plan(task: AiTask): AiProviderId[];
   /** Whether any provider of `task`'s plan could be tried right now, and why the others cannot (cooldown, cap, off, not installed). */
-  usable(task: AiTask): Promise<{ usable: boolean; blocked: AiAttempt[] }>;
+  usable(task: AiTask, opts?: Pick<AiRunOptions, "requireWeb">): Promise<{ usable: boolean; blocked: AiAttempt[] }>;
   run<T>(task: AiTask, prompt: AiPrompt, schema: ZodType<T>, opts?: AiRunOptions): Promise<AiResult<T>>;
 }
 
@@ -244,14 +237,8 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
           });
         }
       }
-      if (evaluation.level === "hard") {
-        const back = evaluation.resumeAt ? `; back around ${clock(evaluation.resumeAt, timeZone)}` : "";
-        return {
-          kind: "budget",
-          message: `Job Radar's own usage cap reached (${evaluation.windowRequests} calls in ${policy.windowHours}h, cap ${policy.hardRequests})${back}`,
-          guard: { reason: "window", resumeAt: evaluation.resumeAt?.toISOString() ?? null },
-        };
-      }
+      const capped = windowBlock(evaluation, policy, timeZone);
+      if (capped) return capped;
       if (origin === "cycle" && cycleStartedAt && policy.cycleRequestCap > 0) {
         const used = await quota.countSince(id, cycleStartedAt);
         if (used >= policy.cycleRequestCap) {
@@ -277,18 +264,8 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
     const policy = config.providers[AI_PROVIDER_CONFIG_KEYS[id]];
     if (!policy.enabled) return { kind: "not_configured", message: "turned off in ai.yaml (enabled: false)" };
     const state = await safely("read", (store) => store.get(id));
-    if (state && isCoolingDown(state, now())) {
-      const until = state.coolingUntil as Date;
-      return {
-        kind: "rate_limited",
-        message: `cooling down until ${clock(until, timeZone)} (${state.lastErrorMessage ?? "limit reached"})`.slice(0, 400),
-        // a limit the provider reported is the usage cap's third reason (it shows and alerts as such)
-        ...(quota && isQuotaGuarded(id) ? { guard: { reason: "error", resumeAt: until.toISOString() } satisfies AiQuotaGuardMark } : {}),
-      };
-    }
-    if (state && policy.daily_request_cap > 0 && requestsOn(state, healthDay(now(), timeZone)) >= policy.daily_request_cap) {
-      return { kind: "budget", message: `daily request cap of ${policy.daily_request_cap} reached` };
-    }
+    const unhealthy = healthBlock(config, id, state ?? null, now(), timeZone, Boolean(quota));
+    if (unhealthy) return unhealthy;
     const capped = await quotaGate(id);
     if (capped) return capped;
     const availability = provider.availability();
@@ -302,9 +279,8 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
         return { kind: "not_configured", message: `no price for model "${model}" in models.yaml` };
       }
       const spent = await apiSpendUsd();
-      if (spent >= config.monthly_api_budget_usd) {
-        return { kind: "budget", message: `monthly API budget of $${config.monthly_api_budget_usd} reached ($${spent.toFixed(4)} spent)` };
-      }
+      const overBudget = apiBudgetBlock(config, spent);
+      if (overBudget) return overBudget;
     }
     return null;
   };
@@ -326,10 +302,15 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
   return {
     plan: (task) => resolveProviderOrder(config, task),
 
-    async usable(task) {
+    async usable(task, opts = {}) {
       const blocked: AiAttempt[] = [];
       let heldBack = false;
       for (const id of resolveProviderOrder(config, task)) {
+        // the same skip as `run`: a provider that cannot search the web never serves this task
+        if (opts.requireWeb && !webCapable(id)) {
+          blocked.push({ provider: id, outcome: "skipped", kind: "not_configured", message: "cannot search the web (this task needs claude-cli, codex-cli or anthropic)" });
+          continue;
+        }
         const reason = apiClosed(heldBack, id) ?? (await gate(id, task));
         if (!reason) return { usable: true, blocked };
         heldBack ||= holdsBack(reason);

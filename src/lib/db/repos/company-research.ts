@@ -1,12 +1,12 @@
 /** Reads and writes of `company_research` and the `company_research` requests around it. */
-import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { isPublicWebsiteDomain } from "@/lib/ai/web-tasks";
 import { COMPANY_RESEARCH_FIELDS, type CompanyResearchView } from "@/lib/research/fields";
 
 import type { Executor } from "../executor";
-import { companies, companyResearch, controlRequests, jobs } from "../schema";
+import { companies, companyResearch, controlRequests, jobs, jobSources } from "../schema";
 import { OPEN_CONTROL_STATUSES, type ControlRequest } from "./control-requests";
 
 export { COMPANY_RESEARCH_FIELDS, type CompanyResearchField, type CompanyResearchView } from "@/lib/research/fields";
@@ -47,6 +47,44 @@ export function confirmedWebsiteDomain(company: Pick<JobForCompanyResearch, "web
   return isPublicWebsiteDomain(company.websiteDomain) ? company.websiteDomain : null;
 }
 
+export async function getCompanyRowForDomain(db: Executor, companyId: number): Promise<{ websiteDomain: string | null; websiteDomainSource: string | null } | null> {
+  const [row] = await db.select({ websiteDomain: companies.websiteDomain, websiteDomainSource: companies.websiteDomainSource }).from(companies).where(eq(companies.id, companyId)).limit(1);
+  return row ?? null;
+}
+
+/** The newest posting links of a company's jobs, the apply links first (the employer's own site more often than the source's page). */
+export async function listCompanyPostingUrls(db: Executor, companyId: number, limit: number): Promise<string[]> {
+  const rows = await db
+    .select({ url: jobSources.url, applyUrl: jobSources.applyUrl })
+    .from(jobSources)
+    .innerJoin(jobs, eq(jobs.id, jobSources.jobId))
+    .where(eq(jobs.companyId, companyId))
+    .orderBy(desc(jobSources.id))
+    .limit(limit);
+  return rows.flatMap((row) => [row.applyUrl, row.url]).filter((url): url is string => url !== null);
+}
+
+/** Store an inferred website domain, unless the company has one by now. It stays out of every prompt and fetch list until confirmed. */
+export async function storeInferredCompanyDomain(db: Executor, input: { companyId: number; domain: string }): Promise<void> {
+  await db.update(companies).set({ websiteDomain: input.domain, websiteDomainSource: "inferred" }).where(and(eq(companies.id, input.companyId), isNull(companies.websiteDomain)));
+}
+
+/** The user confirms the inferred domain they were shown; false when the stored one is no longer that one. */
+export async function confirmInferredCompanyDomain(db: Executor, input: { companyId: number; domain: string; now: Date }): Promise<boolean> {
+  const rows = await db
+    .update(companies)
+    .set({ websiteDomainSource: "user", websiteDomainConfirmedAt: input.now })
+    .where(and(eq(companies.id, input.companyId), eq(companies.websiteDomain, input.domain), eq(companies.websiteDomainSource, "inferred")))
+    .returning({ id: companies.id });
+  return rows.length > 0;
+}
+
+/** The user names the website themselves; false when the company no longer exists. */
+export async function saveUserCompanyDomain(db: Executor, input: { companyId: number; domain: string; now: Date }): Promise<boolean> {
+  const rows = await db.update(companies).set({ websiteDomain: input.domain, websiteDomainSource: "user", websiteDomainConfirmedAt: input.now }).where(eq(companies.id, input.companyId)).returning({ id: companies.id });
+  return rows.length > 0;
+}
+
 function toView(row: typeof companyResearch.$inferSelect, now: Date): CompanyResearchView | null {
   const parsed = companyResearchResultSchema.safeParse(row.resultJson);
   if (!parsed.success) return null;
@@ -73,6 +111,33 @@ export async function findLatestCompanyResearch(db: Executor, input: { companyId
     .orderBy(desc(companyResearch.fetchedAt), desc(companyResearch.id))
     .limit(1);
   return row ? toView(row, input.now) : null;
+}
+
+export interface CompanyResearchOverviewRow {
+  companyId: number;
+  websiteDomain: string | null;
+  websiteDomainSource: string | null;
+  /** The company's newest job: what a refresh from the company list asks through. */
+  jobId: number | null;
+  latest: CompanyResearchView | null;
+}
+
+/** For one page of the company list: each company's newest good result, website and newest job, in one read per kind. */
+export async function listCompanyResearchOverview(db: Executor, input: { companyIds: readonly number[]; promptVersion: number; now: Date }): Promise<CompanyResearchOverviewRow[]> {
+  if (input.companyIds.length === 0) return [];
+  const ids = [...input.companyIds];
+  const [rows, results, newest] = await Promise.all([
+    db.select({ id: companies.id, websiteDomain: companies.websiteDomain, websiteDomainSource: companies.websiteDomainSource }).from(companies).where(inArray(companies.id, ids)),
+    db
+      .selectDistinctOn([companyResearch.companyId])
+      .from(companyResearch)
+      .where(and(inArray(companyResearch.companyId, ids), eq(companyResearch.promptVersion, input.promptVersion), eq(companyResearch.status, "ok")))
+      .orderBy(companyResearch.companyId, desc(companyResearch.fetchedAt), desc(companyResearch.id)),
+    db.selectDistinctOn([jobs.companyId], { companyId: jobs.companyId, jobId: jobs.id }).from(jobs).where(inArray(jobs.companyId, ids)).orderBy(jobs.companyId, desc(jobs.firstSeenAt), desc(jobs.id)),
+  ]);
+  const resultOf = new Map(results.map((row) => [row.companyId, toView(row, input.now)]));
+  const jobOf = new Map(newest.map((row) => [row.companyId, row.jobId]));
+  return rows.map((row) => ({ companyId: row.id, websiteDomain: row.websiteDomain, websiteDomainSource: row.websiteDomainSource, jobId: jobOf.get(row.id) ?? null, latest: resultOf.get(row.id) ?? null }));
 }
 
 /** Whether `latest` can stand in for a new lookup: not expired, and made with the domain confirmed now. */
@@ -160,7 +225,8 @@ const manualSince = (since: Date) => and(eq(controlRequests.kind, "company_resea
  * Queue a `company_research` request, or join the open one of the same company. The daily quota is checked and the request
  * inserted in one transaction under an advisory lock, so two clicks at once can never both take the last slot. A manual
  * request that joins a waiting automatic one takes it over when the quota has room (`origin` removed, so it moves to the
- * interactive lane and counts as manual); without room it stays where it is and is still joined.
+ * interactive lane and counts as manual); without room it stays where it is and
+ * the press gets the quota answer.
  */
 export async function reserveCompanyResearchRequest(db: Executor, input: { companyId: number; jobId: number; force: boolean; origin?: "auto"; maxPerDay: number; now: Date }): Promise<CompanyResearchReservation> {
   return db.transaction(async (tx) => {
@@ -178,7 +244,9 @@ export async function reserveCompanyResearchRequest(db: Executor, input: { compa
       .limit(1);
     if (open) {
       const isAuto = (open.payload as { origin?: unknown } | null)?.origin === "auto";
-      if (input.origin === undefined && isAuto && open.status === "pending" && (await countManual()) < input.maxPerDay) {
+      if (input.origin === undefined && isAuto && open.status === "pending") {
+        const used = await countManual();
+        if (used >= input.maxPerDay) return { state: "quota", used };
         await tx.update(controlRequests).set({ payload: sql`${controlRequests.payload} - 'origin'` }).where(and(eq(controlRequests.id, open.id), eq(controlRequests.status, "pending")));
       }
       return { state: "existing", requestId: open.id };

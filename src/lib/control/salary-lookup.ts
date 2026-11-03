@@ -1,6 +1,6 @@
 import { AiProviderError } from "@/lib/ai";
 import type { AiRouter } from "@/lib/ai/router";
-import { ConfigError, loadConfig, type SalaryConfig } from "@/lib/config";
+import { ConfigError, loadConfig, reloadConfig, type ResearchConfig, type SalaryConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import type { FxTable } from "@/lib/market/currency";
 import { runSalaryLookup } from "@/lib/salary/lookup";
@@ -17,6 +17,8 @@ export interface SalaryLookupHandlerOptions {
   loadSettings?: () => SalaryConfig;
   /** Default: the market's base currency and pipeline.yaml's rates. */
   loadMoney?: () => { currency: string | null; fx: FxTable };
+  /** Default: `research.yaml`, read afresh; an automatic request stops once research is turned off. */
+  loadResearch?: () => ResearchConfig;
 }
 
 /**
@@ -25,6 +27,7 @@ export interface SalaryLookupHandlerOptions {
  */
 export function createSalaryLookupHandler(options: SalaryLookupHandlerOptions = {}): ControlHandler {
   const loadSettings = options.loadSettings ?? ((): SalaryConfig => loadConfig("salary"));
+  const loadResearch = options.loadResearch ?? ((): ResearchConfig => reloadConfig("research"));
   const loadMoney =
     options.loadMoney ??
     ((): { currency: string | null; fx: FxTable } => {
@@ -34,10 +37,11 @@ export function createSalaryLookupHandler(options: SalaryLookupHandlerOptions = 
   return async (request, context) => {
     const payload = salaryLookupPayloadSchema.safeParse(request.payload);
     if (!payload.success) return { status: "failed", result: { error: "invalid_payload" } };
-    const { jobId, force } = payload.data;
+    const { jobId, force, origin } = payload.data;
     let settings: SalaryConfig;
     let money: { currency: string | null; fx: FxTable };
     try {
+      if (origin === "auto" && !loadResearch().enabled) return { status: "failed", result: { jobId, error: "research_disabled" } };
       settings = loadSettings();
       money = loadMoney();
     } catch (error) {

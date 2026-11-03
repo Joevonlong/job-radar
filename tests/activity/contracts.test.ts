@@ -20,6 +20,7 @@ import { SCORE_SUBTASK_NAME } from "@/lib/scoring/score-task";
 import { TRAPS_SUBTASK_NAME } from "@/lib/traps/ai-check";
 import { TRANSLATE_SUBTASK_NAME } from "@/lib/translation/subtask";
 import { BREAKDOWN_SUBTASK_NAME } from "@/lib/breakdown/subtask";
+import { RESEARCH_SUBTASK_NAME } from "@/lib/research/subtask";
 
 describe("activity contracts", () => {
   it("accepts the backfill limit reason through the reason-code contract", () => {
@@ -32,7 +33,7 @@ describe("activity contracts", () => {
     expect(SPAN_NAMES.filter((name) => name.startsWith("step.") && name !== "step.ai_late")).toEqual(CYCLE_STEP_NAMES.map((name) => `step.${name}`));
     expect(SPAN_NAMES.filter((name) => name.startsWith("request."))).toEqual(controlRequestKindEnum.enumValues.map((name) => `request.${name}`));
     // Signals registers its literal inline; the other four subtasks expose constants.
-    expect(SPAN_NAMES.filter((name) => name.startsWith("ai."))).toEqual([SCORE_SUBTASK_NAME, "signals", TRAPS_SUBTASK_NAME, TRANSLATE_SUBTASK_NAME, BREAKDOWN_SUBTASK_NAME].map((name) => `ai.${name}`));
+    expect(SPAN_NAMES.filter((name) => name.startsWith("ai."))).toEqual([SCORE_SUBTASK_NAME, "signals", TRAPS_SUBTASK_NAME, TRANSLATE_SUBTASK_NAME, BREAKDOWN_SUBTASK_NAME, RESEARCH_SUBTASK_NAME].map((name) => `ai.${name}`));
     resetAiSubtasks();
     try {
       registerBuiltinAiSubtasks();

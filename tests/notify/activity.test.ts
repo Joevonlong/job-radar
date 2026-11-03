@@ -56,6 +56,26 @@ describe("Telegram callback activity", () => {
     expect(test.spans[0]).toMatchObject({ name: "system.telegram_callback", links: { jobId: 7 }, items: [["item.ok", { jobId: 7, params: { action: "interested", result: changed ? "changed" : "unchanged" } }]], finishes: [["ok", undefined]] });
   });
 
+  it("asks for research once when a star or a status really changed", async () => {
+    const test = setup();
+    const requestAutoResearch = vi.fn(async () => undefined);
+    test.deps.requestAutoResearch = requestAutoResearch;
+    vi.spyOn(favorites, "addFavorite").mockResolvedValue({ changed: true });
+    await test.handle(update("a:7:f"));
+    expect(requestAutoResearch).toHaveBeenLastCalledWith({ jobId: 7, event: "favorite" });
+    vi.spyOn(favorites, "addFavorite").mockResolvedValue({ changed: false });
+    requestAutoResearch.mockClear();
+    await test.handle(update("a:7:f"));
+    expect(requestAutoResearch).not.toHaveBeenCalled();
+    vi.mocked(applications.setApplicationStatus).mockResolvedValue({ ...statusChange, changed: true });
+    await test.handle();
+    expect(requestAutoResearch).toHaveBeenLastCalledWith({ jobId: 7, event: "status" });
+    vi.mocked(applications.setApplicationStatus).mockResolvedValue({ ...statusChange, changed: false });
+    requestAutoResearch.mockClear();
+    await test.handle();
+    expect(requestAutoResearch).not.toHaveBeenCalled();
+  });
+
   it.each([true, false])("records a favourite changed=%s result", async (changed) => {
     vi.spyOn(favorites, "addFavorite").mockResolvedValue({ changed });
     const test = setup();

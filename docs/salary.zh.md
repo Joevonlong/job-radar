@@ -71,6 +71,8 @@
 
 用 `lookup.enabled: true` 打开（设置 → 薪资 →“开启查薪资”）。面板随后出现“查薪资”按钮，不点就不会查。
 
+除了这个按钮，[调研条](research.zh.md#调研条)也能发起；打开[自动调研](research.zh.md#自动调研)后，不用点也会发送同样的字段。自动查询不占 `lookup.max_per_day`，它在 `research.yaml` 里有自己的上限；等待期间调研被关闭，就会停下。
+
 点了之后：
 
 1. 网页端排一个 `salary_lookup` 请求，由 ai-worker（容器模式下是 runner）领取。

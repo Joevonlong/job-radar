@@ -9,6 +9,7 @@ import type { NotifyConfig } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
 import { setApplicationStatus, type ApplicationStatus, type StatusChange } from "@/lib/db/repos/applications";
 import { addFavorite, getFavorite, removeFavorite } from "@/lib/db/repos/favorites";
+import { statusStartsResearch } from "@/lib/research/auto";
 import { getPushCandidate } from "@/lib/db/repos/notifications";
 import type { PrepareResult } from "@/lib/resume/export";
 import { isResumeKitConfigured } from "@/lib/resume/config";
@@ -47,6 +48,8 @@ export interface UpdateHandlerDeps {
    * and moves the application to `preparing` (only from `allowFrom`). Without it the button only marks `preparing`.
    */
   exportResume?: (jobId: number, allowFrom: readonly ApplicationStatus[]) => Promise<PrepareResult>;
+  /** A star or a status change here may start research, as on the dashboard. It must not throw. */
+  requestAutoResearch?: (input: { jobId: number; event: "favorite" | "status" }) => Promise<unknown>;
   /** The texts in the Telegram language, read per update (language.yaml may change); default from language.yaml. */
   getText?: () => NotifyText;
 }
@@ -119,7 +122,10 @@ export function createUpdateHandler(deps: UpdateHandlerDeps): UpdateHandler {
       // The star only touches `job_favorites`; the buttons stay, the second row flips
       const favorite = decoded.action === "favorite";
       let changed: boolean;
-      if (favorite) changed = (await addFavorite(deps.db, decoded.jobId)).changed;
+      if (favorite) {
+        changed = (await addFavorite(deps.db, decoded.jobId)).changed;
+        if (changed) await deps.requestAutoResearch?.({ jobId: decoded.jobId, event: "favorite" });
+      }
       else changed = (await removeFavorite(deps.db, decoded.jobId)) !== null;
       await answer(query.id, t(favorite ? (changed ? "callback.favoriteMarked" : "callback.favoriteAlready") : "callback.favoriteRemoved"));
       try {
@@ -159,6 +165,7 @@ export function createUpdateHandler(deps: UpdateHandlerDeps): UpdateHandler {
       await answer(query.id, t("callback.rejected", { status: text.status(change.previous ?? "new") }));
       return "rejected";
     }
+    if (change.changed && statusStartsResearch(change.status)) await deps.requestAutoResearch?.({ jobId: decoded.jobId, event: "status" });
 
     const marked = t(rule.marked);
     await answer(query.id, change.changed ? marked : t("callback.already", { status: text.status(rule.to) }));

@@ -12,8 +12,10 @@ these results: they are only displayed.
 
 ## Turning it on
 
-Settings → Research → "Enable company background", or `enabled: true` in `data/config/research.yaml`. The job page then shows
-a "Look up company" button in the "Company background" panel. Nothing is looked up until you press it.
+Settings → Research → "Enable research", or `enabled: true` in `data/config/research.yaml`. The job page then shows
+a research bar under the title and a "Look up company" button in the "Company background" panel. With the shipped `research.yaml`
+research then also starts by itself when you save a job ([automatic research](#automatic-research)); an older file you kept stays
+manual until you choose otherwise.
 
 Which AI runs it is the task "Company background" on the AI tab. The default order is `claude-cli`, then the Anthropic API.
 Only providers that can search the web are used. If none of them is available the panel says so instead of showing the button.
@@ -30,6 +32,71 @@ write any link into a posting, so such a domain never goes into the request or i
 
 These go to the provider of the task, which then searches the web. The sites it reads see requests from that provider, not from
 you.
+
+## The research bar
+
+Under the job's title, one line says where the company lookup, the JD breakdown and the salary lookup of this job stand: how old the
+result is, in progress, paused by the usage cap (with the time it comes back), failed, off (with a link to the setting), or not run
+yet. Each has a button of its own that runs it again; "Research all" runs whatever has no current result. These count as manual:
+they use the manual limits and go ahead of anything automatic, and pressing one also moves a waiting automatic request of the same
+kind up. With research off the bar only lists stored results, without buttons, and without any result there is no bar.
+
+## The company list
+
+On `/companies` a company with a stored result shows its summary and size in one line. "Details" opens the same fields with their
+sources, read only and marked as unverified, a button that looks it up again (one manual lookup, through the company's newest job),
+and the website to confirm or change. A company without a result gets no extra row, only a "Website" button in its actions. Opening
+the list sends nothing, and there is no button for all of them.
+
+## Automatic research
+
+With `enabled: true` and `auto.trigger`:
+
+| `auto.trigger` | Research starts when |
+|---|---|
+| `manual` | never by itself |
+| `favorite` (shipped) | you star a job, on the web or in Telegram |
+| `favorite_or_applying` | also when its status becomes interested, preparing or applied |
+
+`auto.items` says which parts run (`company`, `breakdown`, `salary`). The salary part also needs `lookup.enabled` in `salary.yaml`, the
+breakdown part needs `enabled` in `breakdown.yaml`; a part that is off is left out.
+
+**What this sends:** the company lookup sends what is listed above. An automatic salary lookup sends the company name, job title,
+city, country and seniority ([salary lookup](salary.md#salary-lookup-ai-with-web-search)). A breakdown sends the JD to the provider of
+that task, as it always does. **The timing of these requests reflects what you save and apply to**, which a pressed button did not
+reveal in the same way. If that matters to you, keep `auto.trigger: manual`.
+
+**Limits:** `auto.max_per_day` runs per 24 hours for saved and applied jobs, counted per job and separate from the manual limits. A
+run that finds everything cached does not count, and one job counts at most once per 24 hours whatever triggered it. Past the limit
+nothing is queued and the activity log says so.
+
+**The usage cap:** if the provider cooldown, the usage cap or the API budget would stop a web lookup right now, it is not queued at
+all and the bar lets you start it later; a breakdown is still queued. The checks read the shared state only, so a star never starts a
+provider or moves a window.
+
+**Undo:** removing the star or undoing a status does not cancel what is already queued. It only stops anything further.
+
+**Turning it off:** `auto.trigger: manual` stops new runs. `enabled: false` also makes the ai-worker stop automatic requests still in
+the queue; requests you started yourself are not affected for the salary lookup and the breakdown.
+
+### High-score new jobs
+
+`auto.high_score` is off by default. When on, the late AI step of each cycle queues research for new jobs first seen within
+`max_age_days`, with a rank value of at least `min_rank`, that are open and neither starred nor researched before: at most
+`per_cycle_limit` per cycle and `high_score.max_per_day` per 24 hours, counted apart from saved jobs. This sends the same as above for
+jobs you have not looked at yet, so it uses more of your quota.
+
+## The company's website
+
+The panel asks you about the company's website, because a confirmed domain helps the search find the right company:
+
+- **A suggestion to confirm.** Job Radar takes the domain most of the company's job links point at (`careers.example.de` becomes
+  `example.de`), skipping job boards and applicant tracking hosts (`company.non_company_hosts`). The suggestion is stored and shown,
+  and nothing else happens: until you press "Confirm" it is not sent and its pages are not opened.
+- **Your own.** "Change" or "Add website" takes a domain or a pasted address. The server reduces it to its domain and refuses
+  addresses, local names, public suffixes and job boards.
+
+A domain you gave is never replaced by a suggestion.
 
 ## How far the limits go
 
@@ -75,8 +142,9 @@ a button. Deleting the database removes it.
 
 ## `research.yaml`
 
-The form covers the switch, `ttl_days`, `max_per_day`, `max_searches` and `timeout_seconds`. These are edited in the file (Settings →
-Advanced):
+The form covers the switch, `ttl_days`, `max_per_day`, `max_searches`, `timeout_seconds` and the `auto` block. The other keys are edited in the file;
+`company.allowed_domains` and `company.non_company_hosts` decide which hosts this machine may fetch, so the web app (Advanced editor
+included) refuses to change them and they only change by hand:
 
 | Key | What it does |
 |---|---|
@@ -85,12 +153,18 @@ Advanced):
 | `company.max_field_chars` | Longest stored text of one field. |
 | `company.employees`, `company.rating` | The plausible range of those values. |
 | `company.web_search_usd` | Cost of one search for the usage statistics. |
+| `auto` | [Automatic research](#automatic-research). A `research.yaml` without this block behaves as `trigger: manual`. |
 
 ## Before rolling back
 
 The migration only adds a table and three columns of `companies`; older code ignores them. Older code also ignores `research.yaml`.
 Older code refuses `ai.yaml` if a form save wrote `tasks.company_research` into it: delete that key (and
 `reasoning_effort_by_task.company_research` if present) before you switch.
+
+Automatic requests carry a marker older code does not accept. Before going back to a version without the research bar, set
+`enabled: false` and wait until the queue has no `origin: auto` request left; a request left over fails as an invalid request and
+nothing else happens. A version from before this feature refuses the `auto` block of `research.yaml`: remove the block too. The
+`research_auto_runs` table stays and older code ignores it.
 
 ## If something goes wrong
 

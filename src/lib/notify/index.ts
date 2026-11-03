@@ -5,6 +5,7 @@ import { loadPipeline } from "@/lib/market";
 import type { Db } from "@/lib/db/client";
 import { registerCycleStep } from "@/lib/cycle/steps";
 import { buildWatchedCompanyKeys } from "@/lib/companies/marks";
+import { autoResearchDeps, requestAutoResearch } from "@/lib/research/auto";
 import { prepareResumeKit } from "@/lib/resume/export";
 
 import { aiWorkerOfflineAlert, cycleIncompleteAlert, deliverAlerts, type CycleIncompleteReason } from "./alerts";
@@ -72,6 +73,7 @@ export function startNotifyPoller(options: PollerStartOptions): Promise<void> | 
     getWatchedKeys: watchedKeys,
     exportResume: (jobId, allowFrom) =>
       prepareResumeKit(options.db, jobId, { config: loadConfig("resume"), timeZone: loadConfig("schedule").timezone, now, source: "telegram", allowFrom }),
+    requestAutoResearch: (input) => requestAutoResearch(options.db, input, autoResearchDeps("runner")),
   });
   return runPoller({
     client: runtime.client,

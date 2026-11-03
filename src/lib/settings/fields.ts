@@ -19,6 +19,7 @@ import {
   OPENROUTER_DATA_COLLECTION,
 } from "../config/ai-options";
 import { BREAKDOWN_MODES } from "../config/breakdown-options";
+import { RESEARCH_AUTO_TRIGGERS, RESEARCH_ITEMS } from "../config/schemas/research";
 import { consentKind } from "../channels/access";
 import { channelSupportsCompanyQueries } from "../channels/config-table";
 import { isProtectedPath } from "../config/protected-keys";
@@ -863,6 +864,26 @@ const researchSections: SectionDef[] = [
     id: "research_company",
     title: { section: "research_company" },
     fields: [int("company.ttl_days", "research_ttl_days"), int("company.max_per_day", "research_max_per_day"), int("company.max_searches", "research_max_searches"), int("company.timeout_seconds", "research_timeout")],
+  },
+  {
+    id: "research_auto",
+    title: { section: "research_auto" },
+    fields: [
+      { path: "auto.trigger", kind: "select", label: "research_auto_trigger", options: RESEARCH_AUTO_TRIGGERS, optionGroup: "researchTrigger" },
+      { path: "auto.items", kind: "ordered", label: "research_auto_items", options: RESEARCH_ITEMS, optionGroup: "researchItem" },
+      int("auto.max_per_day", "research_auto_max_per_day"),
+    ],
+  },
+  {
+    id: "research_auto_high_score",
+    title: { section: "research_auto_high_score" },
+    fields: [
+      bool("auto.high_score.enabled", "research_auto_high_enabled"),
+      int("auto.high_score.min_rank", "research_auto_min_rank"),
+      int("auto.high_score.per_cycle_limit", "research_auto_per_cycle"),
+      int("auto.high_score.max_per_day", "research_auto_high_max_per_day"),
+      int("auto.high_score.max_age_days", "research_auto_max_age"),
+    ],
   },
 ];
 

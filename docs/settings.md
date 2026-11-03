@@ -190,7 +190,8 @@ background (`company.ttl_days`, `max_per_day`, `max_searches`, `timeout_seconds`
 as a company's website and the plausible ranges are edited in the YAML (Advanced tab). It is off by default; which AI runs it is
 the task "Company background" on the AI tab (default claude-cli, then the Anthropic API; only providers that can search the web are
 used, and codex-cli, if you add it, searches without a domain limit). The ai-worker reads the file afresh for every request, so
-turning it off also stops what is still queued. See [research.md](research.md).
+turning it off also stops what is still queued. The same tab sets automatic research (`auto.*`): when research starts by itself, which
+parts run, the daily limit, and the optional high-score new jobs. See [research.md](research.md#automatic-research).
 
 ## Manual triggers and tests
 

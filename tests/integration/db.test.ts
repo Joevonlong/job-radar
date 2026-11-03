@@ -50,6 +50,7 @@ const EXPECTED_TABLES = [
   "profile_snapshots",
   "profile_story_drafts",
   "raw_postings",
+  "research_auto_runs",
   "run_deliveries",
   "runner_heartbeats",
   "runs",

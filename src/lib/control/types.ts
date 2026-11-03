@@ -42,6 +42,8 @@ export type TranslateJobPayload = z.infer<typeof translateJobPayloadSchema>;
 /** Payload of a `breakdown_job` request (the breakdown button on the job page). */
 export const breakdownJobPayloadSchema = z.strictObject({
   jobId: z.number().int().positive(),
+  /** Only automatic research writes this marker: the request waits in the batch lane and stops if research was turned off. */
+  origin: z.literal("auto").optional(),
   /** Break down again although a current breakdown exists. */
   force: z.boolean().default(false),
 });
@@ -109,6 +111,8 @@ export type WriterFitPayload = z.infer<typeof writerFitPayloadSchema>;
 /** Payload of a `salary_lookup` request (the "look up salary" button on the job page). */
 export const salaryLookupPayloadSchema = z.strictObject({
   jobId: z.number().int().positive(),
+  /** Only automatic research writes this marker: the request waits in the batch lane and stops if research was turned off. */
+  origin: z.literal("auto").optional(),
   /** Look up again although a current cached lookup exists. */
   force: z.boolean().default(false),
   /** The cache key at queue time (only to join a double click; the worker works the key out again). */

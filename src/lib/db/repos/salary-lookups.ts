@@ -113,44 +113,56 @@ export type SalaryReservation =
 /** Advisory lock key of the salary lookup quota (any constant; only this code takes it). */
 const QUOTA_LOCK = 118_001;
 
+/** Requests of the quota: the kind in the last 24 hours, whatever became of them; automatic ones are limited by `research_auto_runs`. */
+const manualSince = (since: Date) => and(eq(controlRequests.kind, "salary_lookup"), gte(controlRequests.requestedAt, since), sql`${controlRequests.payload} ->> 'origin' is distinct from 'auto'`);
+
 /**
- * Queue a `salary_lookup` request, or join an open one for the same key. The daily quota (`maxPerDay` requests in the last
- * 24 hours, whatever became of them) is checked and the request inserted in one transaction under an advisory lock, so two
- * clicks at once can never both take the last slot.
+ * Queue a `salary_lookup` request, or join an open one for the same key. The daily quota (`maxPerDay` manual requests in the
+ * last 24 hours, whatever became of them) is checked and the request inserted in one transaction under an advisory lock, so two
+ * clicks at once can never both take the last slot. An automatic request does not touch the quota. A manual request that joins
+ * a waiting automatic one takes it over when the quota has room (`origin` removed, so it moves to the interactive lane and
+ * counts as manual); without room it stays where it is and
+ * the press gets the quota answer.
  */
-export async function reserveSalaryLookupRequest(db: Executor, input: { lookupKey: string; jobId: number; force: boolean; maxPerDay: number; now: Date }): Promise<SalaryReservation> {
+export async function reserveSalaryLookupRequest(db: Executor, input: { lookupKey: string; jobId: number; force: boolean; origin?: "auto"; maxPerDay: number; now: Date }): Promise<SalaryReservation> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(${QUOTA_LOCK})`);
+    const since = new Date(input.now.getTime() - 86_400_000);
+    const countManual = async (): Promise<number> => {
+      const [count] = await tx.select({ n: sql<number>`count(*)::int` }).from(controlRequests).where(manualSince(since));
+      return count?.n ?? 0;
+    };
     const [open] = await tx
-      .select({ id: controlRequests.id })
+      .select({ id: controlRequests.id, status: controlRequests.status, payload: controlRequests.payload })
       .from(controlRequests)
       .where(and(eq(controlRequests.kind, "salary_lookup"), inArray(controlRequests.status, [...OPEN_CONTROL_STATUSES]), sql`${controlRequests.payload} ->> 'lookupKey' = ${input.lookupKey}`))
       .orderBy(controlRequests.id)
       .limit(1);
-    if (open) return { state: "existing", requestId: open.id };
-    const since = new Date(input.now.getTime() - 86_400_000);
-    const [count] = await tx
-      .select({ n: sql<number>`count(*)::int` })
-      .from(controlRequests)
-      .where(and(eq(controlRequests.kind, "salary_lookup"), gte(controlRequests.requestedAt, since)));
-    const used = count?.n ?? 0;
-    if (used >= input.maxPerDay) return { state: "quota", used };
+    if (open) {
+      const isAuto = (open.payload as { origin?: unknown } | null)?.origin === "auto";
+      if (input.origin === undefined && isAuto && open.status === "pending") {
+        const used = await countManual();
+        if (used >= input.maxPerDay) return { state: "quota", used };
+        await tx.update(controlRequests).set({ payload: sql`${controlRequests.payload} - 'origin'` }).where(and(eq(controlRequests.id, open.id), eq(controlRequests.status, "pending")));
+      }
+      return { state: "existing", requestId: open.id };
+    }
+    if (input.origin === undefined) {
+      const used = await countManual();
+      if (used >= input.maxPerDay) return { state: "quota", used };
+    }
     const [row] = await tx
       .insert(controlRequests)
-      .values({ kind: "salary_lookup", payload: { jobId: input.jobId, force: input.force, lookupKey: input.lookupKey }, requestedAt: input.now })
+      .values({ kind: "salary_lookup", payload: { jobId: input.jobId, force: input.force, lookupKey: input.lookupKey, ...(input.origin ? { origin: input.origin } : {}) }, requestedAt: input.now })
       .returning({ id: controlRequests.id });
     if (!row) throw new Error("reserveSalaryLookupRequest: insert returned no row");
     return { state: "queued", requestId: row.id };
   });
 }
 
-/** `salary_lookup` requests in the last 24 hours (the quota's count). */
+/** Manual `salary_lookup` requests in the last 24 hours (the quota's count). */
 export async function countSalaryLookupRequests(db: Executor, now: Date): Promise<number> {
-  const since = new Date(now.getTime() - 86_400_000);
-  const [row] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(controlRequests)
-    .where(and(eq(controlRequests.kind, "salary_lookup"), gte(controlRequests.requestedAt, since)));
+  const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(controlRequests).where(manualSince(new Date(now.getTime() - 86_400_000)));
   return row?.n ?? 0;
 }
 

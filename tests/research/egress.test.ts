@@ -22,9 +22,15 @@ describe("what a company lookup sends out", () => {
     expect(withDomain.user).toContain("<website>acme-robotics.com</website>");
   });
 
-  it("takes nothing else: the prompt input has no field for a title, a place, the JD or the profile", () => {
-    const input = { company: "Acme", confirmedDomain: null, maxSearches: 8 } satisfies Parameters<typeof buildCompanyResearchPrompt>[0];
-    expect(Object.keys(input).sort()).toEqual(["company", "confirmedDomain", "maxSearches"]);
+  it("takes nothing else: a title, a place, the JD, the profile or an inferred domain never reach the prompt", () => {
+    // what a job page knows, offered to the builder the way a careless caller would pass it
+    const job = { company: "Acme", confirmedDomain: null, maxSearches: 8, title: "Zebra Wrangler", location: "Quokkaville", description: "Secret quokka JD", profile: "Pangolin profile", inferredDomain: "acme-inferred.com" };
+    const { system, user } = buildCompanyResearchPrompt(job);
+    for (const secret of [job.title, job.location, job.description, job.profile, job.inferredDomain]) {
+      expect(system).not.toContain(secret);
+      expect(user).not.toContain(secret);
+    }
+    expect(user).toContain("Acme");
   });
 
   it("treats only a domain the user confirmed as confirmed", () => {

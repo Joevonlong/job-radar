@@ -10,8 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { loadCompanyOverview } from "@/lib/companies/overview";
 import { serializeCompaniesParams } from "@/lib/companies/search-params";
+import { reloadConfig, type AiConfig } from "@/lib/config";
 import { getDisplayTimeZone } from "@/lib/dashboard/context";
+import { getDb } from "@/lib/db";
 import { MAX_FILTER_VALUE_CHARS } from "@/lib/jobs/constants";
+import { getCompanyResearchOverview } from "@/lib/research/company-overview";
+import { readResearchSettings } from "@/lib/research/settings";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("pages.companies");
@@ -22,6 +26,15 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
   const [overview, t, tPage] = await Promise.all([loadCompanyOverview(searchParams), getTranslations("companies"), getTranslations("pages.companies")]);
   const { rows, params, total, page, pageCount, excludedCount } = overview;
   const timezone = getDisplayTimeZone();
+  const researchSettings = readResearchSettings();
+  let ai: AiConfig | null = null;
+  try {
+    ai = reloadConfig("ai");
+  } catch {
+    ai = null; // ai.yaml cannot be read: no refresh button
+  }
+  // reads what is stored; this page never starts a lookup by itself
+  const research = await getCompanyResearchOverview(getDb(), { companyIds: rows.map((row) => row.id), research: researchSettings.state === "ok" ? researchSettings.config : null, ai, now: new Date() });
 
   return (
     <div data-wide className="flex min-w-0 flex-col gap-sp-4">
@@ -40,7 +53,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
         <span role="status" className="font-mono text-data text-ink-2" data-testid="companies-count">{t("count", { count: total })}</span>
         <Link href="/me#exclude-companies" className="text-body-sm underline underline-offset-4 hover:bg-hi">{t("excludedNote", { count: excludedCount })}</Link>
       </div>
-      <CompanyTable rows={rows} params={params} now={new Date()} timezone={timezone} />
+      <CompanyTable rows={rows} params={params} now={new Date()} timezone={timezone} research={research} />
       <Pagination page={page} pageCount={pageCount} hrefFor={(next) => serializeCompaniesParams("/companies", { ...params, page: next })} />
     </div>
   );

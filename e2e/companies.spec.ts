@@ -77,7 +77,8 @@ test("database-only watches cannot be removed here, and Exclude opens the profil
   await open(page);
   const flagged = page.getByTestId("company-row").filter({ hasText: "Quillfeather Labs" });
   await expect(flagged.getByText(zh.companies.watchedByFlag)).toBeVisible();
-  await expect(flagged.getByRole("button")).toHaveCount(0);
+  await expect(flagged.getByRole("button", { name: zh.companies.unwatch, exact: true })).toHaveCount(0);
+  await expect(flagged.getByRole("button", { name: zh.companies.watch, exact: true })).toHaveCount(0);
   await flagged.getByRole("link", { name: zh.companies.exclude, exact: true }).click();
   await expect(page).toHaveURL((url) => url.pathname === "/me" && url.hash === "#exclude-companies");
   const field = page.locator("#exclude-companies");

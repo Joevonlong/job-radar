@@ -49,6 +49,7 @@ type PanelState = "disabled" | "config_error" | "no_description" | "ready" | "wa
 /** A breakdown left for the ai-worker: the card asks for its state until it is done. `queue`: where it stood when the page was rendered. */
 interface WaitingRequest {
   requestId: number;
+  auto?: true;
   stage: "pending" | "running";
   queue?: ControlQueueView | null;
 }
@@ -86,7 +87,7 @@ export function BreakdownPanel({ jobId, availability, hasDescription, view, init
   // the time Job Radar's AI usage cap is expected to let the AI work again (a `quota_guard` failure); "none" = not known
   const resumeTime = (resumeAt: string | null | undefined): string => (resumeAt ? formatClock(format, resumeAt, timeZone) : "none");
   const [pending, startTransition] = useTransition();
-  const [waiting, setWaiting] = useState<WaitingRequest | null>(initialRequest?.state === "waiting" ? { requestId: initialRequest.requestId, stage: initialRequest.stage, queue: initialRequest.queue } : null);
+  const [waiting, setWaiting] = useState<WaitingRequest | null>(initialRequest?.state === "waiting" ? { requestId: initialRequest.requestId, stage: initialRequest.stage, queue: initialRequest.queue, ...(initialRequest.auto ? { auto: true as const } : {}) } : null);
   const requestId = waiting?.requestId ?? null;
 
   // A fresh result from the server (the request finished, or a cycle made one): stop waiting.
@@ -121,7 +122,8 @@ export function BreakdownPanel({ jobId, availability, hasDescription, view, init
   });
   const stage = waiting ? wait.stage : null;
 
-  const busy = pending || waiting !== null;
+  // an automatic request still waiting stays pressable: the press moves it to the interactive lane
+  const busy = pending || (waiting !== null && !(waiting.auto === true && stage === "pending"));
 
   const run = (force: boolean): void => {
     setError(null);

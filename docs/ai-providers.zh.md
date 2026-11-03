@@ -118,7 +118,7 @@ translation:
 - **任务 `breakdown`**：岗位拆解，默认沿用全局顺序（codex 优先，理由同翻译：输出长，订阅 CLI 没有 4096 输出上限）；可用 `tasks.breakdown.order` 单独排，codex 推理强度用 `reasoning_effort_by_task.breakdown`。默认关闭，见 [breakdown.zh.md](breakdown.zh.md)。
 - **任务 `write`**：申请问题的回答和动机信、优化你自己的稿和教练审阅（[application-writer.zh.md](application-writer.zh.md)），只在 `writer.yaml: enabled` 为 true 且你按**生成**、**优化**或**审阅**时调用。不联网搜索。默认跟全局顺序；动机信要多个版本，需要的输出超过全局 `max_output_tokens`，所以 `tasks.write` 可以单独设 `max_output_tokens` 和 `api_timeout_seconds`（两者都只对 API 服务商生效，任何任务都能设）。回答在上限处被截断时请求以 `output_truncated` 失败。
 - **联网任务**：`salary_lookup` 和 `company_research` 是**仅有的**可以用工具（网页搜索）的 AI 调用。任务清单写死在代码里（`src/lib/ai/web-tasks.ts`），任何设置都不能往里加任务。
-- **任务 `company_research`**：按需查公司背景（[research.zh.md](research.zh.md)），只在 `research.yaml: enabled` 为 true 且你按下按钮时运行。只发送公司名和你确认过的官网域名。默认顺序 `[claude-cli, anthropic]`，provider 规则与 `salary_lookup` 相同。
+- **任务 `company_research`**：按需查公司背景（[research.zh.md](research.zh.md)），只在 `research.yaml: enabled` 为 true 且你按下按钮时运行。也可能由[自动调研](research.zh.md#自动调研)发起：自动请求在批处理通道等待；共享状态显示这个任务的 provider 都跑不了时，联网请求根本不排队。只发送公司名和你确认过的官网域名。默认顺序 `[claude-cli, anthropic]`，provider 规则与 `salary_lookup` 相同。
 - **任务 `story_extract`**：从画像、粘贴的文字或简历起草素材（[application-writer.zh.md](application-writer.zh.md)），只在 `writer.yaml: enabled` 为 true 且你按下 `/me` 素材卡片上的按钮时调用。不联网搜索。默认跟全局顺序；`tasks.story_extract` 可以单独设顺序和上限。发送什么、还会留下什么：[privacy.zh.md](privacy.zh.md#提取素材)。
 - **任务 `salary_lookup`**：按需查薪资（[salary.zh.md](salary.zh.md)）。默认顺序 `[claude-cli, anthropic]`；只尝试能搜网页的 provider（OpenAI API、OpenRouter、DeepSeek、MiMo 跳过）；允许搜网页的任务清单写死在代码里（`src/lib/ai/web-tasks.ts`），任何设置都不能让别的任务上网。可以把 codex-cli 加进 `tasks.salary_lookup.order`，但它的网页搜索不能限定域名（设置页会提示）。
 - **推送先于翻译**：ai-worker 先做打分和信号，然后立刻推送，最后才翻译（翻译标了 `late`，不影响推送内容）。
