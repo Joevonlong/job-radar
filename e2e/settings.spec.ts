@@ -4,6 +4,7 @@ import path from "node:path";
 import postgres from "postgres";
 import { parse } from "yaml";
 
+import { effectiveConfig } from "./helpers/effective-config";
 import { expect, test, type Page } from "./fixtures";
 
 /**
@@ -343,7 +344,7 @@ test("AI tab: models come from the catalog under each provider", async ({ page }
   await expect(page.getByText("已保存", { exact: true })).toBeVisible();
   await expect.poll(() => read("ai")).toContain("claude-opus-5-5");
   const after = read("ai");
-  const saved = parse(after) as { providers: { claude_cli: { model: string }; codex_cli: { model?: string; reasoning_effort_by_task: Record<string, string> } } };
+  const saved = effectiveConfig<{ providers: { claude_cli: { model: string }; codex_cli: { model?: string; reasoning_effort_by_task: Record<string, string> } } }>("ai.yaml");
   expect(saved.providers.claude_cli.model).toBe("claude-opus-5-5");
   expect(saved.providers.codex_cli.reasoning_effort_by_task).toEqual({ translate: "medium" });
   expect(saved.providers.codex_cli.model).toBeUndefined();
@@ -381,7 +382,7 @@ test("task override: pick a provider, then its model", async ({ page }) => {
   await save(page, "ai");
   await expect(page.getByText("已保存", { exact: true })).toBeVisible();
   await expect.poll(() => read("ai")).toContain("claude-cli: claude-sonnet-5-5");
-  const saved = parse(read("ai")) as { tasks: { translate: { order: string[]; models?: Record<string, string> }; score: { models?: unknown } } };
+  const saved = effectiveConfig<{ tasks: { translate: { order: string[]; models?: Record<string, string> }; score: { models?: unknown } } }>("ai.yaml");
   expect(saved.tasks.translate.models).toEqual({ "claude-cli": "claude-sonnet-5-5" });
   expect(saved.tasks.translate.order).toContain("claude-cli");
   expect(saved.tasks.score.models).toBeUndefined();
@@ -457,7 +458,7 @@ test("AI tab: four numbered blocks; the Anthropic card has a subscription row an
   const api = card.getByTestId("vendor-anthropic").getByTestId("section-anthropic");
   await expect(api).toHaveAttribute("data-enabled", "1");
   // the API row switches models on its own and saves; the subscription row is untouched
-  const before = parse(read("ai")) as { providers: { claude_cli: { enabled: boolean; strong_model: string } } };
+  const before = effectiveConfig<{ providers: { claude_cli: { enabled: boolean; strong_model: string } } }>("ai.yaml");
   // (the catalog is whatever models.yaml holds: take its last model)
   const strong = api.getByRole("combobox", { name: "强模型", exact: true });
   const picked = (await strong.locator("option").evaluateAll((options) => options.map((o) => (o as HTMLOptionElement).value))).at(-1) ?? "";
@@ -466,8 +467,8 @@ test("AI tab: four numbered blocks; the Anthropic card has a subscription row an
   await expect(api).toHaveAttribute("data-enabled", "0");
   await save(page, "ai");
   await expect(page.getByText("已保存", { exact: true })).toBeVisible();
-  await expect.poll(() => (parse(read("ai")) as { providers: { anthropic: { enabled: boolean } } }).providers.anthropic.enabled).toBe(false);
-  const saved = parse(read("ai")) as { providers: { anthropic: { enabled: boolean; strong_model: string }; claude_cli: { enabled: boolean; strong_model: string } } };
+  await expect.poll(() => (effectiveConfig<{ providers: { anthropic: { enabled: boolean } } }>("ai.yaml")).providers.anthropic.enabled).toBe(false);
+  const saved = effectiveConfig<{ providers: { anthropic: { enabled: boolean; strong_model: string }; claude_cli: { enabled: boolean; strong_model: string } } }>("ai.yaml");
   expect(saved.providers.anthropic).toMatchObject({ enabled: false, strong_model: picked });
   expect(saved.providers.claude_cli).toMatchObject(before.providers.claude_cli);
   await open(page, "ai");
@@ -528,7 +529,7 @@ test("AI tab: a scoring criterion with commas is added as one sentence and saved
   await priorities.fill("");
   await save(page, "ai");
   await expect(page.getByText("已保存")).toBeVisible();
-  const saved = parse(read("ai")) as { scoring: { criteria: { priorities: string[] } } };
+  const saved = effectiveConfig<{ scoring: { criteria: { priorities: string[] } } }>("ai.yaml");
   expect(saved.scoring.criteria.priorities).toEqual([sentence]);
 });
 
@@ -566,7 +567,7 @@ for (const locale of ["zh", "en"] as const) {
       : ["每个单元每轮的公司查询上限", "同一公司查询的最短间隔（小时）", "每条公司查询的结果上限"];
     for (const [index, label] of fields.entries()) await card.getByRole("textbox", { name: label, exact: true }).fill(String([2, 8, 13][index]));
     await card.getByRole("button", { name: locale === "en" ? "Save" : "保存", exact: true }).click();
-    await expect.poll(() => parse(read("search")).watched_company_queries).toEqual({ enabled: false, max_per_cycle: 2, min_interval_hours: 8, max_results: 13 });
+    await expect.poll(() => effectiveConfig<{ watched_company_queries: unknown }>("search.yaml").watched_company_queries).toEqual({ enabled: false, max_per_cycle: 2, min_interval_hours: 8, max_results: 13 });
     await page.reload();
     await expect(control).not.toBeChecked();
     for (const [index, label] of fields.entries()) await expect(card.getByRole("textbox", { name: label, exact: true })).toHaveValue(String([2, 8, 13][index]));

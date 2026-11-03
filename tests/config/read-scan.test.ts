@@ -15,18 +15,12 @@ const ALLOWED = new Map<string, string>([
   ["src/lib/config/read-user-file.ts", "the reader itself"],
   ["src/lib/config/atomic.ts", "reads back its own temp file"],
   ["src/lib/config/examples.ts", "shipped files"],
-  ["src/lib/config/load.ts", "the shipped models.yaml"],
   ["src/lib/config/models-overlay.ts", "the shipped models.yaml"],
-  ["src/lib/config/paths.ts", "package.json of the app"],
+  ["src/lib/config/paths.ts", "package.json of the app, and the shipped layer"],
   ["src/lib/config/private-file.ts", "a shipped template"],
-  ["src/lib/config/protected-check.ts", "shipped files"],
   ["src/lib/config/shipped-id.ts", "shipped files"],
-  ["src/lib/settings/advanced/service.ts", "the shipped file a text is compared with"],
-  ["src/lib/settings/advanced/view.ts", "the shipped file shown next to the user's"],
   ["src/lib/setup/cli.ts", "the answers file named on the command line"],
   ["src/lib/setup/env-file.ts", ".env and .env.example, on the host"],
-  ["src/lib/setup/steps/targets.ts", "shipped search.yaml"],
-  ["src/lib/setup/state.ts", "the shipped setup.yaml"],
 ]);
 
 function sources(dir: string): string[] {

@@ -2,9 +2,7 @@
  * Setup step 4: what I am looking for. Writes preferences.yaml (titles, level, work modes, salary floor, contracts,
  * exclusions) through `savePreferencesPatch`, and search.yaml `keyword_groups` by the rule of `keywords.ts`.
  */
-import fs from "node:fs";
-
-import { getDefaultConfigPath, mutateConfig, parseConfigText, preferencesSchema, searchSchema } from "@/lib/config";
+import { mutateConfig, preferencesSchema, readShippedConfig, searchSchema } from "@/lib/config";
 import { preferencesConfigToDraft, preferencesDraftToCandidate, toFieldErrors, type PreferencesDraft } from "@/lib/profile/draft";
 import { savePreferencesPatch } from "@/lib/profile/service";
 
@@ -18,13 +16,7 @@ const NOT_MINE = /^(market(\.|$)|locations$|remote_scope$)/;
 
 /** The shipped default `keyword_groups` (null when the defaults directory has no readable search.yaml). */
 export function shippedKeywordGroups(): KeywordGroups | null {
-  const file = getDefaultConfigPath("search");
-  if (file === null) return null;
-  try {
-    return parseConfigText("search", fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8"), file).keyword_groups;
-  } catch {
-    return null;
-  }
+  return readShippedConfig("search")?.keyword_groups ?? null;
 }
 
 export async function saveTargetsStep(raw: unknown): Promise<SetupStepResult> {

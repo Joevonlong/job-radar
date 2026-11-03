@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { effectiveConfig } from "./helpers/effective-config";
 import { expect, test, type Page } from "./fixtures";
 
 /**
@@ -103,11 +104,11 @@ test.describe("settings tab", () => {
     await expect(page.getByText(/已保存|Saved/).first()).toBeVisible();
     if (file) {
       await expect.poll(() => fs.readFileSync(file, "utf8")).toMatch(/^mode: auto/m);
-      expect(fs.readFileSync(file, "utf8")).toContain("# 总开关");
+      expect(fs.readFileSync(file, "utf8")).toContain("# Your changes to the shipped breakdown.yaml"); // the comment of the new file stays
     }
     // back to manual so the other tests see the shipped behaviour
     await mode.selectOption("manual");
     await page.getByRole("button", { name: /^保存$|^Save$/ }).first().click();
-    if (file) await expect.poll(() => fs.readFileSync(file, "utf8")).toMatch(/^mode: manual/m);
+    if (file) await expect.poll(() => effectiveConfig<{ mode: string }>("breakdown.yaml").mode).toBe("manual");
   });
 });

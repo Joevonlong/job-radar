@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
-import { hashConfigText, loadConfig, readConfigText, reloadConfig, resetConfigCache } from "@/lib/config";
+import { layeredConfigFingerprint, loadConfig, reloadConfig, resetConfigCache } from "@/lib/config";
 import { configToDraft } from "@/lib/settings/draft";
 import { saveSettings } from "@/lib/settings/service";
 import { SETTINGS_FILES, SETTINGS_FORMS } from "@/lib/settings/tabs";
@@ -34,11 +34,12 @@ describe("a settings save writes no factory defaults into the user config", () =
       it.each(SETTINGS_FORMS)("%s: saving the form as it is adds no key the file did not have", async (tab) => {
         const file = SETTINGS_FILES[tab];
         const before = keyPaths(yamlOf(fs.existsSync(path.join(tmp.configDir, file)) ? path.join(tmp.configDir, file) : path.join(tmp.defaultsDir, file)));
-        const state = await saveSettings({ tab, draft: configToDraft(tab, loadConfig(tab)), baseHash: hashConfigText(readConfigText(tab)) });
+        const state = await saveSettings({ tab, draft: configToDraft(tab, loadConfig(tab)), baseHash: layeredConfigFingerprint(tab) });
         expect(state.status).toBe("saved");
         const after = keyPaths(yamlOf(path.join(tmp.configDir, file)));
         expect(after.filter((key) => !before.includes(key))).toEqual([]);
-        expect(fs.statSync(path.join(tmp.configDir, file)).mode & 0o777).toBe(0o600);
+        // a new file is private; an unchanged one is not touched at all
+        if (user === "empty") expect(fs.statSync(path.join(tmp.configDir, file)).mode & 0o777).toBe(0o600);
       });
     });
   }
@@ -64,7 +65,7 @@ describe("rotation settings with absent optional keys", () => {
     expect(draft["collect.max_catch_up_hours"]).toBe("168");
     draft["collect.query_rotation"] = false;
     draft["collect.max_catch_up_hours"] = "240";
-    const result = await saveSettings({ tab: "channels", draft, baseHash: hashConfigText(readConfigText("channels")) });
+    const result = await saveSettings({ tab: "channels", draft, baseHash: layeredConfigFingerprint("channels") });
     expect(result.status).toBe("saved");
     const user = parse(fs.readFileSync(path.join(tmp.configDir, "sources.yaml"), "utf8"));
     expect(user.collect).toMatchObject({ query_rotation: false, max_catch_up_hours: 240 });

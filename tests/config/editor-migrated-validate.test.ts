@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { configLayer, hashConfigText, loadConfig, readConfigText, validateConfigText, writeConfigText, type TextIssue } from "@/lib/config";
+import { configLayer, layeredConfigFingerprint, loadConfig, readConfigText, validateConfigText, writeConfigText, type TextIssue } from "@/lib/config";
 
 import { makeTempConfig, type TempConfig } from "./helpers";
 
@@ -80,7 +80,7 @@ describe("validateConfigText on a file older than the code", () => {
 });
 
 describe("saving an older file from the editor", () => {
-  const options = () => ({ baseHash: hashConfigText(readConfigText("notify")), baseLayer: configLayer("notify"), maxBytes: 1_000_000, backupsKeep: 3 });
+  const options = () => ({ baseHash: layeredConfigFingerprint("notify"), baseLayer: configLayer("notify"), maxBytes: 1_000_000, backupsKeep: 3 });
 
   it("writes the text as written (still the old format), and the loader reads it migrated", async () => {
     await writeConfigText("notify", OLD_NOTIFY, options());

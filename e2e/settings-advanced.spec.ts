@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { effectiveConfig } from "./helpers/effective-config";
 import { expect, test, type Page } from "./fixtures";
 
 /**
@@ -49,9 +50,12 @@ test("lists every config file with its source, validity and version state; ?file
 
   await page.goto("/settings?tab=advanced&file=pipeline");
   await expect(page.getByTestId("advanced-editor")).toHaveAttribute("data-file", "pipeline");
-  await expect(page.getByTestId("override-warning")).toContainText("整份覆盖文件");
-  // an 800-line file: the line numbers are there
-  await expect(page.getByTestId("yaml-editor").locator("[data-line-error], div").first()).toBeVisible();
+  // a file nobody changed opens as a short stub, with the shipped text to look things up in; only models.yaml warns
+  await expect(page.getByTestId("override-warning")).toHaveCount(0);
+  await expect(page.getByTestId("shipped-reference")).toBeVisible();
+  expect((await text(page)).split("\n").length).toBeLessThan(10);
+  await page.goto("/settings?tab=advanced&file=models");
+  await expect(page.getByTestId("override-warning")).toBeVisible();
 });
 
 test("a protected key (an API host) is flagged on its line and cannot be saved; the locked keys are listed", async ({ page }) => {
@@ -144,25 +148,22 @@ test("a change made behind the editor's back is noticed at the preview with 'ope
   expect(read("notify.yaml")).toBe(`${theirs}# my note\n`);
 });
 
-test("a product default file: the first save needs a confirmation and creates the override; restoring the default removes it", async ({ page }) => {
+test("a file nobody changed: the first save writes what the user typed, with no confirmation; restoring the default removes it", async ({ page }) => {
   await open(page, "&file=pipeline");
   const original = await text(page);
-  await setText(page, `${original}\n# my comment\n`);
+  const edited = `${original}\n# my comment\nbatch_size: 123\n`;
+  await setText(page, edited);
   await expect(page.getByTestId("issues-ok")).toContainText("没有问题");
   await page.getByTestId("advanced-save").click();
   const dialog = page.getByTestId("preview-dialog");
-  await expect(dialog.getByTestId("override-warning")).toBeVisible();
-  // no confirmation, no save
-  await expect(dialog.getByTestId("preview-confirm")).toBeDisabled();
-  // the diff can be read against the product default too
-  await dialog.getByTestId("preview-against-default").click();
-  await expect(dialog.locator('[data-diff="add"]').filter({ hasText: "my comment" })).toBeVisible();
-  await dialog.getByTestId("override-confirm").click();
+  await expect(dialog.getByTestId("override-warning")).toHaveCount(0);
+  await expect(dialog.getByTestId("changed-paths")).toContainText("batch_size");
   await dialog.getByTestId("preview-confirm").click();
   await expect(page.getByTestId("advanced-state")).toContainText("没有未保存");
   await expect.poll(() => fs.existsSync(file("pipeline.yaml"))).toBe(true);
-  expect(read("pipeline.yaml")).toContain("# my comment");
-  await expect(page.getByTestId("advanced-file-source-pipeline")).toContainText("已覆盖默认");
+  expect(read("pipeline.yaml")).toBe(edited);
+  expect(effectiveConfig<{ batch_size: number; dedupe: unknown }>("pipeline.yaml")).toMatchObject({ batch_size: 123, dedupe: expect.anything() as unknown });
+  await expect(page.getByTestId("advanced-file-source-pipeline")).toContainText("有你的改动");
 
   await page.getByTestId("advanced-reset").click();
   await page.getByTestId("reset-confirm").click();
@@ -182,7 +183,8 @@ test("a user file can be restored to the default content (after a backup), and '
   await expect(page.getByTestId("reset-dialog").locator('[data-diff="del"]').first()).toContainText("max_per_cycle: 13");
   await page.getByTestId("reset-confirm").click();
   await expect(page.getByTestId("advanced-reset")).toBeHidden();
-  expect(read("notify.yaml")).toBe(fs.readFileSync(path.join(DEFAULTS_DIR, "notify.yaml"), "utf8"));
+  // the shipped file answers from now on
+  expect(fs.existsSync(file("notify.yaml"))).toBe(false);
 
   // an edit that is undone again: the preview says there is no change
   await setText(page, `${await text(page)}x`);

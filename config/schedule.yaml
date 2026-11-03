@@ -1,5 +1,7 @@
 # Run times. cron has 5 fields: minute hour day month weekday, interpreted in the timezone below.
 # The runner hot-reloads this file: changes take effect within about 5 seconds of saving; invalid content is ignored and an error is logged.
+config_version: 2
+
 # IANA time zone name (the setup wizard asks for yours)
 timezone: America/New_York
 

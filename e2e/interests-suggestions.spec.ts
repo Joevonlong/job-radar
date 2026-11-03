@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { effectiveConfig } from "./helpers/effective-config";
 import { expect, test, type Page } from "./fixtures";
 import postgres from "postgres";
 
@@ -85,7 +86,7 @@ test("approve writes the lists, reject leaves them, the decided ones move to the
   const company = byKind(page, "watched_company");
   await company.getByTestId("suggestion-reject").click();
   await expect(page.getByTestId("suggestion-item")).toHaveCount(1);
-  expect(read(INTERESTS_FILE)).toMatch(/watched_companies: \[\]/);
+  expect(effectiveConfig<{ watched_companies: unknown[] }>("interests.yaml").watched_companies).toEqual([]);
 
   // approve the filter: preferences.yaml gets the keyword
   await page.getByTestId("suggestion-item").getByTestId("suggestion-approve").click();

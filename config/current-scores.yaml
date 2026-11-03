@@ -1,4 +1,4 @@
-config_version: 1
+config_version: 2
 backfill:
   # Maximum wait for the migration's SHARE lock, in milliseconds (100–60000).
   lock_timeout_ms: 3000

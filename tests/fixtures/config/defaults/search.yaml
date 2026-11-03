@@ -1,5 +1,5 @@
 # 搜索条件。每个关键词组用 OR 合并成一次查询，再按城市各查一次。
-config_version: 2
+config_version: 3
 keyword_groups:
   # 工程类
   engineering:

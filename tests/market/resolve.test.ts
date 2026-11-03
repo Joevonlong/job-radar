@@ -4,8 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { parseDocument } from "yaml";
 
-import { ConfigError, resetConfigCache } from "@/lib/config";
+import { ConfigError, currentConfigVersion, resetConfigCache } from "@/lib/config";
 import { buildEffectivePipeline, loadMarket, loadPack, loadPipeline, MarketUnresolvedError, marketSettingsProblems, resetPackCache, resolveMarket } from "@/lib/market";
 import type { Pack } from "@/lib/market/load";
 import { emptyGhostPack, emptyVisaPack, ghostPackSchema, visaPackSchema } from "@/lib/market/schema";
@@ -203,5 +204,20 @@ describe("marketSettingsProblems", () => {
     const [problem] = marketSettingsProblems({ pack: "de" });
     expect(problem).toMatchObject({ field: "pack", problem: "invalid" });
     expect(problem?.detail).toBeTruthy();
+  });
+});
+
+describe("a user pipeline.yaml laid over the shipped one, united with the pack", () => {
+  it("the user's list replaces the shipped list, then the pack's entries are added", () => {
+    const pipelineFile = (dir: string) => path.join(dir, "pipeline.yaml");
+    const shipped = parseDocument(fs.readFileSync(pipelineFile(tmp.defaultsDir), "utf8"));
+    shipped.setIn(["filter", "eu_countries"], shipped.createNode(["ZY"]));
+    fs.writeFileSync(pipelineFile(tmp.defaultsDir), String(shipped));
+    fs.writeFileSync(pipelineFile(tmp.configDir), `config_version: ${currentConfigVersion("pipeline")}\nfilter:\n  eu_countries: [ZX]\n`);
+    resetConfigCache();
+    const countries = loadPipeline().market.regions.eu?.countries ?? [];
+    expect(countries).toContain("ZX");
+    expect(countries).not.toContain("ZY");
+    expect(countries.length).toBeGreaterThan(1); // the pack's entries
   });
 });

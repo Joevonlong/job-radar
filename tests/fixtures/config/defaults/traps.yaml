@@ -6,7 +6,7 @@
 # 保存后约 5 秒生效（runner / ai-worker 热加载；网页每次打开页面时重读本文件）。
 
 # 本文件结构的版本，不要手改（以后改结构时由迁移脚本升级）
-config_version: 1
+config_version: 2
 
 # 总开关。false：不扫描、不清洗发给 AI 的文字、页面上不显示；已经存下的发现保留
 enabled: true

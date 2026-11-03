@@ -3,6 +3,8 @@
 # goes into filtering, scoring, notifications or the salary benchmark.
 # Takes effect on the next job page load; the ai-worker reads this file again for every request.
 
+config_version: 2
+
 # Master switch. Off by default: when on, the company name (and a website domain you confirmed; never the title, the location,
 # the JD or your profile) is sent to an AI provider with web search, and research can start on its own when you save or apply
 # to a job (see auto below). An automatic salary lookup also sends the title, city, country and seniority. The timing of those

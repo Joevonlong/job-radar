@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # capability: config-write-step
+# capability: config-overlay-convert
 # Deploy / upgrade Job Radar on this machine. Safe to run again: every step is idempotent.
 #
 #   scripts/ops/deploy.sh [--dry-run] [--skip-pull] [--branch main | --ref v2.0.0 [--verify]] [--remote origin]
@@ -42,7 +43,7 @@
 #                  web and runner each have containers, all running the image this deploy built; the worker service points
 #                  at the target release, its PID holds the instance lock, no other worker process runs. With
 #                  --no-ai-worker: no worker service is installed and nobody holds the instance lock.
-#                  Gate passed: config:migrate --write, config:init, config:plan --deploy --check, then
+#                  Gate passed: config:migrate --write --convert-overlays, config:init, config:plan --deploy --check, then
 #                  config:migrate --prune-backups (only warns). Each command takes the config write lock per file, so web
 #                  saves go on meanwhile. The first failure stops the writes. Gate not passed or a write failed: the deploy
 #                  goes on, the reason is printed and passed to the doctor, the exit code is 2 and the next deploy retries.
@@ -790,7 +791,10 @@ config_writes_pending() { CONFIG_WRITES_PENDING=1; CONFIG_PENDING_REASON="$1"; s
 config_writes() {
   local plan_rc=0
   CONFIG_WRITE_DB_URL="$(ai_worker_db_url "$APP")"
-  config_write_run pnpm config:migrate --write || { config_writes_pending "pnpm config:migrate --write failed (see above)"; return 0; }
+  # A target from before the overlay format (a rollback by --ref) refuses the flag: this running script outlives the checkout.
+  local migrate=(pnpm config:migrate --write)
+  if git -C "$ROOT" show "$TARGET:scripts/ops/deploy.sh" 2>/dev/null | grep -x '# capability: config-overlay-convert' >/dev/null; then migrate+=(--convert-overlays); fi
+  config_write_run "${migrate[@]}" || { config_writes_pending "${migrate[*]} failed (see above)"; return 0; }
   config_write_run pnpm config:init || { config_writes_pending "pnpm config:init failed (see above)"; return 0; }
   config_write_run pnpm config:plan --deploy --check || plan_rc=$?
   case "$plan_rc" in
@@ -805,7 +809,7 @@ if [[ "$CONFIG_WRITE_STEP" == 0 ]]; then
   say "target has no config-write step: skipped; step 4 already handled its config"
 elif [[ "$DRY_RUN" == 1 ]]; then
   say "gate: web and runner containers run the built image; the ai-worker service is at the target release and holds the lock (--no-ai-worker: none is installed, nobody holds the lock); no other worker process"
-  echo "  \$ pnpm config:migrate --write"
+  echo "  \$ pnpm config:migrate --write --convert-overlays"
   echo "  \$ pnpm config:init"
   echo "  \$ pnpm config:plan --deploy --check"
   echo "  \$ pnpm config:migrate --prune-backups"

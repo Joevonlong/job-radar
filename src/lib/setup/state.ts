@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { commitConfigFile, ConfigError, getDefaultConfigPath, getUserConfigPath, mutateConfig, parseConfigText, withConfigWriteLock, withFileLock, type SetupConfig } from "@/lib/config";
+import { commitConfigFile, ConfigError, getDefaultConfigPath, getUserConfigPath, mutateConfig, newFileText, parseConfigText, withConfigWriteLock, withFileLock, type SetupConfig } from "@/lib/config";
 
 import { readUserText } from "@/lib/config/read-user-file";
 import { type SetupCompletedBy, type SetupStepId, type SetupStepStatus } from "./steps";
@@ -79,7 +79,9 @@ export function readSetupState(): SetupStatus {
     const userFile = getUserConfigPath("setup");
     const userStamp = fileStamp(userFile);
     if (userStamp !== null) {
-      const key = `user\u0000${userFile}\u0000${userStamp}`;
+      // an overlay's value depends on the shipped file too
+      const shippedFile = getDefaultConfigPath("setup");
+      const key = `user\u0000${userFile}\u0000${userStamp}\u0000${shippedFile === null ? "" : (fileStamp(shippedFile) ?? "")}`;
       if (cache?.key === key) return cache.status;
       const status = readFile(userFile, "user");
       cache = { key, status };
@@ -183,7 +185,7 @@ export async function ensurePendingSetupFile(now: Date = new Date()): Promise<En
       if (fs.existsSync(/*turbopackIgnore: true*/ target)) return { ok: true, existed: true };
       const shipped = getDefaultConfigPath("setup");
       if (shipped === null) return { ok: false, formError: "setupUnreadable" };
-      const text = fs.readFileSync(/*turbopackIgnore: true*/ shipped, "utf8");
+      const text = newFileText("setup");
       const outcome = await commitConfigFile(target, text, { mode: "create", verify: (content) => void parseConfigText("setup", content.toString("utf8"), target) });
       resetSetupStateCache();
       return { ok: true, existed: outcome === "existed" };

@@ -27,7 +27,7 @@ const flagsOf = (command: string[]) => command.slice(1).filter((word) => word.st
 describe("the write step of deploy.sh", () => {
   it("runs the four commands in this order", () => {
     expect(writeStepCommands().map((command) => command.join(" "))).toEqual([
-      "config:migrate --write",
+      "config:migrate --write --convert-overlays",
       "config:init",
       "config:plan --deploy --check",
       "config:migrate --prune-backups",

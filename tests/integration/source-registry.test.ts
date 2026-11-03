@@ -8,7 +8,6 @@ import { closeDb, getAtsBoard, getBoardSeenCounts, getChannelWindowStats, getDb,
 import { runMigrations } from "@/lib/db/migrate";
 import { BOARD_STATE_VERSION } from "@/lib/db/repos/ats-boards";
 import { readRegistrySyncState, syncSourceRegistry } from "@/lib/sources/registry/sync";
-import { hashConfigText } from "@/lib/config";
 
 import { shippedChannels } from "../channels/helpers";
 
@@ -116,18 +115,18 @@ describe("syncSourceRegistryRows", () => {
     const db = getDb();
     await db.execute(sql`truncate table source_registry, runtime_state`);
     const config = shippedChannels();
-    const text = "# the file text";
-    const result = await syncSourceRegistry(db, { config, text, at: new Date("2026-10-08T12:00:00Z") });
+    const fingerprint = "the-fingerprint";
+    const result = await syncSourceRegistry(db, { config, fingerprint, at: new Date("2026-10-08T12:00:00Z") });
     expect(result).toEqual({ upserted: 24 + config.ats_boards.length, removed: 0 });
     const rows = await listSourceRegistryRows(db);
     expect(rows.filter((r) => r.type === "channel")).toHaveLength(24);
     expect(rows.find((r) => r.id === "board:greenhouse:zellwerk")).toMatchObject({ type: "ats_board", parentId: "greenhouse", enabled: true, params: { ats: "greenhouse", token: "zellwerk" } });
-    expect(await readRegistrySyncState(db)).toEqual({ hash: hashConfigText(text), at: "2026-10-08T12:00:00.000Z", count: result.upserted });
+    expect(await readRegistrySyncState(db)).toEqual({ hash: fingerprint, at: "2026-10-08T12:00:00.000Z", count: result.upserted });
     expect((await getRuntimeState(db, "sources.registry_synced"))?.key).toBe("sources.registry_synced");
 
     // a board leaves the file
     const smaller = { ...config, ats_boards: config.ats_boards.slice(1) };
-    expect(await syncSourceRegistry(db, { config: smaller, text: "# smaller" })).toMatchObject({ removed: 1 });
+    expect(await syncSourceRegistry(db, { config: smaller, fingerprint: "smaller" })).toMatchObject({ removed: 1 });
   });
 });
 

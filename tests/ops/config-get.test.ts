@@ -5,6 +5,8 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseDocument } from "yaml";
 
+import { legacyFormatVersion } from "@/lib/config";
+
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 import { runConfigScript } from "../config/run-script";
 
@@ -21,6 +23,7 @@ describe("config-get", () => {
   const writeUser = (text: string) => fs.writeFileSync(path.join(tmp.configDir, "schedule.yaml"), text);
   const shippedWith = (change: (doc: ReturnType<typeof parseDocument>) => void) => {
     const doc = parseDocument(shipped());
+    doc.set("config_version", legacyFormatVersion("schedule")); // a whole file: the last version before the overlay format
     change(doc);
     return doc.toString();
   };
@@ -56,7 +59,7 @@ describe("config-get", () => {
     expect(r).toMatchObject({ status: 0, out: "7\n1\n" });
   });
 
-  it("refuses !unset (not supported by this version): exit 1, nothing on stdout", () => {
+  it("refuses !unset in a whole file: exit 1, nothing on stdout", () => {
     writeUser(`${shippedWith((doc) => doc.deleteIn(["backup", "max_age_hours"]))}`.replace("backup:\n", "backup:\n  max_age_hours: !unset\n"));
     const r = get("schedule.yaml", "timezone");
     expect(r.status).toBe(1);

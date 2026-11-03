@@ -24,11 +24,11 @@ describe("config.layers", () => {
     expect(readOnly.detail).toContain("不可写");
   });
 
-  it("warns about overridden shipped files: product updates of them no longer apply", async () => {
-    const result = await check({ overrides: ["models.yaml"] });
+  it("warns about user files without config_version: keys they lack take the schema's defaults", async () => {
+    const result = await check({ missingVersion: ["ai.yaml"] });
     expect(result.status).toBe("warn");
-    expect(result.detail).toContain("你覆盖了 models.yaml：产品更新这些文件的内容不会生效");
-    expect(result.hint).toContain("data/config");
+    expect(result.detail).toContain("ai.yaml 没有 config_version");
+    expect(result.hint).toContain("config:plan --deploy");
   });
 
   it("warns about files behind the code and says to run config:migrate --write", async () => {

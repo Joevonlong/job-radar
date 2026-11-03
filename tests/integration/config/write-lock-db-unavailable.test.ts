@@ -5,7 +5,7 @@ import path from "node:path";
 import { buildSync } from "esbuild";
 import { afterEach, beforeEach, describe, expect, inject, it } from "vitest";
 
-import { ConfigError, hashConfigText, loadConfig, resetConfigCache, withFileLock, withConfigWriteLock, writeConfig, writeConfigText } from "@/lib/config";
+import { ConfigError, layeredConfigFingerprint, loadConfig, resetConfigCache, withFileLock, withConfigWriteLock, writeConfig, writeConfigText } from "@/lib/config";
 import { acquireConfigWriteLock, DbUnavailable } from "@/lib/db/config-write-lock";
 import { getTranslator } from "@/lib/i18n/node";
 import { saveProfile } from "@/lib/profile/service";
@@ -73,7 +73,7 @@ describe("saves in the web", { timeout: 60_000 }, () => {
     };
     expect(await kindOf(() => writeConfig("notify", { ...loadConfig("notify"), public_base_url: "https://a.example.com" }))).toBe("db_unavailable");
     const text = fs.readFileSync(path.join(temp.configDir, "search.yaml"), "utf8");
-    expect(await kindOf(() => writeConfigText("search", `${text}\n# edited\n`, { baseHash: hashConfigText(text), baseLayer: "user", maxBytes: 1_000_000, backupsKeep: 5 }))).toBe("db_unavailable");
+    expect(await kindOf(() => writeConfigText("search", `${text}\n# edited\n`, { baseHash: layeredConfigFingerprint("search"), baseLayer: "user", maxBytes: 1_000_000, backupsKeep: 5 }))).toBe("db_unavailable");
     expect(await kindOf(() => withFileLock(path.join(temp.configDir, "x.yaml"), () => withConfigWriteLock(async () => 1)))).toBe("db_unavailable");
     expect(await ensurePendingSetupFile()).toEqual({ ok: false, formError: "dbUnavailable" });
     expect(await markStep("market", "done")).toEqual({ ok: false, reason: "db_unavailable" });

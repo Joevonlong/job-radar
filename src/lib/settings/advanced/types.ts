@@ -15,7 +15,7 @@ export interface AdvancedFileEntry {
   /** `user` = copied into the user directory and owned by the user; `shipped` = read from the product defaults (a saved copy overrides it whole). */
   group: "user" | "shipped";
   layer: AdvancedLayer;
-  /** A copy in the user directory replaces a shipped file (only `shipped` files can be overridden). */
+  /** The user directory has a file for a `shipped` config: its keys are laid over the shipped file. */
   overridden: boolean;
   valid: boolean;
   /** First problem as one line (`path: reason`), when the file is not valid. */
@@ -29,16 +29,16 @@ export interface AdvancedFileData {
   entry: AdvancedFileEntry;
   /** For people: `data/config/ai.yaml` or `config/ai.yaml`. */
   path: string;
-  /** Hash of the file's real text and its layer: sent back with a save so a change made meanwhile is noticed. */
+  /** Fingerprint of both layers and the file's layer: sent back with a save so a change made meanwhile is noticed. */
   hash: string;
   layer: AdvancedLayer;
   text: string;
-  /** The shipped default's text (masked); null when there is none. */
+  /** The shipped file's text (masked), the reference shown beside the editor; null when there is none. */
   defaultText: string | null;
   /** `config_version` the code writes for this file. */
   codeVersion: number;
   maxBytes: number;
-  /** Whether "restore default" has anything to do: the user file differs from / overrides the default. */
+  /** Whether "restore default" has anything to do: there is a user file, and it is not setup.yaml (no file there means the wizard is pending). */
   canReset: boolean;
   /** The file's protected key patterns (`providers.*.command`): edited by hand in the file, not here. Empty when none. */
   protectedKeys: string[];

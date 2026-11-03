@@ -4,7 +4,7 @@ import path from "node:path";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
-import { getConfigPath, hashConfigText, loadConfig, readConfigText, resolveConfigPath, watchConfig } from "@/lib/config";
+import { getConfigPath, layeredConfigFingerprint, loadConfig, readConfigText, resolveConfigPath, watchConfig } from "@/lib/config";
 import { claimNextControlRequest, closeDb, createCycle, createRun, finishRun, getDb, insertControlRequest, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { ackState, diskConfigHash, readConfigAcks, recordAllConfigLoaded, recordConfigLoaded } from "@/lib/settings/ack";
@@ -39,7 +39,7 @@ afterAll(async () => {
 const read = (tab: SettingsForm | "models") => fs.readFileSync(resolveConfigPath(tab), "utf8");
 
 /** A save as the form makes it: with the hash of the file as it is now. */
-const saveNow = (request: { tab: SettingsForm; draft: Record<string, unknown> }) => saveSettings({ ...request, baseHash: hashConfigText(read(request.tab)) });
+const saveNow = (request: { tab: SettingsForm; draft: Record<string, unknown> }) => saveSettings({ ...request, baseHash: layeredConfigFingerprint(request.tab) });
 
 function draftOf(tab: SettingsForm) {
   return configToDraft(tab, loadConfig(tab));
@@ -69,18 +69,19 @@ describe("saveSettings", () => {
   });
 
   it("refuses a save made on an older version of the file (another tab or device saved in between)", async () => {
-    const opened = hashConfigText(read("search"));
+    const opened = layeredConfigFingerprint("search");
     const first = draftOf("search");
     first["window_hours.morning"] = "31";
     expect(await saveSettings({ tab: "search", draft: first, baseHash: opened })).toMatchObject({ status: "saved" });
     const afterFirst = read("search");
+    const afterFirstHash = layeredConfigFingerprint("search");
     const second = draftOf("search");
     second["window_hours.morning"] = "32";
     const result = await saveSettings({ tab: "search", draft: second, baseHash: opened });
-    expect(result).toMatchObject({ status: "error", tab: "search", formError: "stale", baseHash: hashConfigText(afterFirst) });
+    expect(result).toMatchObject({ status: "error", tab: "search", formError: "stale", baseHash: afterFirstHash });
     expect(read("search")).toBe(afterFirst);
     // with the current version it saves
-    expect(await saveSettings({ tab: "search", draft: second, baseHash: hashConfigText(afterFirst) })).toMatchObject({ status: "saved" });
+    expect(await saveSettings({ tab: "search", draft: second, baseHash: afterFirstHash })).toMatchObject({ status: "saved" });
   });
 
   it("an invalid value comes back as a field error and leaves the file untouched", async () => {
@@ -92,7 +93,7 @@ describe("saveSettings", () => {
     expect(result.status).toBe("error");
     if (result.status !== "error") return;
     expect(result.formError).toBeNull();
-    expect(result.baseHash).toBe(hashConfigText(before));
+    expect(result.baseHash).toBe(layeredConfigFingerprint("schedule"));
     expect(result.fieldErrors.map((e) => `${e.path}:${e.key}`).sort()).toEqual(["cycles.weekday_morning.cron:cron", "timezone:timezone"]);
     expect(read("schedule")).toBe(before);
   });
@@ -194,7 +195,7 @@ describe("saveSettings", () => {
   it("the page loader hands each tab its draft and hash, and reports a broken file", async () => {
     let page = await loadSettingsPage();
     expect(page.sections.map((s) => s.tab)).toEqual([...SETTINGS_FORMS]);
-    expect(page.sections.every((s) => s.draft !== null && s.hash === hashConfigText(read(s.tab)))).toBe(true);
+    expect(page.sections.every((s) => s.draft !== null && s.hash === layeredConfigFingerprint(s.tab))).toBe(true);
     expect(page.channelChoices).toContain("indeed");
     expect(page.channelChoices).toContain("linkedin-apify"); // registered now
     expect(page.channelChoices).not.toContain("linkedin-session");
@@ -223,7 +224,7 @@ describe("hot reload acknowledgement", () => {
     expect(status.acks.search?.state).toBe("waiting");
     expect(status.acks.schedule?.state).toBe("loaded");
 
-    await recordConfigLoaded(db, "search", readConfigText("search"));
+    await recordConfigLoaded(db, "search", layeredConfigFingerprint("search"));
     status = await loadControlStatus(db);
     expect(status.acks.search?.state).toBe("loaded");
     expect(ackState(diskConfigHash("search"), (await readConfigAcks(db)).search)).toBe("loaded");
@@ -235,7 +236,7 @@ describe("hot reload acknowledgement", () => {
     const stop = watchConfig(
       [...ACK_NAMES],
       (event) => {
-        if (isAckName(event.name)) void recordConfigLoaded(db, event.name satisfies AckName, event.text);
+        if (isAckName(event.name)) void recordConfigLoaded(db, event.name satisfies AckName, event.fingerprint);
       },
       { pollMs: 50, debounceMs: 20 },
     );

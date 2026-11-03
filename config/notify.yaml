@@ -1,6 +1,6 @@
 # Telegram push. Token and chat id go in .env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
 # Creating a bot and getting the chat id: see docs/telegram.md; once set up, send a test message with `pnpm telegram:test`.
-config_version: 2
+config_version: 3
 telegram:
   enabled: false # off until you set up the bot with `pnpm run setup --step telegram` (docs/telegram.md), which offers to switch it on; or switch it on in the setup wizard / Settings
   api_base_url: "https://api.telegram.org"

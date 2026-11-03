@@ -3,6 +3,7 @@ import fs from "node:fs";
 import YAML from "yaml";
 import { describe, expect, it } from "vitest";
 import { configRegistry } from "@/lib/config/registry";
+import { withoutConfigVersion } from "@/lib/config/migrations/version";
 import { activityLogSchema } from "@/lib/config/schemas/activity-log";
 import { parseConfigText } from "@/lib/config/load";
 import { activitySettings } from "../activity/helpers";
@@ -11,7 +12,7 @@ describe("activity log configuration", () => {
   it("accepts repository and fixture YAML without depending on their values", () => {
     for (const file of ["config/activity-log.yaml", "tests/fixtures/config/defaults/activity-log.yaml"]) {
       const text = fs.readFileSync(file, "utf8");
-      expect(activityLogSchema.safeParse(YAML.parse(text)).success).toBe(true);
+      expect(activityLogSchema.safeParse(withoutConfigVersion(YAML.parse(text))).success).toBe(true);
       expect(() => parseConfigText("activityLog", text)).not.toThrow();
     }
     expect(configRegistry.activityLog.kind).toBe("shipped");

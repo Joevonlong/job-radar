@@ -5,7 +5,9 @@
  * - `JOB_RADAR_DEFAULTS_DIR` (default `<job-radar>/config`): shipped defaults, tracked in git, read-only.
  * - `JOB_RADAR_CONFIG_DIR` (default `<job-radar>/data/config`): the user's files; a file here wins, every write lands here.
  * - `JOB_RADAR_PROFILE_DIR` (default `<job-radar>/data/profile`): me.yaml / preferences.yaml.
- * Each file may carry `config_version` (missing = 1); older files are migrated in memory on load (`migrations/`).
+ * A value is the shipped file with the user's file merged over it, key by key (`key: !unset` removes a key). A user file from
+ * before that format is a whole file and read as one; a deploy's write step converts it. Each file may carry
+ * `config_version` (missing = 1); older files are migrated in memory on load (`migrations/`).
  */
 export * from "./errors";
 export { changedKeyPaths, diffYaml, type DiffLine } from "./diff";
@@ -23,17 +25,23 @@ export {
   type ConfigExampleInfo,
 } from "./examples";
 export { freshenConfig } from "./fresh";
-export { hashConfigText } from "./hash";
+export { hashConfigText, layeredConfigFingerprint, layeredFingerprint } from "./hash";
 export {
   configSourcePath,
   loadConfig,
+  fileLacksVersion,
   parseConfigDocument,
   parseConfigText,
   parseConfigTextWithVersion,
+  readConfigLayers,
   readConfigText,
+  readEffectiveConfig,
+  readEffectiveRaw,
   readProfileText,
   refreshConfigCache,
+  readShippedConfig,
   reloadConfig,
+  reloadConfigWithFingerprint,
   resetConfigCache,
   validateConfigValue,
   type ConfigRefreshResult,
@@ -54,6 +62,8 @@ export {
   getProfileDir,
   getProfileExampleDir,
   getUserConfigPath,
+  readOverlayText,
+  readShippedText,
   resolveConfigPath,
   type ConfigLayer,
 } from "./paths";
@@ -70,7 +80,11 @@ export {
   configMigrations,
   currentConfigVersion,
   documentConfigVersion,
+  hasOverlayFormat,
+  isOverlayVersion,
+  legacyFormatVersion,
   migrateConfigDocument,
+  overlayFormatVersion,
   stampConfigVersion,
   withoutConfigVersion,
   type DocumentMigrationResult,
@@ -84,6 +98,8 @@ export {
   type FileMigration,
   type FileMigrationProblem,
 } from "./migrations/files";
+export { applyToFull, planToFull, restoreConfigBackup, type AppliedToFull, type ToFullItem, type ToFullPlan } from "./migrations/rollback";
+export { newFileFormat, type NewFileFormat } from "./new-file-format";
 export { pruneConfigBackups } from "./migrations/backups";
 export { DEPLOY_WRITE_PLAN, planConfigWrites, type ConfigWritesPlan, type PlannedConfigWrite } from "./migrations/plan-writes";
 export { ensureProfileFiles, ensureProfileFilesPlan, setOnProfileSaved, type EnsureProfileResult, type ProfileSavedHook } from "./profile";
@@ -102,7 +118,7 @@ export {
 } from "./registry";
 export * from "./schemas";
 export { watchConfig, type ConfigChangeEvent, type ConfigTarget, type WatchDirectory, type WatchOptions } from "./watch";
-export { mutateConfig, withFileLock, writeConfig, writeConfigText, resetConfigToDefault, type TextBase, type TextWriteOptions, type TextWriteResult } from "./write";
+export { mutateConfig, newFileText, overlayStubText, wholeFileText, withFileLock, writeConfig, writeConfigRepair, writeConfigText, resetConfigToDefault, type TextBase, type TextWriteOptions, type TextWriteResult } from "./write";
 export { backupConfigText, editorBackupRoot } from "./editor-backup";
 export { maskConfigText, restoreMaskedText, type RestoreResult } from "./secrets-mask";
 export { interestsRawWarnings, interestsWarnings, SLOW_PATTERN_MESSAGE, slowInterestPatterns, type InterestsWarning, type SlowInterestPattern } from "./interests-lint";

@@ -7,7 +7,7 @@
 # match reasons and gaps, filter reasons and your salary floor, notes, emails, local paths, keys.
 
 # Version of this file's structure; don't edit by hand (a migration script upgrades it when the structure changes)
-config_version: 1
+config_version: 2
 
 # Master switch. false: `pnpm mcp:serve` refuses to start and says why (your client shows the message)
 enabled: false

@@ -3690,8 +3690,9 @@
       "editorLabel": "Contents of {file}",
       "tabHint": "Tab indents by two spaces; press Esc, then Tab, to leave the box.",
       "keysHint": "Tab indents · Shift+Tab unindents · Esc then Tab leaves the box · Cmd/Ctrl+S previews and saves",
+      "shippedReference": "Shipped file, for reference (your file only needs the keys you change)",
       "secretsNote": "Keep secrets (API keys, tokens, passwords) in .env, not in a config file.",
-      "versionNote": "This file's config_version is older than the program's: it is upgraded in memory when read. To save it here, add the new keys and set config_version to {version}, or run pnpm config:migrate --write.",
+      "versionNote": "This file's config_version is older than the program's. It keeps working: it is read as it is, saved in its own format, and a deploy brings it up to date (pnpm config:migrate --write --convert-overlays).",
       "checking": "Checking…",
       "noIssues": "No problems: ready to save",
       "issueCount": "{count, plural, one {# problem} other {# problems}} (fix them to save)",
@@ -3709,13 +3710,12 @@
       "unsaved": "Unsaved changes",
       "clean": "No unsaved changes",
       "resetButton": "Restore default",
+      "resetToast": "Restored the product default of {file} (your file was backed up and removed)",
       "savedToast": "Saved {file} (the old text was backed up)",
-      "resetToastShipped": "Restored the product default of {file} (the override was backed up and removed)",
-      "resetToastUser": "Restored {file} to the default content (the old text was backed up)",
       "failure": {
         "proxies_changed": "Proxies can only be changed in the file itself: here they show as *** and cannot be added, removed or edited.",
         "too_large": "The text is too long (limit {max} bytes, ui.yaml config_editor.max_bytes).",
-        "needs_confirm": "This is a product default file: the first save must be confirmed, it creates a whole-file override.",
+        "needs_confirm": "models.yaml: the first save writes a full copy of the catalog and must be confirmed.",
         "failed": "Could not save; the file is unchanged.",
         "protected": "This text changes a locked key (a command, an API host or a credential path). Edit the file by hand to change it.",
         "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
@@ -3729,13 +3729,11 @@
         "invalid": "invalid",
         "source_user": "user directory",
         "source_default": "default",
-        "source_overridden": "overrides default",
+        "source_overridden": "has your changes",
         "source_missing": "missing",
         "versionBehind": "version behind"
       },
       "override": {
-        "text": "This is a product default file: saving writes a whole-file override into the user directory, and later product updates of this file will not apply. \"Restore default\" goes back to the product default at any time.",
-        "confirm": "I understand, create the override",
         "textOverlay": "models.yaml is laid over the product's model catalog, model by model. This editor starts from the whole catalog: saving writes a full copy, and every model in it replaces the product's by id, so later product updates to their prices and limits no longer apply. To keep following updates, delete the models you did not change and keep only your own additions (or add models with the refresh button on the AI tab). \"Restore default\" goes back to the product catalog at any time.",
         "confirmOverlay": "I understand, save a full copy"
       },
@@ -3769,9 +3767,8 @@
       },
       "reset": {
         "title": "Restore default",
-        "descriptionShipped": "Removes the override file in the user directory; the product default is read again (and gets the product's updates). The current text is backed up first.",
-        "descriptionUser": "Replaces the current file with the content of the product default. The current text is backed up first.",
-        "noChanges": "The current content is the same as the default.",
+        "description": "Removes your file from the user directory: every key follows the product default again. Your text is backed up first.",
+        "noChanges": "Your file is empty.",
         "cancel": "Cancel",
         "confirm": "Restore default",
         "working": "Working…"
@@ -6065,8 +6062,8 @@
           "pending": "{file} (version {from} → {to})",
           "pendings": "{files} are older than the code and are migrated in memory on every read",
           "pendingsHint": "pnpm config:migrate shows the changes, pnpm config:migrate --write writes them (originals backed up in .backup/)",
-          "overrides": "You override {files}: product updates of these files no longer apply",
-          "overridesHint": "Ignore this if you maintain them yourself; to follow product updates, delete these files from {userDir}",
+          "missingVersion": "{files} without config_version: read as whole files, so keys they lack take the schema's defaults",
+          "missingVersionHint": "Add config_version to the file, or let the next deploy's write step convert it (pnpm config:plan --deploy shows it).",
           "notCopied": "{files} are still read from the defaults (not copied into the user directory)",
           "notCopiedHint": "pnpm config:init",
           "summary": "User config {userDir} ({count} files), defaults {defaultsDir}"
@@ -6139,10 +6136,11 @@
           "none": "no config writes are pending",
           "pending": "{count} config file(s) wait for the next deploy: {files}",
           "skipped": "The last deploy skipped them: {reason}",
-          "hint": "The next deploy retries them. To write them now, once every process runs this version: pnpm config:migrate --write, then pnpm config:init.",
+          "hint": "The next deploy retries them. To write them now, once every process runs this version: pnpm config:migrate --write --convert-overlays, then pnpm config:init.",
           "problems": "{count} config file(s) cannot be migrated: {files}",
           "kind": {
             "migrate": "{file} (format update)",
+            "convert": "{file} (to the key-by-key format)",
             "create": "{file} (new file)"
           }
         }

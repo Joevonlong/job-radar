@@ -7,12 +7,14 @@ import YAML from "yaml";
 
 import { configRegistry } from "@/lib/config";
 
+import { withoutConfigVersion } from "@/lib/config/migrations/version";
+
 import { FIXTURE_DEFAULTS_DIR, shippedYaml } from "./helpers";
 
 /** schedule.yaml deploy.ai_worker_*: the release-directory keys of the host ai-worker, schema defaults only. */
 const schema = configRegistry.schedule.schema;
 const base = (): Record<string, unknown> =>
-  YAML.parse(fs.readFileSync(path.join(FIXTURE_DEFAULTS_DIR, "schedule.yaml"), "utf8")) as Record<string, unknown>;
+  withoutConfigVersion(YAML.parse(fs.readFileSync(path.join(FIXTURE_DEFAULTS_DIR, "schedule.yaml"), "utf8"))) as Record<string, unknown>;
 const withDeploy = (deploy: Record<string, unknown>): Record<string, unknown> => {
   const raw = base();
   raw.deploy = { ...((raw.deploy as Record<string, unknown> | undefined) ?? {}), ...deploy };

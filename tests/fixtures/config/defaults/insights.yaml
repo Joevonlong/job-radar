@@ -1,7 +1,7 @@
 # /insights 统计页：时间范围、单列的城市、直方图怎么分段。只影响统计页的显示，不影响采集。
 # 网页没有配置热加载：每次打开页面时重新读取本文件。
 
-config_version: 2
+config_version: 3
 
 # 时间范围切换（天数，从短到长）。"今天"按 schedule.yaml 的 timezone 算，范围包含今天
 ranges_days: [7, 30, 90]

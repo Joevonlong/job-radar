@@ -7,7 +7,7 @@ import postgres, { type Sql } from "postgres";
 import { parseDocument } from "yaml";
 
 import { CONFIG_WRITE_LOCK_KEY } from "@/lib/db/config-write-lock";
-import { hashConfigText } from "@/lib/config";
+import { layeredConfigFingerprint, type ConfigName } from "@/lib/config";
 
 import type { TempConfig } from "../../config/helpers";
 
@@ -161,8 +161,9 @@ export function setConfigValue(temp: TempConfig, file: string, at: string[], val
   fs.writeFileSync(target, doc.toString());
 }
 
-export function textHash(temp: TempConfig, file: string): string {
-  return hashConfigText(fs.readFileSync(path.join(temp.configDir, file), "utf8"));
+/** The hash a form or the editor opened on `file` holds (the temp directories are this process's, too). */
+export function textHash(_temp: TempConfig, file: string): string {
+  return layeredConfigFingerprint(file.replace(/\.yaml$/, "") as ConfigName);
 }
 
 /** Temp files of a commit that did not finish. */

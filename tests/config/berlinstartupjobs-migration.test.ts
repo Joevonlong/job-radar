@@ -9,7 +9,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse, parseDocument } from "yaml";
 
-import { migrateConfigDocument, parseConfigDocument, validateConfigValue, type ConfigName } from "@/lib/config";
+import { legacyFormatVersion, migrateConfigDocument, parseConfigDocument, validateConfigValue, type ConfigName } from "@/lib/config";
 import { pipeline005 } from "@/lib/config/migrations/pipeline/005-berlinstartupjobs-priority";
 import { sources007 } from "@/lib/config/migrations/sources/007-berlinstartupjobs";
 
@@ -53,7 +53,7 @@ describe("sources.yaml 6 -> 7", () => {
     expect(steps).toBe(1);
     expect(text).toMatch(/^config_version: 7$/m);
     const shipped = parse(fs.readFileSync(path.join(FIXTURE_DEFAULTS_DIR, "sources.yaml"), "utf8")) as Record<string, unknown>;
-    expect(parse(text)).toEqual(shipped);
+    expect(parse(text)).toEqual({ ...shipped, config_version: legacyFormatVersion("channels") });
     expect(validateConfigValue("channels", parse(text), "sources.yaml").sources.berlinstartupjobs).toMatchObject({
       enabled: true,
       markets: ["DE"],

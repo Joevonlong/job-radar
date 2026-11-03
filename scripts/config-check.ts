@@ -26,7 +26,6 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { parse as parseYaml } from "yaml";
 
 import {
   ConfigError,
@@ -49,12 +48,20 @@ import {
   OVERLAID_CONFIG_NAMES,
   parseConfigText,
   parseConfigTextWithVersion,
+  documentConfigVersion,
+  fileLacksVersion,
+  hasOverlayFormat,
+  isOverlayVersion,
+  readConfigLayers,
   readConfigText,
+  readEffectiveConfig,
+  readEffectiveRaw,
   type ConfigName,
   type ConfigValue,
 } from "../src/lib/config";
 import { checkCommentedDefaults, TITLE_GUARD_BLOCK } from "../src/lib/config/commented-defaults";
 import { effectiveConfigEntries } from "../src/lib/config/effective-report";
+import { parseConfigYamlDocument } from "../src/lib/config/yaml-options";
 import { titleGuardSchema } from "../src/lib/config/schemas/pipeline";
 import { shippedConfigId, shortShippedConfigId } from "../src/lib/config/shipped-id";
 import { dealBreakerLimitProblems, slowPatternProblems } from "../src/lib/filter/deal-breakers";
@@ -81,6 +88,18 @@ if (process.argv.includes("--effective")) {
 }
 
 let failures = 0;
+/** A user file at a version below the overlay format: it is read as the whole file, not laid over the shipped one. */
+function isOverlayFile(name: ConfigName): boolean {
+  if (!hasOverlayFormat(name)) return true; // no overlay format: "changes on the shipped file" still describes it
+  const text = readConfigLayers(name).overlay;
+  if (text === null) return true;
+  try {
+    return isOverlayVersion(name, documentConfigVersion(parseConfigYamlDocument(text, { unset: "overlay" })));
+  } catch {
+    return true;
+  }
+}
+
 const pendingMigrations: string[] = [];
 
 function report(label: string, run: () => string | void): void {
@@ -119,9 +138,10 @@ for (const name of CONFIG_NAMES) {
     console.log(`- ${rel(file)} (not present, skipped)`);
     continue;
   }
-  const where = layer === "default" ? "(default)" : entry.location === "profile" ? "(profile)" : (OVERLAID_CONFIG_NAMES as readonly ConfigName[]).includes(name) ? "(user additions on the shipped file)" : entry.kind === "shipped" ? "(user override of a shipped file)" : "(user)";
+  const where = layer === "default" ? "(default)" : entry.location === "profile" ? "(profile)" : !isOverlayFile(name) ? "(user, whole file)" : "(user changes on the shipped file)";
   report(`${rel(file)} ${where}`, () => {
-    const { migration } = parseConfigTextWithVersion(name, readConfigText(name), file);
+    const layers = readConfigLayers(name);
+    const { migration } = parseConfigTextWithVersion(name, layers.overlay ?? layers.shipped ?? readConfigText(name), file, layers.shipped);
     if (migration.applied.length === 0) return;
     if (layer === "default") throw new Error(`the shipped default is at config_version ${migration.from}, the code expects ${migration.to}: ship it migrated`);
     pendingMigrations.push(rel(file));
@@ -155,9 +175,9 @@ for (const name of CONFIG_NAMES.filter((n) => configRegistry[n].location === "pr
   });
 }
 
-// Overrides of shipped files: the product's updates of them no longer apply.
-for (const name of LAYERED_CONFIG_NAMES.filter((n) => configRegistry[n].kind === "shipped" && !(OVERLAID_CONFIG_NAMES as readonly ConfigName[]).includes(n) && configLayer(n) === "user")) {
-  console.log(`! ${rel(getUserConfigPath(name))} replaces the shipped ${configRegistry[name].file}: product updates of that file no longer apply (delete it to follow them)`);
+// A user file without config_version is read as a whole file: keys it lacks take the schema's defaults, not the shipped values.
+for (const name of LAYERED_CONFIG_NAMES.filter(fileLacksVersion)) {
+  console.log(`! ${rel(getUserConfigPath(name))} has no config_version: it is read as a whole file, so keys it lacks take the schema's defaults (a deploy's write step converts it; run pnpm config:plan --deploy)`);
 }
 
 // models.yaml is an overlay: the user's file lists only what it adds or changes
@@ -173,8 +193,7 @@ for (const name of LAYERED_CONFIG_NAMES.filter((n) => configRegistry[n].kind ===
 
 // interests.yaml can be valid and still unable to match a category
 try {
-  const text = readConfigText("interests");
-  for (const warning of [...interestsWarnings(parseConfigText("interests", text)), ...interestsRawWarnings(parseYaml(text))]) console.log(`! interests.yaml ${warning.path.join(".")}: ${warning.message}`);
+  for (const warning of [...interestsWarnings(readEffectiveConfig("interests")), ...interestsRawWarnings(readEffectiveRaw("interests"))]) console.log(`! interests.yaml ${warning.path.join(".")}: ${warning.message}`);
 } catch {
   // reported by the per-file lines above
 }
@@ -185,8 +204,8 @@ try {
   let ai: ConfigValue<"ai"> | null = null;
   let catalog: ConfigValue<"models"> | null = null;
   try {
-    ai = parseConfigText("ai", readConfigText("ai"));
-    catalog = parseConfigText("models", readConfigText("models"));
+    ai = readEffectiveConfig("ai");
+    catalog = readEffectiveConfig("models");
   } catch {
     // reported by the per-file lines above
   }

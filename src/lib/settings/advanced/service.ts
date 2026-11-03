@@ -3,31 +3,39 @@
  * Everything the browser sends is validated with zod again here (C6), the file is re-validated before every write, and
  * a save is refused when the file changed since the editor opened it. Nothing here throws for bad input.
  */
-import fs from "node:fs";
-
 import { z } from "zod";
 
 import { changedKeyPaths, diffYaml } from "@/lib/config/diff";
 import {
   ConfigError,
   configLayer,
-  configRegistry,
+  documentConfigVersion,
   getDefaultConfigPath,
-  hashConfigText,
+  hasOverlayFormat,
+  isOverlayVersion,
+  layeredConfigFingerprint,
   maskConfigText,
-  readConfigText,
+  migrateConfigDocument,
+  parseConfigDocument,
+  readEffectiveConfig,
+  readOverlayText,
+  readShippedText,
   resetConfigToDefault,
   restoreMaskedText,
   validateConfigText,
+  writeConfigRepair,
   writeConfigText,
   type ConfigName,
   type ValidateOptions,
 } from "@/lib/config";
+import { shippedEffective } from "@/lib/config/load";
+import { toFullText } from "@/lib/config/to-full";
+import { stringifyConfigYaml } from "@/lib/config/yaml-options";
 import { signalPatternIsFast } from "@/lib/signals/pattern-guard";
 import { logActionFailure } from "@/lib/logging/action-failure";
 
 import type { AdvancedFailure, AdvancedLayer, AdvancedPreview, AdvancedResetResult, AdvancedSaveResult, AdvancedValidation } from "./types";
-import { advancedNameOfStem, editorLimits } from "./view";
+import { advancedNameOfStem, editorLimits, editorText } from "./view";
 
 /** Hard ceiling for the text field whatever ui.yaml says (the real limit, `config_editor.max_bytes`, is checked after it). */
 const MAX_TEXT_CHARS = 4_000_000;
@@ -47,17 +55,51 @@ const resetSchema = z.strictObject({ file: stemSchema, baseHash: z.string().max(
  */
 const validateOptions = (name: ConfigName): ValidateOptions => (name === "interests" ? { checkProtected: true, interestsProbe: (limits) => signalPatternIsFast(limits) } : { checkProtected: true });
 
+/** The user's file ("" without one or when it cannot be read). */
 function currentText(name: ConfigName): string {
   try {
-    return readConfigText(name);
+    return readOverlayText(name) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function fingerprint(name: ConfigName): string {
+  try {
+    return layeredConfigFingerprint(name);
   } catch {
     return "";
   }
 }
 
 function currentState(name: ConfigName): { text: string; hash: string; layer: AdvancedLayer } {
-  const raw = currentText(name);
-  return { text: maskConfigText(name, raw), hash: hashConfigText(raw), layer: configLayer(name) };
+  let text = "";
+  try {
+    text = editorText(name);
+  } catch {
+    // no layer to read: the editor starts empty
+  }
+  return { text: maskConfigText(name, text), hash: fingerprint(name), layer: configLayer(name) };
+}
+
+/**
+ * What a text means as a whole file: an overlay laid over the shipped file (`text` null: the shipped file alone). Comments are
+ * kept. Null when it cannot be worked out (an invalid text, no shipped file): the preview then compares the plain texts.
+ */
+function effectiveText(name: ConfigName, text: string | null): string | null {
+  const shippedFile = getDefaultConfigPath(name);
+  if (!hasOverlayFormat(name) || shippedFile === null) return null;
+  try {
+    const shippedSource = readShippedText(name);
+    if (shippedSource === null) return null;
+    const shipped = shippedEffective(name, shippedSource, shippedFile).doc;
+    if (text === null) return toFullText(name, shipped, null);
+    const doc = parseConfigDocument(name, text, shippedFile);
+    migrateConfigDocument(name, doc, shippedFile);
+    return isOverlayVersion(name, documentConfigVersion(doc)) ? toFullText(name, shipped, doc) : stringifyConfigYaml(doc);
+  } catch {
+    return null;
+  }
 }
 
 /** What the editor sent, with the masked proxy entries put back; or the failure to report. */
@@ -82,23 +124,37 @@ export async function previewAdvanced(rawRequest: unknown): Promise<AdvancedPrev
   if (!request.success || name === null) return null;
   const { baseHash, baseLayer } = request.data;
   // a change made behind the editor's back is reported now, not only when "Save" is pressed
-  if (baseHash !== undefined && baseLayer !== undefined && (hashConfigText(currentText(name)) !== baseHash || configLayer(name) !== baseLayer)) {
+  if (baseHash !== undefined && baseLayer !== undefined && (fingerprint(name) !== baseHash || configLayer(name) !== baseLayer)) {
     return { lines: [], paths: [], changed: false, stale: currentState(name) };
   }
-  let against = "";
-  if (request.data.against === "saved") {
-    against = maskConfigText(name, currentText(name));
+  // the saved side, as a whole file and, when that cannot be worked out, as the text in the file
+  let savedText: string | null = null;
+  try {
+    savedText = readOverlayText(name);
+  } catch {
+    return null;
+  }
+  const from = request.data.against === "saved" ? savedText : null;
+  const effectiveAgainst = effectiveText(name, from);
+  const effectiveNext = effectiveText(name, request.data.text);
+  let against: string;
+  let next: string;
+  if (effectiveAgainst !== null && effectiveNext !== null) {
+    against = effectiveAgainst;
+    next = effectiveNext;
   } else {
-    const shipped = getDefaultConfigPath(name);
+    next = request.data.text;
     try {
-      against = shipped === null ? "" : maskConfigText(name, fs.readFileSync(/*turbopackIgnore: true*/ shipped, "utf8"));
+      against = request.data.against === "saved" ? (savedText ?? "") : (readShippedText(name) ?? "");
     } catch {
       return null;
     }
   }
-  // both sides are the masked texts: a diff never carries the proxies' credentials
-  const lines = diffYaml(against, request.data.text, 3);
-  return { lines, paths: lines.length === 0 ? [] : changedKeyPaths(against, request.data.text), changed: lines.length > 0, stale: null };
+  // both sides are masked: a diff never carries the proxies' credentials
+  against = maskConfigText(name, against);
+  next = maskConfigText(name, next);
+  const lines = diffYaml(against, next, 3);
+  return { lines, paths: lines.length === 0 ? [] : changedKeyPaths(against, next), changed: lines.length > 0, stale: null };
 }
 
 function failureOf(name: ConfigName, error: unknown): AdvancedFailure {
@@ -114,22 +170,39 @@ function failureOf(name: ConfigName, error: unknown): AdvancedFailure {
   return { status: "failed" };
 }
 
+function needsRepair(name: ConfigName, text: string): boolean {
+  if (!hasOverlayFormat(name) || readOverlayText(name) === null) return false;
+  try {
+    readEffectiveConfig(name);
+    return false;
+  } catch {
+    const file = getDefaultConfigPath(name) ?? "";
+    return !isOverlayVersion(name, documentConfigVersion(parseConfigDocument(name, text, file)));
+  }
+}
+
 export async function saveAdvanced(rawRequest: unknown): Promise<AdvancedSaveResult> {
   const request = saveSchema.safeParse(rawRequest);
   const name = request.success ? advancedNameOfStem(request.data.file) : null;
   if (!request.success || name === null) return { status: "failed" };
   const { baseHash, baseLayer, confirmOverride } = request.data;
   const limits = editorLimits();
-  // the first save of a product default creates an override of the whole file: the browser must have asked
-  if (configRegistry[name].kind === "shipped" && configLayer(name) === "default" && !confirmOverride) return { status: "needs_confirm" };
+  // models.yaml keeps its by-id overlay: the first save of the full catalog pins every model in it, so the browser must have asked
+  if (name === "models" && configLayer(name) === "default" && !confirmOverride) return { status: "needs_confirm" };
   // a change made behind the editor's back wins over everything else: say so with the latest text
-  if (hashConfigText(currentText(name)) !== baseHash || configLayer(name) !== baseLayer) return { status: "stale", current: currentState(name) };
+  if (fingerprint(name) !== baseHash || configLayer(name) !== baseLayer) return { status: "stale", current: currentState(name) };
   const text = unmasked(name, request.data.text);
   if (!text.ok) return text.failure;
   // the issues come from the same validation the live check ran
   const checked = validateConfigText(name, text.text, validateOptions(name));
   if (!checked.ok && Buffer.byteLength(text.text, "utf8") <= limits.maxBytes) return { status: "invalid", issues: checked.issues };
   try {
+    // No usable value now, and the text is a whole file: the repair entry, which writes the format a new file gets. An overlay is saved as written.
+    if (checked.ok && needsRepair(name, text.text)) {
+      await writeConfigRepair(name, checked.value, { previewFingerprint: baseHash });
+      const state = currentState(name);
+      return { status: "saved", hash: state.hash, layer: "user", text: state.text, backup: baseLayer === "user" };
+    }
     const written = await writeConfigText(name, text.text, { baseHash, baseLayer, maxBytes: limits.maxBytes, backupsKeep: limits.backupsKeep });
     const state = currentState(name);
     return { status: "saved", hash: state.hash, layer: written.layer, text: state.text, backup: written.backup !== null };

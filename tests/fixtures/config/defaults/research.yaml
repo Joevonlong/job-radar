@@ -3,6 +3,8 @@
 # goes into filtering, scoring, notifications or the salary benchmark.
 # Takes effect on the next job page load; the ai-worker reads this file again for every request.
 
+config_version: 2
+
 # Master switch. Off by default: when on, the "Look up company" button appears on the job page, and pressing it sends the
 # company name (never the title, the location, the JD or your profile) to an AI provider with web search.
 enabled: false

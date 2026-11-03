@@ -2,16 +2,16 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { ConfigError } from "./errors";
-import { configSourcePath, parseConfigText, primeConfigCache, readConfigText, registerConfigWatcher } from "./load";
+import { configSourcePath, parseConfigLayers, primeConfigCache, readConfigLayers, registerConfigWatcher, type ConfigLayerTexts } from "./load";
 import { getDefaultConfigPath, getPollIntervalMs, getUserConfigPath } from "./paths";
-import { CONFIG_NAMES, type ConfigName, type ConfigValue } from "./registry";
+import { CONFIG_NAMES, isProfileName, type ConfigName, type ConfigValue } from "./registry";
 
 export interface ConfigChangeEvent<N extends ConfigName = ConfigName> {
   name: N;
   filePath: string;
   value: ConfigValue<N>;
-  /** The file text `value` was parsed from (what `hashConfigText` should be applied to). */
-  text: string;
+  /** The layered fingerprint of the snapshot `value` was validated from (what the "loaded" acknowledgement records). */
+  fingerprint: string;
 }
 
 export interface WatchOptions {
@@ -54,8 +54,8 @@ function defaultOnError(error: ConfigError): void {
  *
  * - fs.watch on the containing directories (survives atomic rename-writes) with a debounce, plus a
  *   polling fallback because fs.watch is unreliable on Docker bind mounts.
- * - Both layers are watched (user directory and defaults directory), so a user file that appears or is deleted
- *   switches the value to it / back to the shipped default.
+ * - Both layers are watched (user directory and defaults directory): the value is the shipped file with the user's file
+ *   over it, so a change in either one, or a user file that appears or is deleted, gives a new value.
  * - Invalid content never throws out of the watcher: the previous value stays in the cache and
  *   `onError` is called once per distinct bad content.
  * - While at least one watcher runs, `loadConfig` does not refresh the cache on demand (see there).
@@ -67,9 +67,9 @@ export function watchConfig(target: ConfigTarget, onChange: (event: ConfigChange
   const pollMs = options.pollMs ?? getPollIntervalMs();
   const onError = options.onError ?? defaultOnError;
 
-  // Last text seen per file (null = file absent), so each distinct content is handled once.
-  const lastText = new Map<ConfigName, string | null>();
-  for (const name of names) lastText.set(name, readTextOrNull(name));
+  // Last fingerprint seen per config (null = no layer readable), so each distinct content is handled once.
+  const lastSeen = new Map<ConfigName, string | null>();
+  for (const name of names) lastSeen.set(name, fingerprintOrNull(name));
 
   // A process with a watcher keeps its cache current here, so `loadConfig` does not also refresh on demand.
   const releaseWatcher = registerConfigWatcher();
@@ -78,27 +78,27 @@ export function watchConfig(target: ConfigTarget, onChange: (event: ConfigChange
   const check = (name: ConfigName): void => {
     if (closed) return;
     const filePath = configSourcePath(name);
-    const previous = lastText.get(name) ?? null;
-    let text: string;
+    const previous = lastSeen.get(name) ?? null;
+    let layers: ConfigLayerTexts;
     try {
-      text = readConfigText(name);
+      layers = readConfigLayers(name);
     } catch (err) {
-      if (err instanceof ConfigError && err.kind === "missing") {
-        if (previous !== null) {
-          lastText.set(name, null);
-          safely(() => onError(err));
-        }
-        return;
-      }
       if (err instanceof ConfigError) safely(() => onError(err));
       return;
     }
-    if (text === previous) return;
-    lastText.set(name, text);
+    if (nothingToWatch(name, layers)) {
+      if (previous !== null) {
+        lastSeen.set(name, null);
+        safely(() => onError(new ConfigError({ configName: name, filePath, kind: "missing" })));
+      }
+      return;
+    }
+    if (layers.fingerprint === previous) return;
+    lastSeen.set(name, layers.fingerprint);
     try {
-      const value = parseConfigText(name, text, filePath);
-      primeConfigCache(name, value, text);
-      safely(() => onChange({ name, filePath, value, text }));
+      const value = parseConfigLayers(name, layers);
+      primeConfigCache(name, value, layers.fingerprint);
+      safely(() => onChange({ name, filePath, value, fingerprint: layers.fingerprint }));
     } catch (err) {
       if (err instanceof ConfigError) safely(() => onError(err));
       else throw err;
@@ -171,9 +171,15 @@ export function watchConfig(target: ConfigTarget, onChange: (event: ConfigChange
   };
 }
 
-function readTextOrNull(name: ConfigName): string | null {
+/** No layer to read. A profile file's template does not count: it is what a reader falls back on, not a layer of the file. */
+function nothingToWatch(name: ConfigName, layers: ConfigLayerTexts): boolean {
+  return layers.overlay === null && (layers.shipped === null || isProfileName(name));
+}
+
+function fingerprintOrNull(name: ConfigName): string | null {
   try {
-    return readConfigText(name);
+    const layers = readConfigLayers(name);
+    return nothingToWatch(name, layers) ? null : layers.fingerprint;
   } catch {
     return null;
   }

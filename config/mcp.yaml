@@ -9,7 +9,7 @@
 # each question, which can include your profile summary, skills and languages, chosen stories and emphasis note.
 
 # Version of this file's structure; don't edit by hand (a migration script upgrades it when the structure changes)
-config_version: 1
+config_version: 2
 
 # Master switch. false: `pnpm mcp:serve` refuses to start and says why (your client shows the message)
 enabled: false

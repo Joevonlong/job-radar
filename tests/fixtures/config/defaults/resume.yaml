@@ -1,6 +1,8 @@
 # resume-kit 联动。详情页"定制简历"会把 JD 导出成 md，并给出在 resume-kit 里运行 /tailor 的命令。
 # 路径都指向你自己的文件（主简历在本仓库之外，系统不会读取它）。路径必须是绝对路径，不支持 ~。
 
+config_version: 2
+
 # resume-kit 的本地目录；命令是 `cd <这个目录> && claude "/tailor <jd 路径>"`。null = 只显示导出路径，不给命令
 resume_kit_path: null
 # 你的主简历 YAML；只会写进命令里，不会被读取。null = 命令里不提

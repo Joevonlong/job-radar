@@ -23,7 +23,9 @@ const LOCKED = new Map<string, string>([
   ["src/lib/config/editor-backup.ts#backupConfigText", "the copy of the old text in .backup/editor/"],
   ["src/lib/config/editor-backup.ts#pruneBackups", "the oldest copies in .backup/editor/"],
   ["src/lib/config/migrations/backups.ts#pruneConfigBackups", "the oldest .backup/<time>/"],
-  ["src/lib/config/migrations/files.ts#applyConfigMigrations", "the copy of the original in .backup/<time>/"],
+  ["src/lib/config/migrations/files.ts#applyConfigMigrations", "the copy of the original in .backup/<time>/, and the conversion's record"],
+  ["src/lib/config/migrations/rollback.ts#applyToFull", "the copy of an overlay in .backup/<time>/, before it becomes a whole file"],
+  ["src/lib/config/migrations/rollback.ts#restoreConfigBackup", "the copy of what stands there in .backup/<time>/, before a backup comes back"],
   ["src/lib/config/write.ts#resetConfigToDefault", "removing an override of a shipped file"],
   ["src/lib/setup/state.ts#removeAbandonedSetupTemps", "temp files an interrupted setup.yaml commit left"],
 ]);
@@ -178,14 +180,19 @@ function insideLockCallback(node: ts.Node): boolean {
 }
 
 /** Calls of a function by name, across the scanned files. */
+let callIndex: Map<string, { file: string; node: ts.CallExpression }[]> | null = null;
+
 function callsOf(name: string): { file: string; node: ts.CallExpression }[] {
-  const calls: { file: string; node: ts.CallExpression }[] = [];
-  for (const { file, source } of scanned) {
-    visit(source, (node) => {
-      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === name) calls.push({ file, node });
-    });
+  if (callIndex === null) {
+    const index = new Map<string, { file: string; node: ts.CallExpression }[]>();
+    for (const { file, source } of scanned) {
+      visit(source, (node) => {
+        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) index.set(node.expression.text, [...(index.get(node.expression.text) ?? []), { file, node }]);
+      });
+    }
+    callIndex = index;
   }
-  return calls;
+  return callIndex.get(name) ?? [];
 }
 
 /** The call sites of `name` that are neither in a lock callback nor in a function whose own call sites all are. */
@@ -229,10 +236,11 @@ describe("writes under the user's config and profile directories", () => {
 
   it("the writes in `LOCKED` run inside the lock", () => {
     const problems: string[] = [];
+    const found = directWrites();
     for (const key of LOCKED.keys()) {
       const name = key.split("#")[1] ?? "";
       const [file] = key.split("#");
-      const writes = directWrites().get(key) ?? [];
+      const writes = found.get(key) ?? [];
       // the function's own body holds the lock around the write, or every caller does
       if (writes.length > 0 && writes.every(insideLockCallback)) continue;
       const callers = callsOf(name);

@@ -10,7 +10,7 @@ import { ConfigError } from "../errors";
 import type { ConfigName } from "../registry";
 
 import { CONFIG_MIGRATIONS } from "./index";
-import type { ConfigMigration } from "./types";
+import type { ConfigMigration, MigrationContext } from "./types";
 
 export const CONFIG_VERSION_KEY = "config_version";
 
@@ -33,6 +33,32 @@ export function assertMigrationChain(name: string, steps: readonly ConfigMigrati
 /** The version this code reads and writes for a config: the `to` of its last migration, 1 without migrations. */
 export function currentConfigVersion(name: ConfigName, steps: readonly ConfigMigration[] = configMigrations(name)): number {
   return steps.at(-1)?.to ?? 1;
+}
+
+/** The `overlay-format` step of a config, when it has one (models.yaml and the profile files do not). */
+function overlayFormatStepOf(steps: readonly ConfigMigration[]): ConfigMigration | undefined {
+  return steps.find((step) => step.convertOnly === true);
+}
+
+/** True for the files whose user file can be an overlay merged key by key over the shipped file. */
+export function hasOverlayFormat(name: ConfigName, steps: readonly ConfigMigration[] = configMigrations(name)): boolean {
+  return overlayFormatStepOf(steps) !== undefined;
+}
+
+/** The version a whole-file (legacy) user file is written at: the `from` of the overlay-format step, else the current version. */
+export function legacyFormatVersion(name: ConfigName, steps: readonly ConfigMigration[] = configMigrations(name)): number {
+  return overlayFormatStepOf(steps)?.from ?? currentConfigVersion(name, steps);
+}
+
+/** The version from which a user file is an overlay; null for a file without the format. */
+export function overlayFormatVersion(name: ConfigName, steps: readonly ConfigMigration[] = configMigrations(name)): number | null {
+  return overlayFormatStepOf(steps)?.to ?? null;
+}
+
+/** Does a file of this version hold an overlay (rather than a whole file)? */
+export function isOverlayVersion(name: ConfigName, version: number | null, steps: readonly ConfigMigration[] = configMigrations(name)): boolean {
+  const from = overlayFormatVersion(name, steps);
+  return from !== null && version !== null && version >= from;
 }
 
 /**
@@ -83,17 +109,23 @@ export function withoutConfigVersion(value: unknown): unknown {
 export interface DocumentMigrationResult {
   /** Version the document had. */
   from: number;
-  /** Version it has now (the code's current version). */
+  /** Version it has now: the code's current version, or for a whole file the version before the overlay format. */
   to: number;
   /** The steps that ran (empty = it was current already). */
   applied: readonly ConfigMigration[];
 }
 
+export interface MigrateOptions {
+  /** The shipped document, for steps after the overlay format. */
+  context?: MigrationContext;
+}
+
 /**
- * Bring a parsed document up to the code's version, in place. Throws ConfigError when `config_version` is not a positive
+ * Bring a parsed document up to the code's version, in place, stopping before a `convertOnly` step: a whole file stays a
+ * whole file (`files.ts` crosses that step, and only for `--convert-overlays`). Throws ConfigError when `config_version` is not a positive
  * whole number (`schema`) or is newer than the code supports (`version`: a downgrade, never silently accepted).
  */
-export function migrateConfigDocument(name: ConfigName, doc: Document, filePath: string, steps: readonly ConfigMigration[] = configMigrations(name)): DocumentMigrationResult {
+export function migrateConfigDocument(name: ConfigName, doc: Document, filePath: string, steps: readonly ConfigMigration[] = configMigrations(name), options: MigrateOptions = {}): DocumentMigrationResult {
   assertMigrationChain(name, steps);
   const from = documentConfigVersion(doc);
   if (from === null) {
@@ -108,10 +140,13 @@ export function migrateConfigDocument(name: ConfigName, doc: Document, filePath:
       detail: `config_version ${from} is newer than this version of Job Radar supports (${current}); upgrade Job Radar or restore the file from <user config dir>/.backup`,
     });
   }
-  const applied = steps.filter((step) => step.from >= from);
-  for (const step of applied) {
-    step.migrate(doc);
+  const applied: ConfigMigration[] = [];
+  for (const step of steps) {
+    if (step.from < from) continue;
+    if (step.convertOnly === true) break;
+    step.migrate(doc, options.context);
     stampConfigVersion(doc, step.to);
+    applied.push(step);
   }
-  return { from, to: current, applied };
+  return { from, to: applied.at(-1)?.to ?? from, applied };
 }

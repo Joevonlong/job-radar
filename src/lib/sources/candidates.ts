@@ -7,7 +7,7 @@ import { logActionFailure } from "@/lib/logging/action-failure";
 import { z } from "zod";
 
 import { boardKey } from "@/lib/channels/discovery/boards";
-import { ATS_KINDS, ConfigError, configErrorKey, mutateConfig, readConfigText, reloadConfig, type CompaniesConfig, type ConfigWriteErrorKey } from "@/lib/config";
+import { ATS_KINDS, ConfigError, configErrorKey, layeredConfigFingerprint, mutateConfig, reloadConfig, type CompaniesConfig, type ConfigWriteErrorKey } from "@/lib/config";
 import { getDb, listBoardCandidates, setBoardCandidateStatus, type BoardCandidateRow } from "@/lib/db";
 
 import { syncSourceRegistry } from "./registry/sync";
@@ -113,7 +113,7 @@ export async function addBoardCandidate(raw: unknown): Promise<CandidateActionSt
   if (outcome === "added") {
     // keep the database mirror of sources.yaml in step (a failure is caught up by the next page load or runner reload)
     try {
-      await syncSourceRegistry(getDb(), { config: reloadConfig("channels"), text: readConfigText("channels") });
+      await syncSourceRegistry(getDb(), { config: reloadConfig("channels"), fingerprint: layeredConfigFingerprint("channels") });
     } catch (error) {
       logActionFailure("addBoardCandidate", error);
       // mirror out of sync until then

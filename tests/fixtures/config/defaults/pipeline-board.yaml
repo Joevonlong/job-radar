@@ -1,5 +1,5 @@
 # Display settings for the application board. A user copy replaces this entire file.
-config_version: 1
+config_version: 2
 
 # Reserved for card density controls; validated now, used when card density is available.
 density:

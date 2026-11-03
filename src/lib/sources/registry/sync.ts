@@ -1,5 +1,5 @@
 /** Mirror of config/sources.yaml in `source_registry`. The file is the truth; the database follows. */
-import { hashConfigText, type ChannelsConfig } from "@/lib/config";
+import { type ChannelsConfig } from "@/lib/config";
 import type { Db } from "@/lib/db";
 import { getRuntimeState, setRuntimeState, syncSourceRegistryRows } from "@/lib/db";
 
@@ -14,11 +14,11 @@ export interface RegistrySyncState {
 }
 
 /**
- * Upsert every entry of `config` (read from `text`) and mark the entries that left the file. Idempotent; the runner and
+ * Upsert every entry of `config` (the state with this layered fingerprint) and mark the entries that left the file. Idempotent; the runner and
  * the web app may both call it. Records hash, time and count in `runtime_state`.
  */
-export async function syncSourceRegistry(db: Db, input: { config: ChannelsConfig; text: string; at?: Date }): Promise<{ upserted: number; removed: number }> {
-  const hash = hashConfigText(input.text);
+export async function syncSourceRegistry(db: Db, input: { config: ChannelsConfig; fingerprint: string; at?: Date }): Promise<{ upserted: number; removed: number }> {
+  const hash = input.fingerprint;
   const result = await syncSourceRegistryRows(db, registryRowsFromConfig(input.config), { configHash: hash });
   const state: RegistrySyncState = { hash, at: (input.at ?? new Date()).toISOString(), count: result.upserted };
   await setRuntimeState(db, REGISTRY_SYNC_STATE_KEY, state);

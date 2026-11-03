@@ -45,7 +45,7 @@ function leafPaths(a: unknown, b: unknown, prefix: string, out: string[]): void 
 export function changedKeyPaths(oldText: string, newText: string): string[] | null {
   try {
     const out: string[] = [];
-    leafPaths(parseConfigYaml(oldText), parseConfigYaml(newText), "", out);
+    leafPaths(parseConfigYaml(oldText, { unset: "overlay" }), parseConfigYaml(newText, { unset: "overlay" }), "", out);
     return out;
   } catch {
     return null;

@@ -1,4 +1,4 @@
-config_version: 1
+config_version: 2
 scope:
   channel_kinds: [paid]
   exclude_channels: []

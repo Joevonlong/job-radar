@@ -38,10 +38,10 @@ describe("the file list", () => {
 
   it("an invalid file shows its first problem; one still on an older version is flagged", () => {
     fs.writeFileSync(userFile("notify.yaml"), `${userText("notify.yaml")}\nbogus: 1\n`);
-    fs.writeFileSync(userFile("ui.yaml"), userText("ui.yaml").replace("config_version: 2\n\n", ""));
+    fs.writeFileSync(userFile("ui.yaml"), userText("ui.yaml").replace(/^config_version: \d+/m, "config_version: 1"));
     const entries = loadAdvancedIndex();
     expect(entries.find((entry) => entry.stem === "notify")).toMatchObject({ valid: false, firstProblem: "bogus: unknown key" });
-    expect(entries.find((entry) => entry.stem === "ui")).toMatchObject({ valid: false, versionBehind: true });
+    expect(entries.find((entry) => entry.stem === "ui")).toMatchObject({ versionBehind: true });
   });
 
   it("accepts the registry name as well as the file stem", () => {
@@ -111,20 +111,24 @@ describe("save", () => {
     expect(result.status).toBe("stale");
   });
 
-  it("the first save of a product default file needs the confirmation; then the user directory gets it and only it", async () => {
+  it("a file only the product has opens as a stub; its first save needs no confirmation and writes only the user directory", async () => {
+    const shippedBefore = fs.readFileSync(path.join(tmp.defaultsDir, "pipeline.yaml"), "utf8");
     const data = opened("pipeline");
     const text = `${data.text}\n# mine\n`;
-    expect(await saveAdvanced({ file: "pipeline", text, baseHash: data.hash, baseLayer: data.layer, confirmOverride: false })).toEqual({ status: "needs_confirm" });
-    expect(fs.existsSync(userFile("pipeline.yaml"))).toBe(false);
-    const result = await saveAdvanced({ file: "pipeline", text, baseHash: data.hash, baseLayer: data.layer, confirmOverride: true });
+    const result = await saveAdvanced({ file: "pipeline", text, baseHash: data.hash, baseLayer: data.layer, confirmOverride: false });
     expect(result).toMatchObject({ status: "saved", layer: "user", backup: false });
     expect(userText("pipeline.yaml")).toBe(text);
-    expect(fs.readFileSync(path.join(tmp.defaultsDir, "pipeline.yaml"), "utf8")).toBe(data.text);
-    // saving again does not ask again
+    expect(fs.readFileSync(path.join(tmp.defaultsDir, "pipeline.yaml"), "utf8")).toBe(shippedBefore);
     const again = opened("pipeline");
-    expect(again.entry.overridden).toBe(true);
     const second = await saveAdvanced({ file: "pipeline", text: `${text}# more\n`, baseHash: again.hash, baseLayer: again.layer, confirmOverride: false });
     expect(second).toMatchObject({ status: "saved" });
+  });
+
+  it("models.yaml keeps its confirmation: it has its own overlay", async () => {
+    const data = opened("models");
+    const text = `${data.text}\n# mine\n`;
+    expect(await saveAdvanced({ file: "models", text, baseHash: data.hash, baseLayer: data.layer, confirmOverride: false })).toEqual({ status: "needs_confirm" });
+    expect(fs.existsSync(userFile("models.yaml"))).toBe(false);
   });
 
   it("rejects malformed requests and unknown files without throwing", async () => {
@@ -143,7 +147,7 @@ describe("save", () => {
 });
 
 describe("restore the default", () => {
-  it("a product default file loses its override; a user file gets the default text", async () => {
+  it("removes the user file, whichever it is, and the shipped value answers", async () => {
     const pipeline = opened("pipeline");
     fs.writeFileSync(userFile("pipeline.yaml"), `${pipeline.text}\n# mine\n`);
     let state = opened("pipeline");
@@ -155,7 +159,7 @@ describe("restore the default", () => {
     state = opened("notify");
     expect(state.canReset).toBe(true);
     await resetAdvanced({ file: "notify", baseHash: state.hash, baseLayer: state.layer });
-    expect(userText("notify.yaml")).toBe(fs.readFileSync(path.join(tmp.defaultsDir, "notify.yaml"), "utf8"));
+    expect(fs.existsSync(userFile("notify.yaml"))).toBe(false);
     expect(opened("notify").canReset).toBe(false);
   });
 

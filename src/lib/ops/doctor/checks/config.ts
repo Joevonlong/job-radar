@@ -1,4 +1,4 @@
-/** `config.layers`: the user config directory and the shipped defaults it overrides. `i18n.config`: the languages. */
+/** `config.layers`: the user config directory and the shipped defaults under it. `i18n.config`: the languages. */
 import { LOCALE_META, isLocale } from "@/i18n/locale";
 import { displayLanguageName } from "@/lib/i18n/languages";
 
@@ -33,8 +33,8 @@ export const configLayersCheck: DoctorCheck = {
         hint: t("checks.config.layers.pendingsHint"),
       });
     }
-    if (state.overrides.length > 0) {
-      pieces.push({ status: "warn", detail: t("checks.config.layers.overrides", { files: joinList(ctx, state.overrides) }), hint: t("checks.config.layers.overridesHint", { userDir: state.userDir }) });
+    if (state.missingVersion.length > 0) {
+      pieces.push({ status: "warn", detail: t("checks.config.layers.missingVersion", { files: joinList(ctx, state.missingVersion) }), hint: t("checks.config.layers.missingVersionHint") });
     }
     if (state.notCopied.length > 0) {
       pieces.push({ status: "warn", detail: t("checks.config.layers.notCopied", { files: joinList(ctx, state.notCopied) }), hint: t("checks.config.layers.notCopiedHint") });

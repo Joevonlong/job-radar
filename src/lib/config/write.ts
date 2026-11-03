@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import fsp from "node:fs/promises";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
@@ -8,16 +7,20 @@ import { Document, isMap, isNode, isScalar, isSeq, type YAMLMap, type YAMLSeq } 
 import { commitConfigFile, CONFIG_FILE_MODE } from "./atomic";
 import { ConfigError, zodIssues } from "./errors";
 import { backupConfigText } from "./editor-backup";
-import { hashConfigText } from "./hash";
-import { configSourcePath, loadConfig, primeConfigCache, readConfigText, readProfileText, reloadConfig } from "./load";
-import { CONFIG_VERSION_KEY, currentConfigVersion, documentConfigVersion, migrateConfigDocument, stampConfigVersion, withoutConfigVersion } from "./migrations/version";
-import { configLayer, getDefaultConfigPath, getProfileExampleDir, getUserConfigPath, type ConfigLayer } from "./paths";
-import { pruneRedundantKeys } from "./overlay";
+import { hashConfigText, layeredConfigFingerprint } from "./hash";
+import { configSourcePath, loadConfig, primeConfigCache, readProfileText, reloadConfig, shippedEffective } from "./load";
+import { mergeLayers } from "./merge";
+import { CONFIG_VERSION_KEY, currentConfigVersion, documentConfigVersion, hasOverlayFormat, isOverlayVersion, legacyFormatVersion, migrateConfigDocument, stampConfigVersion, withoutConfigVersion } from "./migrations/version";
+import { newFileFormat } from "./new-file-format";
+import { configLayer, getDefaultConfigPath, getProfileExampleDir, getUserConfigPath, readOverlayText, readShippedText, type ConfigLayer } from "./paths";
+import { applyEditsToDocument, overlayFullEdits, overlaySaveEdits, pruneRedundantKeys } from "./overlay";
+import { replaceRule } from "./overlay-rules";
 import { notifyProfileSaved } from "./profile";
 import { assertProtectedUnchanged } from "./protected-check";
 import { readUserText } from "./read-user-file";
 import { configRegistry, isProfileName, type ConfigName, type ConfigValue } from "./registry";
-import { CONFIG_YAML_OPTIONS, parseConfigYaml, parseConfigYamlDocument } from "./yaml-options";
+import { toFullText } from "./to-full";
+import { CONFIG_YAML_OPTIONS, parseConfigYaml, parseConfigYamlDocument, stringifyConfigYaml } from "./yaml-options";
 import { CONFIG_EDITOR_DEFAULTS } from "./schemas/ui";
 import { validateConfigText } from "./validate-text";
 import { currentConfigWriteLock, lockLostError, withConfigWriteLock } from "./write-lock";
@@ -25,6 +28,8 @@ import { currentConfigWriteLock, lockLostError, withConfigWriteLock } from "./wr
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+const YAML_TEXT_OPTIONS = { lineWidth: 0, flowCollectionPadding: false } as const;
 
 function isScalarValue(value: unknown): value is string | number | boolean | null {
   return value === null || ["string", "number", "boolean"].includes(typeof value);
@@ -77,7 +82,7 @@ function padFlowMap(line: string): string {
  * Make `current` (an existing YAML node) hold `next`, mutating in place wherever the shapes match
  * so comments attached to nodes survive. Returns the node/value that should occupy the slot.
  */
-function syncNode(doc: Document, current: unknown, next: unknown, options: SyncOptions): unknown {
+export function syncNode(doc: Document, current: unknown, next: unknown, options: SyncOptions): unknown {
   if (isMap(current) && isPlainObject(next)) {
     syncMap(doc, current, next, options);
     return current;
@@ -186,13 +191,13 @@ function syncSeq(doc: Document, seq: YAMLSeq, next: unknown[], options: SyncOpti
 }
 
 /**
- * Serialize `value`, reusing the comments and layout of `existingText` when it parses. An existing document older
- * than the code is migrated first (its comments survive the shape change), and `config_version` is kept / stamped with
- * the code's version (it is only added to a file that lacks it once the version is above 1). A document newer than the
- * code is refused (ConfigError `version`).
+ * Serialize `value` as a whole file, reusing the comments and layout of `existingText` when it parses. An existing
+ * document older than the code is migrated first (its comments survive the shape change, a `convertOnly` step does not run),
+ * and `config_version` is kept / stamped with the whole-file version (it is only added to a file that lacks it once the
+ * version is above 1). A document newer than the code is refused (ConfigError `version`).
  */
 function renderYaml<N extends ConfigName>(name: N, existingText: string | null, existingPath: string, value: ConfigValue<N>, options: SyncOptions): string {
-  const current = currentConfigVersion(name);
+  const current = legacyFormatVersion(name);
   let doc: Document | null = null;
   if (existingText !== null) {
     const parsed = parseConfigYamlDocument(existingText);
@@ -209,7 +214,86 @@ function renderYaml<N extends ConfigName>(name: N, existingText: string | null, 
     doc.contents = syncNode(doc, doc.contents, next, options) as Document["contents"];
     if (!hadVersion && current > 1) stampConfigVersion(doc, current);
   }
-  return restoreFlowPadding(existingText, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
+  return restoreFlowPadding(existingText, doc.toString(YAML_TEXT_OPTIONS));
+}
+
+/** The first text of a new overlay: what it is, and the version. */
+export function overlayStubText(name: ConfigName): string {
+  const file = configRegistry[name].file;
+  return [
+    `# Your changes to the shipped ${file}. Only the keys written here override it; everything else follows the product.`,
+    "# Remove a shipped key with `key: !unset`. See docs/configuration.md.",
+    `${CONFIG_VERSION_KEY}: ${currentConfigVersion(name)}`,
+    "",
+  ].join("\n");
+}
+
+/** A whole file holding the shipped values (no user changes), in the whole-file version: comments of the shipped file included. */
+export function wholeFileText(name: ConfigName): string {
+  const file = getDefaultConfigPath(name) ?? getUserConfigPath(name);
+  const text = readShippedText(name);
+  if (text === null) throw new ConfigError({ configName: name, filePath: file, kind: "missing", layer: "shipped" });
+  return toFullText(name, shippedEffective(name, text, file).doc, null);
+}
+
+/** The text of a file created now with no change in it (`config:init`, a pending setup file, the editor's template). */
+export function newFileText(name: ConfigName): string {
+  if (!hasOverlayFormat(name)) {
+    const text = readShippedText(name);
+    if (text === null) throw new ConfigError({ configName: name, filePath: getUserConfigPath(name), kind: "missing", layer: "shipped" });
+    return text;
+  }
+  return newFileFormat() === "overlay" ? overlayStubText(name) : wholeFileText(name);
+}
+
+/** The shipped value in the lock, for a save: the two layers are read again, so E is the one the rename will land on. */
+function shippedValueForWrite(name: ConfigName, filePath: string): unknown {
+  const shippedFile = getDefaultConfigPath(name) ?? filePath;
+  const text = readShippedText(name);
+  if (text === null) throw new ConfigError({ configName: name, filePath: shippedFile, kind: "missing", layer: "shipped" });
+  return shippedEffective(name, text, shippedFile).value;
+}
+
+/** A plain value without its `undefined` keys: an optional key a form cleared. A file cannot hold one, and the schema keeps it. */
+function definedOnly(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(definedOnly);
+  if (value === null || typeof value !== "object" || value instanceof Date) return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, item]) => item !== undefined)
+      .map(([key, item]) => [key, definedOnly(item)]),
+  );
+}
+
+/** An overlay text reads back as `expected`: shipped ⊕ text, through the schema. */
+function overlayReadsBackAs<N extends ConfigName>(name: N, shipped: unknown, text: string, expected: ConfigValue<N>): boolean {
+  try {
+    const overlay = withoutConfigVersion(parseConfigYaml(text, { unset: "overlay" }));
+    const reparsed = configRegistry[name].schema.safeParse(mergeLayers(shipped, overlay, { replaceAt: replaceRule(name) }));
+    return reparsed.success && isDeepStrictEqual(definedOnly(reparsed.data), definedOnly(expected));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The overlay text after saving `value`: only the paths that differ from what the layers give now are touched, in place
+ * (comments stay), and without a change the text stays byte for byte. Refused (nothing written) when the result would not
+ * read back as `value`.
+ */
+function renderOverlay<N extends ConfigName>(name: N, filePath: string, baseText: string, shipped: unknown, value: ConfigValue<N>): string {
+  const overlayValue = (text: string): unknown => withoutConfigVersion(parseConfigYaml(text, { unset: "overlay" }));
+  const input = { shipped, overlay: overlayValue(baseText), value: definedOnly(value) };
+  const candidates = [overlaySaveEdits(name, input), overlayFullEdits(name, input)];
+  for (const edits of candidates) {
+    if (edits.length === 0 && overlayReadsBackAs(name, shipped, baseText, value)) return baseText;
+    const doc = parseConfigYamlDocument(baseText, { unset: "overlay" });
+    applyEditsToDocument(doc, edits, replaceRule(name), (target, current, next) => syncNode(target, current, next, { omitNewEmpty: false }));
+    stampConfigVersion(doc, currentConfigVersion(name));
+    const text = restoreFlowPadding(baseText, stringifyConfigYaml(doc, YAML_TEXT_OPTIONS));
+    if (overlayReadsBackAs(name, shipped, text, value)) return text;
+  }
+  throw new ConfigError({ configName: name, filePath, kind: "schema", issues: [{ path: "", message: "the saved file would not read back as the submitted value" }] });
 }
 
 async function readIfExists(file: string): Promise<string | null> {
@@ -285,7 +369,7 @@ function backupsKeep(): number {
  * copied to `.backup/editor/` like the advanced editor does (ui.yaml `config_editor.backups_keep` copies per file), so a
  * form or wizard save that overwrote something can be undone from the editor's backups.
  *
- * `baseHash` (the forms: `hashConfigText` of the text they were opened on): checked again right before the rename, under
+ * `baseHash` (the forms: `layeredConfigFingerprint` of what they were opened on): checked again right before the rename, under
  * the file's in-process lock, so a save over a file that changed in the meantime is refused (ConfigError `stale`) even
  * when two saves race. Without it (the setup wizard) the save always goes through.
  */
@@ -330,10 +414,10 @@ export async function mutateConfig<N extends ConfigName>(name: N, update: (curre
   });
 }
 
-/** The hash of the file the app reads for `name` now ("" when it is missing or unreadable), as the forms compute it. */
+/** The fingerprint the forms compute for `name` now (a profile file: the hash of its text; "" when it is unreadable). */
 function currentTextHash(name: ConfigName): string {
   try {
-    return hashConfigText(isProfileName(name) ? readProfileText(name) : readConfigText(name));
+    return isProfileName(name) ? hashConfigText(readProfileText(name)) : layeredConfigFingerprint(name);
   } catch {
     return "";
   }
@@ -352,6 +436,29 @@ function existingKeys(name: ConfigName, existingText: string | null, existingPat
   }
 }
 
+type SaveBase =
+  /** An overlay (its text, or a new file's stub): the pinned-key rule. */
+  | { kind: "overlay"; text: string }
+  /** A whole file (not converted yet, a new file while conversions are pending, a profile file, models.yaml). */
+  | { kind: "whole"; text: string | null; path: string };
+
+/** What a save starts from. A user file that cannot be used (a syntax error) counts as absent, its text is backed up. */
+function saveBase(name: ConfigName, filePath: string, userText: string | null, shippedPath: string | null, shippedText: string | null): SaveBase {
+  if (!hasOverlayFormat(name)) return { kind: "whole", text: userText ?? shippedText, path: userText === null && shippedPath !== null ? shippedPath : filePath };
+  if (userText !== null) {
+    const doc = parseConfigYamlDocument(userText, { unset: "overlay" });
+    if (doc.errors.length === 0) {
+      const version = documentConfigVersion(doc);
+      if (isOverlayVersion(name, version) && version !== null) {
+        if (version > currentConfigVersion(name)) migrateConfigDocument(name, doc, filePath); // throws `version`
+        return { kind: "overlay", text: userText };
+      }
+      return { kind: "whole", text: userText, path: filePath };
+    }
+  }
+  return newFileFormat() === "overlay" ? { kind: "overlay", text: overlayStubText(name) } : { kind: "whole", text: wholeFileText(name), path: filePath };
+}
+
 async function writeValidated<N extends ConfigName>(name: N, filePath: string, parsed: ConfigValue<N>, baseHash: string | undefined): Promise<string> {
   const assertUnchanged = (): void => {
     if (baseHash !== undefined && currentTextHash(name) !== baseHash) throw new ConfigError({ configName: name, filePath, kind: "stale" });
@@ -359,17 +466,32 @@ async function writeValidated<N extends ConfigName>(name: N, filePath: string, p
   assertUnchanged();
   const shippedPath = isProfileName(name) ? path.join(getProfileExampleDir(), configRegistry[name].file) : getDefaultConfigPath(name);
   const userText = await readIfExists(filePath);
-  const existing = userText ?? (shippedPath === null ? null : await readIfExists(shippedPath));
-  const existingPath = userText === null && shippedPath !== null ? shippedPath : filePath;
-  // Leave out the keys the file lacks that only hold what the schema defaults to (a shipped default that changes later must
-  // still reach the user); each attempt is used only when it reads back as exactly the validated value.
-  const known = existingKeys(name, existing, existingPath);
-  const leaner = known === undefined ? parsed : pruneRedundantKeys(configRegistry[name].schema, parsed, known);
+  const shippedText = shippedPath === null ? null : await readIfExists(shippedPath);
+  const base = saveBase(name, filePath, userText, shippedPath, shippedText);
   let text = "";
-  for (const [candidate, omitNewEmpty] of [[leaner, true], [leaner, false], [parsed, true], [parsed, false]] as const) {
-    text = renderYaml(name, existing, existingPath, candidate, { omitNewEmpty });
-    if (readsBackAs(name, text, parsed)) break;
+  if (base.kind === "overlay") {
+    text = renderOverlay(name, filePath, base.text, shippedValueForWrite(name, filePath), parsed);
+  } else {
+    // Leave out the keys the file lacks that only hold what the schema defaults to (a shipped default that changes later must
+    // still reach the user); each attempt is used only when it reads back as exactly the validated value.
+    const known = existingKeys(name, base.text, base.path);
+    const leaner = known === undefined ? parsed : pruneRedundantKeys(configRegistry[name].schema, parsed, known);
+    for (const [candidate, omitNewEmpty] of [[leaner, true], [leaner, false], [parsed, true], [parsed, false]] as const) {
+      text = renderYaml(name, base.text, base.path, candidate, { omitNewEmpty });
+      if (readsBackAs(name, text, parsed)) break;
+    }
   }
+  if (userText !== null && userText === text && base.kind === "overlay") {
+    primeConfigCache(name, parsed);
+    return text;
+  }
+  await commitUserText(name, filePath, userText, text, assertUnchanged);
+  primeConfigCache(name, parsed);
+  return text;
+}
+
+/** Back up the old text (config files; profile files have their database snapshots) and replace or create the file. */
+async function commitUserText(name: ConfigName, filePath: string, userText: string | null, text: string, assertUnchanged: () => void): Promise<void> {
   if (userText !== null && userText !== text && !isProfileName(name)) await backupConfigText(name, userText, backupsKeep());
   if (userText === null) {
     // A file this process cannot see may still be there: a bind mount can answer ENOENT for a moment after the host renamed
@@ -379,15 +501,49 @@ async function writeValidated<N extends ConfigName>(name: N, filePath: string, p
   } else {
     await atomicWrite(filePath, text, assertUnchanged);
   }
-  primeConfigCache(name, parsed, text);
-  return text;
+}
+
+/**
+ * The repair entry: the user's file has no usable value (a syntax or schema error), so there is no E to diff against. The
+ * submitted complete value is validated, diffed against the shipped value alone (or, while whole files are around, written
+ * as a whole file; `new-file-format.ts`), the broken text is backed up, and a file that changed since the preview
+ * (`previewFingerprint`) is refused as `stale`. Recoverable credentials are the caller's: it puts them in the value.
+ */
+export async function writeConfigRepair<N extends ConfigName>(name: N, value: ConfigValue<N>, options: { previewFingerprint: string }): Promise<ConfigValue<N>> {
+  assertEditable(name);
+  const filePath = getUserConfigPath(name);
+  const result = configRegistry[name].schema.safeParse(value);
+  if (!result.success) throw new ConfigError({ configName: name, filePath, kind: "schema", issues: zodIssues(result.error) });
+  const parsed = result.data as ConfigValue<N>;
+  return withFileLock(filePath, () => withConfigWriteLock(async () => {
+    assertProtectedUnchanged(name, parsed);
+    const assertUnchanged = (): void => {
+      if (currentTextHash(name) !== options.previewFingerprint) throw new ConfigError({ configName: name, filePath, kind: "stale" });
+    };
+    assertUnchanged();
+    const userText = await readIfExists(filePath);
+    let text = "";
+    if (hasOverlayFormat(name) && newFileFormat() === "overlay") {
+      text = renderOverlay(name, filePath, overlayStubText(name), shippedValueForWrite(name, filePath), parsed);
+    } else {
+      const baseText = hasOverlayFormat(name) ? wholeFileText(name) : await readIfExists(getDefaultConfigPath(name) ?? filePath);
+      const known = existingKeys(name, baseText, filePath);
+      const leaner = known === undefined ? parsed : pruneRedundantKeys(configRegistry[name].schema, parsed, known);
+      text = renderYaml(name, baseText, filePath, leaner, { omitNewEmpty: true });
+      if (!readsBackAs(name, text, parsed)) text = renderYaml(name, baseText, filePath, parsed, { omitNewEmpty: false });
+      if (!readsBackAs(name, text, parsed)) throw new ConfigError({ configName: name, filePath, kind: "schema", issues: [{ path: "", message: "the saved file would not read back as the submitted value" }] });
+    }
+    await commitUserText(name, filePath, userText, text, assertUnchanged);
+    primeConfigCache(name, parsed);
+    return parsed;
+  }, filePath));
 }
 
 // ---------------------------------------------------------------- the advanced editor
 
 /** What the editor saw when it opened the file: a save is refused when the file (or its layer) is not the same any more. */
 export interface TextBase {
-  /** `hashConfigText` of the text the editor was opened on. */
+  /** `layeredConfigFingerprint` of what the editor was opened on. */
   baseHash: string;
   /** The layer that text came from. */
   baseLayer: ConfigLayer;
@@ -411,16 +567,18 @@ function assertEditable(name: ConfigName): void {
   if (isProfileName(name)) throw new Error(`the advanced editor does not edit the profile files (${name})`);
 }
 
-/** Refuse when the file is not what the editor opened (different text or another layer). */
+/** Refuse when the config is not what the editor opened (either layer changed, or the file came or went). Returns the user file's text ("" without one). */
 function assertFresh(name: ConfigName, base: TextBase): string {
   const layer = configLayer(name);
   let currentText = "";
+  let fingerprint = "";
   try {
-    currentText = readConfigText(name);
+    currentText = readOverlayText(name) ?? "";
+    fingerprint = layeredConfigFingerprint(name);
   } catch {
-    // missing / unreadable now
+    // unreadable now
   }
-  if (layer !== base.baseLayer || hashConfigText(currentText) !== base.baseHash) {
+  if (layer !== base.baseLayer || fingerprint !== base.baseHash) {
     throw new ConfigError({ configName: name, filePath: configSourcePath(name), kind: "stale" });
   }
   return currentText;
@@ -428,7 +586,7 @@ function assertFresh(name: ConfigName, base: TextBase): string {
 
 /**
  * Write `text` to the user's config file exactly as given, an older format included (comments and layout are the user's own). Order: size, full
- * validation of the migrated value (syntax, `config_version`, schema, cross-file: what `loadConfig` would accept), then the stale check
+ * validation of the value it gives: an overlay merged over the shipped file, a whole file migrated (syntax, `config_version`, schema, cross-file: what `loadConfig` would accept), then the stale check
  * (the file must still be what the editor opened), then a backup of the old text, then an atomic write and a refreshed cache.
  * A text that changes a protected key (`protected-keys.ts`) is refused before the stale check.
  * Throws `ConfigError` (`too_large`, `yaml` / `schema` / `version` with the first issue, `protected`, `stale`).
@@ -446,19 +604,20 @@ export async function writeConfigText(name: ConfigName, text: string, options: T
     const currentText = assertFresh(name, options);
     const hadUserFile = fs.existsSync(/*turbopackIgnore: true*/ filePath);
     const backup = hadUserFile ? await backupConfigText(name, currentText, options.backupsKeep, options.now) : null;
-    await atomicWrite(filePath, text, () => void assertFresh(name, options));
-    primeConfigCache(name, checked.value, text);
+    await commitConfigFile(filePath, text, { checkFresh: () => void assertFresh(name, options), ...(hadUserFile ? {} : { mode: "create" as const }) });
+    primeConfigCache(name, checked.value);
     return { backup, layer: "user" as const };
   }, filePath));
 }
 
 /**
- * "Restore the default": a `shipped` file (models, pipeline) loses the user's override, so the defaults directory is read
- * again; a `user` file is replaced by the shipped default's text. Either way the user's text is backed up first and the
- * stale check applies. Throws `ConfigError` (`missing` when there is nothing to reset to, `stale`).
+ * "Restore the default": the user's text is backed up and the user file removed, so the shipped file is what counts again
+ * (the stale check applies). Not offered for setup.yaml: its absence means the setup wizard has not been run. Throws
+ * `ConfigError` (`missing` when there is no shipped file to fall back to, `stale`).
  */
 export async function resetConfigToDefault(name: ConfigName, options: TextBase & { backupsKeep: number; now?: Date }): Promise<TextWriteResult> {
   assertEditable(name);
+  if (name === "setup") throw new Error("setup.yaml cannot be restored to the default");
   const filePath = getUserConfigPath(name);
   const shippedPath = getDefaultConfigPath(name);
   if (shippedPath === null) throw new ConfigError({ configName: name, filePath, kind: "missing" });
@@ -468,15 +627,10 @@ export async function resetConfigToDefault(name: ConfigName, options: TextBase &
     const currentText = assertFresh(name, options);
     const hadUserFile = fs.existsSync(/*turbopackIgnore: true*/ filePath);
     const backup = hadUserFile ? await backupConfigText(name, currentText, options.backupsKeep, options.now) : null;
-    if (configRegistry[name].kind === "shipped") {
-      assertFresh(name, options);
-      if (!(await session.fence())) throw lockLostError(filePath);
-      fs.rmSync(/*turbopackIgnore: true*/ filePath, { force: true });
-      reloadConfig(name);
-      return { backup, layer: "default" };
-    }
-    await atomicWrite(filePath, shippedText, () => void assertFresh(name, options));
+    assertFresh(name, options);
+    if (!(await session.fence())) throw lockLostError(filePath);
+    fs.rmSync(/*turbopackIgnore: true*/ filePath, { force: true });
     reloadConfig(name);
-    return { backup, layer: "user" };
+    return { backup, layer: "default" };
   }, filePath));
 }

@@ -5,7 +5,7 @@
  * only uses loader functions that older versions have too.
  */
 import { canonicalConfigHash } from "./canonical-hash";
-import { configSourcePath, parseConfigText, readConfigText } from "./load";
+import { configSourcePath, reloadConfig } from "./load";
 import { configLayer } from "./paths";
 import { CONFIG_NAMES, configRegistry, type ConfigName } from "./registry";
 
@@ -28,7 +28,7 @@ export function effectiveConfigEntries(names: readonly ConfigName[] = CONFIG_NAM
     const file = configSourcePath(name);
     if (layer === "missing" && configRegistry[name].location === "profile") return { name, file, layer, hash: null, error: null, value: null };
     try {
-      const value = parseConfigText(name, readConfigText(name), file);
+      const value = reloadConfig(name);
       return { name, file, layer: layer === "missing" ? "user" : layer, hash: canonicalConfigHash(value), error: null, value };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

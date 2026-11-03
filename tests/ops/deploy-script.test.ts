@@ -300,13 +300,13 @@ esac
 exit "\${STUB_NODE_EXIT:-0}"
 `, 0o755);
   // stub pnpm: logs, runs PNPM_<script>_HOOK, exits with PNPM_<script>_EXIT (e.g. PNPM_doctor_EXIT=2); MUTATE_CONFIG=1 makes
-  // `config:migrate --write` change data/config/sample.yaml.
+  // `config:migrate --write --convert-overlays` change data/config/sample.yaml.
   write(
     path.join(stubs, "pnpm"),
     `#!/usr/bin/env bash
 echo "pnpm $*" >> "$DEPLOY_TEST_LOG"
 export DEPLOY_PID=$PPID
-if [[ "$*" == 'config:migrate --write' && "\${MUTATE_CONFIG:-0}" == 1 ]]; then printf 'config_version: 2\\nnew: true\\n' > "$WORK/data/config/sample.yaml"; fi
+if [[ "$*" == 'config:migrate --write --convert-overlays' && "\${MUTATE_CONFIG:-0}" == 1 ]]; then printf 'config_version: 2\\nnew: true\\n' > "$WORK/data/config/sample.yaml"; fi
 name="\${*: -1}"; name="\${name//:/_}"; name="\${name//-/_}"
 # config commands by their whole line (PNPM_config_plan___deploy___check_EXIT), since their last argument repeats
 if [[ "\${1:-}" == config:* ]]; then name="$*"; name="\${name//[^A-Za-z0-9]/_}"; fi
@@ -623,7 +623,7 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       "$ docker compose -p radar-test up -d --no-deps --wait --wait-timeout 300 jobspy",
       "$ pnpm migrate:run",
       "$ scripts/ops/install-ai-worker.sh --release ",
-      "$ pnpm config:migrate --write",
+      "$ pnpm config:migrate --write --convert-overlays",
       "$ pnpm config:init\n",
       "$ pnpm config:plan --deploy --check",
       "$ pnpm config:migrate --prune-backups",
@@ -791,7 +791,7 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       "docker inspect -f {{.State.Running}} {{.Image}} cid-runner",
       "ps -A -o pid=,args=",
       expect.stringMatching(/^node --import .* scripts\/ops\/worker-heartbeat\.ts --holder --pid [1-9][0-9]* --host \S+$/),
-      "pnpm config:migrate --write",
+      "pnpm config:migrate --write --convert-overlays",
       "pnpm config:init",
       "pnpm config:plan --deploy --check",
       "pnpm config:migrate --prune-backups",
@@ -924,7 +924,7 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       "docker compose -p radar-test up -d --no-deps --wait --wait-timeout 300 jobspy",
       "pnpm migrate:run",
       `install-ai-worker.sh --release ${realWork}/data/releases/ai-worker/${head()} --root ${realWork}`,
-      "pnpm config:migrate --write",
+      "pnpm config:migrate --write --convert-overlays",
       "pnpm config:init",
       "pnpm config:plan --deploy --check",
       "docker image prune -f",
@@ -1117,7 +1117,8 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
         const checkout = r.gitCalls.findIndex((c) => c.includes("checkout --detach"));
         expect(capability).toBeGreaterThanOrEqual(0);
         expect(capability).toBeLessThan(checkout);
-        const firstWrite = r.calls.indexOf("pnpm config:migrate --write");
+        // a target without the config-write step runs its own command, which has never heard of the conversion
+        const firstWrite = r.calls.indexOf(supported ? "pnpm config:migrate --write --convert-overlays" : "pnpm config:migrate --write");
         const build = r.calls.findIndex((c) => c.startsWith("docker compose") && c.endsWith(" build"));
         expect(firstWrite).toBeGreaterThanOrEqual(0);
         expect(fs.existsSync(marker)).toBe(false);
@@ -1132,6 +1133,26 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
           expect(r.calls.some((c) => c.startsWith("pnpm config:plan") || c.includes(" --holder") || c.includes(" ps -a -q ") || c.includes("--prune-backups") || c.includes("--env-only"))).toBe(false);
           expect(r.out).toContain("target has no config-write step: skipped; step 4 already handled its config");
         }
+      } finally {
+        restore(base);
+      }
+    });
+
+    it("a target with the config-write step but without the conversion gets a plain migrate: its command refuses the flag", () => {
+      const base = head();
+      const other = path.join(tmp, "no-convert");
+      git(tmp, "clone", origin, other);
+      const source = fs.readFileSync(realScript, "utf8");
+      write(path.join(other, "scripts/ops/deploy.sh"), source.replace(/^# capability: config-overlay-convert\n/m, ""), 0o755);
+      git(other, "add", ".");
+      git(other, "commit", "--allow-empty", "-m", "no conversion");
+      git(other, "tag", "no-convert");
+      git(other, "push", "origin", "no-convert");
+      try {
+        const r = deploy(["--ref", "no-convert", "--settle", "0"]);
+        expect(r.status, r.out).toBe(0);
+        expect(r.calls).toContain("pnpm config:migrate --write");
+        expect(r.calls).not.toContain("pnpm config:migrate --write --convert-overlays");
       } finally {
         restore(base);
       }
@@ -1988,7 +2009,7 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", { timeo
 
 describe("scripts/ops/deploy.sh: the config-write step", { timeout: TEST_TIMEOUT_MS }, () => {
   const args = ["--skip-pull", "--settle", "0"];
-  const WRITES = ["pnpm config:migrate --write", "pnpm config:init", "pnpm config:plan --deploy --check", "pnpm config:migrate --prune-backups"];
+  const WRITES = ["pnpm config:migrate --write --convert-overlays", "pnpm config:init", "pnpm config:plan --deploy --check", "pnpm config:migrate --prune-backups"];
   const DOCTOR_REASON = 'echo "# doctor reason=${CONFIG_PENDING_REASON:-}" >> "$DEPLOY_TEST_LOG"';
   const sample = () => path.join(work, "data/config/sample.yaml");
   const legacyMarker = () => path.join(work, "data/config/.upgrade-freeze");
@@ -2111,7 +2132,7 @@ describe("scripts/ops/deploy.sh: the config-write step", { timeout: TEST_TIMEOUT
     if (cwd) expect(r.calls).toContain("lsof -a -d cwd -p 9194 -Fn");
     else expect(r.calls.some((call) => call.startsWith("lsof "))).toBe(false);
     if (blocked) { assertUntouched(r); expect(r.out).toContain("9194"); }
-    else expect(r.calls).toContain("pnpm config:migrate --write");
+    else expect(r.calls).toContain("pnpm config:migrate --write --convert-overlays");
   });
 
   it.each(["self", "other", "unknown"])("uses Linux proc cwd for a relative worker owned by %s", (cwd) => {
@@ -2131,7 +2152,7 @@ describe("scripts/ops/deploy.sh: the config-write step", { timeout: TEST_TIMEOUT
     const processes = `${service ? "4242 /usr/bin/node /srv/radar/data/releases/ai-worker/new/src/ai-worker/index.ts\n" : ""}6262 node src/ai-worker/index.ts.bak\n6263 node src/not-ai-worker/index.ts\n6264 node src/ai-worker/index.tsx`;
     const r = deploy(["--skip-pull", "--settle", "5"], { STUB_HOLDER: service ? "service" : "none", STUB_PROCESSES: processes, MUTATE_CONFIG: "1" });
     expect(r.status, r.out).toBe(0);
-    expect(r.calls.indexOf("pnpm config:migrate --write")).toBeGreaterThan(r.calls.indexOf("ps -A -o pid=,args="));
+    expect(r.calls.indexOf("pnpm config:migrate --write --convert-overlays")).toBeGreaterThan(r.calls.indexOf("ps -A -o pid=,args="));
     if (service) expect(r.calls.find((c) => c.includes(" --holder"))).toContain("--pid 4242 --host ");
   });
 
@@ -2234,7 +2255,7 @@ describe("scripts/ops/deploy.sh: the config-write step", { timeout: TEST_TIMEOUT
     const holder = r.calls.findIndex((c) => c.includes(" --holder"));
     const receipt = r.calls.findIndex((c) => c.includes(" --receipt"));
     expect(holder).toBeGreaterThan(receipt);
-    expect(r.calls.indexOf("pnpm config:migrate --write")).toBeGreaterThan(holder);
+    expect(r.calls.indexOf("pnpm config:migrate --write --convert-overlays")).toBeGreaterThan(holder);
     expect(fs.readFileSync(sample(), "utf8")).toContain("config_version: 2");
   });
 
@@ -2297,7 +2318,7 @@ describe("scripts/ops/deploy.sh: the config-write step", { timeout: TEST_TIMEOUT
       const r = deploy(noWorker, { MUTATE_CONFIG: "1" });
       expect(r.status, r.out).toBe(0);
       expect(r.calls.some((c) => c.startsWith("prepare-release.sh") || c.startsWith("install-ai-worker.sh"))).toBe(false);
-      expect(r.calls.indexOf("pnpm config:migrate --write")).toBeGreaterThan(r.calls.findIndex((c) => c.includes(" --lock-holder")));
+      expect(r.calls.indexOf("pnpm config:migrate --write --convert-overlays")).toBeGreaterThan(r.calls.findIndex((c) => c.includes(" --lock-holder")));
       expect(fs.readFileSync(sample(), "utf8")).toContain("config_version: 2");
     });
 
@@ -2397,7 +2418,7 @@ describe("scripts/ops/deploy.sh: the config-write step", { timeout: TEST_TIMEOUT
       expect(fs.readFileSync(legacyMarker(), "utf8")).toBe("old marker");
       expect(fs.existsSync(legacyLease())).toBe(true);
       const hook = 'echo "# at the first write: marker=$([[ -e "$WORK/data/config/.upgrade-freeze" ]] && echo 1 || echo 0)" >> "$DEPLOY_TEST_LOG"';
-      const passed = deploy(args, { PNPM_config_migrate___write_HOOK: hook });
+      const passed = deploy(args, { PNPM_config_migrate___write___convert_overlays_HOOK: hook });
       expect(passed.status, passed.out).toBe(0);
       expect(passed.events).toContain("# at the first write: marker=0");
       expect(fs.existsSync(legacyLease())).toBe(false);
@@ -2451,9 +2472,9 @@ describe("scripts/ops/deploy.sh: the config-write step", { timeout: TEST_TIMEOUT
 
     it(`SIG${signal} during the first write: that command finishes, nothing further runs`, () => {
       existing();
-      const r = deploy(args, { PNPM_config_migrate___write_HOOK: `kill -${signal} $DEPLOY_PID`, MUTATE_CONFIG: "1" });
+      const r = deploy(args, { PNPM_config_migrate___write___convert_overlays_HOOK: `kill -${signal} $DEPLOY_PID`, MUTATE_CONFIG: "1" });
       expect(r.status, r.out).toBe(code);
-      expect(r.calls).toContain("pnpm config:migrate --write");
+      expect(r.calls).toContain("pnpm config:migrate --write --convert-overlays");
       for (const command of WRITES.slice(1)) expect(r.calls).not.toContain(command);
       expect(r.calls).not.toContain("pnpm run doctor");
       expect(r.calls.some((c) => c.includes(" prune "))).toBe(false);
@@ -2462,7 +2483,7 @@ describe("scripts/ops/deploy.sh: the config-write step", { timeout: TEST_TIMEOUT
   }
 
   it.each([
-    { title: "config:migrate --write fails", env: { PNPM_config_migrate___write_EXIT: "1" }, ran: 1, reason: "pnpm config:migrate --write failed (see above)" },
+    { title: "config:migrate --write --convert-overlays fails", env: { PNPM_config_migrate___write___convert_overlays_EXIT: "1" }, ran: 1, reason: "pnpm config:migrate --write --convert-overlays failed (see above)" },
     { title: "config:init fails", env: { PNPM_config_init_EXIT: "1" }, ran: 2, reason: "pnpm config:init failed (see above)" },
     { title: "writes are still planned", env: { PNPM_config_plan___deploy___check_EXIT: "2" }, ran: 3, reason: "writes are still planned after the write step (see the list above)" },
     { title: "the check itself fails", env: { PNPM_config_plan___deploy___check_EXIT: "1" }, ran: 3, reason: "pnpm config:plan --deploy --check failed (see above)" },

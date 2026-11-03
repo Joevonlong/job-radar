@@ -6,7 +6,8 @@ import fsp from "node:fs/promises";
 
 import { planConfigMigrations } from "./migrations/files";
 import { configLayer, displayConfigPath, getConfigDir, getDefaultsDir, getUserConfigPath } from "./paths";
-import { configRegistry, type ConfigName, LAYERED_CONFIG_NAMES, OVERLAID_CONFIG_NAMES, SHIPPED_CONFIG_NAMES, USER_CONFIG_NAMES } from "./registry";
+import { fileLacksVersion } from "./load";
+import { configRegistry, LAYERED_CONFIG_NAMES, USER_CONFIG_NAMES } from "./registry";
 
 export interface ConfigLayersState {
   /** For people (`config`, `data/config`, or absolute outside the app). */
@@ -19,8 +20,8 @@ export interface ConfigLayersState {
   userFiles: number;
   /** `user` files still read from the defaults (not copied yet: `pnpm config:init`). File names. */
   notCopied: string[];
-  /** `shipped` files the user directory replaces as a whole (product updates of them no longer apply); overlay files (models.yaml) are merged and not listed. File names. */
-  overrides: string[];
+  /** User files without `config_version`: read as whole files, so keys they lack take the schema's defaults. File names. */
+  missingVersion: string[];
   /** User files older than the code (migrated in memory on every load). */
   pendingMigrations: { file: string; from: number; to: number }[];
   /** User files that cannot be migrated: newer than the code (a downgrade) or an invalid `config_version`. */
@@ -47,7 +48,7 @@ export async function inspectConfigLayers(): Promise<ConfigLayersState> {
     userDirWritable,
     userFiles: LAYERED_CONFIG_NAMES.filter((name) => fs.existsSync(/*turbopackIgnore: true*/ getUserConfigPath(name))).length,
     notCopied: USER_CONFIG_NAMES.filter((name) => configLayer(name) === "default").map((name) => configRegistry[name].file),
-    overrides: SHIPPED_CONFIG_NAMES.filter((name) => !(OVERLAID_CONFIG_NAMES as readonly ConfigName[]).includes(name) && configLayer(name) === "user").map((name) => configRegistry[name].file),
+    missingVersion: LAYERED_CONFIG_NAMES.filter(fileLacksVersion).map((name) => configRegistry[name].file),
     pendingMigrations: plan.pending.map((item) => ({ file: displayConfigPath(item.path), from: item.from, to: item.to })),
     problems: plan.problems.map((item) => ({ file: displayConfigPath(item.path), message: item.message })),
   };

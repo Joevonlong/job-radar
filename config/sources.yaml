@@ -18,7 +18,7 @@
 # Monthly cap used before starting paid collection runs (USD), shared by all paid channels.
 # Limits use configured prices; settled vendor charges are always recorded and may exceed the cap for one run.
 # (AI spend has its own cap: monthly_api_budget_usd in ai.yaml.)
-config_version: 7
+config_version: 8
 paid_total_monthly_budget_usd: 15
 
 # Circuit breaker: after failures consecutive failures a channel is marked unavailable (paused) and retried after cooldown_hours hours

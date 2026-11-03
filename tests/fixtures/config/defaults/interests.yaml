@@ -3,7 +3,7 @@
 # 信号词表由规则层（不花 AI）在 JD 里找候选，AI 层再确认或否定。
 # 所有正则按 "iu" 标志编译（不区分大小写，Unicode）；关键词按字面、整词匹配。
 # 每个信号都带 JD 原文引用（C7），没有引用就不入库。
-config_version: 3
+config_version: 4
 signals:
   categories:
     # T1：写明具体金额。命中后用 pipeline.yaml 的 salary 段（周期换算、汇率）算成年薪；

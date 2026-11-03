@@ -3,7 +3,7 @@
 # Signal word lists: the rule layer (no AI) finds candidates in the JD, then the AI layer confirms or rejects them.
 # All regexes compile with the "iu" flags (case-insensitive, Unicode); keywords match literally, as whole words.
 # Every signal carries a quote from the JD; without a quote it isn't stored.
-config_version: 3
+config_version: 4
 # Signal categories (on /interests you can add, delete, rename and reorder them; list order is display and sort order; at most 12). Each category:
 #   id          starts with a letter; letters/digits/_/-; at most 24 characters; unique ignoring case; can't change after saving (nor can kind).
 #   kind        amount = stated amount (at most one); keyword = keywords, regexes, excludes; tag = benefit-style tags (not sent to AI review).

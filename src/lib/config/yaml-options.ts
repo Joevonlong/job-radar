@@ -7,8 +7,8 @@
  *   turns the value into a string;
  * - `!unset` is the one custom tag. It marks a key whose value is removed from the shipped default (`key: !unset`). The
  *   marker is checked where it stands: never the whole document, never `config_version`, never in a list, never on a
- *   mapping or a list, never with a value. The overlay semantics are not switched on yet, so in this version a marker
- *   in a valid position is an error too ("not supported by this version"); the merge functions use `unset: "overlay"`;
+ *   mapping or a list, never with a value. Whether a marker in a valid position means anything depends on the file: only
+ *   a user file at its overlay version reads it (`parseConfigDocument`, `unset: "overlay"`); every other reader gets an error;
  * - the canonical text of a marker is `key: !unset` with nothing after it (`stringifyConfigYaml`).
  *
  * `UNSET` (a symbol) is what a marker parses to. It only ever appears inside the overlay merge and diff
@@ -29,6 +29,7 @@ import {
   type ParseOptions,
   type ScalarTag,
   type SchemaOptions,
+  type ToStringOptions,
 } from "yaml";
 
 // Not imported from migrations/version.ts: this module is also bundled for the browser (through diff.ts).
@@ -63,8 +64,8 @@ export const CONFIG_YAML_OPTIONS: ParseOptions & DocumentOptions & SchemaOptions
 };
 
 /**
- * What a valid `!unset` means to the caller. `reject`: the overlay semantics are not on (this version): every marker is an
- * error. `overlay`: a marker in a valid position parses to `UNSET` (the merge and diff tests, and later the loader).
+ * What a valid `!unset` means to the caller. `reject`: this text is not an overlay (a shipped file, a profile file, an
+ * import): every marker is an error. `overlay`: a marker in a valid position parses to `UNSET`.
  */
 export type UnsetMode = "reject" | "overlay";
 
@@ -74,8 +75,8 @@ export interface ConfigYamlParseOptions {
   unset?: UnsetMode;
 }
 
-/** The message of a valid marker while the overlay semantics are off. */
-export const UNSET_NOT_SUPPORTED = "!unset is not supported by this version of Job Radar";
+/** The message of a valid marker where it means nothing (`reject`). */
+export const UNSET_NOT_SUPPORTED = "!unset is not allowed here: only a user config file at its overlay version can use it";
 
 const UNRESOLVED_UNSET = /^Unresolved tag: !unset\b/;
 
@@ -169,15 +170,15 @@ export function containsUnset(value: unknown): boolean {
  * The text of a config document, with every marker in its canonical form `key: !unset` (no space, no value after the
  * tag; `yaml` itself writes `key: !unset ` with a trailing space). The document is not changed.
  */
-export function stringifyConfigYaml(doc: Document): string {
+export function stringifyConfigYaml(doc: Document, options?: ToStringOptions): string {
   let hasMarker = false;
   visit(doc, {
     Scalar(_key, node) {
       if (node.value === UNSET) hasMarker = true;
     },
   });
-  if (!hasMarker) return doc.toString();
-  const plainText = doc.toString();
+  if (!hasMarker) return doc.toString(options);
+  const plainText = doc.toString(options);
   let placeholder = "";
   do placeholder = `jr_unset_${Math.random().toString(36).slice(2)}`;
   while (plainText.includes(placeholder));
@@ -192,5 +193,5 @@ export function stringifyConfigYaml(doc: Document): string {
       return plain;
     },
   });
-  return copy.toString().split(placeholder).join(UNSET_TAG);
+  return copy.toString(options).split(placeholder).join(UNSET_TAG);
 }

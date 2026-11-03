@@ -3690,8 +3690,9 @@
       "editorLabel": "{file} 的内容",
       "tabHint": "Tab 缩进两格；按 Esc 再按 Tab 可以离开输入框。",
       "keysHint": "Tab 缩进 · Shift+Tab 反缩进 · Esc 再 Tab 离开输入框 · ⌘/Ctrl+S 预览并保存",
+      "shippedReference": "出厂文件，仅供参考（你的文件只需要写改动的键）",
       "secretsNote": "密钥（API key、token、密码）放 .env，不要写进配置文件。",
-      "versionNote": "这份文件的 config_version 比程序的旧：读取时会在内存里升级。要在编辑器里保存，先加上新的键并把 config_version 改成 {version}，或运行 pnpm config:migrate --write。",
+      "versionNote": "这个文件的 config_version 比程序的旧。它照常可用：按原样读取，保存时保持自己的格式，下一次部署会把它升上来（pnpm config:migrate --write --convert-overlays）。",
       "checking": "检查中…",
       "noIssues": "没有问题，可以保存",
       "issueCount": "{count, plural, other {# 个问题}}（修好才能保存）",
@@ -3709,13 +3710,12 @@
       "unsaved": "有未保存的改动",
       "clean": "没有未保存的改动",
       "resetButton": "恢复默认",
+      "resetToast": "已恢复 {file} 的产品默认值（你的文件已备份并删除）",
       "savedToast": "已保存 {file}（旧文本已备份）",
-      "resetToastShipped": "已恢复 {file} 的产品默认（覆盖文件已备份并删除）",
-      "resetToastUser": "已把 {file} 恢复成默认内容（旧文本已备份）",
       "failure": {
         "proxies_changed": "代理只能在文件里改：这里它们显示成 ***，不能增删或修改。",
         "too_large": "文本太长（上限 {max} 字节，ui.yaml 的 config_editor.max_bytes）。",
-        "needs_confirm": "这是产品默认文件：第一次保存要先确认会生成整份覆盖文件。",
+        "needs_confirm": "models.yaml：第一次保存会写入目录的完整副本，需要确认。",
         "failed": "保存失败，文件没有改动。",
         "protected": "这段文本修改了受保护的键（命令、API 地址或凭据路径）。请手动编辑文件来改。",
         "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
@@ -3729,13 +3729,11 @@
         "invalid": "不合法",
         "source_user": "用户目录",
         "source_default": "默认",
-        "source_overridden": "已覆盖默认",
+        "source_overridden": "有你的改动",
         "source_missing": "不存在",
         "versionBehind": "版本落后"
       },
       "override": {
-        "text": "这是产品默认文件：保存会在用户目录生成整份覆盖文件，之后产品更新这个文件不会生效。「恢复默认」可以随时回到产品默认。",
-        "confirm": "我明白，生成覆盖文件",
         "textOverlay": "models.yaml 是叠加在产品模型清单上的，按模型逐个叠加。这里的编辑器从整份清单开始：保存会写出一份完整副本，里面的每个模型都按 id 替换产品的那一条，之后产品对这些模型价格和限制的更新就不再生效。想继续跟随更新，请删掉没改过的模型，只留你自己的新增（或用「AI」页的刷新按钮添加模型）。「恢复默认」可以随时回到产品清单。",
         "confirmOverlay": "我明白，保存完整副本"
       },
@@ -3769,9 +3767,8 @@
       },
       "reset": {
         "title": "恢复默认",
-        "descriptionShipped": "删除用户目录里的覆盖文件，之后重新读取产品默认（并能收到产品对它的更新）。当前文本会先备份。",
-        "descriptionUser": "用产品默认文件的内容替换当前文件。当前文本会先备份。",
-        "noChanges": "当前内容和默认一样。",
+        "description": "从用户目录删除你的文件：所有键重新跟随产品默认值。你的文本会先备份。",
+        "noChanges": "你的文件是空的。",
         "cancel": "取消",
         "confirm": "恢复默认",
         "working": "处理中…"
@@ -6065,8 +6062,8 @@
           "pending": "{file}（版本 {from} → {to}）",
           "pendings": "{files} 比代码旧，每次读取都在内存里迁移",
           "pendingsHint": "pnpm config:migrate 看改动，再 pnpm config:migrate --write 写回（原文件备份在 .backup/）",
-          "overrides": "你覆盖了 {files}：产品更新这些文件的内容不会生效",
-          "overridesHint": "确实要自己维护就忽略；想跟随产品更新就删掉 {userDir} 里的这些文件",
+          "missingVersion": "{files} 没有 config_version：按整份文件读取，缺少的键取 schema 默认值",
+          "missingVersionHint": "给文件加上 config_version，或者让下一次部署的写入步骤转换它（pnpm config:plan --deploy 可以查看）。",
           "notCopied": "{files} 还在读默认配置（没有复制到用户目录）",
           "notCopiedHint": "pnpm config:init",
           "summary": "用户配置 {userDir}（{count} 个文件），默认配置 {defaultsDir}"
@@ -6139,10 +6136,11 @@
           "none": "没有待写入的配置",
           "pending": "{count} 个配置文件等下一次部署写入：{files}",
           "skipped": "上一次部署跳过了它们：{reason}",
-          "hint": "下一次部署会重试。要现在写入，先确认所有进程都已是这个版本，再运行 pnpm config:migrate --write 和 pnpm config:init。",
+          "hint": "下一次部署会重试。要现在写入，先确认所有进程都已是这个版本，再运行 pnpm config:migrate --write --convert-overlays 和 pnpm config:init。",
           "problems": "{count} 个配置文件无法迁移：{files}",
           "kind": {
             "migrate": "{file}（格式更新）",
+            "convert": "{file}（转换为按键覆盖的格式）",
             "create": "{file}（新建）"
           }
         }

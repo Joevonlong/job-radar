@@ -80,7 +80,7 @@ describe("loadConfig without a watcher", () => {
     loadConfig("ui");
     loadConfig("search");
     vi.advanceTimersByTime(INTERVAL_MS);
-    expect(countReads(() => loadConfig("ui"))).toBe(2);
+    expect(countReads(() => loadConfig("ui"))).toBe(4); // two configs, two layers each
     expect(countReads(() => loadConfig("search"))).toBe(0);
   });
 

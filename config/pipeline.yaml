@@ -2,7 +2,7 @@
 # Lists marked "regex" match case-insensitively in Unicode mode; invalid regexes are reported by pnpm config:check.
 
 # How many pending raw rows to fetch from the database per parse batch; the step keeps fetching until none are pending
-config_version: 5
+config_version: 6
 batch_size: 200
 
 dedupe:

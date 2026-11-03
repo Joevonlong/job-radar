@@ -9,6 +9,7 @@ import {
   ConfigError,
   ensureProfileFiles,
   hashConfigText,
+  layeredConfigFingerprint,
   loadConfig,
   readProfileText,
   reloadConfig,
@@ -57,7 +58,7 @@ describe("writeConfig keeps factory defaults out of the user file", () => {
     });
     const ai = loadConfig("ai");
     expect(ai.tasks.salary_lookup.order?.length).toBeGreaterThan(0);
-    await writeConfig("ai", ai, { baseHash: hashConfigText(read(tmp.configDir, "ai.yaml")) });
+    await writeConfig("ai", ai, { baseHash: layeredConfigFingerprint("ai") });
     expect(read(tmp.configDir, "ai.yaml")).not.toContain("salary_lookup");
 
     const schedule = loadConfig("schedule");
@@ -246,7 +247,7 @@ describe("writeConfig", () => {
 
   it("baseHash: two saves opened on the same text race; the second one is refused as stale and changes nothing", async () => {
     const notify = loadConfig("notify");
-    const opened = hashConfigText(read(tmp.configDir, "notify.yaml"));
+    const opened = layeredConfigFingerprint("notify");
     const results = await Promise.allSettled([
       writeConfig("notify", { ...notify, max_per_cycle: 5 }, { baseHash: opened }),
       writeConfig("notify", { ...notify, max_per_cycle: 6 }, { baseHash: opened }),
@@ -261,7 +262,7 @@ describe("writeConfig", () => {
   it("baseHash: a file changed while the save waited for the lock is not overwritten", async () => {
     const notify = loadConfig("notify");
     const file = path.join(tmp.configDir, "notify.yaml");
-    const opened = hashConfigText(read(tmp.configDir, "notify.yaml"));
+    const opened = layeredConfigFingerprint("notify");
     let pending: Promise<unknown> = Promise.resolve();
     await withFileLock(file, async () => {
       pending = writeConfig("notify", { ...notify, max_per_cycle: 9 }, { baseHash: opened }).catch((error: unknown) => error);
@@ -275,7 +276,7 @@ describe("writeConfig", () => {
 
   it("baseHash: the current hash saves; no baseHash (the setup wizard) always saves", async () => {
     const notify = loadConfig("notify");
-    await writeConfig("notify", { ...notify, max_per_cycle: 4 }, { baseHash: hashConfigText(read(tmp.configDir, "notify.yaml")) });
+    await writeConfig("notify", { ...notify, max_per_cycle: 4 }, { baseHash: layeredConfigFingerprint("notify") });
     expect(reloadConfig("notify").max_per_cycle).toBe(4);
     await writeConfig("notify", { ...notify, max_per_cycle: 3 });
     expect(reloadConfig("notify").max_per_cycle).toBe(3);

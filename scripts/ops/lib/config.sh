@@ -13,9 +13,9 @@
 #         3  missing: the key is not there and there is no <default> (a required key such as `timezone`)
 #       Which file it reads, as the loader does:
 #         - no user file: the shipped file, then <default>;
-#         - a user file in the whole-file format (without config_version, or older than the overlay format of that file;
-#           in this version every user file): the user file, then <default>; the shipped file is NOT read;
-#         - a user file in the overlay format (`cfg_overlay_format_version`; none yet): `!unset` on the key or on a
+#         - a user file in the whole-file format (without config_version, or older than the overlay format of that file):
+#           the user file, then <default>; the shipped file is NOT read;
+#         - a user file in the overlay format (`cfg_overlay_format_version`): `!unset` on the key or on a
 #           parent gives <default>; a key the user file does not have is read from the shipped file, then <default>.
 #       The YAML subset: block mappings, plain, 'single' and "double" quoted scalars (no escapes), comments. On the path
 #       being read, anything else is unclear: flow style ({} []), anchors and aliases, block scalars (| >), tags other
@@ -49,9 +49,36 @@ stage_has_layered_config() {
 }
 
 # The overlay format version of each file (the config_version from which a user file is an overlay rather than a whole
-# file). Empty in this version: every user file is read with whole-file semantics.
+# file). tests/ops/config-sh-versions.test.ts keeps this table equal to the migration chains. A file not listed (models.yaml)
+# has no such version.
 cfg_overlay_format_version() {
   case "$1" in
+    activity-log.yaml) printf '2' ;;
+    ai.yaml) printf '4' ;;
+    breakdown.yaml) printf '2' ;;
+    current-scores.yaml) printf '2' ;;
+    delivery-audit.yaml) printf '2' ;;
+    insights.yaml) printf '3' ;;
+    interests.yaml) printf '4' ;;
+    job-archive.yaml) printf '2' ;;
+    job-search.yaml) printf '2' ;;
+    language.yaml) printf '2' ;;
+    mcp.yaml) printf '2' ;;
+    notify.yaml) printf '3' ;;
+    pipeline.yaml) printf '6' ;;
+    pipeline-board.yaml) printf '2' ;;
+    replies.yaml) printf '2' ;;
+    research.yaml) printf '2' ;;
+    resume.yaml) printf '2' ;;
+    salary.yaml) printf '3' ;;
+    schedule.yaml) printf '2' ;;
+    search.yaml) printf '3' ;;
+    setup.yaml) printf '2' ;;
+    signal-presets.yaml) printf '2' ;;
+    sources.yaml) printf '8' ;;
+    traps.yaml) printf '2' ;;
+    ui.yaml) printf '3' ;;
+    writer.yaml) printf '2' ;;
     *) printf '' ;;
   esac
 }

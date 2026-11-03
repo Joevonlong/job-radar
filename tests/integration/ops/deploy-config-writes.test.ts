@@ -31,7 +31,7 @@ const HANG_GUARD_MS = 180_000;
 
 const ARGS = ["--skip-pull", "--settle", "0"];
 const NO_WORKER = ["--skip-pull", "--no-ai-worker"];
-const WRITES = ["pnpm config:migrate --write", "pnpm config:init", "pnpm config:plan --deploy --check", "pnpm config:migrate --prune-backups"];
+const WRITES = ["pnpm config:migrate --write --convert-overlays", "pnpm config:init", "pnpm config:plan --deploy --check", "pnpm config:migrate --prune-backups"];
 const OLD_FILES = ["notify", "interests"] as const;
 
 let root = "";
@@ -500,7 +500,7 @@ describe("scripts/ops/deploy.sh: real config writes", { timeout: 300_000 }, () =
     it("between the gate and the writes the lock is this run's: a second run without the token cannot get it", async () => {
       existingInstall();
       const attempt = `env -u JOB_RADAR_RELEASES_LOCK_TOKEN bash -c 'source "$WORK/scripts/ops/lib/proc.sh"; source "$WORK/scripts/ops/lib/releases.sh"; releases_lock_acquire "$WORK"; echo "# second run rc=$?" >> "$DEPLOY_TEST_LOG"'`;
-      const r = await deploy(ARGS, { STUB_config_migrate___write_HOOK: attempt });
+      const r = await deploy(ARGS, { STUB_config_migrate___write___convert_overlays_HOOK: attempt });
       expect(r.status, r.out).toBe(0);
       expect(r.notes).toContain("second run rc=1");
     });
@@ -706,7 +706,7 @@ describe("scripts/ops/deploy.sh: real config writes", { timeout: 300_000 }, () =
         const [first, second] = CONFIG_WRITE_LOCK_KEY;
         await holder`select pg_advisory_lock(${first}, ${second})`;
         const r = await deploy();
-        assertStopped(r, 1, "pnpm config:migrate --write failed (see above)");
+        assertStopped(r, 1, "pnpm config:migrate --write --convert-overlays failed (see above)");
         expect(userBytes()).toBe(before);
       } finally {
         await holder.end({ timeout: 5 });
@@ -718,7 +718,7 @@ describe("scripts/ops/deploy.sh: real config writes", { timeout: 300_000 }, () =
       const before = userBytes();
       write(inTest(".env"), databaseEnv.replace(/^DB_HOST_PORT=.*$/m, `DB_HOST_PORT=${await unusedPort()}`));
       const r = await deploy();
-      assertStopped(r, 1, "pnpm config:migrate --write failed (see above)");
+      assertStopped(r, 1, "pnpm config:migrate --write --convert-overlays failed (see above)");
       expect(userBytes()).toBe(before);
     });
 
@@ -742,7 +742,7 @@ describe("scripts/ops/deploy.sh: real config writes", { timeout: 300_000 }, () =
     it("a user edit to the next file after the plan: it is migrated from what the user saved, nothing is lost", async () => {
       existingInstall();
       const pause = newPauseDir();
-      const run = start([deploySh, ...ARGS], { STUB_PAUSE: "config_migrate___write", PAUSE_DIR: pause });
+      const run = start([deploySh, ...ARGS], { STUB_PAUSE: "config_migrate___write___convert_overlays", PAUSE_DIR: pause });
       await reachedPause(pause, run);
       const original = (name: string): string => fs.readFileSync(path.join(REPO, `tests/fixtures/config/${name}.v1.yaml`), "utf8");
       const next = OLD_FILES.find((name) => fs.readFileSync(configFile(name), "utf8") === original(name));
@@ -790,7 +790,7 @@ describe("scripts/ops/deploy.sh: real config writes", { timeout: 300_000 }, () =
     ] as const)("SIG$name: the writer gets no signal and finishes in the lock, nothing later runs, exit $code; a new deploy completes", async ({ signal, code }) => {
       existingInstall();
       const pause = newPauseDir();
-      const run = start([deploySh, ...ARGS], { STUB_PAUSE: "config_migrate___write", PAUSE_DIR: pause });
+      const run = start([deploySh, ...ARGS], { STUB_PAUSE: "config_migrate___write___convert_overlays", PAUSE_DIR: pause });
       await reachedPause(pause, run);
       mixedFiles();
       expect(await configLockHolders()).toBeGreaterThan(0);
@@ -820,7 +820,7 @@ describe("scripts/ops/deploy.sh: real config writes", { timeout: 300_000 }, () =
       write(path.join(lockDir, "owner"), OWNER_FIXTURE);
       fs.mkdirSync(path.join(lockDir, "inflight"));
       const pause = newPauseDir();
-      const run = start([deploySh, ...ARGS], { JOB_RADAR_RELEASES_LOCK_TOKEN: FIXTURE_TOKEN, STUB_PAUSE: "config_migrate___write", PAUSE_DIR: pause });
+      const run = start([deploySh, ...ARGS], { JOB_RADAR_RELEASES_LOCK_TOKEN: FIXTURE_TOKEN, STUB_PAUSE: "config_migrate___write___convert_overlays", PAUSE_DIR: pause });
       await reachedPause(pause, run);
       process.kill(run.pid, "SIGTERM");
       await waitForSignal(run);
@@ -833,7 +833,7 @@ describe("scripts/ops/deploy.sh: real config writes", { timeout: 300_000 }, () =
     it("SIGKILL of deploy.sh: exit 137, the lock and its record stay, the writer finishes on its own", async () => {
       existingInstall();
       const pause = newPauseDir();
-      const run = start([deploySh, ...ARGS], { STUB_PAUSE: "config_migrate___write", PAUSE_DIR: pause });
+      const run = start([deploySh, ...ARGS], { STUB_PAUSE: "config_migrate___write___convert_overlays", PAUSE_DIR: pause });
       await reachedPause(pause, run);
       const writer = Number(fs.readFileSync(pauseFile(pause, "pid"), "utf8"));
       process.kill(run.pid, "SIGKILL");
@@ -852,7 +852,7 @@ describe("scripts/ops/deploy.sh: real config writes", { timeout: 300_000 }, () =
     it("SIGKILL of deploy.sh under a calling script: it keeps the lock and exits 3; the writer finishes; the next deploy stops in preflight", async () => {
       existingInstall();
       const pause = newPauseDir();
-      const run = start([FAKE_DEPLOY_PROD, inTest("scripts/ops/lib"), work, deploySh, ...ARGS], { STUB_PAUSE: "config_migrate___write", PAUSE_DIR: pause });
+      const run = start([FAKE_DEPLOY_PROD, inTest("scripts/ops/lib"), work, deploySh, ...ARGS], { STUB_PAUSE: "config_migrate___write___convert_overlays", PAUSE_DIR: pause });
       await reachedPause(pause, run);
       const writer = Number(fs.readFileSync(pauseFile(pause, "pid"), "utf8"));
       const deployPid = Number(fs.readFileSync(`${log}.deploy-pid`, "utf8"));
@@ -899,7 +899,7 @@ describe("scripts/ops/deploy.sh: real config writes", { timeout: 300_000 }, () =
     it("named by .env only: no DATABASE_URL in the environment, no test mode; deploy and a direct config:init take the lock there", async () => {
       existingInstall();
       const pause = newPauseDir();
-      const run = start([deploySh, ...ARGS], { STUB_PAUSE: "config_migrate___write", PAUSE_DIR: pause });
+      const run = start([deploySh, ...ARGS], { STUB_PAUSE: "config_migrate___write___convert_overlays", PAUSE_DIR: pause });
       await reachedPause(pause, run);
       expect(await configLockHolders()).toBeGreaterThan(0);
       letGo(pause);
@@ -920,7 +920,7 @@ describe("scripts/ops/deploy.sh: real config writes", { timeout: 300_000 }, () =
       existingInstall();
       write(inTest(".env"), env(await unusedPort()));
       const pause = newPauseDir();
-      const run = start([deploySh, ...ARGS], { DATABASE_URL: hostDatabaseUrl, STUB_PAUSE: "config_migrate___write", PAUSE_DIR: pause });
+      const run = start([deploySh, ...ARGS], { DATABASE_URL: hostDatabaseUrl, STUB_PAUSE: "config_migrate___write___convert_overlays", PAUSE_DIR: pause });
       await reachedPause(pause, run);
       expect(await configLockHolders()).toBeGreaterThan(0);
       letGo(pause);

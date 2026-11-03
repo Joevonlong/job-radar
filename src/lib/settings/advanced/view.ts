@@ -1,7 +1,4 @@
 /** Server side of the advanced editor: the file list, one file's text, the limits. Reads only. */
-import fs from "node:fs";
-
-
 import {
   CONFIG_EDITOR_DEFAULTS,
   CONFIG_NAMES,
@@ -11,11 +8,13 @@ import {
   displayConfigPathForWeb,
   documentConfigVersion,
   currentConfigVersion,
-  getDefaultConfigPath,
-  hashConfigText,
   isProfileName,
+  layeredConfigFingerprint,
   maskConfigText,
-  readConfigText,
+  newFileText,
+  readEffectiveConfig,
+  readOverlayText,
+  readShippedText,
   reloadConfig,
   resolveConfigPath,
   validateConfigText,
@@ -53,9 +52,14 @@ function firstLine(issue: { path: string; message: string } | undefined, fallbac
   return issue ? `${issue.path === "" ? "(root)" : issue.path}: ${issue.message}` : fallback;
 }
 
+/** What the editor opens: the user's file, or the template of a file created now. */
+export function editorText(name: ConfigName): string {
+  return readOverlayText(name) ?? newFileText(name);
+}
+
 function readText(name: ConfigName): { text: string } | { problem: string } {
   try {
-    return { text: readConfigText(name) };
+    return { text: editorText(name) };
   } catch (error) {
     return { problem: error instanceof ConfigError ? (error.message.split("\n")[0] ?? "unreadable") : "unreadable" };
   }
@@ -64,19 +68,24 @@ function readText(name: ConfigName): { text: string } | { problem: string } {
 function entryOf(name: ConfigName): AdvancedFileEntry {
   const registry = configRegistry[name];
   const layer: AdvancedLayer = configLayer(name);
-  const read = readText(name);
   let valid = false;
   let firstProblem: string | null = null;
   let versionBehind = false;
-  if ("problem" in read) {
-    firstProblem = read.problem;
-  } else {
-    const result = validateConfigText(name, read.text);
-    valid = result.ok;
-    if (!result.ok) firstProblem = firstLine(result.issues[0], "invalid");
-    const doc = parseConfigYamlDocument(read.text);
-    const version = doc.errors.length === 0 ? documentConfigVersion(doc) : null;
-    versionBehind = version !== null && version < currentConfigVersion(name);
+  try {
+    const text = readOverlayText(name);
+    if (text === null) {
+      readEffectiveConfig(name);
+      valid = true;
+    } else {
+      const result = validateConfigText(name, text);
+      valid = result.ok;
+      if (!result.ok) firstProblem = firstLine(result.issues[0], "invalid");
+      const doc = parseConfigYamlDocument(text, { unset: "overlay" });
+      const version = doc.errors.length === 0 ? documentConfigVersion(doc) : null;
+      versionBehind = version !== null && version < currentConfigVersion(name);
+    }
+  } catch (error) {
+    firstProblem = error instanceof ConfigError ? (error.message.split("\n")[0] ?? "unreadable") : "unreadable";
   }
   return {
     stem: advancedStem(name),
@@ -101,30 +110,26 @@ export function loadAdvancedFile(stem: string): AdvancedLoad {
   const read = readText(name);
   if ("problem" in read) return { ok: false, reason: "unreadable" };
   const layer: AdvancedLayer = configLayer(name);
-  const shippedPath = getDefaultConfigPath(name);
   let defaultText: string | null = null;
-  if (shippedPath !== null) {
-    try {
-      defaultText = fs.readFileSync(/*turbopackIgnore: true*/ shippedPath, "utf8");
-    } catch {
-      defaultText = null;
-    }
+  let hash = "";
+  try {
+    defaultText = readShippedText(name);
+    hash = layeredConfigFingerprint(name);
+  } catch {
+    if (hash === "") return { ok: false, reason: "unreadable" };
   }
-  // a user file can be restored to the default when it differs from it; an override of a shipped file always can (removing it)
-  const kind = configRegistry[name].kind;
-  const canReset = defaultText !== null && layer === "user" && (kind === "shipped" || read.text !== defaultText);
   return {
     ok: true,
     data: {
       entry: entryOf(name),
       path: displayConfigPathForWeb(resolveConfigPath(name)),
-      hash: hashConfigText(read.text),
+      hash,
       layer,
       text: maskConfigText(name, read.text),
       defaultText: defaultText === null ? null : maskConfigText(name, defaultText),
       codeVersion: currentConfigVersion(name),
       maxBytes: editorLimits().maxBytes,
-      canReset,
+      canReset: defaultText !== null && layer === "user" && name !== "setup",
       protectedKeys: [...protectedPatterns(name)],
       protectedUnlocked: protectedEditAllowed(),
     },

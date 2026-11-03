@@ -24,13 +24,20 @@ export function configErrorKey(error: unknown): ConfigWriteErrorKey | null {
   }
 }
 
+/** The layer a problem comes from: the user's file or the shipped default. */
+export type ConfigErrorLayer = "user" | "shipped";
+
 export interface ConfigIssue {
   /** Dotted field path, e.g. `cycles.weekend.cron`. Empty string = the document root. */
   path: string;
   message: string;
+  /** For a merged value: the layer that holds the value at this path. */
+  layer?: ConfigErrorLayer;
 }
 
 const MAX_ISSUES_IN_MESSAGE = 20;
+
+const LAYER_LABEL: Record<ConfigErrorLayer, string> = { user: "user file", shipped: "shipped file" };
 
 /**
  * Raised for any problem with a config file. Carries the file path and the
@@ -44,6 +51,8 @@ export class ConfigError extends Error {
   readonly issues: readonly ConfigIssue[];
   /** Free text the message carries: for `busy`, the lock holder or `lock_lost`. */
   readonly detail: string | undefined;
+  /** The layer the problem is in, when the error is about one layer (a read, the shipped file's version or syntax). */
+  readonly layer: ConfigErrorLayer | undefined;
 
   constructor(params: {
     configName: string;
@@ -51,9 +60,10 @@ export class ConfigError extends Error {
     kind: ConfigErrorKind;
     issues?: readonly ConfigIssue[];
     detail?: string;
+    layer?: ConfigErrorLayer;
   }) {
     const issues = params.issues ?? [];
-    super(formatMessage(params.configName, params.filePath, params.kind, issues, params.detail));
+    super(formatMessage(params.configName, params.filePath, params.kind, issues, params.detail, params.layer));
     this.name = "ConfigError";
     this.digest = configErrorDigest(params.configName);
     this.configName = params.configName;
@@ -61,6 +71,7 @@ export class ConfigError extends Error {
     this.kind = params.kind;
     this.issues = issues;
     this.detail = params.detail;
+    this.layer = params.layer;
   }
 }
 
@@ -70,6 +81,7 @@ function formatMessage(
   kind: ConfigErrorKind,
   issues: readonly ConfigIssue[],
   detail: string | undefined,
+  layer: ConfigErrorLayer | undefined,
 ): string {
   const head = {
     missing: `Config "${configName}" not found`,
@@ -83,9 +95,9 @@ function formatMessage(
     busy: `Config "${configName}" is being written by another process`,
     db_unavailable: `Config "${configName}" cannot be saved: saving config needs the database (DATABASE_URL, or POSTGRES_* in .env)`,
   }[kind];
-  const lines = [`${head} (${filePath})${detail ? `: ${detail}` : ""}`];
+  const lines = [`${head}${layer ? ` in the ${LAYER_LABEL[layer]}` : ""} (${filePath})${detail ? `: ${detail}` : ""}`];
   for (const issue of issues.slice(0, MAX_ISSUES_IN_MESSAGE)) {
-    lines.push(`  - ${issue.path === "" ? "(root)" : issue.path}: ${issue.message}`);
+    lines.push(`  - ${issue.path === "" ? "(root)" : issue.path}: ${issue.message}${issue.layer ? ` [${LAYER_LABEL[issue.layer]}]` : ""}`);
   }
   if (issues.length > MAX_ISSUES_IN_MESSAGE) {
     lines.push(`  ... and ${issues.length - MAX_ISSUES_IN_MESSAGE} more`);

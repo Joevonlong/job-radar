@@ -4,14 +4,13 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import {
+import { currentConfigVersion, legacyFormatVersion, readShippedText,
   ConfigError,
   configLayer,
   editorBackupRoot,
-  hashConfigText,
+  layeredConfigFingerprint,
   loadConfig,
   maskConfigText,
-  readConfigText,
   resetConfigToDefault,
   restoreMaskedText,
   validateConfigText,
@@ -27,7 +26,7 @@ beforeEach(() => {
 afterEach(() => tmp.cleanup());
 
 const userText = (file: string): string => fs.readFileSync(path.join(tmp.configDir, file), "utf8");
-const base = (name: "notify" | "ai" | "pipeline" | "channels" | "ui") => ({ baseHash: hashConfigText(readConfigText(name)), baseLayer: configLayer(name) });
+const base = (name: "notify" | "ai" | "pipeline" | "channels" | "ui") => ({ baseHash: layeredConfigFingerprint(name), baseLayer: configLayer(name) });
 const limits = { maxBytes: 1_000_000, backupsKeep: 3 };
 
 function failure(name: Parameters<typeof validateConfigText>[0], text: string) {
@@ -64,7 +63,8 @@ describe("validateConfigText", () => {
   });
 
   it("points a missing key at the nearest parent that exists", () => {
-    const text = userText("notify.yaml").replace(/^(\s+)start: .*\n/m, "");
+    // a whole file (the older format): the shipped file does not fill it in
+    const text = userText("notify.yaml").replace(/^config_version: \d+/m, `config_version: ${legacyFormatVersion("notify")}`).replace(/^(\s+)start: .*\n/m, "");
     const issues = failure("notify", text);
     const issue = issues.find((i) => i.path === "quiet_hours.start");
     expect(issue).toBeDefined();
@@ -78,14 +78,15 @@ describe("validateConfigText", () => {
   });
 
   it("checks config_version against the code's version", () => {
-    const bare = userText("ui.yaml").replace("config_version: 2\n", "");
+    const current = currentConfigVersion("ui");
+    const bare = userText("ui.yaml").replace(`config_version: ${current}\n`, "");
     const issues = failure("ui", bare);
     expect(issues[0]).toMatchObject({ source: "version" });
     expect(issues[0]?.message).toContain("config_version is missing");
     expect(validateConfigText("ui", userText("ui.yaml")).ok).toBe(true);
     // an older file stays valid (its writes can be pending after a deploy): it is checked on its migrated value
     expect(validateConfigText("ui", `config_version: 1\n${bare}`).ok).toBe(true);
-    const newer = failure("ui", `config_version: 3\n${bare}`);
+    const newer = failure("ui", `config_version: ${current + 1}\n${bare}`);
     expect(newer[0]?.message).toContain("newer");
     expect(failure("ui", `config_version: x\n${bare}`)[0]?.source).toBe("version");
   });
@@ -97,7 +98,7 @@ describe("validateConfigText", () => {
   });
 
   it("a model id renamed in models.yaml adds a model: the shipped one that ai.yaml uses stays in the catalog", () => {
-    const models = readConfigText("models");
+    const models = readShippedText("models") ?? "";
     const ai = loadConfig("ai");
     const used = ai.providers.deepseek.model;
     // models.yaml is an overlay: the renamed entry is a new model next to the shipped one, nothing is removed
@@ -155,7 +156,7 @@ describe("writeConfigText", () => {
 
   it("a shipped default file: the first save creates the user override, restoring the default removes it", async () => {
     expect(configLayer("pipeline")).toBe("default");
-    const text = `${readConfigText("pipeline")}\n# mine\n`;
+    const text = `${readShippedText("pipeline") ?? ""}\n# mine\n`;
     const written = await writeConfigText("pipeline", text, { ...base("pipeline"), ...limits });
     expect(written.backup).toBeNull();
     expect(configLayer("pipeline")).toBe("user");
@@ -169,11 +170,12 @@ describe("writeConfigText", () => {
     expect(fs.readFileSync(path.join(tmp.defaultsDir, "pipeline.yaml"), "utf8")).not.toContain("# mine");
   });
 
-  it("a user file: restoring the default writes the shipped text and backs up the old one", async () => {
+  it("a user file: restoring the default removes it, backs up the old text, and the shipped value answers", async () => {
     const mine = userText("notify.yaml").replace(/^max_per_cycle: \d+/m, "max_per_cycle: 11");
     fs.writeFileSync(path.join(tmp.configDir, "notify.yaml"), mine);
     const reset = await resetConfigToDefault("notify", { ...base("notify"), backupsKeep: 3 });
-    expect(userText("notify.yaml")).toBe(fs.readFileSync(path.join(tmp.defaultsDir, "notify.yaml"), "utf8"));
+    expect(fs.existsSync(path.join(tmp.configDir, "notify.yaml"))).toBe(false);
+    expect(configLayer("notify")).toBe("default");
     expect(fs.readFileSync(reset.backup ?? "", "utf8")).toBe(mine);
   });
 });
