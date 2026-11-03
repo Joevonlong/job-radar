@@ -76,7 +76,7 @@ describe("linkedin-apify request", () => {
 
   it("leaves the keyword request unchanged", () => {
     expect(buildActorInputs(apifyQuery(), settings(), 25, market)).toEqual([
-      { keywords: '"AI Engineer" OR "LLM Engineer"', location: "Berlin, Germany", datePosted: "r86400", limit: 25 },
+      { keywords: '"AI Engineer" OR "LLM Engineer"', location: "Berlin, Germany", urlParam: [{ key: "f_TPR", value: "r86400" }], limit: 25 },
     ]);
   });
 });

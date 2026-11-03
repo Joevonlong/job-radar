@@ -203,7 +203,7 @@ describe("sources.yaml", () => {
   it.runIf(legacyText("channels") !== null)("renames the remote-location keys, keeps every value", () => {
     const original = legacyValue("channels");
     const migrated = migrateText("channels", legacyText("channels") ?? "");
-    expect(migrated.steps).toBe(7);
+    expect(migrated.steps).toBe(8);
     const back = renameBack(parse(migrated.text) as Json, ["linkedin.brightdata.remote_locations", "linkedin.apify.remote_locations", "linkedin.session.site.remote_locations", "jobspy.remote_location"], [
       ["home_country", "eu_hire_in_de"],
       ["region", "eu_any"],
@@ -227,7 +227,7 @@ describe("sources.yaml", () => {
     // the sixth step added the Berlin Startup Jobs channel, switched on and bound to the German market
     expect(sources.berlinstartupjobs).toMatchObject({ enabled: true, markets: ["DE"] });
     delete sources.berlinstartupjobs;
-    // the seventh step removed StepStone's radius_km and max_pages (robots.txt permits no radius and no paging): project them back from the original
+    // the ninth step (StepStone) removed StepStone's radius_km and max_pages (robots.txt permits no radius and no paging): project them back from the original
     const stepstone = sources.stepstone as Json;
     const wasStepstone = (original.sources as Record<string, Json>).stepstone as Json;
     expect(stepstone).not.toHaveProperty("radius_km");
@@ -239,6 +239,10 @@ describe("sources.yaml", () => {
     expect(linkedin.monid).toMatchObject({ enabled: true, monthly_budget_usd: Math.min(5, Number(back.paid_total_monthly_budget_usd)) });
     delete linkedin.monid;
     if (Array.isArray(linkedin.cascade)) linkedin.cascade = linkedin.cascade.filter((id: unknown) => id !== "linkedin-monid");
+    // the eighth step asks the unedited Apify template for the exact window
+    const apify = linkedin.apify as Json;
+    expect(apify.input_template).toMatchObject({ urlParam: [{ key: "f_TPR", value: "r{posted_within_seconds}" }] });
+    apify.input_template = ((original.linkedin as Json).apify as Json).input_template;
     expect(back).toEqual(original);
     expect(migrateText("channels", migrated.text).steps).toBe(0);
   });

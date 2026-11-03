@@ -50,8 +50,8 @@ sources:
 describe("sources.yaml 4 -> 5", () => {
   it("brings a v4 file to what the shipped defaults hold, and it validates", () => {
     const { text, steps } = migrate("channels", older("sources.yaml", ["sources", "handpicked"], 4));
-    expect(steps).toBe(4); // 5 -> 6 (Berlin Design Network), 6 -> 7 (Berlin Startup Jobs) and 7 -> 8 (StepStone) follow
-    expect(text).toMatch(/^config_version: 8$/m);
+    expect(steps).toBe(5); // 5 -> 6 (Berlin Design Network), 6 -> 7 (Berlin Startup Jobs), 7 -> 8 (Apify exact window) and 8 -> 9 (StepStone) follow
+    expect(text).toMatch(/^config_version: 9$/m);
     const shipped = parse(fs.readFileSync(path.join(FIXTURE_DEFAULTS_DIR, "sources.yaml"), "utf8")) as Record<string, unknown>;
     expect(parse(text)).toEqual(shipped);
     const value = validateConfigValue("channels", parse(text), "sources.yaml");

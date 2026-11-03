@@ -297,11 +297,11 @@ collect:
   windows without a deploy; switching off query rotation alone does not turn off catch-up.
 
 LinkedIn session searches, guest, JSearch and other channels that use the window catch up, including the single-query
-Arbeitnow scan. **Bright Data, Apify and Monid do not automatically catch up yet:** they are billed per record, use coarse
-date ranges and do not return results newest first. They always keep the base window, losing the gap beyond it; a run
-that meets the coverage rules still counts for the family, so a later channel will not recover that gap. Catch-up will
-be enabled for each of these channels only after exact-window requests and newest-first results under its active
-settings have been measured.
+Arbeitnow scan. **Bright Data, Apify and Monid do not automatically catch up yet:** they are billed per record and do not return
+results newest first, and Bright Data and Monid also use coarse date ranges (Apify's default template requests the exact
+window). They always keep the base window, losing the gap beyond it; a run that meets the coverage rules still counts
+for the family, so a later channel will not recover that gap. Catch-up will be enabled for each of these channels only
+after exact-window requests and newest-first results under its active settings have been measured.
 
 Channels that ignore the search window also keep the base: widening fetches nothing extra and would only stop their
 successful runs from counting as possibly-closed evidence:
