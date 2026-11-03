@@ -101,6 +101,13 @@ describe("trigger -> progress -> snapshot", () => {
     expect(provider.count("snapshot")).toBe(0);
   });
 
+  it("a 400 about the account's balance is a budget error; any other 400 keeps the provider's reason", async () => {
+    const empty = await setup(fakeProvider({ trigger: response(400, '{"error":"Insufficient balance"}') }));
+    await expect(empty.client.run(empty.inputs, 10)).rejects.toMatchObject({ code: "budget_exceeded", message: expect.stringContaining("Insufficient balance") });
+    const other = await setup(fakeProvider({ trigger: response(400, '{"error":"dataset is not active"}') }));
+    await expect(other.client.run(other.inputs, 10)).rejects.toMatchObject({ code: "unknown", message: expect.stringContaining("dataset is not active") });
+  });
+
   it("maps 402 to a budget error, 401 to auth_expired and 403 to blocked", async () => {
     const budget = await setup(fakeProvider({ trigger: response(402, "") }));
     await expect(budget.client.run(budget.inputs, 10)).rejects.toBeInstanceOf(BudgetExceededError);

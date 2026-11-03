@@ -4,6 +4,43 @@ import { describe, expect, it } from "vitest";
 import { BudgetExceededError, ChannelError, errorFromHttp, isAbortError, looksBlocked, PartialCollectError, settlePostings, toChannelError } from "@/lib/channels/errors";
 
 describe("errorFromHttp", () => {
+  describe("an unknown 4xx says why", () => {
+    it("carries a short excerpt of the provider's answer", () => {
+      const error = errorFromHttp(400, { where: "api.example.test", bodyExcerpt: '{"error":"dataset is not active"}' });
+      expect(error?.code).toBe("unknown");
+      expect(error?.retryable).toBe(false);
+      expect(error?.message).toContain("dataset is not active");
+    });
+
+    it("keeps keys, tokens and query strings out of the excerpt", () => {
+      const body = 'bad request for https://api.example.test/v1/run?keyword=secret-search&api_key=abc123 with Bearer sk_live_abcdef api_key=abc123 "token":"tok-987" a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4';
+      const message = errorFromHttp(400, { bodyExcerpt: body })?.message ?? "";
+      expect(message).toContain("bad request");
+      expect(message).toContain("https://api.example.test/v1/run");
+      for (const secret of ["secret-search", "abc123", "sk_live_abcdef", "tok-987", "a1b2c3d4e5f6"]) expect(message).not.toContain(secret);
+    });
+
+    it("keeps the excerpt short and on one line, and leaves an HTML page out", () => {
+      const message = errorFromHttp(404, { where: "x.test", bodyExcerpt: `first\nsecond ${"word ".repeat(200)}` })?.message ?? "";
+      expect(message).not.toContain("\n");
+      expect(message.length).toBeLessThan(200);
+      expect(errorFromHttp(404, { where: "x.test", bodyExcerpt: "<!doctype html><html><body>Not here</body></html>" })?.message).toBe("HTTP 404 from x.test");
+      expect(errorFromHttp(404, { where: "x.test", bodyExcerpt: "   " })?.message).toBe("HTTP 404 from x.test");
+    });
+
+    it.each(["Insufficient balance", "No credits left on this account", "Monthly QUOTA exceeded"])("a 400 saying %s is a budget failure", (body) => {
+      const error = errorFromHttp(400, { where: "api.example.test", bodyExcerpt: body });
+      expect(error).toBeInstanceOf(BudgetExceededError);
+      expect(error?.code).toBe("budget_exceeded");
+      expect(error?.message).toContain(body);
+    });
+
+    it("another status, or a word that only contains one of those, stays unknown", () => {
+      expect(errorFromHttp(404, { bodyExcerpt: "quota" })?.code).toBe("unknown");
+      expect(errorFromHttp(400, { bodyExcerpt: "unbalanced parentheses in the query" })?.code).toBe("unknown");
+    });
+  });
+
   it.each([
     [429, "rate_limited", true],
     [401, "auth_expired", false],

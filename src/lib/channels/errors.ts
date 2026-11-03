@@ -127,7 +127,33 @@ export function looksBlocked(body: string): boolean {
 /** Non-standard "request denied" status LinkedIn answers bots with. */
 const LINKEDIN_DENIED_STATUS = 999;
 
-/** Map an HTTP status (and an optional body excerpt) to a ChannelError. Returns null for statuses < 400 without block markers. */
+/** Longest part of a provider's answer an error message quotes. */
+const REASON_MAX_CHARS = 120;
+/** What a provider says when an account has run out: some answer 400 instead of 402. */
+const OUT_OF_BUDGET_WORDS = /\b(?:balance|credits?|quota)\b/i;
+
+/**
+ * The start of a provider's error answer, fit for an error message (messages are logged and stored with the run): one line, without
+ * query strings, credentials or anything that looks like a key. Empty for an HTML page, which says nothing the status does not.
+ */
+function reasonExcerpt(body: string | undefined): string {
+  const text = (body ?? "").trim();
+  if (text.startsWith("<")) return "";
+  return text
+    .replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@]*@/gi, "$1")
+    .replace(/\?[^\s"'<>]*=[^\s"'<>]*/g, "")
+    .replace(/\b(Bearer|Token|Basic)\s+[^\s"',]+/gi, "$1 ***")
+    .replace(/(["']?[\w-]*(?:key|token|secret|password|passwd|credential|authorization|cookie|session|signature)[\w-]*["']?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;&}]+)/gi, "$1***")
+    .replace(/\b(?=[\w-]*\d)[A-Za-z0-9_-]{20,}\b/g, "***")
+    .replace(/\s+/g, " ")
+    .slice(0, REASON_MAX_CHARS)
+    .trim();
+}
+
+/**
+ * Map an HTTP status (and an optional body excerpt) to a ChannelError. Returns null for statuses < 400 without block markers.
+ * Only a status this does not recognise quotes the answer (`reasonExcerpt`): it is the only place the reason can be read.
+ */
 export function errorFromHttp(
   status: number,
   context: { bodyExcerpt?: string; retryAfterMs?: number; where?: string } = {},
@@ -143,7 +169,12 @@ export function errorFromHttp(
     return new ChannelError("blocked", `HTTP ${status}${where}: verification page`, extra);
   }
   if (status === 408 || status >= 500) return new ChannelError("network", `HTTP ${status}${where}: server error`, extra);
-  if (status >= 400) return new ChannelError("unknown", `HTTP ${status}${where}`, { ...extra, retryable: false });
+  if (status >= 400) {
+    const reason = reasonExcerpt(context.bodyExcerpt);
+    const message = `HTTP ${status}${where}${reason === "" ? "" : `: ${reason}`}`;
+    if (status === 400 && OUT_OF_BUDGET_WORDS.test(reason)) return new BudgetExceededError("channel", message);
+    return new ChannelError("unknown", message, { ...extra, retryable: false });
+  }
   return null;
 }
 
