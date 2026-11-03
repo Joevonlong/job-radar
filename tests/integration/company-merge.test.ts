@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -523,6 +523,29 @@ describe("undo", () => {
     expect(twice.text).toContain("already undone");
   });
 
+  it("says which results made for a moved job since the merge stay on the kept company", async () => {
+    const from = await company("A1");
+    const into = await company("B1");
+    const moved = await job(from.id);
+    const own = await job(into.id, "Researcher");
+    await run([...pair(from.id, into.id), "--apply"]);
+    const [record] = await merges();
+    const line = (salaryCount: number, researchCount: number) => `staying on the kept company: ${salaryCount} salary lookups, ${researchCount} company backgrounds`;
+    expect((await run(["--undo", String(record!.id)])).text).toContain(line(0, 0));
+
+    const lookup = await salary(into.id, into.nameNorm, moved.id);
+    const [background] = await db().insert(schema.companyResearch).values({ companyId: into.id, jobId: moved.id, status: "ok", resultJson: { fields: {}, dropped: 0 }, promptVersion: 1, fetchedAt: NOW }).returning();
+    // a result of the kept company's own job is no concern of this undo
+    await salary(into.id, into.nameNorm, own.id);
+
+    expect((await run(["--undo", String(record!.id)])).text).toContain(line(1, 1));
+    const applied = await run(["--undo", String(record!.id), "--apply"]);
+    expect(applied.code).toBe(0);
+    expect(applied.text).toContain(line(1, 1));
+    expect((await lookups()).find((row) => row.id === lookup.id)?.companyId).toBe(into.id);
+    expect((await backgrounds()).find((row) => row.id === background!.id)?.companyId).toBe(into.id);
+  });
+
   it("restores the microseconds of the removed row's timestamps", async () => {
     const from = await company("A1");
     const into = await company("B1");
@@ -649,6 +672,27 @@ describe("--suggest and --list", () => {
     expect(parsePlanText(all.text)).toEqual({ ok: true, pairs: [{ fromId: slug.id, intoId: aleph.id }, { fromId: services.id, intoId: allianz.id }] });
     expect(all.text).not.toMatch(/juni/i);
     expect(await snapshot()).toEqual(before);
+  });
+
+  it("writes only the plan to --out, and --plan reads that file", async () => {
+    const aleph = await company("Aleph Alpha");
+    const slug = await company("Alephalpha");
+    const file = path.join(planDir, "suggested.txt");
+    const result = await run(["--suggest", "--tier", "1", "--out", file]);
+    expect(result.code).toBe(0);
+    expect(result.out).toEqual([`1 candidate pairs written to ${file}.`]);
+    expect(parsePlanText(readFileSync(file, "utf8"))).toEqual({ ok: true, pairs: [{ fromId: slug.id, intoId: aleph.id }] });
+    expect((await run(["--plan", file])).code).toBe(0);
+
+    // what a redirect through pnpm leaves in the file is what the option avoids
+    writeFileSync(file, `Already up to date\n${readFileSync(file, "utf8")}Done in 300ms\n`);
+    expect((await run(["--plan", file])).code).toBe(2);
+  });
+
+  it("answers --out it cannot use with exit code 2", async () => {
+    expect((await run(["--suggest", "--out", path.join(planDir, "no-such-dir", "plan.txt")])).code).toBe(2);
+    expect((await run(["--list", "--out", path.join(planDir, "x.txt")])).code).toBe(2);
+    expect((await run(["--suggest", "--out", ""])).code).toBe(2);
   });
 
   it("keeps a name that would break a plan line on one line", async () => {

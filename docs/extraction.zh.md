@@ -127,6 +127,7 @@ LinkedIn 游客通道与登录、付费通道使用相同的数字岗位 id，�
 
 ```bash
 pnpm companies:merge --suggest [--tier 1|2]        # 列候选，格式就是计划文件的格式
+pnpm companies:merge --suggest --out plan.txt      # 同上，写入文件
 pnpm companies:merge --pair FROM:INTO              # 一对的试运行（可重复）
 pnpm companies:merge --plan plan.txt               # 计划文件的试运行
 pnpm companies:merge --plan plan.txt --apply       # 执行合并
@@ -140,7 +141,7 @@ pnpm companies:merge --list                        # 合并记录
 
 **步骤。**
 
-1. `pnpm companies:merge --suggest --tier 1 > plan.txt`，看一遍，删改。
+1. `pnpm companies:merge --suggest --tier 1 --out plan.txt`，看一遍，删改。要用 `--out`，不要用 `>`：重定向会把 pnpm 自己打印的行也写进去，`--plan` 会拒绝这样的文件。
 2. `pnpm companies:merge --plan plan.txt`，看试运行。它不写库、不拿锁，跑在只读事务里。
 3. `scripts/ops/backup.sh --label pre-company-merge`，见[备份与恢复](backup-restore.zh.md#2-手动备份)。
 4. `pnpm companies:merge --plan plan.txt --apply`，记下打印的合并 id。筛选结果在下一轮周期自动重算，不用手动跑。
@@ -167,12 +168,12 @@ pnpm companies:merge --list                        # 合并记录
 
 **撤销。** `--undo MERGE_ID --apply` 按原 id 恢复 `FROM` 行，把记录里的岗位、薪资查询（连同原来的键）、公司背景移回去，并去掉这次合并加上的别名。`INTO` 的标记、ATS、官网域名只有仍等于合并后的值时才还原，否则保留，输出会列出来。这些情况撤销会被拒绝：这次合并已经撤销过；另一行已经占用了 `FROM` 的键；`INTO` 不在了；之后还有涉及这两行且仍生效的合并（先撤销那一次）。
 
-合并后进来的内容，撤销无法全部还原，所以试运行和执行都打印 `INTO` 名下新岗位的数量和相关岗位上新来源的数量：
+合并后进来的内容，撤销无法全部还原，所以试运行和执行都打印 `INTO` 名下新岗位的数量和相关岗位上新来源的数量。这两个数按岗位或来源首次出现的时间统计，只能作参考，不是合并造成的确切清单：`INTO` 自己的拼写带来的也算在内，所以大于零是正常的；合并前抓取、合并后才处理的帖子不算在内。
 
 - 用 `FROM` 拼写的帖子在 `INTO` 下建的新岗位留在原处。撤销后跑 `pnpm reprocess --channel <通道>`：唯一来源写成 `FROM` 的岗位回到 `FROM`。
 - 并进已有岗位的帖子（同标题同城，或描述几乎一样）不会被拆开。如果它在合并中获胜，还可能改写了那条岗位的标题和描述。这种只有恢复备份才能还原。
 
-两行合并期间也共用薪资缓存键，这段时间新做的查询留在 `INTO`。所以第 2 档合并后要尽快确认，有错当天撤销。
+两行合并期间也共用薪资缓存键。这段时间为移动的岗位新做的薪资查询和公司背景，撤销后留在 `INTO`，回到 `FROM` 的岗位看不到它们；试运行和执行都会打印数量。所以第 2 档合并后要尽快确认，有错当天撤销。
 
 **限制。**
 

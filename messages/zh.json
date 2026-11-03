@@ -6400,7 +6400,7 @@
       "company": "公司：{name}"
     },
     "companiesMerge": {
-      "usage": "用法：pnpm companies:merge --suggest [--tier 1|2] | --pair FROM:INTO ... [--apply] | --plan FILE [--apply] | --undo MERGE_ID [--apply] | --list",
+      "usage": "用法：pnpm companies:merge --suggest [--tier 1|2] [--out FILE] | --pair FROM:INTO ... [--apply] | --plan FILE [--apply] | --undo MERGE_ID [--apply] | --list",
       "planUnreadable": "读不了计划文件 {file}。",
       "planBadLine": "计划文件第 {line} 行不是“FROM_ID INTO_ID”：{text}",
       "badPair": "--pair 需要 FROM:INTO 两个公司 id：{pair}",
@@ -6408,6 +6408,8 @@
       "lockBusy": "有周期或 reprocess 正在运行。没有做任何改动；等它结束后再跑。",
       "aiRunning": "有薪资或公司背景请求正在运行（{ids}）。没有做任何改动；等它们结束后再跑。",
       "lockLost": "周期锁丢失：已停止，还有 {count} 对没有处理。",
+      "suggestWritten": "{count} 对候选已写入 {file}。",
+      "outUnwritable": "无法写入计划文件 {file}。",
       "suggestNone": "# 没有候选",
       "suggestGroup": "# 第 {tier} 档：留下 {name}（{jobs} 条岗位）",
       "suggestLine": "{fromId} {intoId}  # {fromName}（{fromJobs} 条岗位）-> {intoName}（{intoJobs} 条岗位）",
@@ -6434,6 +6436,7 @@
       "undoTitle": "合并记录 {mergeId}：把 {fromName}（#{fromId}）从 {intoName}（#{intoId}）撤销出来",
       "undoMoves": "  移回：{jobs} 条岗位，{salary} 条薪资查询，{research} 条公司背景",
       "undoArrived": "  合并后进来、撤销不处理的：留下的公司名下新岗位 {jobs} 条，它的岗位和移动的岗位上的新来源 {sources} 条。撤销后对相关通道跑 pnpm reprocess；它拆不开的部分见文档",
+      "undoStays": "  合并后为移动的岗位新做的、留在留下的公司上的：薪资查询 {salary} 条，公司背景 {research} 条",
       "undoKept": "  合并后又改过、保持原样的字段：{fields}",
       "undoDry": "试运行，没有写库。加 --apply 执行撤销。",
       "undoDone": "已撤销。",

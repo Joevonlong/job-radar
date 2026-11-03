@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 import { z } from "zod";
@@ -67,9 +67,10 @@ export interface CompanyMergeRunInput {
 const oneLine = (text: string): string => text.replace(/[\p{C}\s]+/gu, " ").trim();
 
 /** What went wrong, not the failed query and its parameters that a database error's own message spells out. */
-function failureText(error: unknown): string {
+export function failureText(error: unknown): string {
   const root = error instanceof Error && error.cause instanceof Error ? error.cause : error;
-  return oneLine(root instanceof Error ? root.message : String(root));
+  if (!(root instanceof Error)) return oneLine(String(root));
+  return oneLine(root.message) || root.name;
 }
 
 /** Everything without `--apply` runs in a read-only transaction: Postgres itself refuses a write. */
@@ -250,6 +251,7 @@ function printUndoPlan(input: CompanyMergeRunInput, plan: CompanyUndoPlan): void
   out(t("undoTitle", { mergeId: plan.mergeId, fromName: oneLine(plan.fromName), fromId: plan.fromId, intoName: plan.intoName === null ? t("unknownCompany") : oneLine(plan.intoName), intoId: plan.intoId }));
   out(t("undoMoves", { jobs: plan.jobs, salary: plan.salaryLookups, research: plan.research }));
   out(t("undoArrived", { jobs: plan.arrivedJobs, sources: plan.arrivedSources }));
+  out(t("undoStays", { salary: plan.newSalaryLookups, research: plan.newResearch }));
 }
 
 async function runUndo(input: CompanyMergeRunInput, mergeId: number, apply: boolean): Promise<number> {
@@ -279,14 +281,26 @@ async function runUndo(input: CompanyMergeRunInput, mergeId: number, apply: bool
   });
 }
 
-async function runSuggest(input: CompanyMergeRunInput, tier: 1 | 2 | null): Promise<number> {
-  const { db, out, t } = input;
+async function runSuggest(input: CompanyMergeRunInput, tier: 1 | 2 | null, outFile: string | undefined): Promise<number> {
+  const { db, t } = input;
+  // A file holds the plan alone: redirecting stdout also catches what the package manager prints around the command.
+  const lines: string[] = [];
+  const out = outFile === undefined ? input.out : (line: string) => void lines.push(line);
   const rows = await readOnly(db, (tx) => listCompaniesForDuplicateCheck(tx));
   const suggestions = suggestCompanyMerges(rows, input.context().pipeline).filter((suggestion) => tier === null || suggestion.tier === tier);
   if (suggestions.length === 0) out(t("suggestNone"));
   for (const { tier: groupTier, into, from } of suggestions) {
     out(t("suggestGroup", { tier: groupTier, name: oneLine(into.name), jobs: into.jobCount }));
     for (const row of from) out(t("suggestLine", { fromId: row.id, intoId: into.id, fromName: oneLine(row.name), fromJobs: row.jobCount, intoName: oneLine(into.name), intoJobs: into.jobCount }));
+  }
+  if (outFile !== undefined) {
+    try {
+      writeFileSync(outFile, `${lines.join("\n")}\n`);
+    } catch {
+      input.err(t("outUnwritable", { file: outFile }));
+      return EXIT_USAGE;
+    }
+    input.out(t("suggestWritten", { count: suggestions.reduce((sum, suggestion) => sum + suggestion.from.length, 0), file: outFile }));
   }
   return EXIT_OK;
 }
@@ -322,6 +336,7 @@ export async function runCompaniesMerge(input: CompanyMergeRunInput): Promise<nu
       options: {
         suggest: { type: "boolean" },
         tier: { type: "string" },
+        out: { type: "string" },
         pair: { type: "string", multiple: true },
         plan: { type: "string" },
         apply: { type: "boolean" },
@@ -333,15 +348,15 @@ export async function runCompaniesMerge(input: CompanyMergeRunInput): Promise<nu
     err(t("usage"));
     return EXIT_USAGE;
   }
-  const { suggest = false, tier, pair: pairArgs, plan: planFile, apply = false, undo, list = false } = values;
+  const { suggest = false, tier, out: outFile, pair: pairArgs, plan: planFile, apply = false, undo, list = false } = values;
   const modes = [suggest, pairArgs !== undefined, planFile !== undefined, undo !== undefined, list].filter(Boolean).length;
   const applies = pairArgs !== undefined || planFile !== undefined || undo !== undefined;
-  if (modes !== 1 || (apply && !applies) || (tier !== undefined && (!suggest || (tier !== "1" && tier !== "2")))) {
+  if (modes !== 1 || (apply && !applies) || (tier !== undefined && (!suggest || (tier !== "1" && tier !== "2"))) || (outFile !== undefined && (!suggest || outFile === ""))) {
     err(t("usage"));
     return EXIT_USAGE;
   }
 
-  if (suggest) return runSuggest(input, tier === undefined ? null : tier === "1" ? 1 : 2);
+  if (suggest) return runSuggest(input, tier === undefined ? null : tier === "1" ? 1 : 2, outFile);
   if (list) return runList(input);
   if (undo !== undefined) {
     const mergeId = companyId.safeParse(undo);

@@ -1,6 +1,8 @@
+import { spawnSync } from "node:child_process";
+
 import { describe, expect, it } from "vitest";
 
-import { parsePlanText } from "@/lib/companies/merge-run";
+import { failureText, parsePlanText } from "@/lib/companies/merge-run";
 import { suggestCompanyMerges, type MergeSuggestRow } from "@/lib/companies/merge-suggest";
 import { normalizeCompanyKey } from "@/lib/pipeline/company";
 
@@ -97,6 +99,33 @@ describe("suggestCompanyMerges", () => {
       expect(keeps(row("Allianz Services", 3), row("Allianz", 1))).toBe("Allianz Services");
     });
   });
+});
+
+describe("failureText", () => {
+  it("gives the cause of a failed query, not the query and its parameters", () => {
+    const error = new Error('Failed query: insert into "company_merges" values ($1)\nparams: Acme', { cause: new Error("connection lost") });
+    expect(failureText(error)).toBe("connection lost");
+  });
+  it("gives the message of any other error, on one line", () => {
+    expect(failureText(new Error("bad\nrecord"))).toBe("bad record");
+    expect(failureText("text")).toBe("text");
+  });
+  it("names an error that has no message", () => {
+    expect(failureText(new Error("", { cause: new TypeError("") }))).toBe("TypeError");
+  });
+});
+
+describe("the companies:merge script", () => {
+  it("reports an unreachable database without the failed query, and exits 1", () => {
+    const run = spawnSync(process.execPath, ["--import", "tsx", "scripts/companies-merge.ts", "--list"], {
+      encoding: "utf8",
+      env: { ...process.env, DATABASE_URL: "postgres://nobody:secret@127.0.0.1:1/none" },
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("companies:merge: ");
+    expect(run.stderr).not.toContain("Failed query");
+    expect(run.stderr).not.toContain("params:");
+  }, 60_000);
 });
 
 describe("parsePlanText", () => {

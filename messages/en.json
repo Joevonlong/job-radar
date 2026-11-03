@@ -6400,7 +6400,7 @@
       "company": "Company: {name}"
     },
     "companiesMerge": {
-      "usage": "Usage: pnpm companies:merge --suggest [--tier 1|2] | --pair FROM:INTO ... [--apply] | --plan FILE [--apply] | --undo MERGE_ID [--apply] | --list",
+      "usage": "Usage: pnpm companies:merge --suggest [--tier 1|2] [--out FILE] | --pair FROM:INTO ... [--apply] | --plan FILE [--apply] | --undo MERGE_ID [--apply] | --list",
       "planUnreadable": "Cannot read the plan file {file}.",
       "planBadLine": "Plan file line {line} is not \"FROM_ID INTO_ID\": {text}",
       "badPair": "--pair needs FROM:INTO with two company ids: {pair}",
@@ -6408,6 +6408,8 @@
       "lockBusy": "A cycle or a reprocess is running. Nothing was changed; run this again when it has finished.",
       "aiRunning": "Salary or company background requests are running ({ids}). Nothing was changed; run this again when they have finished.",
       "lockLost": "The cycle lock was lost: stopped with {count} pairs not processed.",
+      "suggestWritten": "{count} candidate pairs written to {file}.",
+      "outUnwritable": "Cannot write the plan file {file}.",
       "suggestNone": "# no candidates",
       "suggestGroup": "# tier {tier}: keeps {name} ({jobs} jobs)",
       "suggestLine": "{fromId} {intoId}  # {fromName} ({fromJobs} jobs) -> {intoName} ({intoJobs} jobs)",
@@ -6434,6 +6436,7 @@
       "undoTitle": "Merge {mergeId}: {fromName} (#{fromId}) back out of {intoName} (#{intoId})",
       "undoMoves": "  moves back: {jobs} jobs, {salary} salary lookups, {research} company backgrounds",
       "undoArrived": "  arrived since the merge and not undone: {jobs} new jobs on the kept company, {sources} postings on its jobs or the moved ones. Run pnpm reprocess with the channels concerned afterwards; see the docs for what that cannot separate",
+      "undoStays": "  made for the moved jobs since the merge, staying on the kept company: {salary} salary lookups, {research} company backgrounds",
       "undoKept": "  left as they are, changed since the merge: {fields}",
       "undoDry": "Dry run, nothing written. Add --apply to undo.",
       "undoDone": "Undone.",

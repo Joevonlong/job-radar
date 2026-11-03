@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 
 import { buildBlacklistedCompanyKeys, isCompanyExcluded, watchedEntriesFor } from "@/lib/companies/marks";
@@ -210,9 +210,16 @@ export interface CompanyUndoPlan {
   jobs: number;
   salaryLookups: number;
   research: number;
-  /** New since the merge and not undone by it: jobs on the kept row, and postings on those jobs or on the moved ones. */
+  /**
+   * New since the merge and not undone by it: jobs on the kept row, and postings on those jobs or on the moved ones. By when a
+   * job or posting was first seen, so this includes what the kept company's own spelling brought and misses a posting fetched
+   * before the merge and processed after it.
+   */
   arrivedJobs: number;
   arrivedSources: number;
+  /** Salary lookups and backgrounds on the kept row for a moved job that the merge did not move: they stay there. */
+  newSalaryLookups: number;
+  newResearch: number;
 }
 
 async function readMerge(db: Executor, mergeId: number) {
@@ -257,6 +264,8 @@ export async function planCompanyUndo(db: Executor, mergeId: number): Promise<Co
     research: await db.$count(companyResearch, and(inArray(companyResearch.id, moved.research), eq(companyResearch.companyId, intoId))),
     arrivedJobs: arrived?.jobs ?? 0,
     arrivedSources: arrived?.sources ?? 0,
+    newSalaryLookups: await db.$count(salaryLookups, and(eq(salaryLookups.companyId, intoId), inArray(salaryLookups.jobId, moved.jobIds), notInArray(salaryLookups.id, moved.salary.map((row) => row.id)))),
+    newResearch: await db.$count(companyResearch, and(eq(companyResearch.companyId, intoId), inArray(companyResearch.jobId, moved.jobIds), notInArray(companyResearch.id, moved.research))),
   };
 }
 

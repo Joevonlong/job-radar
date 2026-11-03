@@ -1,7 +1,7 @@
 /**
  * Find duplicate company rows and merge the ones you confirm (docs/extraction.md, "Merging duplicate companies").
  *
- *   pnpm companies:merge --suggest [--tier 1|2]            list candidates, in the plan file's format
+ *   pnpm companies:merge --suggest [--tier 1|2] [--out FILE]   list candidates, in the plan file's format
  *   pnpm companies:merge --pair FROM:INTO ... [--apply]    dry run, or merge
  *   pnpm companies:merge --plan FILE [--apply]             the same from a plan file
  *   pnpm companies:merge --undo MERGE_ID [--apply]         dry run, or undo
@@ -12,7 +12,7 @@
  * DATABASE_URL decides which database; `.env` is loaded by the pnpm script.
  */
 import { loadConfig } from "../src/lib/config";
-import { runCompaniesMerge } from "../src/lib/companies/merge-run";
+import { failureText, runCompaniesMerge } from "../src/lib/companies/merge-run";
 import { closeDb, getDb } from "../src/lib/db";
 import { readGhostSettings, trustedCompanyKeys } from "../src/lib/ghost/settings";
 import { getTranslator } from "../src/lib/i18n/node";
@@ -44,7 +44,7 @@ async function main(): Promise<number> {
 main().then(
   (code) => process.exit(code),
   (error: unknown) => {
-    console.error(`companies:merge: ${error instanceof Error ? error.message : "failed"}`);
+    console.error(`companies:merge: ${failureText(error)}`);
     process.exit(1);
   },
 );

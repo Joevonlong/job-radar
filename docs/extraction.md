@@ -149,6 +149,7 @@ One company can end up as two rows in `companies`, usually through a source that
 
 ```bash
 pnpm companies:merge --suggest [--tier 1|2]        # list candidates, in the plan file's format
+pnpm companies:merge --suggest --out plan.txt      # the same, written to a file
 pnpm companies:merge --pair FROM:INTO              # dry run for one pair (repeatable)
 pnpm companies:merge --plan plan.txt               # dry run for a plan file
 pnpm companies:merge --plan plan.txt --apply       # merge
@@ -162,7 +163,7 @@ A plan file has one `FROM_ID INTO_ID` per line, and everything after `#` is a co
 
 **Steps.**
 
-1. `pnpm companies:merge --suggest --tier 1 > plan.txt`, then read it and delete or change lines.
+1. `pnpm companies:merge --suggest --tier 1 --out plan.txt`, then read it and delete or change lines. Use `--out` and not `>`: a redirect also catches the lines pnpm prints, and `--plan` refuses such a file.
 2. `pnpm companies:merge --plan plan.txt`, and read the dry run. It writes nothing, takes no lock and runs in a read-only transaction.
 3. `scripts/ops/backup.sh --label pre-company-merge`, see [Backup and restore](backup-restore.md#2-manual-backup).
 4. `pnpm companies:merge --plan plan.txt --apply`, and note the merge ids it prints. The filter results are recalculated by the next cycle; there is nothing to run by hand.
@@ -189,12 +190,12 @@ Each pair is its own transaction. A pair that fails leaves no trace and the othe
 
 **Undo.** `--undo MERGE_ID --apply` restores the `FROM` row with its original id, moves the recorded jobs, salary lookups (with their original keys) and backgrounds back, and removes the aliases this merge added. The marks, ATS and website domain of `INTO` return only if they still have the values the merge left; otherwise they stay, and the output names them. Undo is refused when the merge was already undone, another row now has the key of `FROM`, `INTO` is gone, or a later merge that is still in force involves these rows (undo that one first).
 
-Undo cannot put back everything that arrived after the merge, so its dry run and its run both print the count of new jobs on `INTO` and of new postings on the jobs concerned:
+Undo cannot put back everything that arrived after the merge, so its dry run and its run both print the count of new jobs on `INTO` and of new postings on the jobs concerned. These counts go by when a job or posting was first seen, so they are a guide and not an exact list of what the merge caused: they include what the kept company's own spelling brought, so a number above zero is normal, and they miss a posting fetched before the merge and processed after it.
 
 - A new job on `INTO` from a posting spelled like `FROM` stays there. After the undo, run `pnpm reprocess --channel <channel>`: a job whose only source spells `FROM` moves back to `FROM`.
 - A posting that was merged into an existing job (same title and city, or a near-identical description) is not separated again. If it won, it may also have rewritten that job's title and description. Only restoring a backup reverses that.
 
-While the two rows are merged they also share salary cache keys, and a lookup made in that time stays with `INTO`. So check a tier 2 merge soon after it runs, and undo it the same day if it is wrong.
+While the two rows are merged they also share salary cache keys. A salary lookup or company background made in that time for a moved job stays on `INTO` after the undo, and the job on `FROM` does not see it; both outputs print how many there are. So check a tier 2 merge soon after it runs, and undo it the same day if it is wrong.
 
 **Limits.**
 
