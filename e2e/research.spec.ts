@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import postgres from "postgres";
+import { parseDocument } from "yaml";
 
 import { expect, test, type Page } from "./fixtures";
 import { listRows } from "./list-rows";
@@ -31,7 +32,10 @@ async function withResearchFile(edit: (text: string) => string, run: () => Promi
   if (!configDir) throw new Error("E2E_CONFIG_DIR is required");
   const file = path.join(configDir, "research.yaml");
   const original = fs.readFileSync(file, "utf8");
-  fs.writeFileSync(file, edit(original));
+  const edited = edit(original);
+  // The file holds only the keys that differ from the shipped ones: an edit that finds nothing must not pass silently
+  if (edited === original) throw new Error("the edit did not change research.yaml");
+  fs.writeFileSync(file, edited);
   try {
     await run();
   } finally {
@@ -124,7 +128,11 @@ test.describe("the research bar", () => {
 
   test("a star starts research by itself when the setting asks for it", async ({ page }) => {
     await withResearchFile(
-      (text) => text.replace(/^  trigger: \w+$/m, "  trigger: favorite"),
+      (text) => {
+        const doc = parseDocument(text);
+        doc.setIn(["auto", "trigger"], "favorite");
+        return doc.toString();
+      },
       async () => {
         await page.goto("/jobs");
         await page.waitForLoadState("networkidle");

@@ -1,12 +1,9 @@
-import fs from "node:fs";
-import path from "node:path";
-
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
-import { parse } from "yaml";
 
 import { createLogger, type LogRecord } from "@/lib/channels/logger";
-import { repliesSchema, type RepliesConfig } from "@/lib/config/schemas/replies";
+import { loadConfig } from "@/lib/config";
+import type { RepliesConfig } from "@/lib/config/schemas/replies";
 import { closeDb, getDb, listApplicationEvents, schema, setApplicationStatus } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { confirmReply, dismissReply, listPendingReplies, listRecentlyConfirmedReplies, pruneDecidedReplies, reassignReply, recategorizeReply, undoReply, type ReplyWording } from "@/lib/db/repos/replies";
@@ -17,8 +14,7 @@ import { ENV, fakeMailbox, type FakeMessage } from "../channels/email/helpers";
 
 const url = inject("testDatabaseUrl");
 const NOW = new Date("2026-10-07T07:00:00Z");
-const base = repliesSchema.parse(parse(fs.readFileSync(path.resolve(import.meta.dirname, "../fixtures/config/defaults/replies.yaml"), "utf8")));
-const config: RepliesConfig = { ...base, enabled: true };
+const config: RepliesConfig = { ...loadConfig("replies"), enabled: true };
 const GMAIL = { host: "imap.gmail.com", port: 993, secure: true, timeout_ms: 1000, label: "unused", lookback_days: 1, max_messages_per_cycle: 1 } as never;
 const WORDS: ReplyWording = { note: (category) => `Gmail reply: ${category}`, nextAction: (action) => `next ${action}` };
 

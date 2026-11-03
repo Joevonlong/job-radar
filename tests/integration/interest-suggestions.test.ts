@@ -10,7 +10,7 @@ import { createProvider } from "@/lib/ai/provider";
 import { createAiRouter } from "@/lib/ai/router";
 import type { AiTransport, AiTransportRequest } from "@/lib/ai/types";
 import { AiProviderError } from "@/lib/ai/errors";
-import { ensureProfileFiles, resetConfigCache } from "@/lib/config";
+import { ensureProfileFiles, loadConfig, resetConfigCache } from "@/lib/config";
 import { processNextControlRequest, registerControlHandler, resetControlHandlers } from "@/lib/control";
 import { createRunSuggestHandler } from "@/lib/control/suggest";
 import { closeDb, getDb, insertControlRequest, schema } from "@/lib/db";
@@ -262,6 +262,8 @@ describe("approving and rejecting", () => {
   it("approve writes the word into interests.yaml (comments kept), marks it approved and recomputes the ranking", async () => {
     const { word, ids } = await stored();
     const before = fs.readFileSync(interestsFile(), "utf8");
+    resetConfigCache();
+    const effectiveBefore = structuredClone(loadConfig("interests"));
     // a scored job, so the recompute has something to check
     const [snapshot] = await db().insert(schema.profileSnapshots).values({ kind: "preferences", contentYaml: "x", hash: "h" }).returning();
     await withRebuiltCurrentScores(db(), db().insert(schema.scores).values({ jobId: ids.liked1, profileSnapshotId: snapshot!.id, filterResult: "passed", score: 80, rankValue: 80 }));
@@ -278,7 +280,17 @@ describe("approving and rejecting", () => {
     expect(interests.signals.categories.find((c) => c.id === "tag")?.tags).toContain("wellness budget");
     const after = fs.readFileSync(interestsFile(), "utf8");
     expect(after).toContain("# 福利标签：只显示，不加分");
-    expect(after.split("\n").length).toBeGreaterThanOrEqual(before.split("\n").length);
+    // A save drops keys equal to the shipped value, so the file can get shorter. What must survive is every comment
+    // and the effective config, whose only change is the new word.
+    const comments = before.split("\n").map((line) => line.trim()).filter((line) => line.startsWith("#"));
+    expect(comments.length).toBeGreaterThan(0);
+    for (const comment of comments) expect(after).toContain(comment);
+    const expected = structuredClone(effectiveBefore);
+    const tagCategory = expected.signals.categories.find((c) => c.id === "tag");
+    if (tagCategory?.kind !== "tag") throw new Error("the fixture must have a tag category");
+    tagCategory.tags.push("wellness budget");
+    resetConfigCache();
+    expect(loadConfig("interests")).toEqual(expected);
     const [row] = await db().select().from(schema.interestSuggestions).where(eq(schema.interestSuggestions.id, word.id));
     expect(row).toMatchObject({ status: "approved" });
     expect(row?.decidedAt).not.toBeNull();
