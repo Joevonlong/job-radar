@@ -116,6 +116,17 @@ export const jobspyErrorSchema = z.object({
 /** Longest sidecar message kept in a ChannelError. */
 const MAX_MESSAGE_CHARS = 200;
 
+/**
+ * An upstream error often quotes the search URL, whose query string holds the user's keywords and location. The sidecar
+ * removes them already; this keeps a sidecar that does not (an older image) from putting them into the logs.
+ */
+export function withoutUrlQueries(text: string): string {
+  // an absolute URL (any query), then a bare query string with key=value pairs (requests quotes a request path: "url: /jobs/search?keywords=...")
+  return text.replace(/(\b[a-z][a-z0-9+.-]*:\/\/[^\s?#'"<>]*)\?[^\s'"<>]*/gi, "$1?<query>").replace(/\?[^\s'"<>]*=[^\s'"<>]*/g, "?<query>");
+}
+
+const loggable = (text: string): string => withoutUrlQueries(text).slice(0, MAX_MESSAGE_CHARS);
+
 /** Statuses the sidecar answers with a structured error body (so `ctx.http` must not retry or throw on them). */
 const SIDECAR_ERROR_STATUSES = [422, 429, 502] as const;
 
@@ -133,7 +144,7 @@ function statusFallbackCode(status: number): (typeof SIDECAR_ERROR_CODES)[number
 export function channelErrorFromSidecar(status: number, body: unknown): ChannelError {
   const parsed = jobspyErrorSchema.safeParse(body);
   const code = parsed.success ? parsed.data.code : statusFallbackCode(status);
-  const detail = parsed.success ? `: ${parsed.data.message.slice(0, MAX_MESSAGE_CHARS)}` : "";
+  const detail = parsed.success ? `: ${loggable(parsed.data.message)}` : "";
   switch (code) {
     case "rate_limited":
       return new ChannelError("rate_limited", `jobspy: rate limited by the job board${detail}`, { status });
@@ -174,7 +185,7 @@ export async function searchJobspy(ctx: ChannelContext, settings: JobspySettings
   if (parsed.data.site !== request.site) {
     throw new ChannelError("parse", `jobspy sidecar answered for site ${parsed.data.site}, asked for ${request.site}`);
   }
-  for (const warning of parsed.data.warnings) ctx.logger.warn("jobspy reported an error alongside results", { site: request.site, warning: warning.slice(0, MAX_MESSAGE_CHARS) });
+  for (const warning of parsed.data.warnings) ctx.logger.warn("jobspy reported an error alongside results", { site: request.site, warning: loggable(warning) });
   return parsed.data;
 }
 

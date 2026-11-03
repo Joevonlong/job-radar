@@ -121,6 +121,27 @@ test("every subset of the Latin families renders in its own family and fetches i
   }
 });
 
+test("each font variable of the page names a family the document has faces for, the latin file and the extra subsets alike", async ({ page }) => {
+  // next/font names the family after the constant in layout.tsx and sets the variable on <html>; globals.css adds
+  // subsets under the same name by hand. A bundler that renamed or hashed the family would split them silently.
+  await page.goto("/jobs");
+  await page.waitForLoadState("networkidle");
+  const result = await page.evaluate(() => {
+    const families = new Map<string, number>();
+    for (const face of document.fonts) families.set(face.family.replace(/"/g, ""), (families.get(face.family.replace(/"/g, "")) ?? 0) + 1);
+    const style = getComputedStyle(document.documentElement);
+    return ["--font-archivo", "--font-archivo-black", "--font-plex-mono"].map((name) => {
+      const first = style.getPropertyValue(name).split(",")[0]?.trim().replace(/"/g, "") ?? "";
+      return { name, first, faces: families.get(first) ?? 0 };
+    });
+  });
+  for (const { name, first, faces } of result) {
+    expect(first, name).not.toBe("");
+    // the latin face of next/font plus at least one extra subset rule from globals.css
+    expect(faces, `${name} -> ${first}`).toBeGreaterThanOrEqual(2);
+  }
+});
+
 test("only the Latin subset files are preloaded", async ({ page }) => {
   await page.goto("/");
   const preloads = await page.locator('link[rel="preload"][as="font"]').evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? ""));

@@ -84,7 +84,7 @@ OpenRouter 把每个请求转给所选模型的某个上游 provider，它可能
 
 ## 登录
 
-见 [host-setup.zh.md](host-setup.zh.md) 第 6 节：`claude` → `/login`，`codex login`。provider 顺序、选哪个模型、超时在 `data/config/ai.yaml`，有哪些模型和单价在 `data/config/models.yaml`（模型目录）；`pnpm ai:probe` 看哪些 provider 此刻可用，也可以在 `/sources` 的"AI provider 健康度"里点某个 provider 的"测试"（由 ai-worker 发同样的极小请求，见 [settings.zh.md](settings.zh.md)）。pay-per-token 的 API provider（Anthropic / OpenAI / OpenRouter / DeepSeek / MiMo）保留实现，但只有你在 `.env` 里填了 key 才会被路由选中，并受 `monthly_api_budget_usd` 限制。DeepSeek 和 MiMo 出厂是关的（`enabled: false`），要用哪个就把它改成 `enabled: true`；它们的 key 只发往厂商自己的主机（见 [ai-worker 不从 ai.yaml 接受的东西](#ai-worker-不从-aiyaml-接受的东西)）。key 由宿主机的 ai-worker 读取，runner 容器里这几个变量被显式置空。
+见 [host-setup.zh.md](host-setup.zh.md) 第 6 节：`claude` → `/login`，`codex login`。provider 顺序、选哪个模型、超时在 `data/config/ai.yaml`，有哪些模型和单价在 `config/models.yaml`（模型目录，你自己的新增写在 `data/config/models.yaml`）；`pnpm ai:probe` 看哪些 provider 此刻可用，也可以在 `/sources` 的"AI provider 健康度"里点某个 provider 的"测试"（由 ai-worker 发同样的极小请求，见 [settings.zh.md](settings.zh.md)）。pay-per-token 的 API provider（Anthropic / OpenAI / OpenRouter / DeepSeek / MiMo）保留实现，但只有你在 `.env` 里填了 key 才会被路由选中，并受 `monthly_api_budget_usd` 限制。DeepSeek 和 MiMo 出厂是关的（`enabled: false`），要用哪个就把它改成 `enabled: true`；它们的 key 只发往厂商自己的主机（见 [ai-worker 不从 ai.yaml 接受的东西](#ai-worker-不从-aiyaml-接受的东西)）。key 由宿主机的 ai-worker 读取，runner 容器里这几个变量被显式置空。
 
 ## 配置
 
@@ -116,11 +116,11 @@ translation:
 - **用量上限（订阅 CLI）**：`quota_guard` 是 Job Radar 自己对 claude-cli、codex-cli 调用频率的限制。它**只统计 Job Radar 自己的调用**（`ai_usage`，失败的也算）；订阅和你自己在终端、网页里的使用共用，这部分它看不到，所以它只会比真实上限晚触发，不会提前（真实上限先到了，仍由上面的冷却接住）。每个 CLI（`quota_guard.providers.codex_cli` / `claude_cli`）有两项：`hard_requests` 是滚动窗口 `window_hours`（默认 5）内的调用数，达到后该 CLI 对所有任务暂停（包括你自己点的），等足够多的调用滑出窗口再继续（降到 `resume_ratio` × `hard_requests` 以下，默认 0.8）；`cycle_request_cap` 限制一轮处理的调用数，这一轮剩下的留到下一轮。**你主动发起的请求（立即打分、翻译、拆解、查薪资、测试）不受每轮上限约束**，只在窗口满时受限。被上限跳过时，任务**不会改走付费 API**（`fallthrough_to_api: false`，默认）；上面的错误冷却照旧可以落到 API。填 0 关闭该项；`enabled: false` 关闭整个上限（行为回到没有它之前）。窗口满或 provider 报告限制时 Telegram 发一条告警，恢复可用时再发一条（`notify_recovery`）；状态持续不会重发（`alert_dedupe_hours` 只防状态来回抖动）。每轮上限不发告警，推送摘要最后一行写明有几个新岗位等打分、预计什么时候处理。状态存在 `runtime_state`（键 `ai_quota:<名字>`），不需要迁移。默认值 = 维护者自己用量中见过的最大值 × 1.5（codex-cli 窗口 861 / 每轮 554，claude-cli 399 / 399）。各人的订阅档位不同，请在设置页（AI 标签的“限额”块）调整；`pnpm ai:usage-stats` 只读地打印你自己的最大值和建议上限。
 - **时间预算**：`cycle_budget_minutes`（默认 30）限制一轮里打分、信号占用的时间，超过就留到下一轮；这一轮没有新岗位时用 `idle_cycle_budget_minutes`（默认 10）。`cycle_budget_minutes` 也限制每次重打过期分数、打分积压或指定岗位的控制请求：开始下一条前检查预算，已经开始的岗位会走完 provider 回退链，因此可能多用这一条的耗时。设置页和“立即打分”会显示预算用尽及剩余岗位数。修改预算后，下一个请求使用新值。0 = 不限。所有 provider 都在冷却 / 关闭 / 到上限时，AI 步骤直接跳过（cycle 摘要里写明原因）。
 - **任务 `breakdown`**：岗位拆解，默认沿用全局顺序（codex 优先，理由同翻译：输出长，订阅 CLI 没有 4096 输出上限）；可用 `tasks.breakdown.order` 单独排，codex 推理强度用 `reasoning_effort_by_task.breakdown`。默认关闭，见 [breakdown.zh.md](breakdown.zh.md)。
-- **任务 `write`**：申请问题的回答和动机信（[application-writer.zh.md](application-writer.zh.md)），只在 `writer.yaml: enabled` 为 true 且你按**生成**时调用。不联网搜索。默认跟全局顺序；动机信要多个版本，需要的输出超过全局 `max_output_tokens`，所以 `tasks.write` 可以单独设 `max_output_tokens` 和 `api_timeout_seconds`（两者都只对 API 服务商生效，任何任务都能设）。回答在上限处被截断时请求以 `output_truncated` 失败。
+- **任务 `write`**：申请问题的回答和动机信、优化你自己的稿和教练审阅（[application-writer.zh.md](application-writer.zh.md)），只在 `writer.yaml: enabled` 为 true 且你按**生成**、**优化**或**审阅**时调用。不联网搜索。默认跟全局顺序；动机信要多个版本，需要的输出超过全局 `max_output_tokens`，所以 `tasks.write` 可以单独设 `max_output_tokens` 和 `api_timeout_seconds`（两者都只对 API 服务商生效，任何任务都能设）。回答在上限处被截断时请求以 `output_truncated` 失败。
 - **任务 `salary_lookup`**：按需查薪资（[salary.zh.md](salary.zh.md)），是**唯一**可以用工具（网页搜索）的 AI 调用。默认顺序 `[claude-cli, anthropic]`；只尝试能搜网页的 provider（OpenAI API、OpenRouter、DeepSeek、MiMo 跳过）；允许搜网页的任务清单写死在代码里（`src/lib/ai/web-tasks.ts`），任何设置都不能让别的任务上网。可以把 codex-cli 加进 `tasks.salary_lookup.order`，但它的网页搜索不能限定域名（设置页会提示）。
 - **推送先于翻译**：ai-worker 先做打分和信号，然后立刻推送，最后才翻译（翻译标了 `late`，不影响推送内容）。
 - **看状态**：`/sources` 的"AI provider 健康度"显示每个 provider 的状态（可用 / 未配置 / 已关闭 / 未登录 / 已达每日上限 / 已达 Job Radar 用量上限到几点 / 冷却到几点）、用量上限窗口内 Job Radar 自己的调用数对比 `hard_requests`、今日请求数对比上限、最近一次成功和失败；每行有"测试"按钮。设置页 AI 标签的顺序列表和下拉用同一份状态标出不可用的 provider。
-- **模型目录**：两个文件分工——`config/models.yaml` 是**目录**（每个 provider 有哪些模型：`id`、显示名 `label`、`aliases`、API 的 `price`、codex 的 `reasoning_efforts` / `cli_default`、`deprecated`、`notes`），`data/config/ai.yaml` 是**选择**（`providers.<名字>.model` / `strong_model`、`tasks.<任务>.models`）。`ai.yaml` 照常单独加载，不依赖 `models.yaml`；选中的模型必须在对应 provider 的目录里，`pnpm config:check`（多一行 `ai.yaml ↔ models.yaml`）和设置页保存时检查：不在目录 / codex 推理强度不被模型支持 = 错误，选中已停用的模型 = 警告。
+- **模型目录**：两个文件分工——`config/models.yaml` 是随产品发布的**目录**，你自己的新增写在 `data/config/models.yaml`、叠在它上面（见[新模型上线清单](#新模型上线清单)）（每个 provider 有哪些模型：`id`、显示名 `label`、`aliases`、API 的 `price`、codex 的 `reasoning_efforts` / `cli_default`、`deprecated`、`notes`），`data/config/ai.yaml` 是**选择**（`providers.<名字>.model` / `strong_model`、`tasks.<任务>.models`）。`ai.yaml` 照常单独加载，不依赖 `models.yaml`；选中的模型必须在对应 provider 的目录里，`pnpm config:check`（多一行 `ai.yaml ↔ models.yaml`）和设置页保存时检查：不在目录 / codex 推理强度不被模型支持 = 错误，选中已停用的模型 = 警告。
   - **按任务选模型**：`tasks.<任务>.models` 是"服务商 id → 模型 id"，只能给这个任务自己的 `order` 里直接列出的服务商指定（`api` 展开出来的不行）；路由试到该服务商时用它，否则用服务商默认模型。设置页的任务覆盖每行就是"服务商 + 模型下拉"。
   - **费用**：API 回复里的模型名先按目录的 `id`、再按 `aliases` 找单价；都对不上时按这个 provider 目录里最贵的输入价 / 输出价算（宁可多算，不让月预算漏掉），日志里有一条 warn，提示给它加 `aliases`。订阅 CLI 恒为 0。
   - **目录坏了**：路由在试 API provider 前检查这次要用的模型在目录里有单价；没有、或 `models.yaml` 读不了，就跳过这个 API provider（记为"未配置"，信息写明原因），订阅 CLI 不受影响。文件每次调用前按修改时间重读，写坏马上被发现，修好后下一次调用就恢复。
@@ -132,15 +132,33 @@ translation:
 
 ## 新模型上线清单
 
-厂商出了新模型（不需要重启，保存后约 5 秒热加载；步骤也写在发布的 `config/models.yaml` 文件开头；`models.yaml` 是随产品发布的文件，先把它复制到 `data/config/models.yaml`，再改你的副本）：
+`config/models.yaml` 是随产品发布的模型目录，你的 `data/config/models.yaml` 是叠在它上面的**叠加层**。那里只写你新增或要改的模型：同一服务商里 `id` 相同的条目整条替换发布的那条（不做逐字段合并，所以不会出现半个旧价格），新的 `id` 排在发布的模型后面，只写 `id` 加 `deprecated: true` 就隐藏一个发布的模型，你的文件里没有的服务商一节取自发布的文件。你没写的一切都跟随产品更新。以前复制的、列出全部模型的整份文件仍然有效；你的文件只是重复了发布的模型时，`pnpm config:check` 会告诉你。新模型不需要重启，保存后约 5 秒生效。
 
-1. 在 `data/config/models.yaml` 对应 provider 的 `models` 下加一条：`id` 写厂商文档里的模型名，`label` 写显示名。
+厂商出了新模型：
+
+1. **OpenRouter：** 在 `/settings` 的 AI 标签里点 OpenRouter 卡片的“刷新可用模型”（或运行 `pnpm models:sync --provider openrouter`）。ai-worker 读取 OpenRouter 公开的模型列表（不带 key，你不点就不读），与你的目录比对，列出可添加的模型、单价、上下文长度和是否声明支持 JSON 模式。勾选想要的，点“加入我的列表”。单价取自 OpenRouter 的列表，不来自浏览器。**其他服务商：** 在 `data/config/models.yaml` 对应服务商的 `models` 下加一条：`id` 写厂商文档里的模型名，`label` 写显示名。
 2. API provider（anthropic / openai / openrouter / deepseek / mimo）必须写 `price`（美元 / 100 万 token 的输入价和输出价，以官网为准）；订阅 CLI 不写 `price`。
 3. `pnpm config:check` 确认没有报错。
 4. 先试一次：`pnpm ai:probe --provider <服务商> --model <id>`（`--model` 必须配一个且只配一个 `--provider`；输出里 `catalog=exact|alias|unknown` 说明回复里的模型名在目录里是否找到）。
 5. 刷新 `/settings`，在 AI 标签对应服务商一节的"模型"下拉里选中它，保存。
 
 旧模型下线：先在设置页换成别的模型，再给它加 `deprecated: true`（下拉不再列出；正在被选中时仍显示并标"已停用"，`config:check` 只警告）；确认没人用了再删掉这一条。厂商回复里报带日期的快照名时，把它加进该模型的 `aliases`。
+
+### `pnpm models:sync`
+
+```bash
+pnpm models:sync --provider openrouter [--filter <词>] [--dry-run]
+pnpm models:sync --provider openrouter --add <id> [<id>...] [--allow-unverified]
+pnpm models:sync --provider openrouter --update-prices [--filter <词>]
+```
+
+不带 `--add` 或 `--update-prices` 时只打印一张表：id、名称、单价（美元 / 100 万 token：输入 / 输出 / 缓存读取）、上下文长度、JSON 模式、是否已在你的目录里、价格变化、下线日期。`--add` 把你点名的模型写进 `data/config/models.yaml`，`--update-prices` 替换价格变了的条目（整条替换，保留你的备注），`--dry-run` 只显示会写什么、不写。OpenRouter 不再列出的模型只标记，不删除。只有文本对话模型、有可用单价、且声明支持 JSON 模式的才能添加；OpenRouter 没声明 JSON 支持的显示为“未验证”，只能用 `--allow-unverified` 添加（之后用 `pnpm ai:probe` 试一下）。文件里的注释会保留，每次写入前先按合并后的目录校验，旧文件先备份。只有 OpenRouter 有刷新功能，其他服务商手写条目。
+
+维护者在每次发版前运行 `pnpm models:sync --provider openrouter --dry-run`，把变化更新进发布的 `config/models.yaml`。
+
+### 降级之前
+
+旧版本把 `data/config/models.yaml` 当作**整份**目录来读，叠加层会让它只剩你新增的那几个。降级前先运行 `pnpm models:export --full`：它把完整目录（发布的加你新增的）写进你的文件，旧文件先备份。`--stdout` 或 `--out <文件>` 改为打印或写到别处。
 
 ## codex-cli 的调用方式和省额度设置
 

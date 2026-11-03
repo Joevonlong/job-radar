@@ -3263,7 +3263,8 @@
           "test_ai": "测试 AI",
           "test_telegram": "测试 Telegram",
           "salary_lookup": "查薪资",
-          "writer_job": "申请回答"
+          "writer_job": "申请回答",
+          "models_sync": "刷新模型列表"
         },
         "status": {
           "pending": "排队中",
@@ -3385,6 +3386,62 @@
       "tableLabel": "{provider} 的模型目录",
       "subscriptionEquivalent": "订阅 · 折合 ${input} / ${output}"
     },
+    "modelSync": {
+      "title": "{provider} 提供的模型",
+      "hint": "向 {provider} 查询它提供哪些模型和价格，把你要的加进自己的清单（{file}）。出厂清单不变，继续随产品更新。只在你点击时才会读取这份列表。",
+      "filterLabel": "按名称筛选",
+      "filterPlaceholder": "例如 claude、flash",
+      "refresh": "刷新可选模型",
+      "pending": "等待 AI 工作进程向 {provider} 查询…",
+      "running": "正在向 {provider} 查询模型列表…",
+      "failed": "读不到模型列表（{kind}），没有改动任何东西。",
+      "summary": "共 {listed} 个模型，{matched} 个符合筛选。",
+      "truncated": "只显示前 {max} 个；缩小筛选范围可以看到其余的。",
+      "gone": "{provider} 已不再列出（仍在你的清单里，没有删除）：{ids}",
+      "tableLabel": "{provider} 提供的模型",
+      "col": {
+        "pick": "选择",
+        "model": "模型",
+        "price": "价格（美元/百万 token，输入 / 输出）",
+        "context": "上下文",
+        "json": "JSON 模式",
+        "status": "状态"
+      },
+      "json": {
+        "yes": "支持",
+        "no": "不支持",
+        "unverified": "未说明"
+      },
+      "status": {
+        "inCatalog": "已在你的清单里",
+        "added": "已加入",
+        "canAdd": "可加入",
+        "unverified": "未验证",
+        "notChat": "不是文本对话模型",
+        "noPrice": "没有可用价格",
+        "noJson": "不支持 JSON 模式",
+        "retired": "已下架"
+      },
+      "priceWas": "清单里是 ${input} / ${output}",
+      "retires": "{date} 下架",
+      "pickModel": "选择 {model}",
+      "showMore": "再显示 {count} 个",
+      "add": "加入我的清单（{count}）",
+      "addHint": "服务商没有说明是否支持 JSON 模式的模型，只能用 pnpm models:sync --allow-unverified 加入。",
+      "added": "已把 {count} 个模型加入 {file}，现在可以在模型下拉里选用。",
+      "addError": {
+        "invalidPayload": "选择不合法，请刷新列表后重试。",
+        "requestUnavailable": "这次刷新的结果已经没有了，请重新刷新后再试。",
+        "notAddable": "选中的模型里有不能加入的（已在清单里，或不支持 JSON 模式），请刷新列表后重试。",
+        "catalogInvalid": "加入后清单不合法，所以没有写入。请到“设置 → 高级”检查 models.yaml。",
+        "frozen": "升级期间配置被冻结，请稍后再试。",
+        "busy": "有别的进程正在写配置，请稍后再试。",
+        "stale": "保存时文件有了变化，请刷新列表后重试。",
+        "protected": "这个改动涉及受保护的设置。",
+        "databaseUnavailable": "数据库不可用，没有写入。",
+        "transportFailed": "连不上服务器，请检查网络后重试。"
+      }
+    },
     "registryLink": "公司清单和健康状态在「来源清单」 →",
     "workflow": {
       "title": "申请流程",
@@ -3476,7 +3533,9 @@
       },
       "override": {
         "text": "这是产品默认文件：保存会在用户目录生成整份覆盖文件，之后产品更新这个文件不会生效。「恢复默认」可以随时回到产品默认。",
-        "confirm": "我明白，生成覆盖文件"
+        "confirm": "我明白，生成覆盖文件",
+        "textOverlay": "models.yaml 是叠加在产品模型清单上的，按模型逐个叠加。这里的编辑器从整份清单开始：保存会写出一份完整副本，里面的每个模型都按 id 替换产品的那一条，之后产品对这些模型价格和限制的更新就不再生效。想继续跟随更新，请删掉没改过的模型，只留你自己的新增（或用「AI」页的刷新按钮添加模型）。「恢复默认」可以随时回到产品清单。",
+        "confirmOverlay": "我明白，保存完整副本"
       },
       "preview": {
         "title": "预览并保存",
@@ -7048,7 +7107,8 @@
       "system__reconcile": "核对操作日志",
       "system__telegram_callback": "Telegram 按钮操作",
       "system__reminder": "每日提醒",
-      "request__writer_job": "写申请回答"
+      "request__writer_job": "写申请回答",
+      "request__models_sync": "刷新模型列表"
     },
     "event": {
       "item__ok": "单项处理成功",
@@ -7151,6 +7211,8 @@
       "cycleBusy": "已有采集任务排队或运行中",
       "configUnavailable": "配置读取失败",
       "no_material": "没有选择素材",
+      "too_long": "文字超过长度上限",
+      "busy": "这道题已有别的请求在进行",
       "output_truncated": "回答在输出上限处被截断",
       "expired": "请求已过期",
       "not_recorded": "结果未记录",
@@ -7374,7 +7436,8 @@
       "test_ai": "测试 AI",
       "test_telegram": "测试 Telegram",
       "salary_lookup": "查询薪资",
-      "writer_job": "写申请回答"
+      "writer_job": "写申请回答",
+      "models_sync": "刷新模型列表"
     },
     "level": {
       "all": "全部级别",
@@ -7505,7 +7568,8 @@
         "jd_excerpt": "JD 原文节选",
         "profile": "画像简介、技能、语言",
         "stories": "勾选的经历素材",
-        "emphasis": "你的强调说明"
+        "emphasis": "你的强调说明",
+        "draft": "你的稿子或被审阅的回答"
       },
       "running": "正在写…",
       "requesting": "排队中…",
@@ -7532,7 +7596,9 @@
         "failed": "生成失败，请重试。",
         "invalid_payload": "请求无效。",
         "handler_error": "处理请求时出错，请重试。",
-        "no_handler": "还没有 AI worker 处理这类请求，请确认 ai-worker 在运行。"
+        "no_handler": "还没有 AI worker 处理这类请求，请确认 ai-worker 在运行。",
+        "too_long": "文字超过 writer.yaml 里的长度上限（draft_max_chars）。",
+        "busy": "这道题已有别的请求在进行（可能来自另一个标签页或设备）。等它结束后再试。"
       },
       "versionsLabel": "版本",
       "manual": "你改过的",
@@ -7634,6 +7700,61 @@
       "discard": "丢弃",
       "saved": "已存为版本",
       "oldCompany": "这段文字里还有 {companies}，也就是你拿来做底稿的那份回答的公司。使用前请检查。"
+    },
+    "polish": {
+      "title": "优化我自己的稿",
+      "hint": "贴上你写的稿子，任何语言都行。结果是一个新版本，用这道题的回答语言写；每句话都对照你的稿（选“贴合岗位”时还有你勾选的素材）核对。",
+      "textLabel": "你的稿",
+      "placeholder": "把你写的回答贴在这里……",
+      "tooLong": "太长了：最多 {max} 个字符。",
+      "optionLabel": "怎么优化",
+      "option": {
+        "align_to_job": "贴合岗位",
+        "language_only": "只改语言"
+      },
+      "explain": {
+        "align_to_job": "保留稿里的事实，按问题和岗位调整。如果你勾选的画像、经历素材或强调说明里有能支撑你观点的事实，可以补进来。",
+        "language_only": "只翻译和润色措辞，不增、不删、不改任何事实，也不会发送你勾选的素材。"
+      },
+      "run": "优化",
+      "versionLabel": {
+        "align_to_job": "优化稿",
+        "language_only": "只改语言"
+      }
+    },
+    "coach": {
+      "title": "教练审阅",
+      "hint": "AI 对照这道题和岗位读这一版，打分并建议更好的句子。分数是它的判断，不是测量值。",
+      "run": "审阅",
+      "again": "重新审阅",
+      "score": "{score} / 100",
+      "aiJudgement": "AI 判断",
+      "dimensionsLabel": "各维度结论",
+      "status": {
+        "good": "不错",
+        "improve": "可改进",
+        "missing": "缺失"
+      },
+      "dimension": {
+        "answers_question": "回答了问题",
+        "concrete_evidence": "有具体依据",
+        "company_specific": "针对这家公司",
+        "covers_must_haves": "覆盖必备要求",
+        "length": "长度",
+        "language_tone": "语言和语气",
+        "no_overclaim": "没有夸大"
+      },
+      "suggestionsLabel": "建议",
+      "sentenceN": "第 {number} 句：",
+      "adopt": "采用这句",
+      "adopted": "已另存为新版本",
+      "unverifiedNote": "这条建议没有引用你素材里的原文，所以没有核对。用之前请自己确认属实。",
+      "noSuggestions": "没有逐句建议。",
+      "rewrite": "按这些建议改一版",
+      "rewriteHint": "请 AI 套用建议写出一个新版本，像初稿一样核对。当前版本保留。",
+      "rewriteLabel": "教练改写",
+      "droppedDimensions": "已略去：{count} 条未配置维度的评分。",
+      "droppedSuggestions": "已略去：{count} 条指向不存在句子的建议。"
     }
   }
 }

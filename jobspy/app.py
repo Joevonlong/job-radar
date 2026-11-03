@@ -45,6 +45,12 @@ _MAX_MESSAGE_CHARS = 300
 _RATE_LIMITED = re.compile(r"\b429\b|too many requests|rate.?limit", re.IGNORECASE)
 _BLOCKED = re.compile(r"\b(?:401|403|999)\b|forbidden|captcha|blocked|access denied|unauthori[sz]ed|authwall", re.IGNORECASE)
 
+# A URL's query string carries the user's keywords and location (and may carry anything else): it is never returned or classified.
+# Two shapes: an absolute URL (any query), and a bare query string with key=value pairs, as requests/urllib3 quote a
+# request path ("url: /jobs-guest/search?keywords=captcha+engineer&location=Berlin"). A lone "?" in prose has no "=".
+_URL_QUERY = re.compile(r"(\b[a-z][a-z0-9+.-]*://[^\s?#'\"<>]*)\?[^\s'\"<>]*", re.IGNORECASE)
+_BARE_QUERY = re.compile(r"\?[^\s'\"<>]*=[^\s'\"<>]*")
+
 # jobspy keeps global state per scraper module: one scrape at a time keeps concurrent requests from interfering.
 _scrape_lock = threading.Lock()
 
@@ -121,19 +127,35 @@ def health() -> dict[str, str]:
 # ------------------------------------------------------------------ error mapping
 
 
+def strip_queries(text: str) -> str:
+    """Replace the query string of every URL or request path in `text` with a marker (the path and host stay)."""
+    return _BARE_QUERY.sub("?<query>", _URL_QUERY.sub(r"\1?<query>", text))
+
+
 def scrub(text: str, proxies: list[str]) -> str:
-    """Remove proxy strings and URL credentials from a message and cap its length."""
+    """Remove proxy strings, URL credentials and URL query strings (the user's keywords) from a message and cap its length."""
     for proxy in proxies:
         if proxy:
             text = text.replace(proxy, "<proxy>")
     text = re.sub(r"://[^/\s@]+@", "://<redacted>@", text)
+    text = strip_queries(text)
     text = " ".join(text.split())
     return text[:_MAX_MESSAGE_CHARS]
 
 
-def classify(messages: list[str]) -> ErrorCode:
-    """rate_limited beats blocked beats upstream_error."""
-    joined = "\n".join(messages)
+def classify(messages: list[str], request_terms: list[str] | None = None) -> ErrorCode:
+    """rate_limited beats blocked beats upstream_error.
+
+    The user's own words must not decide the class: URL query strings are dropped, and so is the search term or location
+    when the message quotes it as a whole word ("no jobs for 'captcha'"). Short terms are left alone (nothing to mistake)."""
+    cleaned = []
+    for message in messages:
+        message = strip_queries(message)
+        for term in request_terms or []:
+            if len(term.strip()) >= 3:
+                message = re.sub(rf"(?<!\w){re.escape(term.strip())}(?!\w)", " ", message, flags=re.IGNORECASE)
+        cleaned.append(message)
+    joined = "\n".join(cleaned)
     if _RATE_LIMITED.search(joined):
         return "rate_limited"
     if _BLOCKED.search(joined):
@@ -209,6 +231,10 @@ def _report_messages(frame: Any) -> tuple[list[str], list[str]]:
     return errors, warnings
 
 
+def _request_terms(request: SearchRequest) -> list[str]:
+    return [term for term in (request.search_term, request.location) if term]
+
+
 def run_search(request: SearchRequest) -> tuple[list[dict[str, Any]], list[str]]:
     """Run jobspy once. Returns (records, warnings) or raises SidecarError."""
     kwargs: dict[str, Any] = {
@@ -230,14 +256,14 @@ def run_search(request: SearchRequest) -> tuple[list[dict[str, Any]], list[str]]
             frame = scrape_jobs(**kwargs)
         except Exception as exc:  # noqa: BLE001 - every failure is mapped to a structured error
             message = scrub(f"{type(exc).__name__}: {exc}", request.proxies)
-            raise SidecarError(classify([str(exc), message]), message) from None
+            raise SidecarError(classify([str(exc), message], _request_terms(request)), message) from None
 
     raw_errors, raw_warnings = _report_messages(frame)
     errors = [scrub(m, request.proxies) for m in raw_errors]
     warnings = [scrub(m, request.proxies) for m in raw_warnings]
     records = records_from_frame(frame)
     if not records and errors:
-        raise SidecarError(classify(raw_errors), errors[0])  # classify the full text: scrub() caps the length
+        raise SidecarError(classify(raw_errors, _request_terms(request)), errors[0])  # classify the full text: scrub() caps the length
     return records, errors + warnings
 
 

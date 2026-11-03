@@ -1,20 +1,30 @@
+import type { ZodType } from "zod";
+
 import { AiProviderError } from "@/lib/ai";
-import { buildWritePrompt, WRITE_PROMPT_VERSIONS, writeOutputSchema, type WriteOutput } from "@/lib/ai/prompts/write";
+import {
+  buildWritePrompt,
+  coachOutputSchema,
+  WRITE_PROMPT_VERSIONS,
+  writeOutputSchema,
+  type CoachOutput,
+  type WriteOutput,
+} from "@/lib/ai/prompts/write";
 import { truncateJd } from "@/lib/ai/prompts/score";
 import type { AiRouter } from "@/lib/ai/router";
-import type { AiCallRecord } from "@/lib/ai/types";
+import type { AiCallRecord, AiResult } from "@/lib/ai/types";
 import { parseStoredBreakdown } from "@/lib/breakdown/content";
 import { ConfigError, loadConfig, type WriterConfig } from "@/lib/config";
-import { getApplicationQuestion, insertAnswerVersions, type AnswerVersionInput } from "@/lib/db/repos/application-writer";
+import { getApplicationQuestion, insertAnswerVersions, setAnswerVersionCoach, type AnswerVersionInput } from "@/lib/db/repos/application-writer";
 import { getJobBreakdown, getJobForBreakdown } from "@/lib/db/repos/breakdowns";
 import { locateQuote } from "@/lib/signals/quote";
 import { cleanDescriptionForAi } from "@/lib/traps/clean";
 import { classifyTranslationFailure, resumeOf } from "@/lib/translation/errors";
 import { createRequestRouter } from "@/lib/translation/router";
 import { buildWriteInput, profileEvidenceText, storyEvidenceText, type WriterMaterials } from "@/lib/writer/materials";
-import { countStatuses, joinSentences, verifySentences, type VerifyContext } from "@/lib/writer/verify";
+import { COACH_REWRITE_VARIANT, type CheckedSentence } from "@/lib/writer/types";
+import { countStatuses, joinSentences, verifySentences, verifySuggestion, type VerifyContext } from "@/lib/writer/verify";
 
-import { writerJobPayloadSchema, type ControlHandler, type ControlHandlerContext } from "./types";
+import { writerJobPayloadSchema, type ControlHandler, type ControlHandlerContext, type ControlOutcome } from "./types";
 
 export interface WriterJobHandlerOptions {
   /** Default: the router of ai.yaml (usage written to `ai_usage`). Tests inject a fake. */
@@ -43,19 +53,25 @@ function pairVariants(materials: WriterMaterials, output: WriteOutput): { id: st
 }
 
 /**
- * `writer_job`: draft the answer of one application question from the material snapshot in the payload. The JD goes
- * through the trap cleaning first, and a chosen JD point whose quote the cleaned JD no longer has is not sent. Every
- * sentence of every version is then checked against the snapshot and the stored JD (`verifySentences`), and the versions
- * are stored with their check results. Claimed only by the ai-worker; the payload's material is cleared when the request
- * ends (`finishControlRequest`). The result never holds text of the material or the answer.
+ * `writer_job`: write for one application question from the material snapshot in the payload, in one of four modes.
+ * `draft`: the versions the question asks for. `polish`: one version made from your own text (fitted to the job, or only
+ * its language). `coach`: a review of one version (score, verdicts, sentence suggestions) stored on that version.
+ * `coach_rewrite`: one version made from a reviewed version and its suggestions. The JD goes through the trap cleaning
+ * first, and a chosen JD point whose quote the cleaned JD no longer has is not sent. Every sentence of every version and
+ * every suggested rewrite is then checked against the snapshot and the stored JD (`verifySentences`). Claimed only by
+ * the ai-worker; the payload's material is cleared when the request ends (`finishControlRequest`). The result never holds
+ * text of the material or the answer.
  */
 export function createWriterJobHandler(options: WriterJobHandlerOptions = {}): ControlHandler {
   const loadSettings = options.loadSettings ?? ((): WriterConfig => loadConfig("writer"));
   return async (request, context) => {
     const payload = writerJobPayloadSchema.safeParse(request.payload);
     if (!payload.success) return { status: "failed", result: { error: "invalid_payload" } };
-    const { jobId, questionId, materials, materialsHash } = payload.data;
+    const { jobId, questionId, materials, materialsHash, mode, polish, versionId } = payload.data;
     const base = { jobId, questionId };
+    // polish and review work on a text: the payload must carry it (and a review the version it is stored on)
+    if (mode !== "draft" && materials.draft === null) return { status: "failed", result: { ...base, error: "invalid_payload" } };
+    if ((mode === "coach" || mode === "coach_rewrite") && versionId === undefined) return { status: "failed", result: { ...base, error: "invalid_payload" } };
     let settings: WriterConfig;
     try {
       settings = loadSettings();
@@ -74,33 +90,43 @@ export function createWriterJobHandler(options: WriterJobHandlerOptions = {}): C
     const sent: WriterMaterials = { ...materials, jdPoints };
     const excerpt = sent.useJdText && cleaned !== null ? truncateJd(cleaned, settings.jd_max_chars, settings.jd_head_share).text : null;
     const { input } = buildWriteInput(sent, excerpt);
-    const prompt = buildWritePrompt({ input, outputLanguage: materials.question.outputLanguage, quoteMaxChars: settings.evidence.quote_max_chars });
+    const prompt = buildWritePrompt({
+      input,
+      mode,
+      outputLanguage: materials.question.outputLanguage,
+      quoteMaxChars: settings.evidence.quote_max_chars,
+      ...(polish ? { polish } : {}),
+      coach: { dimensions: settings.coach.dimensions, maxSuggestions: settings.coach.max_suggestions },
+      ...(materials.draft ? { notesLanguage: materials.draft.notesLanguage } : {}),
+    });
 
     // `timeout_seconds` counts from the claim (the JD cleaning above included), so this timeout ends a live request
     // before the expiry (`timeout_seconds + expiry_grace_seconds` from the claim) would
     const startedAt = request.startedAt?.getTime() ?? Date.now();
     const timeout = AbortSignal.timeout(Math.max(1, startedAt + settings.timeout_seconds * 1000 - Date.now()));
     let lastCall: AiCallRecord | null = null;
-    let result;
-    try {
-      const router = options.createRouter ? options.createRouter(context) : createRequestRouter(context.db, context.logger);
-      result = await router.run("write", prompt, writeOutputSchema, {
-        signal: AbortSignal.any([context.signal, timeout]),
-        jobId,
-        onCall: (call) => {
-          lastCall = call;
-        },
-      });
-    } catch (error) {
-      if (timeout.aborted && !context.signal.aborted) return { status: "failed", result: { ...base, error: "timeout" } };
-      if (error instanceof AiProviderError && error.kind === "aborted") return { status: "failed", result: { ...base, error: "aborted" } };
-      const failure = classifyTranslationFailure(error);
-      const call = lastCall as AiCallRecord | null;
-      if (failure.code === "invalid_output" && call !== null && call.usage.tokensOut >= writeOutputTokenCap() * settings.output_truncated_share) {
-        return { status: "failed", result: { ...base, error: "output_truncated" } };
+    const callAi = async <T>(schema: ZodType<T>): Promise<{ result: AiResult<T> } | { failed: ControlOutcome }> => {
+      try {
+        const router = options.createRouter ? options.createRouter(context) : createRequestRouter(context.db, context.logger);
+        const result = await router.run("write", prompt, schema, {
+          signal: AbortSignal.any([context.signal, timeout]),
+          jobId,
+          onCall: (call) => {
+            lastCall = call;
+          },
+        });
+        return { result };
+      } catch (error) {
+        if (timeout.aborted && !context.signal.aborted) return { failed: { status: "failed", result: { ...base, error: "timeout" } } };
+        if (error instanceof AiProviderError && error.kind === "aborted") return { failed: { status: "failed", result: { ...base, error: "aborted" } } };
+        const failure = classifyTranslationFailure(error);
+        const call = lastCall as AiCallRecord | null;
+        if (failure.code === "invalid_output" && call !== null && call.usage.tokensOut >= writeOutputTokenCap() * settings.output_truncated_share) {
+          return { failed: { status: "failed", result: { ...base, error: "output_truncated" } } };
+        }
+        return { failed: { status: "failed", result: { ...base, error: failure.code, detail: failure.message, ...resumeOf(failure) } } };
       }
-      return { status: "failed", result: { ...base, error: failure.code, detail: failure.message, ...resumeOf(failure) } };
-    }
+    };
 
     const breakdown = await getJobBreakdown(db, jobId);
     const content = breakdown ? parseStoredBreakdown(breakdown.promptVersion, breakdown.content) : null;
@@ -109,7 +135,7 @@ export function createWriterJobHandler(options: WriterJobHandlerOptions = {}): C
       profile: materials.profile ? profileEvidenceText(materials.profile) : null,
       stories: new Map(materials.stories.map((story) => [story.id, storyEvidenceText(story)])),
       emphasis: materials.emphasis,
-      draft: null,
+      draft: materials.draft ? (materials.draft.evidenceText ?? materials.draft.text) : null,
       company: null,
       entities: [
         ...(content?.tech_stack.map((item) => item.name) ?? []),
@@ -121,6 +147,45 @@ export function createWriterJobHandler(options: WriterJobHandlerOptions = {}): C
       language: materials.question.outputLanguage,
       config: settings.evidence,
     };
+
+    if (mode === "coach") {
+      const called = await callAi<CoachOutput>(coachOutputSchema);
+      if ("failed" in called) return called.failed;
+      const { result } = called;
+      const out = result.value;
+      const sentenceCount = materials.draft?.sentences.length ?? 0;
+      const allowed = new Set(settings.coach.dimensions);
+      const seen = new Set<string>();
+      const dimensions = out.dimensions.filter((entry) => {
+        if (!allowed.has(entry.id) || seen.has(entry.id)) return false;
+        seen.add(entry.id);
+        return true;
+      });
+      const suggested = out.suggestions.filter((entry) => entry.sentence_index < sentenceCount).slice(0, settings.coach.max_suggestions);
+      const coach = {
+        score: Math.round(out.score),
+        dimensions,
+        suggestions: suggested.map((entry) => ({
+          sentenceIndex: entry.sentence_index,
+          issue: entry.issue,
+          sentence: verifySuggestion({ text: entry.rewrite, about: entry.about, evidence: entry.evidence }, verify) satisfies CheckedSentence,
+        })),
+        dropped: { dimensions: out.dimensions.length - dimensions.length, suggestions: out.suggestions.length - suggested.length },
+        provider: result.provider,
+        model: result.model,
+        promptVersion: WRITE_PROMPT_VERSIONS.coach,
+        createdAt: new Date().toISOString(),
+      };
+      if (!(await setAnswerVersionCoach(db, { questionId, versionId: versionId ?? 0, coach }))) return { status: "failed", result: { ...base, error: "not_found" } };
+      return {
+        status: "done",
+        result: { ...base, versionId, score: coach.score, suggestions: coach.suggestions.length, dropped: coach.dropped, provider: result.provider, model: result.model },
+      };
+    }
+
+    const called = await callAi<WriteOutput>(writeOutputSchema);
+    if ("failed" in called) return called.failed;
+    const { result } = called;
     const versions: AnswerVersionInput[] = pairVariants(materials, result.value).map((variant) => {
       const sentences = verifySentences(
         variant.sentences.map((sentence) => ({ text: sentence.text, about: sentence.about, newParagraph: sentence.new_paragraph ?? false, evidence: sentence.evidence })),
@@ -128,8 +193,8 @@ export function createWriterJobHandler(options: WriterJobHandlerOptions = {}): C
       );
       const counts = countStatuses(sentences);
       return {
-        mode: "draft",
-        variantId: variant.id,
+        mode: mode === "polish" ? "polish" : mode === "coach_rewrite" ? "coach_rewrite" : "draft",
+        variantId: mode === "coach_rewrite" ? COACH_REWRITE_VARIANT : variant.id,
         text: joinSentences(sentences),
         sentences,
         supportedCount: counts.supported,
@@ -138,9 +203,10 @@ export function createWriterJobHandler(options: WriterJobHandlerOptions = {}): C
         framingCount: counts.framing,
         userWrittenCount: counts.user_written,
         webUnverifiedCount: counts.web_unverified,
+        ...(mode === "coach_rewrite" && versionId !== undefined ? { parentVersionId: versionId } : {}),
         provider: result.provider,
         model: result.model,
-        promptVersion: WRITE_PROMPT_VERSIONS.draft,
+        promptVersion: WRITE_PROMPT_VERSIONS[mode],
         materialsHash,
         controlRequestId: request.id,
       };
@@ -149,7 +215,7 @@ export function createWriterJobHandler(options: WriterJobHandlerOptions = {}): C
     const ids = await insertAnswerVersions(db, { questionId, versions, maxVersions: settings.questions.max_versions_per_question });
     return {
       status: "done",
-      result: { ...base, versions: ids, provider: result.provider, model: result.model, droppedJdPoints: materials.jdPoints.length - jdPoints.length },
+      result: { ...base, mode, versions: ids, provider: result.provider, model: result.model, droppedJdPoints: materials.jdPoints.length - jdPoints.length },
     };
   };
 }

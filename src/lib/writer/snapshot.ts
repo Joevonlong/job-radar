@@ -8,7 +8,7 @@ import type { MeConfig, Story, WriterConfig } from "@/lib/config";
 import type { QuestionKind, LengthUnit } from "@/lib/config/schemas/writer";
 
 import { resolveJdPoints, type JdPoint } from "./jd-points";
-import type { ProfileSnapshot, StorySnapshot, WriterMaterials } from "./materials";
+import type { DraftSnapshot, ProfileSnapshot, StorySnapshot, WriterMaterials } from "./materials";
 import type { QuestionSelection, QuestionSettings } from "./types";
 
 export interface SnapshotInput {
@@ -20,6 +20,11 @@ export interface SnapshotInput {
   me: MeConfig | null;
   stories: readonly Story[];
   writer: WriterConfig;
+  /**
+   * Polish and review requests: the text to work on, and the versions to ask for instead of the question kind's styles
+   * (none for a review). Absent: a draft from the material.
+   */
+  draft?: { snapshot: DraftSnapshot; variants: { id: string; hint: string }[] } | undefined;
 }
 
 export interface Snapshot {
@@ -62,7 +67,7 @@ export function buildSnapshot(input: SnapshotInput): Snapshot {
       lengthValue: question.lengthValue,
       outputLanguage: question.outputLanguage,
       tone: question.tone,
-      variants: variantsFor(writer, question.kind),
+      variants: input.draft ? input.draft.variants : variantsFor(writer, question.kind),
     },
     job: input.job,
     jdPoints: jd.points.map((point) => ({ text: point.text, quote: point.quote, offset: point.offset, requirement: point.requirement })),
@@ -70,6 +75,7 @@ export function buildSnapshot(input: SnapshotInput): Snapshot {
     profile: selection.profile && input.me !== null ? profileSnapshot(input.me) : null,
     stories,
     emphasis: emphasis === "" ? null : emphasis,
+    draft: input.draft ? input.draft.snapshot : null,
   };
   return { materials, stale: { jdPoints: jd.stale, stories: selection.storyIds.length - stories.length } };
 }

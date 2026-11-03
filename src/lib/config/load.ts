@@ -5,9 +5,9 @@ import type { Document } from "yaml";
 import { ConfigError, zodIssues } from "./errors";
 import { isExistingInstall } from "./install";
 import { EXISTING_INSTALL_LANGUAGE_YAML } from "./migrations/language/existing-install";
-import { withShippedModelProviders } from "./models-backfill";
+import { issuesInUserFile, mergeModelsWithShipped, type ModelsMerge, type OverlayIssue } from "./models-overlay";
 import { migrateConfigDocument, withoutConfigVersion, type DocumentMigrationResult } from "./migrations/version";
-import { getDefaultsDir, getPollIntervalMs, getUserConfigPath, resolveConfigPath, resolveConfigReadPath } from "./paths";
+import { getDefaultConfigPath, getDefaultsDir, getPollIntervalMs, getUserConfigPath, resolveConfigPath, resolveConfigReadPath } from "./paths";
 import { CONFIG_NAMES, configRegistry, isProfileName, type ConfigName, type ConfigValue, type ProfileName } from "./registry";
 import { parseConfigYamlDocument } from "./yaml-options";
 
@@ -94,6 +94,22 @@ function readForLoad(name: ConfigName): string {
 }
 
 /**
+ * What the cache compares to tell that a config changed: the text of the file read, and for an overlay (models.yaml) the
+ * shipped file too, because the value depends on both.
+ */
+function cacheSignature(name: ConfigName, text: string): string {
+  if (name !== "models") return text;
+  const shipped = getDefaultConfigPath(name);
+  let shippedText = "";
+  try {
+    if (shipped !== null) shippedText = fs.readFileSync(/*turbopackIgnore: true*/ shipped, "utf8");
+  } catch {
+    // unreadable shipped file: the merge reports it
+  }
+  return `${text}\u0000${shippedText}`;
+}
+
+/**
  * Parse YAML text into a document with the shared options (`yaml-options.ts`: unresolved tags and `!unset` are errors);
  * throws ConfigError(yaml) naming the line, never the contents.
  */
@@ -115,17 +131,19 @@ export function parseConfigDocument(name: ConfigName, text: string, filePath: st
 }
 
 /** Validate an already parsed (and migrated) value against the config's schema; `config_version` is not part of it. */
-export function validateConfigValue<N extends ConfigName>(name: N, raw: unknown, filePath: string): ConfigValue<N> {
+export function validateConfigValue<N extends ConfigName>(name: N, raw: unknown, filePath: string, userRaw?: unknown): ConfigValue<N> {
   const result = configRegistry[name].schema.safeParse(withoutConfigVersion(raw));
   if (!result.success) {
-    throw new ConfigError({ configName: name, filePath, kind: "schema", issues: zodIssues(result.error) });
+    // an overlay's value is the merged one: its problems are shown at the positions of the user's file
+    const issues = name === "models" && userRaw !== undefined ? issuesInUserFile(zodIssues(result.error), raw, withoutConfigVersion(userRaw)) : zodIssues(result.error);
+    throw new ConfigError({ configName: name, filePath, kind: "schema", issues });
   }
   return result.data as ConfigValue<N>;
 }
 
 /**
  * Parse, migrate (in memory) and validate YAML text for the given config. No cache; no disk access except the shipped
- * models.yaml when a models.yaml lacks a provider section (`configDocumentValue`).
+ * models.yaml when parsing models.yaml (`resolveConfigDocument`).
  * Errors name the file and the field paths, never the file contents.
  */
 export function parseConfigText<N extends ConfigName>(name: N, text: string, filePath = configSourcePath(name)): ConfigValue<N> {
@@ -133,26 +151,39 @@ export function parseConfigText<N extends ConfigName>(name: N, text: string, fil
 }
 
 /**
- * The plain value of a parsed (and migrated) document as the schema takes it. models.yaml: a provider section the file
- * lacks is filled in from the shipped file (`models-backfill.ts`), the one read this does.
+ * The plain value of a parsed (and migrated) document as the schema takes it, with what a layered file needs on top.
+ * models.yaml is an overlay: the value is the shipped catalog with this file's models merged in (`models-overlay.ts`),
+ * the one extra file read this does. `errors` are clashes in the overlay (they make the file invalid), `warnings` are
+ * things the merge dropped.
  */
-export function configDocumentValue(name: ConfigName, doc: Document): unknown {
+export function resolveConfigDocument(name: ConfigName, doc: Document): ModelsMerge {
   const raw: unknown = doc.toJS();
-  return name === "models" ? withShippedModelProviders(raw) : raw;
+  return name === "models" ? mergeModelsWithShipped(withoutConfigVersion(raw)) : { value: raw, errors: [], warnings: [] };
 }
+
+/** The plain value of `resolveConfigDocument`. */
+export function configDocumentValue(name: ConfigName, doc: Document): unknown {
+  return resolveConfigDocument(name, doc).value;
+}
+
+const overlayPath = (path: OverlayIssue["path"]): string => path.reduce<string>((acc, segment) => (typeof segment === "number" ? `${acc}[${segment}]` : acc === "" ? segment : `${acc}.${segment}`), "");
 
 /** `parseConfigText` plus what the in-memory migration did (from / to version and the steps that ran). */
 export function parseConfigTextWithVersion<N extends ConfigName>(name: N, text: string, filePath = configSourcePath(name)): { value: ConfigValue<N>; migration: DocumentMigrationResult } {
   const doc = parseConfigDocument(name, text, filePath);
   const migration = migrateConfigDocument(name, doc, filePath);
-  return { value: validateConfigValue(name, configDocumentValue(name, doc), filePath), migration };
+  const resolved = resolveConfigDocument(name, doc);
+  if (resolved.errors.length > 0) {
+    throw new ConfigError({ configName: name, filePath, kind: "schema", issues: resolved.errors.map((issue) => ({ path: overlayPath(issue.path), message: issue.message })) });
+  }
+  return { value: validateConfigValue(name, resolved.value, filePath, doc.toJS()), migration };
 }
 
 /** Re-read the file, validate and replace the cache entry. On failure the previous cache entry is kept. */
 export function reloadConfig<N extends ConfigName>(name: N): ConfigValue<N> {
   const text = readForLoad(name);
   const value = deepFreeze(parseConfigText(name, text, resolveConfigReadPath(name)));
-  setEntry(name, value, text);
+  setEntry(name, value, cacheSignature(name, text));
   return value;
 }
 
@@ -198,7 +229,7 @@ function refreshStaleCache(): boolean {
 
 /** Internal: used by writeConfig to refresh the cache with what it just wrote. */
 export function primeConfigCache<N extends ConfigName>(name: N, value: ConfigValue<N>, text: string): void {
-  setEntry(name, deepFreeze(value), text);
+  setEntry(name, deepFreeze(value), cacheSignature(name, text));
 }
 
 export interface ConfigRefreshResult {
@@ -239,13 +270,14 @@ function refreshCacheEntries(reportOnce: boolean): ConfigRefreshResult {
     let badContent = "";
     try {
       const text = readForLoad(name);
-      if (text === hit.text) {
+      const signature = cacheSignature(name, text);
+      if (signature === hit.text) {
         reportedBad.delete(name);
         continue;
       }
-      badContent = text;
+      badContent = signature;
       const value = deepFreeze(parseConfigText(name, text, resolveConfigReadPath(name)));
-      cache.set(key, { value, text });
+      cache.set(key, { value, text: signature });
       reportedBad.delete(name);
       changed.push(name);
     } catch (err) {

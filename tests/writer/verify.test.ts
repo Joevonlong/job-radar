@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { writerSchema } from "@/lib/config/schemas/writer";
 import { diffSentences } from "@/lib/writer/diff";
-import { countStatuses, figures, isFirstPerson, nameCandidates, normalize, verifySentence, type RawSentence, type VerifyContext } from "@/lib/writer/verify";
+import { countStatuses, figures, isFirstPerson, nameCandidates, normalize, verifySentence, verifySuggestion, type RawSentence, type VerifyContext } from "@/lib/writer/verify";
 
 const config = writerSchema.parse({}).evidence;
 
@@ -204,6 +204,55 @@ describe("figures", () => {
     expect(figures("2,5").keys.has("2.5")).toBe(true);
   });
 
+  it("a figure written against Chinese characters is a figure, one against Latin letters is a name", () => {
+    expect(figures("错误下降了40%的").keys.has("40%")).toBe(true);
+    expect(figures("迁移用了3个月").keys.has("3")).toBe(true);
+    expect(figures("我用S3和K8s").shown).toEqual([]);
+  });
+
+  it("a Chinese draft backs the English sentence with the same figure", () => {
+    const checked = verifySentence(sentence("After the migration, errors fell by 40%.", "user", [{ source: "draft", quote: "错误下降了40%" }]), context({ draft: "我把账单服务迁移之后，错误下降了40%。" }));
+    expect(checked.missing).toEqual([]);
+    expect(checked.status).toBe("supported");
+  });
+
+  it("a magnitude unit scales the figure, so 5万 is 50,000 and not 5", () => {
+    expect(figures("5万").keys.has("50000")).toBe(true);
+    expect(figures("5万").keys.has("5")).toBe(false);
+    expect(figures("500万").keys.has("5000000")).toBe(true);
+    expect(figures("1.5万").keys.has("15000")).toBe(true);
+    expect(figures("3千").keys.has("3000")).toBe(true);
+    expect(figures("2亿").keys.has("200000000")).toBe(true);
+    const backed = verifySentence(sentence("成本降低了5万欧元。", "user", [{ source: "draft", quote: "50,000" }]), context({ draft: "成本降低了50,000欧元。" }));
+    expect(backed.missing).toEqual([]);
+  });
+
+  it("a different unit is a different figure: 500万 is not 500, 40倍 is not 40%", () => {
+    const unit = verifySentence(sentence("用户增长了500万。", "user", [{ source: "draft", quote: "增长了500" }]), context({ draft: "用户增长了500。" }));
+    expect(unit.missing).toEqual(["500万"]);
+    const multiple = verifySentence(sentence("速度提升了40倍。", "user", [{ source: "draft", quote: "提升了40%" }]), context({ draft: "速度提升了40%。" }));
+    expect(multiple.missing).toEqual(["40倍"]);
+    const reverse = verifySentence(sentence("速度提升了40%。", "user", [{ source: "draft", quote: "提升了40倍" }]), context({ draft: "速度提升了40倍。" }));
+    expect(reverse.missing).toEqual(["40%"]);
+    const same = verifySentence(sentence("速度提升了40倍。", "user", [{ source: "draft", quote: "提升了40倍" }]), context({ draft: "速度提升了40倍。" }));
+    expect(same.missing).toEqual([]);
+  });
+
+  it("the units come from evidence.figure_units: none configured means the word is just a word", () => {
+    const none = writerSchema.parse({ evidence: { figure_units: { scale: {}, multiple: [] } } }).evidence.figure_units;
+    expect(figures("5万", none).keys.has("5")).toBe(true);
+    const own = writerSchema.parse({ evidence: { figure_units: { scale: { 百: 100 }, multiple: [] } } }).evidence.figure_units;
+    expect(figures("5百", own).keys.has("500")).toBe(true);
+    expect(writerSchema.parse({}).evidence.figure_units.multiple).toEqual(["倍"]);
+  });
+
+  it("full-width digits and marks are read like ASCII ones", () => {
+    expect(figures("下降了４０％").keys.has("40%")).toBe(true);
+    expect(figures("共５００人").keys.has("500")).toBe(true);
+    const checked = verifySentence(sentence("Errors fell by 40%.", "user", [{ source: "draft", quote: "下降了４０％" }]), context({ draft: "错误下降了４０％。" }));
+    expect(checked.missing).toEqual([]);
+  });
+
   it("figures written as words and digits inside names are not figures", () => {
     expect(figures("forty percent").shown).toEqual([]);
     expect(figures("S3 and K8s").shown).toEqual([]);
@@ -275,5 +324,32 @@ describe("after a manual edit", () => {
   it("a new paragraph stays marked", () => {
     const kept = verifySentence(sentence("That is why I am applying.", "framing", []), context());
     expect(diffSentences([kept], "New start.\n\nThat is why I am applying.").map((entry) => entry.newParagraph)).toEqual([false, true]);
+  });
+});
+
+describe("verifySuggestion", () => {
+  it("a rewrite with a valid quote keeps its own status", () => {
+    const checked = verifySuggestion(sentence("I led the migration of the billing service.", "user", [{ source: "story", ref: "billing", quote: "led the migration of the billing service" }]), context());
+    expect(checked.status).toBe("supported");
+  });
+
+  it("a rewrite that rests on the user's own draft is backed by it", () => {
+    const checked = verifySuggestion(sentence("Ich habe die Abrechnung migriert.", "user", [{ source: "draft", quote: "habe die Abrechnung migriert" }]), context({ language: "de" }));
+    expect(checked.status).toBe("supported");
+  });
+
+  it("a rewrite without a valid quote is an unverified AI suggestion, not 'no evidence'", () => {
+    expect(verifySuggestion(sentence("I ran the platform for two years.", "user", []), context()).status).toBe("ai_suggestion_unverified");
+    expect(verifySuggestion(sentence("I ran the platform.", "user", [{ source: "profile", quote: "Rust (9 years)" }]), context()).status).toBe("ai_suggestion_unverified");
+  });
+
+  it("a partly backed rewrite is flagged for what it adds", () => {
+    const checked = verifySuggestion(sentence("Errors fell by 60%.", "user", [{ source: "story", ref: "billing", quote: "errors fell by 40%" }]), context());
+    expect(checked.status).toBe("partial");
+    expect(checked.missing).toEqual(["60%"]);
+  });
+
+  it("a linking sentence stays framing", () => {
+    expect(verifySuggestion(sentence("That is why this matters to me.", "framing", []), context()).status).toBe("framing");
   });
 });

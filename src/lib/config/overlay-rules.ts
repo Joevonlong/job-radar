@@ -59,6 +59,7 @@ export const OVERLAY_RECORD_RULES: Readonly<Partial<Record<ConfigName, readonly 
   // per language: a user list for one language leaves the shipped lists of the others in place
   writer: [
     { path: "evidence.first_person", kind: "entries" },
+    { path: "evidence.figure_units.scale", kind: "entries" },
     { path: "evidence.names.capitalized_non_initial", kind: "entries" },
   ],
 };

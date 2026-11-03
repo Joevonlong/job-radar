@@ -1,6 +1,7 @@
 import type { ActivityRecorder, RequestSpanHandle } from "@/lib/activity/types";
 import { z } from "zod";
 
+import { MODEL_SYNC_PROVIDERS } from "@/lib/ai/model-sync/types";
 import { AI_PROVIDER_IDS } from "@/lib/ai/types";
 import type { ChannelLogger } from "@/lib/channels/types";
 import { MAX_WINDOW_HOURS } from "@/lib/config/schemas/channels";
@@ -8,6 +9,7 @@ import type { Db } from "@/lib/db/client";
 import type { CycleSummary } from "@/lib/cycle/run-cycle";
 import type { ControlRequest } from "@/lib/db/repos/control-requests";
 import { writerMaterialsSchema } from "@/lib/writer/materials";
+import { POLISH_OPTIONS, WRITE_MODES } from "@/lib/writer/types";
 
 /** Payload of a `run_cycle` request: run only these channels (default: every enabled channel). */
 export const runCyclePayloadSchema = z.strictObject({
@@ -45,20 +47,26 @@ export const breakdownJobPayloadSchema = z.strictObject({
 export type BreakdownJobPayload = z.infer<typeof breakdownJobPayloadSchema>;
 
 /**
- * Payload of a `writer_job` request (the application writer's "write" button). `materials` is the snapshot of what the
- * user chose, written from and checked against; it is removed from the row (`scrubbed: true`) as soon as the request
+ * Payload of a `writer_job` request (the application writer's "write", "improve my draft" and coach buttons). `materials`
+ * is the snapshot of what the user chose and, to polish or review, the text to work on (`draft`), written from and checked against; it is removed from the row (`scrubbed: true`) as soon as the request
  * ends in any way. `refs` and `materialsHash` stay: which stories and how many JD points were used, never their text.
  */
 export const writerJobPayloadSchema = z.strictObject({
   jobId: z.number().int().positive(),
   questionId: z.number().int().positive(),
-  mode: z.literal("draft"),
+  /** What the request does; absent in a request queued before the other modes existed (a draft). */
+  mode: z.enum(WRITE_MODES).default("draft"),
+  /** `polish`: how. */
+  polish: z.enum(POLISH_OPTIONS).optional(),
+  /** `coach` / `coach_rewrite`: the version under review (its text is in `materials.draft`). */
+  versionId: z.number().int().positive().optional(),
   materialsHash: z.string().regex(/^[0-9a-f]{64}$/),
   refs: z.strictObject({
     storyIds: z.array(z.string().max(80)).max(1000),
     jdPoints: z.number().int().min(0),
     profile: z.boolean(),
     emphasis: z.boolean(),
+    draft: z.boolean().default(false),
   }),
   materials: writerMaterialsSchema,
 });
@@ -95,6 +103,14 @@ export const testAiPayloadSchema = z.strictObject({
   provider: z.enum(AI_PROVIDER_IDS),
 });
 export type TestAiPayload = z.infer<typeof testAiPayloadSchema>;
+
+/** Payload of a `models_sync` request: refresh this provider's model list; nothing else is accepted (no URL, no path). */
+export const modelsSyncPayloadSchema = z.strictObject({
+  provider: z.enum(MODEL_SYNC_PROVIDERS),
+  /** Shows only the models whose id or name contains this (case-insensitive). */
+  filter: z.string().trim().min(1).max(80).optional(),
+});
+export type ModelsSyncPayload = z.infer<typeof modelsSyncPayloadSchema>;
 
 /** Payload of a `test_telegram` request: nothing. */
 export const testTelegramPayloadSchema = z.strictObject({});

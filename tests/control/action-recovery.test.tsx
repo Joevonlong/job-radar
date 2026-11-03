@@ -31,7 +31,7 @@ it("catches an outdated action before it replaces the page, and requests update 
     await userEvent.setup().click(screen.getByRole("button", { name: "Test" }));
     await waitFor(() => expect(recover).toHaveBeenCalled());
     expect(screen.queryByTestId("page-error")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Test" })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Test" })).toBeEnabled());
   } finally {
     window.removeEventListener("jobradar:action-failure", recover);
   }
@@ -44,5 +44,5 @@ it.each([{ locale: "en", messages: en }, { locale: "zh", messages: zh }] as cons
   await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(messages.trigger.refused.transportFailed));
   expect(screen.queryByText(messages.trigger.refused.databaseUnavailable)).not.toBeInTheDocument();
   expect(screen.queryByTestId("page-error")).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: messages.trigger.button.testChannel })).toBeEnabled();
+  await waitFor(() => expect(screen.getByRole("button", { name: messages.trigger.button.testChannel })).toBeEnabled());
 });

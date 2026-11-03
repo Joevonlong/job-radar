@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { EVIDENCE_SOURCES, SENTENCE_ABOUT, SENTENCE_STATUSES, type CheckedSentence } from "./types";
 
-const checkedSentenceSchema = z.object({
+export const checkedSentenceSchema = z.object({
   text: z.string(),
   newParagraph: z.boolean().catch(false),
   about: z.enum(SENTENCE_ABOUT).catch("framing"),

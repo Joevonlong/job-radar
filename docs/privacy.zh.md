@@ -40,7 +40,7 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 
 | 谁 | 发什么 | 何时 | 怎么停止 |
 |---|---|---|---|
-| 你使用的 AI 提供方：OpenAI（`codex` 命令行或 API）、Anthropic（`claude` 命令行或 API）、OpenRouter 及它转发到的上游提供方（API）、DeepSeek 或小米 MiMo（API，**默认关闭**）。API 提供方在 `.env` 里填了 key 之前什么都不发 | **评分：** 画像摘要、技能和年限、语言等级、**目标职位、目标城市、工作方式、远程范围、级别、薪资底线、合同偏好、排除的公司、排除的关键词、你自己的评分标准**，加上岗位描述。**每周建议：** 你标记过的岗位（感兴趣、准备中、已申请、面试中、offer、忽略）**及其状态**，加上你的偏好。**翻译、拆解、信号、陷阱检查：** 只有岗位文本。**申请写作**（默认关闭）：只发送“生成”上方披露框列出的素材：问题及其设置、职位名称和公司、勾选的 JD 要点或一段 JD 原文、画像简介、技能和语言、勾选的经历素材和你的强调说明，在你按**生成**时发送。你的居住城市和签证状态（`me.yaml`）、备注和申请备注不会发送。 | 每一轮；申请写作只在你点击时 | 关掉该提供方（`ai.yaml` 里 `enabled: false`，或"设置 → AI"），不安装它的命令行、不填它的 key；每周建议用 `schedule.yaml` 的 `suggest.enabled` 关掉；`writer.yaml: enabled` 保持 `false` |
+| 你使用的 AI 提供方：OpenAI（`codex` 命令行或 API）、Anthropic（`claude` 命令行或 API）、OpenRouter 及它转发到的上游提供方（API）、DeepSeek 或小米 MiMo（API，**默认关闭**）。API 提供方在 `.env` 里填了 key 之前什么都不发 | **评分：** 画像摘要、技能和年限、语言等级、**目标职位、目标城市、工作方式、远程范围、级别、薪资底线、合同偏好、排除的公司、排除的关键词、你自己的评分标准**，加上岗位描述。**每周建议：** 你标记过的岗位（感兴趣、准备中、已申请、面试中、offer、忽略）**及其状态**，加上你的偏好。**翻译、拆解、信号、陷阱检查：** 只有岗位文本。**申请写作**（默认关闭）：只发送“生成”上方披露框列出的素材：问题及其设置、职位名称和公司、勾选的 JD 要点或一段 JD 原文、画像简介、技能和语言、勾选的经历素材和你的强调说明，在你按**生成**时发送。**优化我自己的稿**发送你贴的文字（加上同样的素材；选“只改语言”时不带素材），**审阅**发送该版本的文字和同样的素材。你的居住城市和签证状态（`me.yaml`）、备注和申请备注不会发送。 | 每一轮；申请写作只在你点击时 | 关掉该提供方（`ai.yaml` 里 `enabled: false`，或"设置 → AI"），不安装它的命令行、不填它的 key；每周建议用 `schedule.yaml` 的 `suggest.enabled` 关掉；`writer.yaml: enabled` 保持 `false` |
 | 招聘网站与 API：Arbeitsagentur、Indeed、LinkedIn、StepStone、XING、JSearch 的 Google Jobs、公司招聘看板、Bright Data、Apify、Monid | 搜索关键词、搜索城市或本国名、关注名单里的公司名，以及来自你的 IP 的请求（LinkedIn session 以你自己登录的账号发出） | 每轮采集；公司查询仅发给支持且已启用的通道 | 在来源页关闭通道；公司查询可在 `search.yaml` 设 `watched_company_queries.enabled: false` 全部关闭，或在 `sources.yaml` 的通道块设 `company_queries: false` 单独关闭 |
 | Arbeitnow（免费招聘板接口） | 只有来自你 IP 地址的请求（它不收关键词和地点） | 每一轮 | 在"来源"页关掉该通道 |
 | Tavily 或 Brave（招聘页发现） | 形如"关键词 jobs 城市"的搜索词 | 每天，且仅在有 key 时 | 不设置 key |
@@ -57,6 +57,7 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
   取决于**你账号里的设置**：在 ChatGPT（设置 → 数据控制）里查看"为所有人改进模型"，在 Claude（设置 → 隐私）里查看"帮助改进 Claude"，不想被用就关掉。
 - **API key** 适用提供方的商业或 API 条款，通常默认不会拿你的数据训练；请阅读你所用提供方的条款。
 - **OpenRouter** 是转发服务：它把每个请求转给所选模型的某个上游提供方，可能是另一家公司、在另一个国家（默认模型的上游可能是 DeepSeek，见下条）。Job Radar 要求它只用不存储、不拿 prompt 训练的上游（`providers.openrouter.routing.data_collection: deny`）。这**不是**零数据保留：上游仍可能把请求保留一段时间。在 `ai.yaml` 里设 `routing.zdr: true` 只允许零数据保留的上游（能用的模型会变少）。你 OpenRouter 账号里的设置同样生效。
+  设置页的“刷新可用模型”按钮（以及 `pnpm models:sync`）只对 OpenRouter 公开的模型列表发一个普通的 `GET`：不带 key，不发你的资料和职位文本，只在你点击或运行命令时才读。
 - **DeepSeek 和小米 MiMo** 由中国境内运营，发给它们的数据受中国法律管辖。它们默认关闭，只有接受这一点时才打开。
 - **经 OpenRouter 到 DeepSeek：** 填了 OpenRouter 的 key 并使用它的默认模型（`deepseek/deepseek-v4.1-flash`）时，即使
   `deepseek` 服务商是关着的，你的数据也可能到达 DeepSeek 自己在中国境内运营的上游。不想这样，可以给 OpenRouter 选一个

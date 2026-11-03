@@ -9,7 +9,7 @@
 import { isMap, isNode, isScalar, LineCounter, type Document } from "yaml";
 import type { ZodError } from "zod";
 
-import { configDocumentValue, parseConfigText, readConfigText } from "./load";
+import { configDocumentValue, parseConfigText, readConfigText, resolveConfigDocument } from "./load";
 import { interestsRawWarnings, interestsWarnings, SLOW_PATTERN_MESSAGE, slowInterestPatterns } from "./interests-lint";
 import { checkAiAgainstCatalog } from "./model-catalog";
 import { documentConfigVersion, currentConfigVersion, CONFIG_VERSION_KEY, withoutConfigVersion } from "./migrations/version";
@@ -158,7 +158,13 @@ export function validateConfigText<N extends ConfigName>(name: N, text: string, 
   }
   if (version === null || (version !== current && version > current)) return { ok: false, issues };
 
-  const parsed = configRegistry[name].schema.safeParse(withoutConfigVersion(configDocumentValue(name, doc)));
+  // models.yaml is an overlay: clashes inside it are reported at the user's own paths, before the merged catalog is judged
+  const resolved = resolveConfigDocument(name, doc);
+  if (resolved.errors.length > 0) {
+    for (const error of resolved.errors.slice(0, MAX_TEXT_ISSUES)) issues.push(issueAt(doc, lineCounter, "schema", error.path, error.message, error.message === "unknown key"));
+    return { ok: false, issues };
+  }
+  const parsed = configRegistry[name].schema.safeParse(withoutConfigVersion(resolved.value));
   if (!parsed.success) {
     for (const issue of parsed.error.issues) {
       for (const where of zodPaths(issue)) {
@@ -171,7 +177,7 @@ export function validateConfigText<N extends ConfigName>(name: N, text: string, 
   if (issues.length > 0) return { ok: false, issues };
 
   const value = parsed.data as ConfigValue<N>;
-  const warnings: TextIssue[] = [];
+  const warnings: TextIssue[] = resolved.warnings.map((warning) => issueAt(doc, lineCounter, "catalog", warning.path, warning.message));
   const readOther = options.readOther ?? defaultReadOther;
 
   // cross-file: ai.yaml's models against the catalog, and (saving the catalog) the models ai.yaml uses against the new catalog

@@ -3263,7 +3263,8 @@
           "test_ai": "AI test",
           "test_telegram": "Telegram test",
           "salary_lookup": "Salary lookup",
-          "writer_job": "Application answer"
+          "writer_job": "Application answer",
+          "models_sync": "Model list refresh"
         },
         "status": {
           "pending": "Queued",
@@ -3385,6 +3386,62 @@
       "tableLabel": "Model catalog of {provider}",
       "subscriptionEquivalent": "Subscription · equiv. ${input} / ${output}"
     },
+    "modelSync": {
+      "title": "Models offered by {provider}",
+      "hint": "Ask {provider} which models it offers, with their prices, and add the ones you want to your own list ({file}). The shipped catalog stays as it is and keeps following product updates. The list is only read when you click.",
+      "filterLabel": "Filter by name",
+      "filterPlaceholder": "e.g. claude, flash",
+      "refresh": "Refresh available models",
+      "pending": "Waiting for the AI worker to ask {provider}…",
+      "running": "Asking {provider} for its model list…",
+      "failed": "Could not read the model list ({kind}). Nothing was changed.",
+      "summary": "{listed} models listed, {matched} match.",
+      "truncated": "Only the first {max} are shown; narrow the filter to see the others.",
+      "gone": "No longer listed by {provider} (still in your catalog, not removed): {ids}",
+      "tableLabel": "Models offered by {provider}",
+      "col": {
+        "pick": "Select",
+        "model": "Model",
+        "price": "Price ($/1M tokens, in / out)",
+        "context": "Context",
+        "json": "JSON mode",
+        "status": "Status"
+      },
+      "json": {
+        "yes": "Supported",
+        "no": "Not supported",
+        "unverified": "Not stated"
+      },
+      "status": {
+        "inCatalog": "In your catalog",
+        "added": "Added",
+        "canAdd": "Can be added",
+        "unverified": "Unverified",
+        "notChat": "Not a text chat model",
+        "noPrice": "No usable price",
+        "noJson": "No JSON mode",
+        "retired": "Retired"
+      },
+      "priceWas": "catalog has ${input} / ${output}",
+      "retires": "Retires {date}",
+      "pickModel": "Select {model}",
+      "showMore": "Show {count} more",
+      "add": "Add to my list ({count})",
+      "addHint": "Models whose JSON mode the provider does not state are only added with pnpm models:sync --allow-unverified.",
+      "added": "Added {count, plural, one {# model} other {# models}} to {file}. They are in the model dropdown now.",
+      "addError": {
+        "invalidPayload": "That selection is not valid. Refresh the list and try again.",
+        "requestUnavailable": "The refreshed list is gone. Refresh it and try again.",
+        "notAddable": "One of the selected models cannot be added (already in the catalog, or no JSON mode). Refresh the list and try again.",
+        "catalogInvalid": "The catalog would not be valid with these models, so nothing was written. Check your models.yaml under Settings → Advanced.",
+        "frozen": "Configuration is frozen during an upgrade. Try again in a moment.",
+        "busy": "Another process is writing the configuration. Try again in a moment.",
+        "stale": "The file changed while saving. Refresh the list and try again.",
+        "protected": "That change touches a protected setting.",
+        "databaseUnavailable": "The database is not available, so nothing was written.",
+        "transportFailed": "Could not reach the server. Check your connection and try again."
+      }
+    },
     "registryLink": "Company boards and source health are in the Source registry →",
     "workflow": {
       "title": "Application workflow",
@@ -3476,7 +3533,9 @@
       },
       "override": {
         "text": "This is a product default file: saving writes a whole-file override into the user directory, and later product updates of this file will not apply. \"Restore default\" goes back to the product default at any time.",
-        "confirm": "I understand, create the override"
+        "confirm": "I understand, create the override",
+        "textOverlay": "models.yaml is laid over the product's model catalog, model by model. This editor starts from the whole catalog: saving writes a full copy, and every model in it replaces the product's by id, so later product updates to their prices and limits no longer apply. To keep following updates, delete the models you did not change and keep only your own additions (or add models with the refresh button on the AI tab). \"Restore default\" goes back to the product catalog at any time.",
+        "confirmOverlay": "I understand, save a full copy"
       },
       "preview": {
         "title": "Preview and save",
@@ -7048,7 +7107,8 @@
       "system__reconcile": "Reconcile activity log",
       "system__telegram_callback": "Telegram button action",
       "system__reminder": "Daily reminder",
-      "request__writer_job": "Write application answer"
+      "request__writer_job": "Write application answer",
+      "request__models_sync": "Refresh model list"
     },
     "event": {
       "item__ok": "Item completed",
@@ -7151,6 +7211,8 @@
       "cycleBusy": "A run was already queued or running",
       "configUnavailable": "Configuration could not be read",
       "no_material": "No material chosen",
+      "too_long": "Text longer than allowed",
+      "busy": "Another request for this question is running",
       "output_truncated": "Answer cut off at the output limit",
       "expired": "Request expired",
       "not_recorded": "Result not recorded",
@@ -7374,7 +7436,8 @@
       "test_ai": "Test AI",
       "test_telegram": "Test Telegram",
       "salary_lookup": "Look up salary",
-      "writer_job": "Write application answer"
+      "writer_job": "Write application answer",
+      "models_sync": "Refresh model list"
     },
     "level": {
       "all": "All levels",
@@ -7505,7 +7568,8 @@
         "jd_excerpt": "JD excerpt",
         "profile": "profile summary, skills, languages",
         "stories": "chosen stories",
-        "emphasis": "your emphasis note"
+        "emphasis": "your emphasis note",
+        "draft": "your text or the answer under review"
       },
       "running": "Writing…",
       "requesting": "Queued…",
@@ -7532,7 +7596,9 @@
         "failed": "Writing failed. Please try again.",
         "invalid_payload": "The request was not valid.",
         "handler_error": "Something went wrong handling the request. Try again.",
-        "no_handler": "No AI worker handles this request yet. Check that the ai-worker runs."
+        "no_handler": "No AI worker handles this request yet. Check that the ai-worker runs.",
+        "too_long": "The text is longer than the limit in writer.yaml (draft_max_chars).",
+        "busy": "Another request for this question is still running (maybe from another tab or device). Wait for it to finish, then try again."
       },
       "versionsLabel": "Versions",
       "manual": "Edited by you",
@@ -7634,6 +7700,61 @@
       "discard": "Discard",
       "saved": "Saved as a version",
       "oldCompany": "This text still names {companies}, the company of the answer you started from. Check it before you use it."
+    },
+    "polish": {
+      "title": "Improve my own draft",
+      "hint": "Paste what you wrote, in any language. The result is a new version in the answer language of this question; every sentence is checked against your text (and, for \"fit to the job\", the material you chose).",
+      "textLabel": "Your draft",
+      "placeholder": "Paste or write your answer here…",
+      "tooLong": "Too long: at most {max} characters.",
+      "optionLabel": "How to improve it",
+      "option": {
+        "align_to_job": "Fit it to the job",
+        "language_only": "Language only"
+      },
+      "explain": {
+        "align_to_job": "Keeps the facts of your draft and shapes it to the question and the job. It may add a fact from the profile, stories or emphasis note you chose when that backs a point you make.",
+        "language_only": "Only translates and polishes the wording. No fact is added, removed or changed, and none of your chosen material is sent."
+      },
+      "run": "Improve",
+      "versionLabel": {
+        "align_to_job": "Improved draft",
+        "language_only": "Language only"
+      }
+    },
+    "coach": {
+      "title": "Coach review",
+      "hint": "The AI reads this version against the question and the job, rates it and suggests better sentences. The score is its judgement, not a measurement.",
+      "run": "Review",
+      "again": "Review again",
+      "score": "{score} / 100",
+      "aiJudgement": "AI judgement",
+      "dimensionsLabel": "Verdict per dimension",
+      "status": {
+        "good": "Good",
+        "improve": "Improve",
+        "missing": "Missing"
+      },
+      "dimension": {
+        "answers_question": "Answers the question",
+        "concrete_evidence": "Concrete evidence",
+        "company_specific": "Specific to this company",
+        "covers_must_haves": "Covers the must-haves",
+        "length": "Length",
+        "language_tone": "Language and tone",
+        "no_overclaim": "No overclaiming"
+      },
+      "suggestionsLabel": "Suggestions",
+      "sentenceN": "Sentence {number}:",
+      "adopt": "Use this sentence",
+      "adopted": "Saved as a new version",
+      "unverifiedNote": "This suggestion names no quote from your material, so it is not checked. Check that it is true before you use it.",
+      "noSuggestions": "No sentence suggestions.",
+      "rewrite": "Rewrite by these suggestions",
+      "rewriteHint": "Asks the AI for one new version that applies the suggestions; it is checked like a draft. Your current version stays.",
+      "rewriteLabel": "Coach rewrite",
+      "droppedDimensions": "Left out: {count, plural, one {# rating of a dimension that is not configured.} other {# ratings of dimensions that are not configured.}}",
+      "droppedSuggestions": "Left out: {count, plural, one {# suggestion for a sentence that does not exist.} other {# suggestions for sentences that do not exist.}}"
     }
   }
 }

@@ -340,6 +340,74 @@ def test_proxy_credentials_are_scrubbed_from_reported_errors_and_warnings(monkey
     assert len(partial.json()["warnings"]) == 2
 
 
+def test_url_query_strings_are_removed_from_returned_errors_and_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
+    url = "https://de.indeed.com/jobs?q=Secret+Keyword&l=Hidden+City&start=10"
+    patch_scrape(monkeypatch, errors={"indeed": f"500 Server Error for url: {url}"})
+    failed = client.post("/search", json=BASE)
+    assert failed.status_code == 502
+    assert "Secret" not in failed.text and "Hidden" not in failed.text
+    assert failed.json()["message"] == "500 Server Error for url: https://de.indeed.com/jobs?<query>"
+
+    patch_scrape(
+        monkeypatch,
+        frame([{"id": "x", "title": "T", "company": "C"}]),
+        errors={"indeed": f"page 2 failed: {url}#frag"},
+        warnings={"indeed": ["retrying 'http://x.example/a/b?keywords=Secret' now"]},
+    )
+    partial = client.post("/search", json=BASE)
+    assert partial.status_code == 200
+    assert "Secret" not in partial.text and "Hidden" not in partial.text
+    assert partial.json()["warnings"] == ["page 2 failed: https://de.indeed.com/jobs?<query>", "retrying 'http://x.example/a/b?<query>' now"]
+
+
+def test_a_url_without_a_query_string_and_plain_questions_are_left_alone() -> None:
+    assert sidecar.scrub("see https://a.example/path/x now", []) == "see https://a.example/path/x now"
+    assert sidecar.scrub("Why? because", []) == "Why? because"
+
+
+@pytest.mark.parametrize("word", ["blocked", "captcha", "429", "forbidden"])
+@pytest.mark.parametrize("shape", ["absolute", "relative"])
+def test_a_keyword_in_the_request_does_not_change_the_error_class(monkeypatch: pytest.MonkeyPatch, word: str, shape: str) -> None:
+    # the upstream error carries the search URL, so the user's own words are inside the text that gets classified;
+    # urllib3 quotes the request path without a scheme, and a multi-word search term is "+"-encoded there
+    path = f"/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={word}+engineer&location={word}"
+    url = f"https://www.linkedin.com{path}" if shape == "absolute" else path
+    patch_scrape(monkeypatch, raises=RuntimeError(f"HTTPSConnectionPool(host='www.linkedin.com', port=443): Max retries exceeded with url: {url} (Caused by ReadTimeoutError)"))
+    response = client.post("/search", json={**BASE, "site": "linkedin", "search_term": f"{word} engineer", "location": word})
+    assert response.status_code == 502
+    assert response.json()["code"] == "upstream_error"
+    message = response.json()["message"]
+    assert "?<query>" in message and word not in message.split("?", 1)[1] and "engineer" not in message.split("?", 1)[1]
+
+
+def test_bare_query_strings_are_removed_and_plain_questions_are_left_alone() -> None:
+    text = "Max retries exceeded with url: /jobs-guest/x/search?keywords=Secret+Word&location=Hidden%20City (Caused by Y)"
+    assert sidecar.scrub(text, []) == "Max retries exceeded with url: /jobs-guest/x/search?<query> (Caused by Y)"
+    assert sidecar.strip_queries("see /a?b=1&c=2.") == "see /a?<query>"
+    assert sidecar.scrub("Why? because. Done?! no=yes", []) == "Why? because. Done?! no=yes"
+
+
+def test_a_keyword_quoted_without_a_url_does_not_change_the_error_class(monkeypatch: pytest.MonkeyPatch) -> None:
+    patch_scrape(monkeypatch, errors={"indeed": "No jobs found for 'captcha' in Berlin: parse error"})
+    response = client.post("/search", json={**BASE, "search_term": "captcha"})
+    assert response.status_code == 502
+    assert response.json()["code"] == "upstream_error"
+
+
+@pytest.mark.parametrize(
+    ("message", "code"),
+    [
+        ("403 Client Error: Forbidden for url: https://x.example/search?q=engineer", "blocked"),
+        ("429 Too Many Requests for url: https://x.example/search?q=engineer", "rate_limited"),
+        ("Please solve the captcha https://x.example/c?next=/jobs", "blocked"),
+    ],
+)
+def test_real_blocking_and_rate_limit_signals_outside_the_query_still_classify(monkeypatch: pytest.MonkeyPatch, message: str, code: str) -> None:
+    patch_scrape(monkeypatch, errors={"indeed": message})
+    response = client.post("/search", json=BASE)
+    assert response.json()["code"] == code
+
+
 # ---------------------------------------------------------------- contract with the real jobspy
 
 

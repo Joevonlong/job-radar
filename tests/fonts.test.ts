@@ -80,6 +80,17 @@ describe("self-hosted fonts", () => {
     expect([...families].sort()).toEqual(constants.sort());
   });
 
+  it("the CSS variables the font stacks use are the ones the next/font/local calls declare", () => {
+    const declared = [...layout.matchAll(/variable:\s*"(--font-[\w-]+)"/g)].map((m) => m[1] ?? "").sort();
+    expect(declared).toEqual(["--font-archivo", "--font-archivo-black", "--font-plex-mono"]);
+    // Noto Sans SC is not a next/font call: globals.css defines its variable itself
+    const used = new Set([...globals.matchAll(/var\((--font-[\w-]+)\)/g)].map((m) => m[1] ?? ""));
+    used.delete("--font-noto-sans-sc");
+    for (const name of ["--font-display", "--font-sans", "--font-mono"]) used.delete(name);
+    expect([...used].sort()).toEqual(declared);
+    expect(globals).toMatch(/--font-noto-sans-sc:\s*"Noto Sans SC Variable"/);
+  });
+
   it("the font packages are pinned to exact versions and their licences are in licenses/fonts", () => {
     const licences = readdirSync(path.join(root, "licenses/fonts"));
     for (const name of FONT_PACKAGES) {
@@ -111,7 +122,8 @@ describe("self-hosted fonts", () => {
     }
     for (const { face, google } of [...Object.values(FALLBACKS), { face: "Noto Sans SC Fallback", google: "Noto Sans SC" }]) {
       const rule = faceDescriptors(face);
-      expect(rule.src, face).toBe('local("Arial")');
+      // Liberation Sans has Arial's metrics, so the same overrides fit the Linux stand-in
+      expect(rule.src, face).toBe('local("Arial"), local("Liberation Sans")');
       const expected = getFallbackFontOverrideMetrics(google);
       expect(percent(rule["ascent-override"]), face).toBe(percent(expected.ascentOverride));
       expect(percent(rule["descent-override"]), face).toBe(percent(expected.descentOverride));

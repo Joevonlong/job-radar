@@ -213,4 +213,13 @@ describe("company filter on Today and the view trends", () => {
     expect(counts.get("sap")).toEqual([0, 7]);
     expect(counts.get("nobody")).toEqual([0, 0]);
   });
+
+  it("a view's trend ignores any date condition on the filters it is given", async () => {
+    const base = viewTrendInput(view({ company: ["SAP"] }), { cityGroups: null, hideGermanLevels: [], highValue: policy, companyIds: await companyIds(["SAP"]) });
+    // dates that would match none of the jobs if they were applied: the chart window is the last days, not the view's dates
+    const dated = { ...base, id: "dated", filters: { ...base.filters, from: "2020-01-01", to: "2020-01-02", within: { kind: "days", days: 1 }, dateField: "posted" } } satisfies typeof base;
+    const counts = await getViewDailyCounts(getDb(), { views: [base, dated], timezone: TZ, now: NOW, days: 2 });
+    expect(counts.get("dated")).toEqual(counts.get("sap"));
+    expect(counts.get("dated")).toEqual([0, 7]);
+  });
 });
