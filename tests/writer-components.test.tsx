@@ -4,6 +4,9 @@ import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AnswerPanel } from "@/components/writer/answer-panel";
+import { writerEntryHref } from "@/lib/writer/entry";
+import zh from "../messages/zh.json";
 import { BaseEditor } from "@/components/writer/base-editor";
 import { CoachReview } from "@/components/writer/coach-review";
 import { PolishBox } from "@/components/writer/polish-box";
@@ -328,5 +331,43 @@ describe("CoachReview", () => {
     rerender(wrap(<CoachReview {...props(reviewed({ ...coach, suggestions: [] }))} />));
     expect(screen.queryByTestId("writer-coach-rewrite")).toBeNull();
     expect(screen.getByTestId("writer-coach-no-suggestions")).toBeVisible();
+  });
+});
+
+describe("the workbench entry, the evidence notice and the quota pause", () => {
+  it("the job page entry leads to the workbench when the writer is on or answers exist, else to the setting that turns it on", () => {
+    expect(writerEntryHref({ jobId: 7, enabled: true, questions: 0 })).toBe("/jobs/7/apply");
+    expect(writerEntryHref({ jobId: 7, enabled: false, questions: 2 })).toBe("/jobs/7/apply");
+    expect(writerEntryHref({ jobId: 7, enabled: false, questions: 0 })).toBe("/settings?tab=workflow");
+  });
+
+  const panelView = (...questions: WorkbenchQuestion[]): WorkbenchView =>
+    ({ ...view(questions), providers: [], jdPoints: [], stories: [], company: null, profile: { available: false, summary: "", skills: [] }, kinds: { question: { unit: "words", value: 150, variants: 3 }, motivation: { unit: "words", value: 250, variants: 2 } }, limits: { maxQuestions: 10, textMaxChars: 3000, emphasisMaxChars: 500, draftMaxChars: 8000, reuseMinWords: 3 } }) as unknown as WorkbenchView;
+  const panel = (q: WorkbenchQuestion, locale: "en" | "zh" = "en") => (
+    <NextIntlClientProvider locale={locale} messages={locale === "en" ? en : zh}>
+      <AnswerPanel view={panelView(q)} question={q} base={null} onBaseDone={() => {}} enabled timeZone="UTC" />
+    </NextIntlClientProvider>
+  );
+
+  it.each([["en", "has evidence"], ["zh", "不等于内容属实"]] as const)("every shown version says that evidence is not verification, and promises nothing (%s)", (locale, phrase) => {
+    const q = question(1, "Why us?", "I built the service.");
+    render(panel(q, locale));
+    const note = screen.getByTestId("writer-evidence-note");
+    expect(note).toHaveTextContent(locale === "en" ? en.writer.answer.evidenceNote : zh.writer.answer.evidenceNote);
+    expect(note.textContent).toContain(phrase.startsWith("has") ? "not that the claim is true" : phrase);
+    expect(note.textContent).not.toMatch(/guarantee|never invent|保证|绝不编造/i);
+  });
+
+  it.each(["en", "zh"] as const)("a request held back by the usage cap shows the same notice as the breakdown, with the resume time (%s)", (locale) => {
+    const q = { ...question(1, "Why us?", null), initialRequest: { state: "failed", error: "quota_guard", detail: null, resumeAt: "2026-01-02T15:30:00.000Z" } } as unknown as WorkbenchQuestion;
+    render(panel(q, locale));
+    const messages = locale === "en" ? en : zh;
+    const text = screen.getByTestId("writer-error").textContent ?? "";
+    expect(screen.getByTestId("writer-error")).toHaveAttribute("data-error", "quota_guard");
+    // the breakdown's message template, filled the same way: only the wording that carries the time may differ in value, never in kind
+    const breakdown = messages.jdBreakdown.error.quota_guard;
+    expect(messages.writer.answer.error.quota_guard).toBe(breakdown);
+    expect(text).not.toContain("{");
+    expect(text).toMatch(locale === "en" ? /Available again after/ : /后可用/);
   });
 });
