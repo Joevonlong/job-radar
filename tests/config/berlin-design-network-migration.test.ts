@@ -38,8 +38,8 @@ describe("sources.yaml 5 -> 6", () => {
     doc.deleteIn(["sources", "berlin_design_network"]);
     doc.set("config_version", 5);
     const { text, steps } = migrate(doc.toString(SERIALIZE));
-    expect(steps).toBe(2); // 6 -> 7 (Berlin Startup Jobs) follows
-    expect(text).toMatch(/^config_version: 7$/m);
+    expect(steps).toBe(3); // 6 -> 7 (Berlin Startup Jobs) and 7 -> 8 (Apify exact window) follow
+    expect(text).toMatch(/^config_version: 8$/m);
     const shipped = parse(fs.readFileSync(path.join(FIXTURE_DEFAULTS_DIR, "sources.yaml"), "utf8")) as Record<string, unknown>;
     expect(parse(text)).toEqual(shipped);
     expect(validateConfigValue("channels", parse(text), "sources.yaml").sources.berlin_design_network).toMatchObject({

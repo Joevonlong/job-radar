@@ -203,7 +203,7 @@ describe("sources.yaml", () => {
   it.runIf(legacyText("channels") !== null)("renames the remote-location keys, keeps every value", () => {
     const original = legacyValue("channels");
     const migrated = migrateText("channels", legacyText("channels") ?? "");
-    expect(migrated.steps).toBe(6);
+    expect(migrated.steps).toBe(7);
     const back = renameBack(parse(migrated.text) as Json, ["linkedin.brightdata.remote_locations", "linkedin.apify.remote_locations", "linkedin.session.site.remote_locations", "jobspy.remote_location"], [
       ["home_country", "eu_hire_in_de"],
       ["region", "eu_any"],
@@ -232,6 +232,10 @@ describe("sources.yaml", () => {
     expect(linkedin.monid).toMatchObject({ enabled: true, monthly_budget_usd: Math.min(5, Number(back.paid_total_monthly_budget_usd)) });
     delete linkedin.monid;
     if (Array.isArray(linkedin.cascade)) linkedin.cascade = linkedin.cascade.filter((id: unknown) => id !== "linkedin-monid");
+    // the last step asks the unedited Apify template for the exact window
+    const apify = linkedin.apify as Json;
+    expect(apify.input_template).toMatchObject({ urlParam: [{ key: "f_TPR", value: "r{posted_within_seconds}" }] });
+    apify.input_template = ((original.linkedin as Json).apify as Json).input_template;
     expect(back).toEqual(original);
     expect(migrateText("channels", migrated.text).steps).toBe(0);
   });

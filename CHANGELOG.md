@@ -9,8 +9,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 - **Gmail replies (optional, off by default).** Reads one Gmail label read-only with local rules and suggests status changes on `/pipeline`, each confirmed by you and undoable. No AI reads the mails and no mail content leaves the machine. See `docs/gmail-replies.md`. Adds the table `email_replies`.
 
+### Changed
+
+- **Apify LinkedIn searches now request the query's exact window** (`f_TPR=r<seconds>`, for example `r36000` for 10 hours) instead of the actor's 24-hour, week or month filter, so fewer billed records fall outside the window. Results are still not newest first, because the actor ignores `sortBy=DD`, so catch-up stays off for this channel.
+
 ### Upgrade notes
 
+- **`sources.yaml` moves to `config_version: 8`.** The migration rewrites `linkedin.apify.input_template` only when it is the old shipped template of the default actor; an edited template, or one for another actor, keeps working as before. In `remote_input`, a `{key, value}` list now merges by `key` with the template's list instead of replacing it. **Rollback:** an older version refuses a `config_version: 8` file, which exists only after `pnpm config:migrate --write`. Restore the backup from `data/config/.backup/`, or set the template back to `datePosted: "{date_posted}"` without `urlParam` and set `config_version: 7`.
 - **Berlin Startup Jobs now starts by itself on existing German installs.** The new Berlin Startup Jobs channel is on by
   default for installs whose market is Germany, so the next cycle after upgrading starts reading it. To turn it off, set
   `sources.berlinstartupjobs.enabled: false` in `data/config/sources.yaml`.

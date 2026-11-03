@@ -4,6 +4,7 @@ import type { SearchQuery } from "../../types";
 import { sessionSettingsSchema, type SessionSettings } from "@/lib/config/schemas/channels";
 import { remoteLocationFor } from "@/lib/market/remote-scope";
 import { keywordStrings } from "../brightdata/contract";
+import { postedWithinSeconds } from "../date-window";
 import { searchKind } from "../../query";
 
 /**
@@ -29,8 +30,6 @@ export function readSessionSettings(extra: unknown): SessionSettings {
 
 /** LinkedIn's search pages hold this many results; `start=` moves by it. Not tunable: it is LinkedIn's page size. */
 export const SEARCH_PAGE_SIZE = 25;
-
-const SECONDS_PER_HOUR = 3600;
 
 /** `https://www.linkedin.com/jobs/view/<id>/`: the id every LinkedIn channel dedupes on. */
 export function jobUrl(baseUrl: string, jobId: string): string {
@@ -60,7 +59,7 @@ export function searchUrl(query: SearchQuery, settings: SessionSettings, keyword
   const url = new URL("/jobs/search/", settings.site.base_url);
   url.searchParams.set("keywords", keywords);
   url.searchParams.set("location", locationOf(query, settings, market));
-  url.searchParams.set("f_TPR", `r${Math.max(1, Math.round(query.windowHours * SECONDS_PER_HOUR))}`);
+  url.searchParams.set("f_TPR", `r${postedWithinSeconds(query.windowHours)}`);
   url.searchParams.set("sortBy", "DD");
   if (searchKind(query) === "remote") url.searchParams.set("f_WT", "2");
   if (start > 0) url.searchParams.set("start", String(start));
