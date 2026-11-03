@@ -467,6 +467,8 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 用真 Docker 和每个版本自己的 deploy、install、uninstall 脚本测升级迁移，ai-worker 跑在模拟的 systemd 下（`tests/transition/run.sh`）。`changes` 设了 `transition` 时运行（改到部署相关文件或工具链的 PR、每次推送到 `main`、手动运行）。矩阵生成 `upgrade-transition (A)` 和 `upgrade-transition (B)`，各用独立 runner；`fail-fast: false` 保证一个失败不会取消另一个。没有 service 容器：脚本的每个 compose 项目自带数据库。每条腿保留 120 分钟任务上限、从启动算起的 65 分钟截止时间和 66 分钟等待上限。准备和启动上限合计 25 分钟，加上 1 分钟报告余量、5 分钟清理（含 240 秒宽限期）、一次 5 分钟上传，保守合计 101 分钟，留出 19 分钟余量。
 
+部署步骤若构建输出显示历史提交取 Google Fonts 失败（`internal/font/google`），会重试（最多两次，间隔递增，每次重试都写进日志）；其他失败立即报错。
+
 #### Check out the repository
 
 `actions/checkout`，`fetch-depth: 0`：场景要检出更早的版本。

@@ -764,6 +764,8 @@ No service container: each compose project of the script runs its own database. 
 reporting, 5 minutes for cleanup (including its 240-second grace), and one 5-minute upload gives a conservative
 101-minute budget per leg, leaving 19 minutes before the job limit.
 
+A deploy step of a historical commit is run again (at most twice, with a growing pause, each retry logged) when its build output shows a failed Google Fonts fetch (`internal/font/google`); any other failure fails at once.
+
 #### Check out the repository
 
 `actions/checkout` with `fetch-depth: 0`: the scenarios check out the earlier versions.

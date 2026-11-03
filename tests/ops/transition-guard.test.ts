@@ -232,3 +232,69 @@ describe("clean-env.sh and run.sh", () => {
     for (const name of Object.keys(HOSTILE)) expect(seen, name).not.toContain(name);
   });
 });
+
+describe("step-retry.sh", () => {
+  // A fake step that fails with <output> on its first <fails> calls, then succeeds; prints the number of calls and the
+  // outcome of `logged`.
+  function runStep(opts: {
+    fails: number;
+    output: string;
+    retry?: boolean;
+    want?: string;
+    max?: number;
+  }) {
+    const root = fs.mkdtempSync(path.join(tmp, "retry-"));
+    const counter = path.join(root, "calls");
+    const step = path.join(root, "step.sh");
+    fs.writeFileSync(path.join(root, "out"), `${opts.output}\n`);
+    fs.writeFileSync(
+      step,
+      `#!/usr/bin/env bash\nn=$(( $(cat '${counter}' 2>/dev/null || echo 0) + 1 )); echo $n > '${counter}'\n` +
+        `if (( n <= ${opts.fails} )); then cat '${path.join(root, "out")}'; exit 1; fi\necho ok\n`,
+      { mode: 0o755 },
+    );
+    const script =
+      `die() { echo "DIE: $*" >&2; exit 1; }; root='${root}'; FONT_RETRY_MAX=${opts.max ?? 2}; FONT_RETRY_BACKOFF=0\n` +
+      `source '${path.join(dir, "step-retry.sh")}'\n` +
+      `${opts.retry === false ? "" : "RETRY_FONT_FETCH=1 "}logged s '${opts.want ?? "0"}' '${step}'\n`;
+    const r = spawnSync("/bin/bash", ["-c", script], { encoding: "utf8" });
+    const calls = Number(
+      fs.existsSync(counter) ? fs.readFileSync(counter, "utf8") : 0,
+    );
+    return { ...r, calls };
+  }
+  const FONT =
+    "Module not found: Can't resolve '[next]/internal/font/google/archivo_abc.module.css'";
+
+  it("retries a font fetch failure and passes", () => {
+    const r = runStep({ fails: 2, output: FONT });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.calls).toBe(3);
+    expect(r.stderr).toContain("RETRY 1/2");
+    expect(r.stderr).toContain("RETRY 2/2");
+    expect(r.stderr).toContain("passed on attempt 3");
+  });
+
+  it("gives up after the limit", () => {
+    const r = runStep({ fails: 99, output: FONT, max: 2 });
+    expect(r.status).toBe(1);
+    expect(r.calls).toBe(3);
+    expect(r.stderr).toContain("DIE: step 1 (s): exit 1");
+  });
+
+  it("does not retry another failure", () => {
+    const r = runStep({ fails: 1, output: "docker: no space left on device" });
+    expect(r.status).toBe(1);
+    expect(r.calls).toBe(1);
+    expect(r.stderr).not.toContain("RETRY");
+  });
+
+  it("does not retry a step that did not ask for it, nor a wanted failure", () => {
+    const off = runStep({ fails: 1, output: FONT, retry: false });
+    expect(off.status).toBe(1);
+    expect(off.calls).toBe(1);
+    const wanted = runStep({ fails: 1, output: FONT, want: "1" });
+    expect(wanted.status, wanted.stderr).toBe(0);
+    expect(wanted.calls).toBe(1);
+  });
+});
