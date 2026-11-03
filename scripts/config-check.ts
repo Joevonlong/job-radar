@@ -12,6 +12,8 @@
  *   - the deal-breakers of preferences.yaml must keep to the limits of pipeline.yaml (a language gate in a market without a
  *     local-language step is only a warning: it does nothing).
  *
+ *   - the commented title_guard block of the shipped pipeline.yaml must equal the schema's defaults (a warning when the
+ *     same-title limit is below the compatible limit or above the related-company limit);
  *   - the identity of the shipped defaults directory is printed (12 characters); a directory that cannot be identified (a
  *     symbolic link, an unsupported file name) is a failure.
  *
@@ -51,7 +53,9 @@ import {
   type ConfigName,
   type ConfigValue,
 } from "../src/lib/config";
+import { checkCommentedDefaults, TITLE_GUARD_BLOCK } from "../src/lib/config/commented-defaults";
 import { effectiveConfigEntries } from "../src/lib/config/effective-report";
+import { titleGuardSchema } from "../src/lib/config/schemas/pipeline";
 import { shippedConfigId, shortShippedConfigId } from "../src/lib/config/shipped-id";
 import { dealBreakerLimitProblems, slowPatternProblems } from "../src/lib/filter/deal-breakers";
 import { vmTimeBox } from "../src/lib/filter/time-box";
@@ -241,6 +245,25 @@ report("preferences.yaml market", () => {
       ghostViolations = compileGhostRules(loaded).prefilterViolations;
     });
     for (const where of ghostViolations) console.log(`    ! ${where}: has no word of ghost.prefilter, so it is skipped on a text without one (add a prefilter word)`);
+  }
+}
+
+// The commented title_guard block of the shipped pipeline.yaml says what applies while it stays commented out: it must not drift.
+{
+  const file = getDefaultConfigPath("pipeline");
+  if (file !== null && fs.existsSync(file)) {
+    report("title_guard commented defaults", () => {
+      const checked = checkCommentedDefaults(fs.readFileSync(file, "utf8"), TITLE_GUARD_BLOCK, "title_guard", titleGuardSchema);
+      if (!checked.ok) throw new Error(`title_guard commented defaults: ${checked.reason} (${rel(file)}, line ${checked.line})`);
+    });
+  }
+  try {
+    const { dedupe } = loadPipeline();
+    const sameMax = dedupe.title_guard.same_title_max_distance;
+    if (sameMax < dedupe.simhash_max_distance) console.log(`! dedupe.title_guard.same_title_max_distance (${sameMax}) is below dedupe.simhash_max_distance (${dedupe.simhash_max_distance}): titles that only look alike would merge more easily than equal ones`);
+    if (sameMax > dedupe.cross_company_simhash_max_distance) console.log(`! dedupe.title_guard.same_title_max_distance (${sameMax}) is above dedupe.cross_company_simhash_max_distance (${dedupe.cross_company_simhash_max_distance}): the same company would be looser than related company names`);
+  } catch {
+    // reported by the lines above
   }
 }
 

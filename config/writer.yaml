@@ -102,6 +102,9 @@ reuse:
   max_candidates: 3
   # Fewest words a new question needs before earlier answers are looked up (each Chinese, Japanese or Korean character is a word)
   min_question_words: 3
+  # Words left out when two questions are compared, because nearly every question has them. Replaces the shipped list when set.
+  # Shipped: common English, German and Chinese question words, so "greatest strength" and "greatest weakness" do not match.
+  # stopwords: [what, is, your]
 
 # The evidence check of every sentence (in code, no AI call). It flags names and figures to check; it does not prove the
 # AI made nothing up.

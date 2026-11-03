@@ -186,7 +186,8 @@ new question, the form offers it ("You answered something like this before"), wi
 questions share. **Start from this answer** adds the new question and puts the earlier answer into an editor on the
 right; nothing is stored until you press **Save as first version** (or **Discard**).
 
-- Similarity is the share of words the two questions have in common (accents, case and punctuation ignored), at least
+- Similarity is the share of words the two questions have in common (accents, case and punctuation ignored, and without
+  the two companies' names and the words of `reuse.stopwords` that nearly every question has), at least
   `reuse.min_similarity`; at most `reuse.max_candidates` answers are offered, the most similar first. Words are compared
   as written, so **the same question in another language is not matched**. Chinese is compared character by character,
   so a short Chinese question counts as several words. Nothing is looked up for a question with fewer than
@@ -196,7 +197,8 @@ right; nothing is stored until you press **Save as first version** (or **Discard
 - If the text still names the company of the answer you started from, a warning appears in the editor and under the
   saved version (and stays after a reload). The check looks for the company's name as a whole word, and also for the name
   without its legal form ("Acme" for "Acme GmbH"), using the same legal forms as the company matching of the pipeline
-  (`company.legal_suffixes` and the market packs). The warning names the company as it is stored. It does not know
+  (`company.legal_suffixes` and the market packs). A name that reads like an ordinary word is matched more strictly: up to three letters only
+  exactly as stored and not as the first word of a sentence (It), a longer plain word only with a capital (Target). The warning names the company as it is stored. It does not know
   other names tied to that job (a product, a team, a person), so read the text through.
 - The warning is worked out from the earlier answer a version was started from. Once that version is removed (older
   versions are pruned past `max_versions_per_question`), the warning for the text started from it can disappear.
@@ -253,6 +255,7 @@ The removal only reaches the request row:
 | `coach.max_suggestions` | `8` | Most sentence suggestions one review returns |
 | `reuse.min_similarity` | `0.55` | Lowest share of words a new question must have in common with an earlier one for that answer to be offered |
 | `reuse.max_candidates` | `3` | Most earlier answers offered for one new question |
+| `reuse.stopwords` | common English, German, Chinese question words | Words left out when two questions are compared; setting it replaces the list |
 | `reuse.min_question_words` | `3` | Fewest words a new question needs before earlier answers are looked up (each Chinese character is a word) |
 | `evidence.quote_max_chars` | `160` | Longest quote the AI may give |
 | `evidence.min_quote_chars` | `4` | Shortest quote that counts as evidence, unless it is exactly a known name |

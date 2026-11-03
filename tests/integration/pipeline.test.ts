@@ -22,12 +22,14 @@ import { createHttpClient } from "@/lib/channels/http";
 import { buildSalary } from "@/lib/pipeline/salary";
 import { refreshStoredSalaries, runMaintenance, runPipeline, salaryFingerprint, type MaintenanceResult, type PipelineResult } from "@/lib/pipeline";
 import { SALARY_FINGERPRINT_KEY } from "@/lib/pipeline/refresh-salary";
+import { findMatchingJob } from "@/lib/pipeline/dedupe";
+import { normalizeDraft } from "@/lib/pipeline/normalize";
 import { hammingDistance, simhash } from "@/lib/pipeline/simhash";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 import { createLogger } from "@/lib/channels/logger";
 import { config, quietLogger } from "../cycle/helpers";
-import { pipelineWith, shippedPipeline } from "../pipeline/helpers";
+import { draft, pipelineWith, shippedPipeline } from "../pipeline/helpers";
 
 const url = inject("testDatabaseUrl");
 const DAY = 86_400_000;
@@ -335,6 +337,86 @@ describe("cross-source pipeline", () => {
     expect(together.merged.simhash).toBe(1);
     const [job] = await allJobs();
     expect(await listJobSources(getDb(), job?.id as number)).toHaveLength(2);
+  });
+
+  describe("with the title check on", () => {
+    const BASE =
+      "We are looking for a machine learning engineer to build and operate recommendation systems for millions of users. You will work with Python, PyTorch and Kubernetes every day, review designs, run experiments, write clear documents, mentor colleagues and share what you learn with the whole engineering team in regular talks.";
+    const options = { shingleWords: 3, minWords: 30 };
+    const between = (a: string, b: string): number => hammingDistance(simhash(a, options) as string, simhash(b, options) as string);
+    /** The base text with extra words, at a distance above the compatible limit of 3. */
+    const FAR = (() => {
+      for (let words = 1; words < 60; words += 1) {
+        const text = `${BASE} ${Array.from({ length: words }, (_, i) => `extra${i}`).join(" ")}`;
+        if (between(BASE, text) > 3) return text;
+      }
+      throw new Error("no text above the limit");
+    })();
+    const guarded = (guard: Record<string, unknown>) => pipelineWith((raw) => ((raw.dedupe as Record<string, unknown>).title_guard = { enabled: true, ...guard }));
+
+    /** Two postings that can only meet in the SimHash pass: other family, other external id, disjoint cities. */
+    const collect = async (a: Partial<FixturePosting>, b: Partial<FixturePosting>): Promise<ChannelRegistry> => {
+      const registry = new ChannelRegistry();
+      registerFixtureChannel(registry, { id: "fx-a", family: "ats", usesQueries: false, postings: [posting("1", { city: "Berlin", ...a })] });
+      registerFixtureChannel(registry, { id: "fx-b", family: "linkedin", usesQueries: false, postings: [posting("2", { city: "Hamburg", ...b })] });
+      resetCycleSteps();
+      await run(registry);
+      return registry;
+    };
+    const pipeline = (registry: ChannelRegistry, guard: Record<string, unknown>) => runPipeline(getDb(), { relist: { minGapDays: 9 }, config: guarded(guard), registry, logger: quietLogger });
+
+    it("merges the same title up to its own limit, and only in the SimHash pass", async () => {
+      const distance = between(BASE, FAR);
+      const same = { title: "Machine Learning Engineer" };
+      let result = await pipeline(await collect({ ...same, description: BASE }, { ...same, description: FAR }), { same_title_max_distance: distance });
+      expect(result).toMatchObject({ created: 1, merged: { same_source: 0, exact_key: 0, simhash: 1 }, titleGuard: { blocked: 0 } });
+
+      await resetTables();
+      result = await pipeline(await collect({ ...same, description: BASE }, { ...same, description: FAR }), { same_title_max_distance: distance - 1 });
+      expect(result).toMatchObject({ created: 2, merged: { exact_key: 0, simhash: 0 }, titleGuard: { blocked: 0 } });
+    });
+
+    it("holds another title apart at distance zero, and counts it once", async () => {
+      const result = await pipeline(await collect({ title: "ML Engineer Recommendations", description: BASE }, { title: "Machine Learning Engineer", description: BASE }), {});
+      expect(result).toMatchObject({ created: 2, merged: { exact_key: 0, simhash: 0 }, titleGuard: { blocked: 1 } });
+    });
+
+    it("keeps the count out of the merged jobs, and away with the check off", async () => {
+      const registry = await collect({ title: "ML Engineer Recommendations", description: BASE }, { title: "Machine Learning Engineer", description: BASE });
+      const result = await pipeline(registry, { enabled: false });
+      expect(result).toMatchObject({ created: 1, merged: { simhash: 1 }, titleGuard: { blocked: 0 } });
+      expect(Object.keys(result.merged)).not.toContain("blocked");
+    });
+
+    it("reads a job's bad stored locations as none, without an exception", async () => {
+      const registry = new ChannelRegistry();
+      registerFixtureChannel(registry, { id: "fx-a", family: "ats", usesQueries: false, postings: [posting("1", { title: "Machine Learning Engineer", city: "Berlin", description: BASE })] });
+      resetCycleSteps();
+      await run(registry);
+      await pipeline(registry, {});
+      const [stored] = await allJobs();
+      await getDb().update(schema.jobs).set({ locationsJson: { city: 3 } }).where(eq(schema.jobs.id, stored?.id as number));
+
+      const later = new ChannelRegistry();
+      registerFixtureChannel(later, { id: "fx-b", family: "linkedin", usesQueries: false, postings: [posting("2", { title: "Machine Learning Engineer", city: "Berlin", description: FAR })] });
+      await run(later);
+      const result = await pipeline(later, { same_title_max_distance: 1 });
+      expect(result).toMatchObject({ created: 1, merged: { exact_key: 0, simhash: 0 } });
+    });
+
+    it("merges a related company through the database with the candidate's title", async () => {
+      await collect({ title: "Machine Learning Engineer", company: "Contoso", description: BASE }, { title: "Machine Learning Engineer", company: "Contoso Digital GmbH", description: FAR });
+      const db = getDb();
+      const registry = new ChannelRegistry();
+      registerFixtureChannel(registry, { id: "fx-a", family: "ats", usesQueries: false, postings: [posting("1", { title: "Machine Learning Engineer", company: "Contoso", description: BASE })] });
+      await pipeline(registry, {});
+      const [job] = await allJobs();
+      const config = guarded({});
+      const normalized = normalizeDraft(draft({ title: "Machine Learning Engineer", companyName: "Contoso Digital GmbH", locations: [{ label: "Hamburg", city: "Hamburg", countryCode: "DE" }], description: FAR }), config);
+      const other = await db.insert(schema.companies).values({ name: "Contoso Digital GmbH", nameNorm: "contoso-digital-gmbh" }).returning();
+      const found = await findMatchingJob(db, { normalized, companyId: other[0]?.id as number, companyName: "Contoso Digital GmbH", channelFamily: "linkedin", externalId: "zz", rawPostingId: 999999 }, config);
+      expect(found.match).toMatchObject({ job: { id: job?.id }, detail: { rule: "related_company", comparedTitle: job?.title } });
+    });
   });
 
   it("merges one job posted under two spellings of a company name, but not different companies with the same title", async () => {

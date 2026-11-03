@@ -51,11 +51,13 @@ const CHECK_ATTEMPTS = 3;
 
 /**
  * The `application_name` of a process holding an instance lock: `job-radar <name> pid=<pid> host=<host>`, cut to 63
- * characters (Postgres keeps at most 63 bytes; host names are ASCII). The release tooling's evidence check compares the
- * holder's name with this, so the format is an interface (tests pin it).
+ * characters. Postgres keeps at most 63 bytes and rewrites what is not ASCII (`\xHH` since 16, `?` before), so the characters of a
+ * host name outside printable ASCII are written as `%` and their UTF-8 bytes first: what it stores is then exactly this string. The
+ * release tooling's evidence check compares the holder's name with this, so the format is an interface (tests pin it).
  */
 export function instanceApplicationName(name: string, pid: number = process.pid, host: string = os.hostname()): string {
-  return `job-radar ${name} pid=${pid} host=${host}`.slice(0, 63);
+  const asciiHost = host.replace(/[^\x20-\x7e]/gu, (char) => Buffer.from(char).toString("hex").replace(/../g, "%$&"));
+  return `job-radar ${name} pid=${pid} host=${asciiHost}`.slice(0, 63);
 }
 
 async function tryLock(sql: Sql, k1: number, k2: number): Promise<boolean> {

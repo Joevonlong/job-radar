@@ -219,7 +219,8 @@ leaves the index in place and needs no database change. The two new `ui.yaml` ke
 
 Saved views can store the date condition as two optional keys in a view's `filters` in `interests.yaml`: `within` (`7d`,
 `month`, ... the quick range, counted from the day the view is opened) and `dateBy` (`posted` or `seen`; written only for
-`posted`, a view without it compares first seen). Views you already have load unchanged. Rolling back:
+`posted`, a view without it compares first seen). Views you already have load unchanged. A value of either key this version does
+not take is ignored with a `pnpm config:check` warning; the rest of the view and of the file still load. Rolling back:
 
 - **To a release before the date filter (2.0.1 or earlier)**: its `interests.yaml` check is strict and refuses the whole
   file when a view holds `within` or `dateBy`, so no view loads. Delete those two keys from every view (and, if you added them,

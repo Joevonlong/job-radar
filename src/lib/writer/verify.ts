@@ -92,7 +92,7 @@ const figurePattern = (words: readonly string[]): RegExp => {
   const alternatives = [...(cjk.length > 0 ? [`(?:${anyOf(cjk)})+`] : []), ...(other.length > 0 ? [anyOf(other)] : [])];
   const unit = alternatives.length > 0 ? `(${alternatives.join("|")})?` : "()";
   return new RegExp(
-    String.raw`(?<=^|[^\p{L}\p{N}]|[${CJK_CLASS}])(\d{1,3}(?:[.,\u00a0\u202f ]\d{3})+|\d+)(?:[.,](\d+))?\s*(k)?${unit}(?=$|[^\p{L}\p{N}]|[${CJK_CLASS}])(\s*(?:%|percent|per cent|prozent|pct)(?!(?![${CJK_CLASS}])\p{L}))?`,
+    String.raw`(?<=^|[^\p{L}\p{N}]|[${CJK_CLASS}])(\d{1,3}(?:[.,\u00a0\u202f ]\d{3})+|\d+)(?:[.,](\d+))?\s*(k(?![a-z]))?${unit}(?=$|[^\p{L}\p{N}]|[${CJK_CLASS}])(\s*(?:%|percent|per cent|prozent|pct)(?!(?![${CJK_CLASS}])\p{L}))?`,
     "giu",
   );
 };

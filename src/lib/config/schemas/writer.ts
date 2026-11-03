@@ -50,6 +50,15 @@ function defaultFirstPerson(): Record<string, string[] | { words: string[]; excl
   };
 }
 
+/** The shipped question stopwords (a fresh list each time): words nearly every application question has, which say nothing about what it asks. */
+function defaultQuestionStopwords(): string[] {
+  return [
+    ...["a", "an", "the", "is", "are", "was", "were", "be", "do", "does", "did", "have", "has", "what", "which", "how", "can", "could", "would", "will", "please", "tell", "describe", "you", "your", "i", "my", "me", "we", "our", "us", "of", "in", "on", "at", "to", "for", "with", "about", "and", "or", "this", "that"],
+    ...["ein", "eine", "einen", "der", "die", "das", "ist", "sind", "was", "wie", "welche", "welcher", "welches", "sie", "ihre", "ihr", "ihren", "ihrer", "ich", "mein", "meine", "wir", "uns", "unser", "unsere", "bitte", "und", "oder", "bei", "zu", "für", "mit", "von", "in", "an", "auf"],
+    ...["你", "您", "我", "们", "的", "是", "什", "么", "请", "吗", "呢", "了", "在", "和", "最", "大"],
+  ];
+}
+
 /** The shipped figure units (a fresh object each time): magnitude words that follow a digit (5万, $2M, 3 Mio), and the ones that make it a multiple (40倍, 10x). */
 export function defaultFigureUnits(): { scale: Record<string, number>; multiple: string[] } {
   return {
@@ -183,6 +192,8 @@ export const writerSchema = z.strictObject({
       max_candidates: z.number().int().min(1).max(10).default(3),
       /** Fewest words a new question needs before earlier answers are looked up (every Chinese, Japanese or Korean character counts as a word). */
       min_question_words: z.number().int().min(1).max(50).default(3),
+      /** Words left out when two questions are compared, because nearly every question has them ("what is your greatest ..."). */
+      stopwords: z.array(nonEmptyString.max(40)).max(500).default(defaultQuestionStopwords),
     })
     .prefault({}),
   /** The sentence-by-sentence evidence check (deterministic, no AI call). */

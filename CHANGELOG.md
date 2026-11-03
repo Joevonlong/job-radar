@@ -7,6 +7,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Optional title check for duplicate merging.** `dedupe.title_guard` in `pipeline.yaml` can compare titles before a job
+  is merged on its description. It is off by default, so matching does not change, and no migration runs. The first cycle
+  after upgrading re-evaluates the filter once, with no AI cost. **Rollback:** an older version refuses
+  `title_guard` in `data/config/pipeline.yaml`, so remove the key first. See
+  [Merging duplicate jobs](docs/extraction.md#merging-duplicate-jobs).
 - **Your `models.yaml` is now an overlay on the shipped model catalog.** `data/config/models.yaml` used to replace the
   shipped `config/models.yaml` as a whole; it is now laid over it model by model: an entry with the same `id` (within a
   provider) replaces the shipped entry, a new `id` is added, `deprecated: true` with just an `id` hides a shipped model,
@@ -323,6 +328,12 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- Application writer: two quick clicks on **Write** queue one request, so the AI is called once. Saving a version is refused while the writer is switched off, like the rest of the workbench.
+- Application writer: earlier answers are no longer offered because questions share only generic words ("greatest strength" and "greatest weakness"; new optional `reuse.stopwords`). The old-company warning no longer fires on ordinary words for companies called It, Target or Meta.
+- Evidence check: `3千万` reads as 30,000,000, amounts written against a currency code (`EUR50,000`) are read whole, and `figure_units` match whatever their case or compatibility form.
+- A hand-written invalid `within` or `dateBy` in a saved view is ignored with a `config:check` warning instead of rejecting all of `interests.yaml`.
+- Upgrades: the worker lock holder is recognised on hosts whose name is not ASCII, so config writes no longer stay pending.
+- Sources: an unrecognised HTTP 4xx from a provider shows a short, scrubbed excerpt of its answer, and a 400 saying the balance, credits or quota have run out counts as a budget failure.
 - The jobspy sidecar no longer returns or logs the query string of a search URL quoted in an upstream error (it holds your keywords and location), and a keyword such as "blocked", "captcha" or "429" no longer changes how a failure is classified.
 - A write lock whose guard was left by a dead process is taken over even when a slow disk has used up the wait budget.
 - Fallback faces for the web fonts also use Liberation Sans, the usual Arial stand-in on Linux, so text does not reflow when the fonts arrive.

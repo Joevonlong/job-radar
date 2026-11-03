@@ -254,6 +254,9 @@ describe("figures", () => {
     expect(unbacked.missing).toEqual(["2M"]);
     // digits inside a word stay names
     expect(figures("S3, K8s, 5mm").shown).toEqual([]);
+    // a single-letter unit does not stack on k: 5km is a name, 5k and 5 m are figures
+    expect(figures("ran 5km").shown).toEqual([]);
+    expect([...figures("5k users, 5 m users").keys]).toEqual(["5000", "5000000"]);
   });
 
   it("units in a row multiply: 3千万 is 30,000,000, not 3000", () => {

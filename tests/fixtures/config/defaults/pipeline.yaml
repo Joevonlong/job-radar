@@ -14,6 +14,23 @@ dedupe:
   simhash_shingle_words: 3
   # 正文少于这么多词就不算 SimHash（太短，不同岗位会撞）
   simhash_min_words: 30
+  # >>> title_guard defaults
+  # title_guard:
+  #   enabled: false
+  #   same_title_max_distance: 8
+  #   different_title_max_distance: null
+  #   synonyms:
+  #     sr: senior
+  #     snr: senior
+  #     jr: junior
+  #   city_connectors: [in, at, bei, im, for, für]
+  #   work_mode_words: [remote, hybrid, on-site, onsite, home office, homeoffice, remote-first, fully remote, 100% remote, remote worldwide, 100% remote worldwide, mobiles arbeiten]
+  #   seniority_words: [junior, jr, mid, senior, sr, snr, staff, principal, lead, head, intern, werkstudent, praktikant]
+  #   scope_words: [eu, europe, emea, dach, apac, latam, nordics, benelux, americas]
+  #   ignore_patterns:
+  #     - '[(\[]?\s*\b(?:[mwfdx]|div(?:erse?)?)\s*[/|\\]\s*(?:[mwfdx]|div(?:erse?)?)\s*[/|\\]\s*(?:[mwfdx]|div(?:erse?)?)\b\s*[)\]]?'
+  #     - '\s[-–—|·]\s*[\p{L}\p{N}-]+\.(?:com|net|org|de)\s*$'
+  # <<< title_guard defaults
 
 lifecycle:
   # 所有来源连续这么多天没有再返回 → possibly_closed（只统计这期间成功跑过的通道，见 C2）

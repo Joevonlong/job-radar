@@ -23,7 +23,20 @@ export interface WatchOptions {
   fsWatch?: boolean;
   /** Called when a changed file is invalid. The last good value stays in the cache. Default: console.error. */
   onError?: (error: ConfigError) => void;
+  /** How a directory is watched (default `fs.watch`). Tests pass their own: the operating system decides when its events arrive. */
+  watchDirectory?: WatchDirectory;
 }
+
+/** Start watching `dir`; `onChange` gets the name of the changed file (null: the system did not say which). Throws when the directory cannot be watched. */
+export type WatchDirectory = (dir: string, onChange: (filename: string | null) => void) => { close: () => void };
+
+const fsWatchDirectory: WatchDirectory = (dir, onChange) => {
+  const watcher = fs.watch(dir, { persistent: false }, (_event, filename) => onChange(filename === null || filename === undefined ? null : String(filename)));
+  watcher.on("error", () => {
+    // Directory removed or watcher broke: polling keeps working.
+  });
+  return watcher;
+};
 
 export type ConfigTarget = ConfigName | "all" | readonly ConfigName[];
 
@@ -104,21 +117,19 @@ export function watchConfig(target: ConfigTarget, onChange: (event: ConfigChange
     timers.set(name, timer);
   };
 
-  const watchers: fs.FSWatcher[] = [];
+  const watchDirectory = options.watchDirectory ?? fsWatchDirectory;
+  const watchers: Array<{ close: () => void }> = [];
   // Directories that could not be watched yet (e.g. profile dir not created); retried on each poll tick.
   const pendingDirs = new Map<string, Map<string, ConfigName>>();
   const attach = (dir: string, files: Map<string, ConfigName>): void => {
     try {
-      const watcher = fs.watch(dir, { persistent: false }, (_event, filename) => {
-        if (filename === null || filename === undefined) {
+      const watcher = watchDirectory(dir, (filename) => {
+        if (filename === null) {
           for (const n of files.values()) schedule(n);
           return;
         }
-        const changed = files.get(String(filename));
+        const changed = files.get(filename);
         if (changed) schedule(changed);
-      });
-      watcher.on("error", () => {
-        // Directory removed or watcher broke: polling keeps working.
       });
       watchers.push(watcher);
       pendingDirs.delete(dir);
