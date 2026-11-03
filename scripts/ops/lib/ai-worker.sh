@@ -149,27 +149,38 @@ ai_worker_identity() {
 # off reports nothing, whatever it printed before; its output goes to a temp file, not a pipe, so that nothing left behind
 # can hold the call open.
 ai_worker_service_pid() {
-  local platform="$1" target="$2" secs="${3:-}" out="" f rc=0
-  f="$(mktemp "${TMPDIR:-/tmp}/ai-worker-pid.XXXXXX")" || return 0
-  case "$platform" in
-    launchd) set -- launchctl print "gui/$(id -u)/$target" ;;
-    systemd) set -- systemctl --user show -p MainPID --value "$target" ;;
-    *) rm -f "$f"; return 0 ;;
-  esac
-  if [[ -n "$secs" ]]; then
-    ai_worker_run_bounded "$secs" ai_worker_exec_to "$f" "$@" || rc=$?
-  else
-    "$@" > "$f" 2>/dev/null || rc=$?
-  fi
-  if (( rc != 0 )); then rm -f "$f"; return 0; fi
-  case "$platform" in
-    launchd) out="$(awk '$1 == "pid" && $2 == "=" { print $3; exit }' "$f" 2>/dev/null)" || out="" ;;
-    systemd) out="$(cat "$f" 2>/dev/null)" || out="" ;;
-  esac
-  rm -f "$f"
-  out="${out//[[:space:]]/}"
-  [[ "$out" =~ ^[0-9]+$ && "$out" != 0 ]] && printf '%s\n' "$out"
-  return 0
+  # In a subshell of its own, so that its trap (the temp file goes when TERM / HUP / INT arrives mid-call, which the
+  # caller's own handlers cannot see: this usually runs inside $(...)) never replaces the caller's.
+  (
+    local platform="$1" target="$2" secs="${3:-}" out="" f="" rc=0 n
+    trap 'rm -f "$f"; exit 143' TERM HUP INT
+    # a fresh name first, then the file created under it with noclobber: the trap knows the name before the file exists
+    for n in 1 2 3 4 5; do
+      f="$(mktemp -u "${TMPDIR:-/tmp}/ai-worker-pid.XXXXXX")" || exit 0
+      if ( set -C; umask 077; : > "$f" ) 2>/dev/null; then break; fi
+      f=""
+    done
+    [[ -n "$f" ]] || exit 0
+    case "$platform" in
+      launchd) set -- launchctl print "gui/$(id -u)/$target" ;;
+      systemd) set -- systemctl --user show -p MainPID --value "$target" ;;
+      *) rm -f "$f"; exit 0 ;;
+    esac
+    if [[ -n "$secs" ]]; then
+      ai_worker_run_bounded "$secs" ai_worker_exec_to "$f" "$@" || rc=$?
+    else
+      "$@" > "$f" 2>/dev/null || rc=$?
+    fi
+    if (( rc != 0 )); then rm -f "$f"; exit 0; fi
+    case "$platform" in
+      launchd) out="$(awk '$1 == "pid" && $2 == "=" { print $3; exit }' "$f" 2>/dev/null)" || out="" ;;
+      systemd) out="$(cat "$f" 2>/dev/null)" || out="" ;;
+    esac
+    rm -f "$f"
+    out="${out//[[:space:]]/}"
+    [[ "$out" =~ ^[0-9]+$ && "$out" != 0 ]] && printf '%s\n' "$out"
+    exit 0
+  )
 }
 
 # ai_worker_run_bounded <seconds> <command…>: runs the command in the background and waits at most <seconds> for it;
