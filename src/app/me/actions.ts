@@ -4,7 +4,9 @@ import { logActionFailure } from "@/lib/logging/action-failure";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { readStoryExtractRequest, type StoryExtractErrorCode } from "@/lib/control/story-extract-request";
 import { getDb } from "@/lib/db";
+import { discardStoryDraft } from "@/lib/db/repos/story-drafts";
 import { currentMe } from "@/lib/filter";
 import { loadMarket, loadPipeline } from "@/lib/market";
 import { previewDealBreakerDrafts, previewRequestSchema, type DraftPreviewRule } from "@/lib/profile/deal-breaker-preview";
@@ -12,6 +14,8 @@ import { invalidProfileRequest, rollbackProfile, saveProfile, saveStories } from
 import { syncSearchLocations, type SyncSearchLocationsResult } from "@/lib/profile/search-locations";
 import { enableMarketChannels, type RegistryActionState } from "@/lib/sources/registry/service";
 import type { ProfileActionState } from "@/lib/profile/types";
+import { adoptStoryDraft } from "@/lib/stories/adopt";
+import { adoptedStorySchema } from "@/lib/stories/extract";
 
 // Server Actions are public POST endpoints: everything arriving here is validated again in the
 // service (zod), and the web server only listens on 127.0.0.1 / Tailscale (C5).
@@ -98,5 +102,69 @@ export async function previewDealBreakersAction(drafts: unknown): Promise<DealBr
     logActionFailure("previewDealBreakersAction", error);
     // no database, or pipeline.yaml / the market cannot be read: the card says the preview is unavailable
     return { status: "error", error: "unavailable" };
+  }
+}
+
+const positiveId = z.number().int().positive();
+
+export type StoryExtractStatusResult =
+  | { ok: true; state: "waiting"; stage: "pending" | "running"; queue: unknown }
+  | { ok: true; state: "done"; drafts: number }
+  | { ok: false; error: StoryExtractErrorCode | "not_found" | "invalid"; resumeAt: string | null }
+  | null;
+
+/** Where an extraction stands; `null`: it could not be read this time. Its end refreshes the page, which lists the new drafts. */
+export async function storyExtractStatusAction(requestId: unknown): Promise<StoryExtractStatusResult> {
+  const parsed = positiveId.safeParse(requestId);
+  if (!parsed.success) return { ok: false, error: "invalid", resumeAt: null };
+  try {
+    const state = await readStoryExtractRequest(getDb(), parsed.data);
+    if (state.state === "missing") return { ok: false, error: "not_found", resumeAt: null };
+    if (state.state === "waiting") return { ok: true, state: "waiting", stage: state.stage, queue: state.queue };
+    if (state.state === "failed") return { ok: false, error: state.error, resumeAt: state.resumeAt };
+    revalidatePath("/me");
+    return { ok: true, state: "done", drafts: state.drafts };
+  } catch (error) {
+    logActionFailure("storyExtractStatusAction", error);
+    return null;
+  }
+}
+
+export type AdoptStoryDraftResult = { status: "saved" } | { status: "not_found" | "unreadable" | "invalid" | "failed" } | { status: "refused"; result: ProfileActionState };
+
+const adoptRequestSchema = z.strictObject({ draftId: positiveId, baseHash: z.string().max(200), edited: adoptedStorySchema.optional() });
+
+/** Adopt a draft into the experience library, with your edits if any. */
+export async function adoptStoryDraftAction(request: unknown): Promise<AdoptStoryDraftResult> {
+  const parsed = adoptRequestSchema.safeParse(request);
+  if (!parsed.success) return { status: "invalid" };
+  try {
+    const outcome = await adoptStoryDraft(getDb(), parsed.data);
+    if (outcome.state === "saved") {
+      revalidatePath("/me");
+      return { status: "saved" };
+    }
+    if (outcome.state === "refused") {
+      await refreshed(outcome.result);
+      return { status: "refused", result: outcome.result };
+    }
+    return { status: outcome.state };
+  } catch (error) {
+    logActionFailure("adoptStoryDraftAction", error);
+    return { status: "failed" };
+  }
+}
+
+/** Discard a draft; its text goes with it. */
+export async function discardStoryDraftAction(draftId: unknown): Promise<{ ok: boolean }> {
+  const parsed = positiveId.safeParse(draftId);
+  if (!parsed.success) return { ok: false };
+  try {
+    const ok = await discardStoryDraft(getDb(), parsed.data);
+    revalidatePath("/me");
+    return { ok };
+  } catch (error) {
+    logActionFailure("discardStoryDraftAction", error);
+    return { ok: false };
   }
 }

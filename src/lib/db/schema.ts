@@ -726,6 +726,27 @@ export const applicationAnswerVersions = pgTable(
 );
 
 /**
+ * Stories the AI extracted from your profile, a text or a résumé, waiting for review on /me. `stories.yaml` changes only
+ * when one is adopted. `draft` holds every field with its quote from the source and the check result, never the source
+ * itself; adopting or discarding clears it. Every row goes `writer.yaml: import.draft_ttl_days` after `created_at`.
+ */
+export const profileStoryDrafts = pgTable(
+  "profile_story_drafts",
+  {
+    id: id(),
+    draft: jsonb("draft").notNull(),
+    /** `profile` | `self_description` | `resume`: also the `source` of the story once adopted. */
+    origin: text("origin").notNull(),
+    /** SHA-256 of the source text (the text itself is not kept). */
+    sourceHash: text("source_hash").notNull(),
+    /** `pending` | `adopted` | `discarded`. */
+    status: text("status").notNull().default("pending"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("profile_story_drafts_status_idx").on(t.status, t.createdAt)],
+);
+
+/**
  * The salary benchmark, rebuilt after each pipeline step from the stated salaries of the window (and, optionally,
  * checked AI lookup bands): one row per group that reached `salary.yaml: benchmark.min_sample`. `seniority` `*` = any
  * seniority; `geo_level` city / country / all (`geo_key` the lower-case city, the ISO country code, or `*`). Figures are
@@ -1160,7 +1181,7 @@ export const runnerHeartbeats = pgTable(
 
 // ---------------------------------------------------------------- web -> runner control
 
-export const controlRequestKindEnum = pgEnum("control_request_kind", ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup", "writer_job", "models_sync", "company_research"]);
+export const controlRequestKindEnum = pgEnum("control_request_kind", ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup", "writer_job", "models_sync", "company_research", "story_extract"]);
 export const controlRequestStatusEnum = pgEnum("control_request_status", ["pending", "running", "done", "failed"]);
 
 /**

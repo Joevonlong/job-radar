@@ -121,6 +121,9 @@ importers:
       undici:
         specifier: ^8.12.3
         version: 8.12.3
+      unpdf:
+        specifier: 2.1.0
+        version: 2.1.0
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -4640,6 +4643,15 @@ packages:
   undici@8.12.3:
     resolution: {integrity: sha512-+fdndUTwBP86cVjihTp21hZHo7d6oj1c/47XPA3lL8mM0XHs+C4EkcjmgRsFnFk2f/UONGDy9ItBItmXsLOQHw==}
     engines: {node: '>=22.19.0'}
+
+  unpdf@2.1.0:
+    resolution: {integrity: sha512-G/Hsrm++g0EoubUhV8TDFItq6oQ+FUu9EMvIRtHUwseKXB0iJoCvaLvBGOpYUBqyvggv/XfxhYYtohL2QpE3xQ==}
+    engines: {node: '>=24'}
+    peerDependencies:
+      '@napi-rs/canvas': ^0.1.69 || ^1.0.0
+    peerDependenciesMeta:
+      '@napi-rs/canvas':
+        optional: true
 
   unrs-resolver@1.12.2:
     resolution: {integrity: sha512-dmlRxBJJayXjqTwC+JtF1HhJmgf3ftQ3YejFcZrf4+KKtJv0qDsK1pjqaaVjG7wJ5NJ6UVP1OqRMQ71Z4C3rxQ==}
@@ -9216,6 +9228,8 @@ snapshots:
   undici@7.30.1: {}
 
   undici@8.12.3: {}
+
+  unpdf@2.1.0: {}
 
   unrs-resolver@1.12.2:
     dependencies:

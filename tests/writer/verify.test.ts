@@ -238,6 +238,27 @@ describe("figures", () => {
     expect(same.missing).toEqual([]);
   });
 
+  it("Latin magnitudes and multiples are figures: $2M, $5B, 2.5M, 3 Mio, 10x", () => {
+    expect([...figures("saved $2M a year").keys]).toEqual(["2000000"]);
+    expect([...figures("raised $5B").keys]).toEqual(["5000000000"]);
+    expect([...figures("2.5M users").keys]).toEqual(["2500000"]);
+    expect([...figures("3 Mio Nutzer").keys]).toEqual(["3000000"]);
+    expect([...figures("2 million users").keys]).toEqual(["2000000"]);
+    expect([...figures("1.5bn").keys]).toEqual(["1500000000"]);
+    expect([...figures("10x faster").keys]).toEqual(["10x"]);
+    // a multiple is not its bare number, and an amount matches however it is written
+    expect(figures("10").keys.has("10x")).toBe(false);
+    const backed = verifySentence(sentence("Saved $2M a year.", "user", [{ source: "draft", quote: "saved 2,000,000 dollars" }]), context({ draft: "I saved 2,000,000 dollars." }));
+    expect(backed.missing).toEqual([]);
+    const unbacked = verifySentence(sentence("Saved $2M a year.", "user", [{ source: "draft", quote: "saved money every year" }]), context({ draft: "I saved money every year." }));
+    expect(unbacked.missing).toEqual(["2M"]);
+    // digits inside a word stay names
+    expect(figures("S3, K8s, 5mm").shown).toEqual([]);
+    // a single-letter unit does not stack on k: 5km is a name, 5k and 5 m are figures
+    expect(figures("ran 5km").shown).toEqual([]);
+    expect([...figures("5k users, 5 m users").keys]).toEqual(["5000", "5000000"]);
+  });
+
   it("units in a row multiply: 3千万 is 30,000,000, not 3000", () => {
     expect([...figures("3千万").keys]).toEqual(["30000000"]);
     expect([...figures("2万亿").keys]).toEqual(["2000000000000"]);
@@ -275,7 +296,7 @@ describe("figures", () => {
     expect(figures("5万", none).keys.has("5")).toBe(true);
     const own = writerSchema.parse({ evidence: { figure_units: { scale: { 百: 100 }, multiple: [] } } }).evidence.figure_units;
     expect(figures("5百", own).keys.has("500")).toBe(true);
-    expect(writerSchema.parse({}).evidence.figure_units.multiple).toEqual(["倍"]);
+    expect(writerSchema.parse({}).evidence.figure_units.multiple).toEqual(["倍", "x"]);
   });
 
   it("full-width digits and marks are read like ASCII ones", () => {

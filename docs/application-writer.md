@@ -40,6 +40,37 @@ The **My experience** card on `/me` holds your projects and achievements, one pe
 The file is `data/profile/stories.yaml` (template: `config/profile.example/stories.yaml`), so it is in the daily
 configuration archive with the rest of `data/profile/` ([backup-restore.md](backup-restore.md)).
 
+### Getting stories from what you already wrote
+
+The **Get stories from what you already wrote** card below the library has the AI draft stories, from one of three sources:
+
+- **From my profile**: the summary and skills of `me.yaml`, nothing else.
+- **Paste a self-description**: any text you paste.
+- **Upload a résumé**: a PDF, Markdown or plain text file (`import.formats`), up to `import.max_file_bytes`. A PDF must have
+  a text layer: a scan has none and gets "no text to extract from", so paste the text instead. The file is read in memory
+  and never stored, not even in a temporary folder.
+
+A text longer than `import.max_chars` is cut and the card says so. These buttons need the writer switched on, and nothing is
+sent until you press them; the card names the providers of the `story_extract` task (`ai.yaml`). The AI is told to leave out
+your name, contact details and ID numbers, but it can miss one: a draft that seems to hold an email address or phone number
+is marked, as a story is. What remains of the text, and where, is in
+[Story extraction](privacy.md#story-extraction).
+
+The results wait in **drafts to review**. `stories.yaml` does not change until you adopt one. For each draft:
+
+- Every field shows the passage of your text it rests on. A field is marked **Check** when that quote is not in the text, is
+  too short to back anything (`evidence.min_quote_chars`), or lacks a figure the value has ("60%" when the text says 40%). This
+  is checked in code, with no further AI call. An unmarked field means a quote was found, not that the field is right.
+- **Adopt** adds the story as it stands, with a new id and its source (profile, description, résumé); it never overwrites a
+  story. **Edit first** lets you change it, then **Adopt with my edits**. **Discard** drops it. Adopting and discarding also
+  clear the draft's text from the database.
+- While the library above has unsaved edits, adopting is off: it would reload the form without them. Adopting over a library
+  that changed elsewhere is refused and the page reloads.
+
+Drafts are deleted after `import.draft_ttl_days`, reviewed or not. One extraction runs at a time. Extracting the same text
+again replaces the drafts of that text that still wait. After a restart of the ai-worker an extraction is not run again: it
+fails, its text is cleared, and you send it again.
+
 ## Writing answers (`/jobs/<id>/apply`)
 
 **Write answers** on a job's page opens the workbench for that job (the button shows how many questions have a final
@@ -201,6 +232,14 @@ The removal only reaches the request row:
 | `stories.title_max_chars` | `120` | Longest title; also the longest single figure, skill or tag |
 | `stories.text_max_chars` | `1500` | Longest "what you did" and "result" |
 | `stories.preselect_count` | `4` | How many stories a new application question starts with selected |
+| `import.max_file_bytes` | `2000000` | Largest résumé file, in bytes; a larger one is refused unread |
+| `import.max_chars` | `30000` | Longest source text sent to the AI; a longer one is cut |
+| `import.min_chars` | `20` | A source with less text has nothing to extract |
+| `import.formats` | `[pdf, md, txt]` | File types a résumé may have |
+| `import.max_drafts` | `12` | Most drafts one extraction may return |
+| `import.pdf_timeout_seconds` | `15` | Longest a PDF may take to read; it is then stopped and you are asked to paste the text |
+| `import.pdf_max_memory_mb` | `256` | Most memory reading one PDF may use, in MB |
+| `import.draft_ttl_days` | `14` | Days a draft waits for review; older ones are deleted, reviewed or not |
 | `questions.max_per_job` | `12` | Most questions per job |
 | `questions.text_max_chars` | `1000` | Longest question text |
 | `questions.max_versions_per_question` | `20` | Most versions of one question besides the final one |
@@ -221,7 +260,7 @@ The removal only reaches the request row:
 | `evidence.quote_max_chars` | `160` | Longest quote the AI may give |
 | `evidence.min_quote_chars` | `4` | Shortest quote that counts as evidence, unless it is exactly a known name |
 | `evidence.first_person` | en / de / zh words | Words that make a sentence one about you |
-| `evidence.figure_units` | `scale`: 万 萬 亿 億 千; `multiple`: 倍 | Words right after a digit that change the figure: `scale` multiplies it (5万 is 50,000), `multiple` makes it a multiple that matches only a multiple. Case and compatibility forms do not count (`M` is `m`, `㎏` is `kg`); Chinese, Japanese or Korean units may stand in a row (3千万) |
+| `evidence.figure_units` | `scale`: 万 萬 亿 億 千, thousand, m, mio, million, b, bn, mrd, billion and similar; `multiple`: 倍, x | Words right after a digit that change the figure: `scale` multiplies it (5万 is 50,000), `multiple` makes it a multiple that matches only a multiple. Case and compatibility forms do not count (`M` is `m`, `㎏` is `kg`); Chinese, Japanese or Korean units may stand in a row (3千万) |
 | `evidence.names` | quoted, mixed tokens, capitalised words (German: only two or more in a row) | What the check treats as a name |
 
 Which AI writes is the `write` task in `ai.yaml` (order, model, and for the API providers `max_output_tokens` /

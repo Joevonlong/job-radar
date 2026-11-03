@@ -351,6 +351,13 @@
       "when": 1793677402433,
       "tag": "0049_company_research",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793684222584,
+      "tag": "0050_story_extract_drafts",
+      "breakpoints": true
     }
   ]
 }

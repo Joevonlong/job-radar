@@ -10,6 +10,10 @@ export const WRITER_DEFAULT_QUEUE_TIMEOUT_SECONDS = 900;
 
 export const WRITER_STORIES_DEFAULTS = { max_items: 60, title_max_chars: 120, text_max_chars: 1500, preselect_count: 4 } as const;
 
+/** The file types a résumé upload accepts (`import.formats`). */
+export const STORY_IMPORT_FORMATS = ["pdf", "md", "txt"] as const;
+export type StoryImportFormat = (typeof STORY_IMPORT_FORMATS)[number];
+
 /** The two kinds of application question: a form question, or a cover letter (one long question). */
 export const QUESTION_KINDS = ["question", "letter"] as const;
 export type QuestionKind = (typeof QUESTION_KINDS)[number];
@@ -55,9 +59,17 @@ function defaultQuestionStopwords(): string[] {
   ];
 }
 
-/** The shipped figure units (a fresh object each time): East Asian magnitude words that follow a digit, and the one that makes it a multiple. */
+/** The shipped figure units (a fresh object each time): magnitude words that follow a digit (5万, $2M, 3 Mio), and the ones that make it a multiple (40倍, 10x). */
 export function defaultFigureUnits(): { scale: Record<string, number>; multiple: string[] } {
-  return { scale: { 万: 10_000, 萬: 10_000, 亿: 100_000_000, 億: 100_000_000, 千: 1000 }, multiple: ["倍"] };
+  return {
+    scale: {
+      ...{ 万: 10_000, 萬: 10_000, 亿: 100_000_000, 億: 100_000_000, 千: 1000 },
+      ...{ thousand: 1000, tausend: 1000 },
+      ...{ m: 1_000_000, mn: 1_000_000, mio: 1_000_000, million: 1_000_000, millionen: 1_000_000 },
+      ...{ b: 1_000_000_000, bn: 1_000_000_000, mrd: 1_000_000_000, billion: 1_000_000_000, milliarden: 1_000_000_000 },
+    },
+    multiple: ["倍", "x"],
+  };
 }
 
 /**
@@ -95,6 +107,31 @@ export const writerSchema = z.strictObject({
       preselect_count: z.number().int().min(0).max(50).default(WRITER_STORIES_DEFAULTS.preselect_count),
     })
     .default(WRITER_STORIES_DEFAULTS),
+  /** Extracting stories from your profile, a pasted text or an uploaded résumé. */
+  import: z
+    .strictObject({
+      /** Largest résumé file, in bytes; a larger one is refused unread. */
+      max_file_bytes: z.number().int().min(10_000).max(9_000_000).default(2_000_000),
+      /** Longest source text sent to the AI, in characters; a longer one is cut and the page says so. */
+      max_chars: z.number().int().min(1000).max(200_000).default(30_000),
+      /** A source with less text than this has nothing to extract (a scanned PDF has no text layer). */
+      min_chars: z.number().int().min(1).max(1000).default(20),
+      /** File types a résumé may have. */
+      formats: z
+        .array(z.enum(STORY_IMPORT_FORMATS))
+        .min(1)
+        .refine((items) => new Set(items).size === items.length, "must not contain duplicates")
+        .default(["pdf", "md", "txt"]),
+      /** Most drafts one extraction may return. */
+      max_drafts: z.number().int().min(1).max(50).default(12),
+      /** Days a draft waits for review; older ones are deleted, reviewed or not. */
+      /** Longest a PDF may take to read; a crafted file can keep the parser busy with few bytes. */
+      pdf_timeout_seconds: z.number().positive().max(120).default(15),
+      /** Most memory reading one PDF may use, in MB. */
+      pdf_max_memory_mb: z.number().int().min(32).max(2048).default(256),
+      draft_ttl_days: z.number().int().min(1).max(365).default(14),
+    })
+    .prefault({}),
   questions: z
     .strictObject({
       /** Most questions per job. */
@@ -174,8 +211,8 @@ export const writerSchema = z.strictObject({
        */
       figure_units: z
         .strictObject({
-          scale: z.record(nonEmptyString.max(4), z.number().positive().max(1e12)).default(() => defaultFigureUnits().scale),
-          multiple: z.array(nonEmptyString.max(4)).max(20).default(() => defaultFigureUnits().multiple),
+          scale: z.record(nonEmptyString.max(12), z.number().positive().max(1e12)).default(() => defaultFigureUnits().scale),
+          multiple: z.array(nonEmptyString.max(12)).max(20).default(() => defaultFigureUnits().multiple),
         })
         .prefault({}),
       /** Which words count as names to check (language-independent; a name not found in the sentence's valid quotes is flagged; a sentence about the job or company may also find it in the JD or company background). */

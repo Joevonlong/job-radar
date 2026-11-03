@@ -2,7 +2,7 @@
 
 import { AlertTriangle, ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ interface StoriesCardProps {
   pending: boolean;
   limits: WriterStoriesLimits;
   onSave: (draft: StoriesDraft) => void;
+  /** Whether the form has unsaved edits (a save elsewhere on the page would reload it without them). */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 /** A story with the key React uses for its row (new stories have no id yet). */
@@ -37,7 +39,7 @@ function rowsOf(draft: StoriesDraft): Row[] {
 }
 
 /** The experience library on /me: list, add, edit, delete and reorder; saved as a whole like the other profile forms. */
-export function StoriesCard({ initial, hash, state, pending, limits, onSave }: StoriesCardProps) {
+export function StoriesCard({ initial, hash, state, pending, limits, onSave, onDirtyChange }: StoriesCardProps) {
   const t = useTranslations("profile");
   const listId = useId();
   const [rows, setRows] = useState<Row[]>(() => rowsOf(initial));
@@ -47,6 +49,11 @@ export function StoriesCard({ initial, hash, state, pending, limits, onSave }: S
   const draft: StoriesDraft = { stories: rows.map((row) => row.story) };
   const dirtyCount = changedPaths(draft, initial).length;
   const full = rows.length >= limits.max_items;
+  const dirty = dirtyCount > 0;
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
 
   function toggle(key: string, value: boolean) {
     setOpen((current) => {

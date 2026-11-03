@@ -18,8 +18,9 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 | 邮件元数据（Message-ID、发件人地址、IMAP UID） | 数据库表 `email_messages` | 直到你删除数据库 |
 | AI 结果（评分及理由、翻译、拆解、信号、陷阱标记、带引文的每周建议）和 AI 用量记录（模型、token、耗时） | 数据库 | 直到你删除数据库 |
 | 公司背景结果（每个字段及其来源链接、provider 和模型） | 数据库表 `company_research` | 直到你删除数据库；关闭功能不会删除 |
-| 已发出的 Telegram 消息（内容和消息 id）、控制请求及结果 | 数据库 | 直到你删除数据库；写作请求（`writer_job`）的素材在请求完成、失败或过期（排队时看 `writer.yaml: queue_timeout_seconds`，运行时看 `timeout_seconds` + `expiry_grace_seconds`）后即从请求里清除。请求未结束时做的备份会留下这些素材，包括部署时的迁移前备份：日备和周备约保留 8 周，系统备份和手动备份更久。Postgres 的堆和 WAL 也可能留着，直到 vacuum 和 checkpoint。 |
+| 已发出的 Telegram 消息（内容和消息 id）、控制请求及结果 | 数据库 | 直到你删除数据库；写作请求（`writer_job`）的素材和提取素材请求（`story_extract`）的文字在请求完成、失败或过期（排队时看 `writer.yaml: queue_timeout_seconds`，运行时看 `timeout_seconds` + `expiry_grace_seconds`）后即从请求里清除。请求未结束时做的备份会留下这些素材，包括部署时的迁移前备份：日备和周备约保留 8 周，系统备份和手动备份更久。Postgres 的堆和 WAL 也可能留着，直到 vacuum 和 checkpoint。 |
 | 申请问题和回答版本，以及每句话的依据核对结果 | 数据库表 `application_questions`、`application_answer_versions` | 直到你删除问题（或数据库）；超过 `questions.max_versions_per_question` 时删除最旧的版本 |
+| 从画像、文字或简历提取的素材草稿，以及它们引用的片段 | 数据库表 `profile_story_drafts` | 采用或丢弃草稿时清除文字；这一行在 `writer.yaml: import.draft_ttl_days` 天后删除。见[提取素材](#提取素材) |
 | runner 心跳 | 数据库 | 24 小时 |
 | 数据库备份 | `data/backups/` | 自动：14 份日备、8 份周备；手动备份不会被清理。已删除的记录在旧备份里还会留着，直到这些备份被删掉 |
 | 给 resume-kit 的 JD 导出 | `data/exports/jd/` | 直到你删除 |
@@ -51,6 +52,19 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 | 你自己配置的 MCP 客户端（Claude Desktop、Claude Code 等）所用的模型服务商（**默认关闭**） | 你提问时工具返回的内容：岗位事实字段、来源链接、分数与排名、带 JD 引用的信号、经 AI 陷阱清洗的 JD、申请的状态 / 日期 / 下一步 / 面试轮数。**永远不给：** 画像、匹配理由和差距、过滤原因、薪资底线、备注、邮件、本机路径、密钥。见 [mcp.zh.md](mcp.zh.md) | 只在你向客户端提问时 | 保持 `mcp.yaml: enabled: false`，或从客户端里删掉这个服务 |
 
 不会向项目维护者或任何统计服务发送任何东西。
+
+### 提取素材
+
+`/me` 素材卡片上的按钮把画像的摘要和技能、你粘贴的文字或简历的文字发给 `ai.yaml` 里 `story_extract` 任务的提供方，只在你按下时发送，并且 `writer.yaml: enabled` 要为 true。不联网搜索。上传的文件只在内存里读取，不写磁盘，也不写临时目录；文件名不保留。文字进入一条 `story_extract` 控制请求，留到请求结束：任何结束方式（完成、失败、过期、被重启打断）都在同一条语句里清除文字，只留下 SHA-256 和长度。重启后请求不会重跑。
+
+之后可能还会留下的：
+
+- **Postgres 内部**：旧的行版本把文字留在表文件里，直到 autovacuum 复用；预写日志（WAL）留到被回收。通常是几小时。
+- **数据库日志**：Postgres 可能把失败语句连同它的值写进日志。
+- **备份**：请求未结束时做的备份会留下文字。日备和周备约 8 周后删除；迁移前、部署前和手动备份保留更久，直到你删除。
+- **草稿和已采用的素材**：草稿含有文字片段（每个字段和它的引用），留到你采用或丢弃，或到 `import.draft_ttl_days` 天后。已采用的素材留在 `data/profile/stories.yaml`，内容是你采用的那些。
+- **错误信息**：提供方在这个任务或 `write` 任务上失败时，日志和提供方健康表只记录错误类型，不记录可能带出你文字的错误信息。
+- **AI 提供方**：它保留什么见 [AI 提供方怎么保存](#ai-提供方怎么保存)。
 
 ### AI 提供方怎么保存
 

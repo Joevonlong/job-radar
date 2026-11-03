@@ -828,6 +828,77 @@
         "period": "Free text, e.g. 2021–2023.",
         "language": "Code such as en, de, zh."
       }
+    },
+    "storyImport": {
+      "title": "Get stories from what you already wrote",
+      "description": "The AI drafts stories from your profile, a text you paste or your résumé. Nothing enters your library until you adopt it.",
+      "sendsTo": "The text goes to:",
+      "noProvider": "no AI provider is enabled for this task",
+      "residue": "It is cleared from the request when processing ends, but may remain for a while in database logs and in a backup taken while it runs. Drafts and adopted stories hold snippets of it.",
+      "residueLink": "What remains, and for how long",
+      "fromProfile": "From my profile",
+      "paste": "Paste a self-description",
+      "upload": "Upload a résumé",
+      "pasteLabel": "Your self-description",
+      "pasteHint": "The first {max} characters are used.",
+      "fileLabel": "Résumé file",
+      "fileHint": "{formats}, up to {maxMb} MB. PDFs need a text layer: scans are not read. The file is read in memory and not stored.",
+      "send": "Extract stories",
+      "requesting": "Waiting for the AI worker…",
+      "running": "Extracting stories…",
+      "truncated": "The text was longer than {max} characters: only the beginning was sent.",
+      "doneToast": "{count, plural, one {1 draft is} other {# drafts are}} ready for review",
+      "noneFound": "The AI found no stories in this text",
+      "off": "Extracting stories uses the application writer, which is off: nothing can be sent.",
+      "offLink": "Turn it on in the settings",
+      "pendingTitle": "{count, plural, one {1 draft to review} other {# drafts to review}}",
+      "pendingHint": "Check each one against what really happened. Drafts are deleted after {days} days, reviewed or not.",
+      "saveFirst": "Save or reset your edits in the library above first: adopting reloads it.",
+      "quote": "Source: “{quote}”",
+      "flagged": "{count, plural, one {1 field to check} other {# fields to check}}",
+      "flag": {
+        "quote_missing": "Check: this quote is not in the source",
+        "quote_too_short": "Check: the quote is too short to back this",
+        "figure_missing": "Check: not in the quote: {missing}"
+      },
+      "adopt": "Adopt",
+      "adoptEdited": "Adopt with my edits",
+      "edit": "Edit first",
+      "cancelEdit": "Cancel edits",
+      "discard": "Discard",
+      "adopted": "Added to your library: {title}",
+      "adoptFailed": "That did not work. Nothing changed; try again.",
+      "adoptRefused": "This cannot be saved yet: {detail}",
+      "stale": "The library changed elsewhere and the page has reloaded. Check it, then adopt again.",
+      "gone": "This draft no longer waits for review.",
+      "unreadable": "stories.yaml cannot be read. Fix it first; the draft keeps waiting.",
+      "error": {
+        "invalid": "The request was not understood. Reload the page and try again.",
+        "too_large": "This file is larger than {maxMb} MB, so it was not read.",
+        "bad_type": "This file type cannot be read. Use {formats}.",
+        "unreadable": "This PDF cannot be read: it is damaged or protected by a password.",
+        "too_complex": "Reading this PDF took too long or used too much memory, so it was stopped. Paste the text instead.",
+        "no_text": "No text to extract from. A scanned PDF has no text layer: paste the text instead, or fill in your profile first.",
+        "disabled": "The application writer is off, so nothing was sent.",
+        "busy": "Another extraction is still running. Wait for it to end.",
+        "config_error": "A config file cannot be read, so nothing was sent. The settings page names it.",
+        "unavailable": "The database cannot be reached right now. Try again later.",
+        "auth": "The AI provider refused the login. Check it on the sources page.",
+        "timeout": "The AI took too long, so it was stopped and the text was cleared. Try again, or send a shorter text.",
+        "rate_limited": "The AI provider is rate limited right now. Try again later.",
+        "invalid_output": "The AI's reply could not be read. Try again.",
+        "provider_error": "The AI provider reported an error. Try again later.",
+        "network": "The AI provider could not be reached. Try again later.",
+        "budget": "The monthly budget for the AI API is used up.",
+        "quota_guard": "Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
+        "failed": "The extraction failed and the text was cleared. Try again.",
+        "expired": "The AI worker did not finish in time, so the text was cleared. Check that it runs, then try again.",
+        "output_truncated": "The AI's reply was cut off. Send a shorter text, or raise the task's output limit.",
+        "aborted": "The AI worker was stopped and the text was cleared. Try again.",
+        "invalid_payload": "The request could not be read. Try again.",
+        "handler_error": "The drafts could not be stored. Try again.",
+        "no_handler": "The AI worker does not know this request yet: it needs a restart after the update."
+      }
     }
   },
   "filter": {
@@ -3239,6 +3310,13 @@
       "writer_timeout_seconds": {
         "label": "Longest run of one request",
         "hint": "Counted from the moment the ai-worker takes it. A longer AI call stops and the request fails as a timeout; its material is cleared from the database."
+      },
+      "task_story_extract": {
+        "label": "Story extraction",
+        "hint": "Extracts draft stories from your profile, a text or a résumé; never searches the web."
+      },
+      "reasoning_effort_story_extract": {
+        "label": "Reasoning effort: Story extraction"
       }
     },
     "control": {
@@ -3298,7 +3376,8 @@
           "salary_lookup": "Salary lookup",
           "company_research": "Company background",
           "writer_job": "Application answer",
-          "models_sync": "Model list refresh"
+          "models_sync": "Model list refresh",
+          "story_extract": "Story extraction"
         },
         "status": {
           "pending": "Queued",
@@ -3835,7 +3914,8 @@
         "traps": "AI traps",
         "salary_lookup": "Salary lookup",
         "company_research": "Company background",
-        "write": "Application writer"
+        "write": "Application writer",
+        "story_extract": "Story extraction"
       },
       "details": "Details →"
     },
@@ -7208,7 +7288,8 @@
       "system__telegram_callback": "Telegram button action",
       "system__reminder": "Daily reminder",
       "request__writer_job": "Write application answer",
-      "request__models_sync": "Refresh model list"
+      "request__models_sync": "Refresh model list",
+      "request__story_extract": "Extract stories"
     },
     "event": {
       "item__ok": "Item completed",
@@ -7311,6 +7392,7 @@
       "cycleBusy": "A run was already queued or running",
       "configUnavailable": "Configuration could not be read",
       "no_material": "No material chosen",
+      "no_text": "No text to extract from",
       "too_long": "Text longer than allowed",
       "busy": "Another request for this question is running",
       "output_truncated": "Answer cut off at the output limit",
@@ -7538,7 +7620,8 @@
       "salary_lookup": "Look up salary",
       "company_research": "Look up company",
       "writer_job": "Write application answer",
-      "models_sync": "Refresh model list"
+      "models_sync": "Refresh model list",
+      "story_extract": "Extract stories"
     },
     "level": {
       "all": "All levels",

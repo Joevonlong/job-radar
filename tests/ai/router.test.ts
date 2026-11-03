@@ -4,8 +4,9 @@ import { z } from "zod";
 
 import type { ChannelLogger } from "@/lib/channels/types";
 import { AiProviderError, AiUnavailableError } from "@/lib/ai/errors";
+import { createMemoryHealthStore } from "@/lib/ai/health";
 import { createAiRouter, resolveProviderOrder } from "@/lib/ai/router";
-import type { AiProvider, AiProviderId } from "@/lib/ai/types";
+import type { AiProvider, AiProviderId, AiTask } from "@/lib/ai/types";
 import { createMemoryUsageStore } from "@/lib/ai/usage";
 
 import { scriptedProvider, pinnedAi, shippedCatalog, bareCatalog, usageEntry, type Step } from "./helpers";
@@ -58,6 +59,31 @@ describe("resolveProviderOrder", () => {
     });
     expect(resolveProviderOrder(config, "translate")).toEqual(["deepseek", "anthropic", "mimo", "codex-cli"]);
     expect(resolveProviderOrder(config, "score")).toEqual(["codex-cli", "claude-cli", "anthropic", "deepseek", "mimo"]);
+  });
+});
+
+describe("errors of a task with private input", () => {
+  const SECRET = "résumé text the provider echoed";
+  const failing = () => scriptedProvider("deepseek", [new AiProviderError("deepseek", "provider_error", `bad request: ${SECRET}`)], { available: true }).provider;
+  const run = async (task: AiTask) => {
+    const warns: unknown[] = [];
+    const logger: ChannelLogger = { debug: () => {}, info: () => {}, error: () => {}, warn: (message: string, fields?: unknown) => { warns.push({ message, fields }); }, child: () => logger };
+    const health = createMemoryHealthStore();
+    const router = createAiRouter({ config: pinnedAi(), providers: [failing()], usage: createMemoryUsageStore(), health, now: () => NOW, timeZone: "Europe/Berlin", catalog: shippedCatalog(), logger });
+    const thrown = await router.run(task, prompt, schema).catch((error: unknown) => error);
+    expect(thrown).toBeInstanceOf(AiUnavailableError);
+    return { logged: JSON.stringify(warns), stored: health.rows.get("deepseek"), error: thrown instanceof Error ? thrown.message : "" };
+  };
+
+  it.each(["story_extract", "write"] as const)("%s: logs, health and the final error hold the kind only", async (task) => {
+    const { logged, stored, error } = await run(task);
+    for (const text of [logged, JSON.stringify(stored), error]) expect(text).not.toContain(SECRET);
+    expect(stored).toMatchObject({ lastErrorKind: "provider_error", lastErrorMessage: "provider_error" });
+  });
+
+  it("other tasks keep the provider's message", async () => {
+    const { stored } = await run("score");
+    expect(stored?.lastErrorMessage).toContain(SECRET);
   });
 });
 

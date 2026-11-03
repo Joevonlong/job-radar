@@ -18,7 +18,7 @@ AI 可以走订阅命令行（`claude`、`codex`）、按量计费的 API key，
 |---|---|---|
 | runner | Docker 容器 | collect → pipeline → filter → signals（规则）→ maintenance；`ai` 和 `notify` 步骤不执行，只写一个 `run_ai` 请求（`ai.yaml: execution: host`，默认） |
 | web | Docker 容器 | 网页的"翻译"按钮写 `translate_job` 请求并轮询状态；"重新打分"写 `rescore_stale` 请求；本身不调用任何 AI |
-| ai-worker | 宿主机（macOS 上是 launchd 服务，Linux 上是 systemd 用户单元；其他系统用任意进程管理器） | 处理 `run_ai`（score → signals → translate → breakdown（仅 `breakdown.yaml` 为 auto），然后 notify）、`translate_job`、`breakdown_job`（详情页"拆解这个岗位"）、`writer_job`（申请写作工作台的“生成”，[application-writer.zh.md](application-writer.zh.md)）、`rescore_stale`；写自己的心跳（`runner_heartbeats.process = 'ai-worker'`） |
+| ai-worker | 宿主机（macOS 上是 launchd 服务，Linux 上是 systemd 用户单元；其他系统用任意进程管理器） | 处理 `run_ai`（score → signals → translate → breakdown（仅 `breakdown.yaml` 为 auto），然后 notify）、`translate_job`、`breakdown_job`（详情页"拆解这个岗位"）、`writer_job`（申请写作工作台的“生成”，[application-writer.zh.md](application-writer.zh.md)）、`story_extract`（`/me` 上提取素材）、`rescore_stale`；写自己的心跳（`runner_heartbeats.process = 'ai-worker'`） |
 
 请求都在表 `control_requests` 里；runner 和 ai-worker 各自只领自己那几种（`src/lib/control/kinds.ts`），所以谁重启都不会把对方正在做的事标成失败。`run_ai` 要等它指向的那一轮结束后才会被领走（那一轮最后才写 cycle 摘要）。worker 做完把真实的 `ai` 和 `notify` 两段写回那一轮的摘要，替换容器里留下的 `delegated` 占位。
 
@@ -119,6 +119,7 @@ translation:
 - **任务 `write`**：申请问题的回答和动机信、优化你自己的稿和教练审阅（[application-writer.zh.md](application-writer.zh.md)），只在 `writer.yaml: enabled` 为 true 且你按**生成**、**优化**或**审阅**时调用。不联网搜索。默认跟全局顺序；动机信要多个版本，需要的输出超过全局 `max_output_tokens`，所以 `tasks.write` 可以单独设 `max_output_tokens` 和 `api_timeout_seconds`（两者都只对 API 服务商生效，任何任务都能设）。回答在上限处被截断时请求以 `output_truncated` 失败。
 - **联网任务**：`salary_lookup` 和 `company_research` 是**仅有的**可以用工具（网页搜索）的 AI 调用。任务清单写死在代码里（`src/lib/ai/web-tasks.ts`），任何设置都不能往里加任务。
 - **任务 `company_research`**：按需查公司背景（[research.zh.md](research.zh.md)），只在 `research.yaml: enabled` 为 true 且你按下按钮时运行。只发送公司名和你确认过的官网域名。默认顺序 `[claude-cli, anthropic]`，provider 规则与 `salary_lookup` 相同。
+- **任务 `story_extract`**：从画像、粘贴的文字或简历起草素材（[application-writer.zh.md](application-writer.zh.md)），只在 `writer.yaml: enabled` 为 true 且你按下 `/me` 素材卡片上的按钮时调用。不联网搜索。默认跟全局顺序；`tasks.story_extract` 可以单独设顺序和上限。发送什么、还会留下什么：[privacy.zh.md](privacy.zh.md#提取素材)。
 - **任务 `salary_lookup`**：按需查薪资（[salary.zh.md](salary.zh.md)）。默认顺序 `[claude-cli, anthropic]`；只尝试能搜网页的 provider（OpenAI API、OpenRouter、DeepSeek、MiMo 跳过）；允许搜网页的任务清单写死在代码里（`src/lib/ai/web-tasks.ts`），任何设置都不能让别的任务上网。可以把 codex-cli 加进 `tasks.salary_lookup.order`，但它的网页搜索不能限定域名（设置页会提示）。
 - **推送先于翻译**：ai-worker 先做打分和信号，然后立刻推送，最后才翻译（翻译标了 `late`，不影响推送内容）。
 - **看状态**：`/sources` 的"AI provider 健康度"显示每个 provider 的状态（可用 / 未配置 / 已关闭 / 未登录 / 已达每日上限 / 已达 Job Radar 用量上限到几点 / 冷却到几点）、用量上限窗口内 Job Radar 自己的调用数对比 `hard_requests`、今日请求数对比上限、最近一次成功和失败；每行有"测试"按钮。设置页 AI 标签的顺序列表和下拉用同一份状态标出不可用的 provider。

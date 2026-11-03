@@ -9,6 +9,7 @@ import { registerSuggestHandler } from "./suggest";
 import { createRunAiHandler } from "./run-ai";
 import { testAiHandler } from "./test-ai";
 import { translateJobHandler } from "./translate-job";
+import { storyExtractHandler } from "./story-extract";
 import { writerJobHandler } from "./writer-job";
 
 /**
@@ -27,6 +28,7 @@ export function registerAiControlHandlers(): void {
   registerControlHandler("test_ai", testAiHandler);
   registerControlHandler("salary_lookup", salaryLookupHandler);
   registerControlHandler("writer_job", writerJobHandler);
+  registerControlHandler("story_extract", storyExtractHandler);
   registerControlHandler("models_sync", modelsSyncHandler);
   registerControlHandler("company_research", companyResearchHandler);
   registerSuggestHandler();

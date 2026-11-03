@@ -37,6 +37,7 @@ import { ACK_NAMES, isAckName } from "../src/lib/settings/tabs";
 import { createAiRouter, createProvider } from "../src/lib/ai";
 import type { AiTransport } from "../src/lib/ai/types";
 import { createCompanyResearchHandler } from "../src/lib/control/company-research";
+import { createStoryExtractHandler } from "../src/lib/control/story-extract";
 import { createWriterJobHandler } from "../src/lib/control/writer-job";
 
 /** How long the stub cycle "runs": long enough for a test to see the running state. */
@@ -292,6 +293,31 @@ registerControlHandler(
   }),
 );
 
+// Story extraction, from the text it was sent: one draft that passes the check (with the first line of the source as its
+// quote) and one with a quote the source does not have, so the review shows both.
+const storyAi: AiTransport = {
+  id: "codex-cli",
+  availability: () => ({ available: true }),
+  plannedModel: () => "e2e-model",
+  async call(request) {
+    await sleep(STUB_TEST_MS);
+    const source = request.user.replace(/<\/?story_source>/g, "");
+    const line = source.split("\n").map((entry) => entry.trim()).find((entry) => entry.length > 0) ?? "";
+    const field = (value: string, quote: string) => ({ value, quote });
+    const drafts = [
+      { title: field(line.slice(0, 60), line.slice(0, 60)), what: field(line, line), result: null, period: null, metrics: [], skills: [], language: "en" },
+      { title: field("Invented achievement", "not in the source at all"), what: field("Cut costs by 60%.", "cut costs by 40%"), result: null, period: null, metrics: [field("60% lower costs", "cut costs by 40%")], skills: [], language: "en" },
+    ];
+    return { text: JSON.stringify({ drafts }), model: "e2e-model", usage: { tokensIn: 100, tokensOut: 50 } };
+  },
+};
+registerControlHandler(
+  "story_extract",
+  createStoryExtractHandler({
+    createRouter: () => createAiRouter({ config: loadConfig("ai"), providers: [createProvider(storyAi)], usage: null, health: null, quota: null, catalog: null, origin: "control" }),
+  }),
+);
+
 await recordAllConfigLoaded(db);
 await syncSourceRegistry(db, { config: loadConfig("channels"), text: readConfigText("channels") }).catch(() => {});
 const stopWatching = watchConfig(
@@ -307,7 +333,7 @@ const stopWatching = watchConfig(
 
 // What the settings, sources and interests pages offer, plus the ai-worker's AI test, breakdown, salary lookup, company background and writer (answered
 // here with stand-ins). The other AI requests (scoring, translation, ...) belong to the host ai-worker, which e2e does not run.
-const poller = runControlPoller({ db, signal: abort.signal, logger: createLogger({ sink: () => {} }), kinds: () => ["run_cycle", "rescore_stale", "run_suggest", "test_channel", "test_telegram", "test_ai", "models_sync", "breakdown_job", "salary_lookup", "company_research", "writer_job"], pollSeconds: () => POLL_SECONDS });
+const poller = runControlPoller({ db, signal: abort.signal, logger: createLogger({ sink: () => {} }), kinds: () => ["run_cycle", "rescore_stale", "run_suggest", "test_channel", "test_telegram", "test_ai", "models_sync", "breakdown_job", "salary_lookup", "company_research", "story_extract", "writer_job"], pollSeconds: () => POLL_SECONDS });
 
 log("ready");
 while (!abort.signal.aborted) {

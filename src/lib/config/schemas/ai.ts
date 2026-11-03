@@ -469,6 +469,8 @@ export const aiSchema = z.strictObject({
     company_research: task.default({ order: ["claude-cli", "anthropic"] }),
     /** The application writer (never searches the web); optional like `breakdown`. */
     write: task.default({}),
+    /** Story extraction for the experience library, from your profile, a text or a résumé (never searches the web); optional like `breakdown`. */
+    story_extract: task.default({}),
   }),
   /** Request timeout for the API providers. */
   api_timeout_seconds: positiveInt,

@@ -39,7 +39,7 @@ Job Radar 的所有设置都是 YAML，分两层：
 
 市场包（`config/packs/<id>/`：国家、城市、本地语言规则）也按 `shipped` 处理：`data/config/packs/<id>/` 里的副本整包替换发布的那份。见 [market-packs.zh.md](market-packs.zh.md)。
 
-画像文件 `me.yaml`、`preferences.yaml` 和 `stories.yaml`（经历素材库，见 [application-writer.zh.md](application-writer.zh.md)）在 `data/profile/` 里，在 `/me` 页编辑。`preferences.yaml` 里可选的 `deal_breakers` 列表
+画像文件 `me.yaml`、`preferences.yaml` 和 `stories.yaml`（经历素材库，见 [application-writer.zh.md](application-writer.zh.md)）在 `data/profile/` 里，在 `/me` 页编辑，也可以在那里从文字或简历提取素材（`writer.yaml: import`）。`preferences.yaml` 里可选的 `deal_breakers` 列表
 （在任何 AI 调用之前否决岗位的规则）见 [deal-breakers.zh.md](deal-breakers.zh.md)；它的上限在 `pipeline.yaml: filter.deal_breakers`。
 
 运行时的 profile 读取可在内存里使用 `config/profile.example/`，不创建用户文件。原文检查、doctor 和 watcher 仍区分缺失文件与已保存文件；模板不属于默认配置层。

@@ -6,7 +6,7 @@ import type { AiAttempt, AiProviderErrorKind } from "./errors";
 import type { WebAccessLimits } from "./web-tasks";
 
 /** The task kinds; each may override the provider order in ai.yaml. */
-export const AI_TASKS = ["score", "signals", "translate", "summarize", "suggest", "breakdown", "traps", "salary_lookup", "company_research", "write"] as const;
+export const AI_TASKS = ["score", "signals", "translate", "summarize", "suggest", "breakdown", "traps", "salary_lookup", "company_research", "write", "story_extract"] as const;
 export type AiTask = (typeof AI_TASKS)[number];
 
 export { AI_PROVIDER_IDS, AI_PROVIDER_KIND } from "@/lib/config/ai-options";

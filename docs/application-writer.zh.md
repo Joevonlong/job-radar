@@ -34,6 +34,24 @@
 文件是 `data/profile/stories.yaml`（模板：`config/profile.example/stories.yaml`），所以它和 `data/profile/` 里的其他文件一起进每日配置归档
 （[backup-restore.zh.md](backup-restore.zh.md)）。
 
+### 从你写过的内容里提取素材
+
+素材库下面的**从你写过的内容里提取素材**卡片让 AI 起草素材，来源有三种：
+
+- **从我的画像提取**：`me.yaml` 的摘要和技能，别的都不发。
+- **粘贴自述**：你粘贴的任何文字。
+- **上传简历**：PDF、Markdown 或纯文本文件（`import.formats`），不超过 `import.max_file_bytes`。PDF 要有文字层：扫描件没有，会提示“没有可提取的文字”，请改为粘贴文字。文件只在内存里读取，不保存，也不写临时目录。
+
+超过 `import.max_chars` 的文字会被截断，卡片会说明。这些按钮要求申请写作已打开，你按下之前什么都不发送；卡片上写明 `story_extract` 任务的提供方（`ai.yaml`）。AI 被要求去掉姓名、联系方式和证件号，但可能漏掉：草稿里疑似有邮箱或电话时会标出，和素材一样。文字还会留在哪里，见[提取素材](privacy.zh.md#提取素材)。
+
+结果进入**待审核草稿**。采用之前 `stories.yaml` 不会变。每条草稿：
+
+- 每个字段都显示它依据的原文片段。引用不在原文里、引用太短不足以作为依据（`evidence.min_quote_chars`），或字段里的数字引用里没有（原文写 40%，字段写 60%）时，字段标**需核对**。这是代码核对，不再调用 AI。没有标记只表示找到了引用，不表示字段内容就对。
+- **采用**按原样加入，得到新的 id 和来源（画像、自述、简历），绝不覆盖已有素材。**先修改**可以改完再**按我的修改采用**。**丢弃**不要这条。采用和丢弃也会把草稿文字从数据库里清除。
+- 上面的素材库有未保存的改动时不能采用：采用会重新载入表单，改动就丢了。素材库在别处改过时，采用会被拒绝，页面重新载入。
+
+草稿 `import.draft_ttl_days` 天后删除，无论是否审核过。同一时间只运行一次提取。再次提取同样的文字，会替换这段文字还在等待审核的草稿。ai-worker 重启后，提取不会重跑：它失败、文字被清除，需要你重新发送。
+
 ## 写申请回答（`/jobs/<id>/apply`）
 
 职位页上的**写申请回答**打开这个职位的工作台（按钮上显示有定稿的问题数，例如 `1/3`）。手机上同一个入口是职位页底部栏里的笔形按钮。`writer.yaml: enabled` 为
@@ -149,6 +167,14 @@ ai-worker；请求完成、失败或过期后，素材从请求里清除，只�
 | `stories.title_max_chars` | `120` | 标题最长字符数；也是单条数字、技能、标签的上限 |
 | `stories.text_max_chars` | `1500` | “做了什么”和“结果”的最长字符数 |
 | `stories.preselect_count` | `4` | 新的申请问题默认勾选几条素材 |
+| `import.max_file_bytes` | `2000000` | 简历文件最大字节数，更大的不读取直接拒绝 |
+| `import.max_chars` | `30000` | 发给 AI 的原文最长字符数，更长的会截断 |
+| `import.min_chars` | `20` | 文字比这更少时视为没有可提取的内容 |
+| `import.formats` | `[pdf, md, txt]` | 简历可用的文件类型 |
+| `import.max_drafts` | `12` | 一次提取最多返回几条草稿 |
+| `import.pdf_timeout_seconds` | `15` | 读取一个 PDF 的最长时间，超时即停止并请你粘贴文字 |
+| `import.pdf_max_memory_mb` | `256` | 读取一个 PDF 最多占用的内存（MB） |
+| `import.draft_ttl_days` | `14` | 草稿等待审核的天数，过期删除，无论是否审核过 |
 | `questions.max_per_job` | `12` | 每个职位最多几题 |
 | `questions.text_max_chars` | `1000` | 问题原文最长字符数 |
 | `questions.max_versions_per_question` | `20` | 一题除定稿外最多几个版本 |
@@ -169,7 +195,7 @@ ai-worker；请求完成、失败或过期后，素材从请求里清除，只�
 | `evidence.quote_max_chars` | `160` | AI 给出的引用最长字符数 |
 | `evidence.min_quote_chars` | `4` | 算作依据的引用最短字符数；恰好是已知名称的除外 |
 | `evidence.first_person` | en / de / zh 词表 | 让句子算作“关于你”的词 |
-| `evidence.figure_units` | `scale`：万 萬 亿 億 千；`multiple`：倍 | 紧跟在数字后、会改变数字含义的词：`scale` 乘以倍数（5万 即 50,000），`multiple` 表示“倍数”，只和倍数匹配。大小写和兼容写法不算差别（`M` 就是 `m`，`㎏` 就是 `kg`）；中日韩单位可以连写（3千万） |
+| `evidence.figure_units` | `scale`：万 萬 亿 億 千、thousand、m、mio、million、b、bn、mrd、billion 等；`multiple`：倍、x | 紧跟在数字后、会改变数字含义的词：`scale` 乘以倍数（5万 即 50,000），`multiple` 表示“倍数”，只和倍数匹配。大小写和兼容写法不算差别（`M` 就是 `m`，`㎏` 就是 `kg`）；中日韩单位可以连写（3千万） |
 | `evidence.names` | 引号、混合词、大写词（德语：两个以上连续才算） | 核对时当作名称的词 |
 
 用哪个 AI 写由 `ai.yaml` 的 `write` 任务决定（顺序、模型，以及 API 服务商单独的 `max_output_tokens` /

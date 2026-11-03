@@ -8,6 +8,7 @@ import { MAX_WINDOW_HOURS } from "@/lib/config/schemas/channels";
 import type { Db } from "@/lib/db/client";
 import type { CycleSummary } from "@/lib/cycle/run-cycle";
 import type { ControlRequest } from "@/lib/db/repos/control-requests";
+import { STORY_EXTRACT_MAX_CHARS, STORY_EXTRACT_ORIGINS } from "@/lib/stories/extract";
 import { writerMaterialsSchema } from "@/lib/writer/materials";
 import { POLISH_OPTIONS, WRITE_MODES } from "@/lib/writer/types";
 
@@ -71,6 +72,20 @@ export const writerJobPayloadSchema = z.strictObject({
   materials: writerMaterialsSchema,
 });
 export type WriterJobPayload = z.infer<typeof writerJobPayloadSchema>;
+
+/**
+ * Payload of a `story_extract` request (the "from profile", "paste" and "upload" entries of the stories card). `text` is the
+ * source, cleared by every path that ends the request (`SCRUBBED_PAYLOAD_KEYS`); the hash and length stay. An `origin`
+ * value here also means the interactive lane: only `"auto"` means batch.
+ */
+export const storyExtractPayloadSchema = z.strictObject({
+  origin: z.enum(STORY_EXTRACT_ORIGINS),
+  sourceHash: z.string().regex(/^[0-9a-f]{64}$/),
+  sourceChars: z.number().int().min(0),
+  truncated: z.boolean(),
+  text: z.string().min(1).max(STORY_EXTRACT_MAX_CHARS),
+});
+export type StoryExtractPayload = z.infer<typeof storyExtractPayloadSchema>;
 
 /** Payload of a `salary_lookup` request (the "look up salary" button on the job page). */
 export const salaryLookupPayloadSchema = z.strictObject({
