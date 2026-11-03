@@ -144,11 +144,11 @@ describe("reading the label", () => {
   it("a mail that fails every cycle takes no slot of the batch: the next one is read in its place", async () => {
     await application();
     const bad = mail({ uid: 1, date: new Date("2026-10-01T09:00:00Z"), subject: undefined as never });
-    const result = await read([bad, mail({ uid: 2 }), mail({ uid: 3, date: new Date("2026-10-06T10:00:00Z") })], { settings: { ...config, max_messages_per_cycle: 1 } }).run;
+    const result = await read([bad, mail({ uid: 2 }), mail({ uid: 3, date: new Date("2026-10-06T10:00:00Z") })], { settings: { ...config, max_messages_per_cycle: 1, max_fetches_per_cycle: 2 } }).run;
     expect(result).toMatchObject({ fresh: 3, read: 1, stored: 1, failed: 1 });
-    // the work stays bounded: a cycle tries at most twice the limit
+    // the work stays bounded: a cycle fetches at most max_fetches_per_cycle
     const many = Array.from({ length: 6 }, (_, i) => mail({ uid: 10 + i, subject: undefined as never, date: new Date(2026, 9, 1, 9, i) }));
-    const bounded = await read(many, { settings: { ...config, max_messages_per_cycle: 2 } }).run;
+    const bounded = await read(many, { settings: { ...config, max_messages_per_cycle: 2, max_fetches_per_cycle: 4 } }).run;
     expect(bounded.read).toBe(0);
     expect(bounded.failed).toBe(4);
   });

@@ -9,6 +9,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 - **Gmail replies (optional, off by default).** Reads one Gmail label read-only with local rules and suggests status changes on `/pipeline`, each confirmed by you and undoable. No AI reads the mails and no mail content leaves the machine. See `docs/gmail-replies.md`. Adds the table `email_replies`.
 
+### Changed
+
+- **Writer and Gmail replies fixes.** The usage-cap notice in the application writer now reads like the other AI panels. The evidence check no longer reads a spaced single letter as a unit (`5 m` is a 5; `$5 m` and `3 x` still count). Gmail replies skip mail from a Gmail alias of the mailbox, and a mail that fails every cycle no longer holds a batch slot: `replies.yaml` gets `max_fetches_per_cycle` (default 100; a `replies.yaml` you already have needs no change, but older code refuses the new key, so remove it before rolling back).
+
 ### Upgrade notes
 
 - **Berlin Startup Jobs now starts by itself on existing German installs.** The new Berlin Startup Jobs channel is on by

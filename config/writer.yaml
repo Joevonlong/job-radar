@@ -126,7 +126,7 @@ evidence:
     zh: { words: [我, 我的], exclude: [我们, 我们的] }
   # Words right after a digit that change the figure, in any case. scale: multiplies it (5万 = 50,000, $2M = 2,000,000, so it matches "50,000" but not "5");
   # multiple: makes it a multiple (40倍), which matches only a multiple, not 40 or 40%.
-  # A one-letter Latin unit counts only against its digits (5M, 3x), so "5 m" stays a 5
+  # A one-letter Latin unit counts only against its digits (5M), so "5 m" stays a 5; after a currency sign or code ("$5 m") it counts, and a one-letter multiple (x) may stand apart
   figure_units:
     scale:
       { 万: 10000, 萬: 10000, 亿: 100000000, 億: 100000000, 千: 1000, thousand: 1000, tausend: 1000,

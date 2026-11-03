@@ -86,15 +86,19 @@ function foldedUnits(units: FigureUnits): { scale: Map<string, number>; multiple
  * The figure pattern; its fourth group is what follows the digits of `evidence.figure_units` (none when none are configured). CJK units
  * may stand in a row (3千万); a Latin one stands alone, so 5mm is not two units.
  */
-const figurePattern = (words: readonly string[]): RegExp => {
+const CURRENCY = String.raw`(?:[$€£¥]|\b(?:usd|eur|gbp|chf|cad|aud|jpy|cny))`;
+const figurePattern = (words: readonly string[], multiple: ReadonlySet<string> = new Set()): RegExp => {
   const cjk = words.filter((word) => ONLY_CJK.test(word));
   const other = words.filter((word) => !ONLY_CJK.test(word));
-  // a one-letter Latin unit (5M, 5x) must stand against the digits: "5 m" is five metres or minutes as often as five million
-  const spaced = other.filter((word) => word.length > 1);
+  // a one-letter Latin unit (5M, 5x) must stand against the digits: "5 m" is five metres or minutes as often as five million. Two
+  // exceptions: after a currency sign or code the letter is an amount ("$5 m", "EUR 5 M"), and a one-letter multiple ("3 x") is one
+  const spaced = other.filter((word) => word.length > 1 || multiple.has(word));
   const attached = other.filter((word) => word.length === 1);
+  const afterCurrency = attached.filter((word) => !multiple.has(word));
   const alternatives = [
     ...(cjk.length > 0 ? [String.raw`\s*(?:${anyOf(cjk)})+`] : []),
     ...(spaced.length > 0 ? [String.raw`\s*(?:${anyOf(spaced)})`] : []),
+    ...(afterCurrency.length > 0 ? [String.raw`\s+(?<=${CURRENCY}\s*\d[\d.,\u00a0\u202f ]*\s+)(?:${anyOf(afterCurrency)})`] : []),
     ...(attached.length > 0 ? [anyOf(attached)] : []),
   ];
   const unit = alternatives.length > 0 ? `(${alternatives.join("|")})?` : "()";
@@ -161,7 +165,7 @@ export function figures(text: string, units: FigureUnits = defaultFigureUnits())
   const shown: string[] = [];
   const folded = foldedUnits(units);
   const unitWord = folded.words.length > 0 ? new RegExp(anyOf(folded.words), "gu") : null;
-  for (const match of figureText(text).matchAll(figurePattern(folded.words))) {
+  for (const match of figureText(text).matchAll(figurePattern(folded.words, folded.multiple))) {
     const [whole, intPart = "", decimals, thousand, unit, percentMark] = match;
     const digits = intPart.replace(/[.,\u00a0\u202f ]/g, "");
     let value = Number(decimals === undefined ? digits : `${digits}.${decimals}`);
@@ -188,8 +192,11 @@ export function figures(text: string, units: FigureUnits = defaultFigureUnits())
 export function missingFigures(sentence: string, evidence: string, units: FigureUnits): string[] {
   const have = figures(evidence, units).keys;
   const out: string[] = [];
-  for (const match of figureText(sentence).matchAll(figurePattern(foldedUnits(units).words))) {
-    const { keys } = figures(match[0], units);
+  const text = figureText(sentence);
+  const lead = new RegExp(`${CURRENCY}\\s*$`, "iu");
+  for (const match of text.matchAll(figurePattern(foldedUnits(units).words, foldedUnits(units).multiple))) {
+    // a currency sign or code in front is part of how the figure reads ("$5 m"), so it goes along when the match is read on its own
+    const { keys } = figures((text.slice(0, match.index).match(lead)?.[0] ?? "") + match[0], units);
     const percentKey = [...keys].find((key) => key.endsWith("%"));
     const wanted = percentKey ?? [...keys][0];
     if (wanted !== undefined && !have.has(wanted)) out.push(match[0].trim());

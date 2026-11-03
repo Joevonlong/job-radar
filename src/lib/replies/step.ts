@@ -194,9 +194,9 @@ export async function readReplies(options: ReadRepliesOptions): Promise<ReplyRun
       .sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime() || a.uid - b.uid);
     result.fresh = fresh.length;
     // A mail that fails every cycle is never stored, so it is always "fresh" and, oldest first, would take a slot of the batch for good: only
-    // mail that was read uses a slot. The window is twice the limit, so one cycle never works through a whole backlog of bad mail.
+    // mail that was read uses a slot. The fetch window is `max_fetches_per_cycle`, so one cycle never works through a whole backlog of bad mail.
     const limit = config.max_messages_per_cycle;
-    const batch = fresh.slice(0, limit * 2);
+    const batch = fresh.slice(0, Math.max(config.max_fetches_per_cycle, limit));
     const candidates = db ? await listReplyCandidates(db, config.match.candidate_statuses) : [];
     const threads = db ? await listConfirmedThreads(db, [...new Set(batch.flatMap((header) => (header.threadId ? [header.threadId] : [])))]) : [];
 

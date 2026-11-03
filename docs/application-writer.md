@@ -292,7 +292,7 @@ it says when it may be outdated (a newer search or a changed story). The materia
 | `evidence.quote_max_chars` | `160` | Longest quote the AI may give |
 | `evidence.min_quote_chars` | `4` | Shortest quote that counts as evidence, unless it is exactly a known name |
 | `evidence.first_person` | en / de / zh words | Words that make a sentence one about you |
-| `evidence.figure_units` | `scale`: 万 萬 亿 億 千, thousand, m, mio, million, b, bn, mrd, billion and similar; `multiple`: 倍, x | Words right after a digit that change the figure: `scale` multiplies it (5万 is 50,000), `multiple` makes it a multiple that matches only a multiple. Case and compatibility forms do not count (`M` is `m`, `㎏` is `kg`); A one-letter Latin unit must stand against the digits (5M, 3x; with a space, "5 m" is not a unit); Chinese, Japanese or Korean units may stand in a row (3千万) |
+| `evidence.figure_units` | `scale`: 万 萬 亿 億 千, thousand, m, mio, million, b, bn, mrd, billion and similar; `multiple`: 倍, x | Words right after a digit that change the figure: `scale` multiplies it (5万 is 50,000), `multiple` makes it a multiple that matches only a multiple. Case and compatibility forms do not count (`M` is `m`, `㎏` is `kg`); A one-letter Latin unit must stand against the digits (5M); with a space it is a unit only after a currency sign or code ("$5 m"), and a one-letter multiple such as `x` may stand apart ("3 x"); Chinese, Japanese or Korean units may stand in a row (3千万) |
 | `evidence.names` | quoted, mixed tokens, capitalised words (German: only two or more in a row) | What the check treats as a name |
 
 Which AI writes is the `write` task in `ai.yaml` (order, model, and for the API providers `max_output_tokens` /
