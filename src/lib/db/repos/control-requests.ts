@@ -460,19 +460,19 @@ export async function findOpenFitRequest(db: Db, jobId: number): Promise<Control
   const [row] = await db
     .select()
     .from(controlRequests)
-    .where(and(sql`${controlRequests.kind}::text = 'writer_fit'`, inArray(controlRequests.status, [...OPEN_CONTROL_STATUSES]), sql`${controlRequests.payload} ->> 'jobId' = ${String(jobId)}`))
+    .where(and(eq(controlRequests.kind, "writer_fit"), inArray(controlRequests.status, [...OPEN_CONTROL_STATUSES]), sql`${controlRequests.payload} ->> 'jobId' = ${String(jobId)}`))
     .orderBy(controlRequests.id)
     .limit(1);
   return row ?? null;
 }
 
-/** The open `writer_job` request of a question, or null. */
+/** The open `writer_job` request of a question, or null. The kind is compared as the enum so `control_requests_job_id_idx` narrows by kind and job. */
 export async function findOpenWriterRequest(db: Executor, input: { jobId: number; questionId: number }): Promise<ControlRequest | null> {
   const [row] = await db
     .select()
     .from(controlRequests)
     .where(and(
-      sql`${controlRequests.kind}::text = 'writer_job'`,
+      eq(controlRequests.kind, "writer_job"),
       inArray(controlRequests.status, [...OPEN_CONTROL_STATUSES]),
       sql`${controlRequests.payload} ->> 'jobId' = ${String(input.jobId)}`,
       sql`${controlRequests.payload} ->> 'questionId' = ${String(input.questionId)}`,

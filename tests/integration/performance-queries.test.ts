@@ -11,6 +11,7 @@ import { listJobsToScan, listJobsToSyncSalary } from "@/lib/db/repos/signals";
 import { listJobsToTrapScan } from "@/lib/db/repos/traps";
 import { getPushCandidate } from "@/lib/db/repos/notifications";
 import { upsertRawPostings } from "@/lib/db/repos/raw-postings";
+import { findOpenFitRequest, findOpenWriterRequest, findLatestWriterRequests } from "@/lib/db/repos/control-requests";
 import { sumAiCostForMonth } from "@/lib/db/repos/ai-usage";
 import { getAiUsageForMonth, getMonthRunTotals, listRecentRunsByChannel } from "@/lib/db/queries/sources";
 import { oldGetAiUsageForMonth, oldGetMonthRunTotals, oldListRecentRunsByChannel, oldSumAiCostForMonth, oldUpsertRawPostings } from "./performance-baseline";
@@ -168,5 +169,20 @@ it("provides indexes whose keys match run, notification, pending raw and per-job
       [sql`explain (format json) select id from control_requests where kind = 'translate_job' and payload->>'jobId' = '123' order by id desc limit 1`, "control_requests_job_id_idx"],
       [sql`explain (format json) select id from raw_postings where parse_status = 'pending' and id > 0 order by id limit 10`, "raw_postings_pending_id_idx"],
     ] as const) expect(JSON.stringify(await tx.execute(query))).toContain(index);
+  });
+});
+
+it("compares the request kind as the enum in the writer request lookups, so the per-job request index applies", async () => {
+  queries.length = 0;
+  await findOpenWriterRequest(db, { jobId: 123, questionId: 4 });
+  await findOpenFitRequest(db, 123);
+  await findLatestWriterRequests(db, 123);
+  expect(queries.join("\n")).not.toContain("::text");
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`insert into control_requests (kind, payload) select 'translate_job', jsonb_build_object('jobId', g) from generate_series(1, 3000) g`);
+    await tx.execute(sql`analyze control_requests`);
+    await tx.execute(sql`set local enable_seqscan = off`);
+    const plan = JSON.stringify(await tx.execute(sql`explain (format json) select id from control_requests where kind = 'writer_job' and status in ('pending', 'running') and payload ->> 'jobId' = '123' and payload ->> 'questionId' = '4' order by id limit 1`));
+    expect(plan).toContain("control_requests_job_id_idx");
   });
 });
