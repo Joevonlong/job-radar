@@ -36,11 +36,11 @@ async function application(name = "Acme Robotics", status: "applied" | "intervie
   return { jobId: job!.id, applicationId: change.applicationId };
 }
 
-function read(messages: readonly FakeMessage[], over: { write?: boolean; records?: LogRecord[]; failFetchAfter?: number; failConnect?: unknown; settings?: RepliesConfig } = {}) {
+function read(messages: readonly FakeMessage[], over: { write?: boolean; records?: LogRecord[]; failFetchAfter?: number; failConnect?: unknown; settings?: RepliesConfig; environment?: Record<string, string> } = {}) {
   const box = fakeMailbox(messages, { ...(over.failFetchAfter === undefined ? {} : { failFetchAfter: over.failFetchAfter }), ...(over.failConnect ? { failConnect: over.failConnect } : {}) });
   const records = over.records;
   const logger = createLogger(records ? { sink: (record) => void records.push(record), minLevel: "debug" } : { sink: () => {} });
-  const run = readReplies({ config: over.settings ?? config, gmail: GMAIL, db: getDb(), write: over.write ?? true, legalSuffixes: [], logger, signal: new AbortController().signal, now: () => NOW, connect: box.factory, environment: ENV });
+  const run = readReplies({ config: over.settings ?? config, gmail: GMAIL, db: getDb(), write: over.write ?? true, legalSuffixes: [], logger, signal: new AbortController().signal, now: () => NOW, connect: box.factory, environment: over.environment ?? ENV });
   return { box, run };
 }
 
@@ -139,6 +139,30 @@ describe("reading the label", () => {
     expect(warned).toHaveLength(1);
     expect(JSON.stringify(warned)).toContain('"uid":1');
     expect(await getDb().select().from(schema.emailReplies)).toHaveLength(1);
+  });
+
+  it("a mail that fails every cycle takes no slot of the batch: the next one is read in its place", async () => {
+    await application();
+    const bad = mail({ uid: 1, date: new Date("2026-10-01T09:00:00Z"), subject: undefined as never });
+    const result = await read([bad, mail({ uid: 2 }), mail({ uid: 3, date: new Date("2026-10-06T10:00:00Z") })], { settings: { ...config, max_messages_per_cycle: 1 } }).run;
+    expect(result).toMatchObject({ fresh: 3, read: 1, stored: 1, failed: 1 });
+    // the work stays bounded: a cycle tries at most twice the limit
+    const many = Array.from({ length: 6 }, (_, i) => mail({ uid: 10 + i, subject: undefined as never, date: new Date(2026, 9, 1, 9, i) }));
+    const bounded = await read(many, { settings: { ...config, max_messages_per_cycle: 2 } }).run;
+    expect(bounded.read).toBe(0);
+    expect(bounded.failed).toBe(4);
+  });
+
+  it.each([["radar.test@gmail.com", "Radar.Test+jobs@gmail.com"], ["radar.test@gmail.com", "radartest@googlemail.com"], ["radartest@gmail.com", "r.a.d.a.r.t.e.s.t+x@Gmail.com"]])("mail from a Gmail alias of the mailbox (%s, %s) is not a reply", async (user, from) => {
+    await application();
+    const result = await read([mail({ uid: 1, from }), mail({ uid: 2 })], { environment: { ...ENV, GMAIL_USER: user } }).run;
+    expect(result).toMatchObject({ ownSkipped: 1, fresh: 1, read: 1 });
+  });
+
+  it("another Gmail address, or the same name at another domain, is still a reply", async () => {
+    await application();
+    const result = await read([mail({ uid: 1, from: "radartest2@gmail.com" }), mail({ uid: 2, from: "radar.test@example.test" })], { environment: { ...ENV, GMAIL_USER: "radar.test@gmail.com" } }).run;
+    expect(result.ownSkipped).toBe(0);
   });
 
   it("a database failure says so, not that IMAP failed", async () => {
