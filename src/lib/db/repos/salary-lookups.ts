@@ -121,7 +121,8 @@ const manualSince = (since: Date) => and(eq(controlRequests.kind, "salary_lookup
  * last 24 hours, whatever became of them) is checked and the request inserted in one transaction under an advisory lock, so two
  * clicks at once can never both take the last slot. An automatic request does not touch the quota. A manual request that joins
  * a waiting automatic one takes it over when the quota has room (`origin` removed, so it moves to the interactive lane and
- * counts as manual); without room it stays where it is and is still joined.
+ * counts as manual); without room it stays where it is and
+ * the press gets the quota answer.
  */
 export async function reserveSalaryLookupRequest(db: Executor, input: { lookupKey: string; jobId: number; force: boolean; origin?: "auto"; maxPerDay: number; now: Date }): Promise<SalaryReservation> {
   return db.transaction(async (tx) => {
@@ -139,7 +140,9 @@ export async function reserveSalaryLookupRequest(db: Executor, input: { lookupKe
       .limit(1);
     if (open) {
       const isAuto = (open.payload as { origin?: unknown } | null)?.origin === "auto";
-      if (input.origin === undefined && isAuto && open.status === "pending" && (await countManual()) < input.maxPerDay) {
+      if (input.origin === undefined && isAuto && open.status === "pending") {
+        const used = await countManual();
+        if (used >= input.maxPerDay) return { state: "quota", used };
         await tx.update(controlRequests).set({ payload: sql`${controlRequests.payload} - 'origin'` }).where(and(eq(controlRequests.id, open.id), eq(controlRequests.status, "pending")));
       }
       return { state: "existing", requestId: open.id };

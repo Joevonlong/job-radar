@@ -1,14 +1,18 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, it, vi } from "vitest";
 
+import { requestResearchItemAction } from "@/app/jobs/[id]/research-bar-actions";
 import { ResearchBar } from "@/components/jobs/detail/research-bar";
 import type { ResearchBarStatus } from "@/lib/research/bar-view";
+import { toastTone } from "@/lib/toast";
 import en from "../../messages/en.json";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/app/jobs/[id]/research-bar-actions", () => ({ requestResearchAction: vi.fn(), requestResearchItemAction: vi.fn(), researchStatusAction: vi.fn(async () => null) }));
+
+vi.mock("@/lib/toast", () => ({ toastTone: vi.fn() }));
 
 const show = (initial: ResearchBarStatus) =>
   render(
@@ -22,6 +26,15 @@ describe("ResearchBar", () => {
     show({ canRequest: true, items: { company: { state: "running", stage: "pending", auto: true } } });
     expect(screen.getByTestId("research-bar-company-run")).toBeTruthy();
     expect(screen.getByTestId("research-bar-all")).toBeTruthy();
+  });
+
+  it("says so when the daily limit stops a press from moving the request up, and it still reads as queued", async () => {
+    const status: ResearchBarStatus = { canRequest: true, items: { company: { state: "running", stage: "pending", auto: true } } };
+    vi.mocked(requestResearchItemAction).mockResolvedValue({ ok: true, status, errors: { company: "quota" } });
+    show(status);
+    fireEvent.click(screen.getByTestId("research-bar-company-run"));
+    await waitFor(() => expect(toastTone).toHaveBeenCalledWith("error", `${en.research.bar.item.company}: ${en.research.bar.error.quota}`));
+    expect(screen.getByTestId("research-bar-company").textContent).toContain(en.research.bar.state.queuedAuto);
   });
 
   it("has no button once the worker has it, or for a request the user made", () => {

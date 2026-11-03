@@ -225,7 +225,8 @@ const manualSince = (since: Date) => and(eq(controlRequests.kind, "company_resea
  * Queue a `company_research` request, or join the open one of the same company. The daily quota is checked and the request
  * inserted in one transaction under an advisory lock, so two clicks at once can never both take the last slot. A manual
  * request that joins a waiting automatic one takes it over when the quota has room (`origin` removed, so it moves to the
- * interactive lane and counts as manual); without room it stays where it is and is still joined.
+ * interactive lane and counts as manual); without room it stays where it is and
+ * the press gets the quota answer.
  */
 export async function reserveCompanyResearchRequest(db: Executor, input: { companyId: number; jobId: number; force: boolean; origin?: "auto"; maxPerDay: number; now: Date }): Promise<CompanyResearchReservation> {
   return db.transaction(async (tx) => {
@@ -243,7 +244,9 @@ export async function reserveCompanyResearchRequest(db: Executor, input: { compa
       .limit(1);
     if (open) {
       const isAuto = (open.payload as { origin?: unknown } | null)?.origin === "auto";
-      if (input.origin === undefined && isAuto && open.status === "pending" && (await countManual()) < input.maxPerDay) {
+      if (input.origin === undefined && isAuto && open.status === "pending") {
+        const used = await countManual();
+        if (used >= input.maxPerDay) return { state: "quota", used };
         await tx.update(controlRequests).set({ payload: sql`${controlRequests.payload} - 'origin'` }).where(and(eq(controlRequests.id, open.id), eq(controlRequests.status, "pending")));
       }
       return { state: "existing", requestId: open.id };

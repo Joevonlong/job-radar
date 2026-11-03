@@ -24,7 +24,7 @@ company:
   # is not limited to them. Edit in this file only: it decides which hosts this machine may fetch.
   allowed_domains: [linkedin.com, kununu.com, glassdoor.com, glassdoor.de, crunchbase.com, wikipedia.org, northdata.com, github.com]
   # Job boards and applicant tracking systems: never taken as a company's own website. Edit in this file only.
-  non_company_hosts: [greenhouse.io, lever.co, ashbyhq.com, workable.com, personio.de, smartrecruiters.com, recruitee.com, join.com, myworkdayjobs.com, successfactors.com, successfactors.eu, teamtailor.com, softgarden.io, bamboohr.com, icims.com, taleo.net, jobvite.com, linkedin.com, stepstone.de, indeed.com, xing.com, arbeitsagentur.de, arbeitnow.com, notion.site, nip.io, sslip.io, xip.io]
+  non_company_hosts: [greenhouse.io, lever.co, ashbyhq.com, workable.com, personio.de, smartrecruiters.com, recruitee.com, join.com, myworkdayjobs.com, successfactors.com, successfactors.eu, teamtailor.com, softgarden.io, bamboohr.com, icims.com, taleo.net, jobvite.com, linkedin.com, stepstone.de, indeed.com, xing.com, arbeitsagentur.de, arbeitnow.com]
   # A stated company size or review rating outside these ranges is dropped as implausible
   employees: {min: 1, max: 3000000}
   rating: {min: 0, max: 5}

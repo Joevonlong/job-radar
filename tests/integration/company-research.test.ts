@@ -14,6 +14,7 @@ import { getOrCreateCompany, mergeCompanyInto } from "@/lib/db/repos/companies";
 import { controlLaneOf, getControlRequest } from "@/lib/db/repos/control-requests";
 import { confirmInferredCompanyDomain, countCompanyResearchRequests, findLatestCompanyResearch, getCompanyResearchForJob, insertCompanyResearchOfJob, reserveCompanyResearchRequest, saveUserCompanyDomain } from "@/lib/db/repos/company-research";
 import { insertJob } from "@/lib/db/repos/jobs";
+import { reserveSalaryLookupRequest } from "@/lib/db/repos/salary-lookups";
 import { getCompanyResearchOverview } from "@/lib/research/company-overview";
 import { getCompanyResearchContext } from "@/lib/research/view";
 
@@ -282,6 +283,24 @@ describe("the request rules", () => {
     const promoted = await getControlRequest(db(), auto.requestId);
     expect(controlLaneOf("company_research", promoted?.payload)).toBe("interactive");
     expect(await countCompanyResearchRequests(db(), NOW)).toBe(1);
+  });
+
+  it("a manual press at the daily limit gets the limit and leaves a waiting automatic request where it is", async () => {
+    const { jobId, companyId } = await addJob("Acme");
+    const auto = await reserveCompanyResearchRequest(db(), { jobId, companyId, force: false, origin: "auto", maxPerDay: 1, now: NOW });
+    if (auto.state !== "queued") throw new Error("not queued");
+    const other = await addJob("Bolt");
+    await reserveCompanyResearchRequest(db(), { jobId: other.jobId, companyId: other.companyId, force: false, maxPerDay: 1, now: NOW });
+    expect(await reserveCompanyResearchRequest(db(), { jobId, companyId, force: false, maxPerDay: 1, now: NOW })).toEqual({ state: "quota", used: 1 });
+    const kept = await getControlRequest(db(), auto.requestId);
+    expect(controlLaneOf("company_research", kept?.payload)).toBe("batch");
+
+    const lookupKey = "acme|engineer";
+    const salaryAuto = await reserveSalaryLookupRequest(db(), { lookupKey, jobId, force: false, origin: "auto", maxPerDay: 1, now: NOW });
+    if (salaryAuto.state !== "queued") throw new Error("not queued");
+    await reserveSalaryLookupRequest(db(), { lookupKey: "bolt|engineer", jobId: other.jobId, force: false, maxPerDay: 1, now: NOW });
+    expect(await reserveSalaryLookupRequest(db(), { lookupKey, jobId, force: false, maxPerDay: 1, now: NOW })).toEqual({ state: "quota", used: 1 });
+    expect(controlLaneOf("salary_lookup", (await getControlRequest(db(), salaryAuto.requestId))?.payload)).toBe("batch");
   });
 
   it("does not reveal another company's request by its id", async () => {

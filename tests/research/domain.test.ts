@@ -22,6 +22,14 @@ describe("the domain a link belongs to", () => {
   });
 });
 
+describe("the domain a link belongs to, with an empty host list", () => {
+  it("still refuses wildcard DNS names, and takes one site under a shared host", () => {
+    expect(registrableDomainOf("https://10.0.0.1.nip.io/careers", [])).toBeNull();
+    expect(registrableDomainOf("https://notion.site", [])).toBeNull();
+    expect(registrableDomainOf("https://acme.notion.site/jobs", [])).toBe("acme.notion.site");
+  });
+});
+
 describe("the domain a company's links suggest", () => {
   it("takes the most common candidate, skips the rest, and does not depend on the order", () => {
     const urls = ["https://careers.acme.de/1", "https://boards.greenhouse.io/acme", "https://jobs.acme.de/2", "https://other.example.org/", "nonsense"];
