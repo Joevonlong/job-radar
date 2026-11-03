@@ -4,7 +4,7 @@ import path from "node:path";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
-import { getConfigPath, layeredConfigFingerprint, loadConfig, readConfigText, resolveConfigPath, watchConfig } from "@/lib/config";
+import { getConfigPath, layeredConfigFingerprint, loadConfig, resolveConfigPath, watchConfig } from "@/lib/config";
 import { claimNextControlRequest, closeDb, createCycle, createRun, finishRun, getDb, insertControlRequest, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { ackState, diskConfigHash, readConfigAcks, recordAllConfigLoaded, recordConfigLoaded } from "@/lib/settings/ack";
