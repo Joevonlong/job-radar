@@ -48,6 +48,38 @@
 
 同一岗位在不同来源里公司名写法不同（"SIV.AG" / "SIV.AG - Service für Informationsverarbeitung AG"、"Allianz in Deutschland" / "Allianz Kunde und Markt GmbH"）时，原来只在同一个公司名下找重复，所以漏合并。现在公司名相关（一个是另一个的词前缀，或首词相同）、标题相同、SimHash 距离 ≤ `dedupe.cross_company_simhash_max_distance`（默认 14，比同公司的 `simhash_max_distance` 宽，因为 StepStone 和 LinkedIn 的同一份 JD 样板文字不同）才合并。已经入库的重复岗位不会被追溯合并，只对之后新进来的岗位生效。
 
+## 重复岗位的合并
+
+新 posting 按下面的顺序做四项检查，找到就并入已有岗位：
+
+1. **同一来源**：同一渠道系列、同一 external id。
+2. **精确键**：同公司、标题键相同、同城市。
+3. **正文**：同公司，正文 SimHash 距离在上限内。
+4. **相关公司**：公司名是这家公司的变体写法，标题键相同，SimHash 距离在 `dedupe.cross_company_simhash_max_distance` 内。
+
+公司常把同一份正文用在不同职级和方向上，所以只看第 3 项可能把不同岗位并到一起。`pipeline.yaml` 里可选的标题检查 `dedupe.title_guard` 会先比较标题。它默认关闭：用真实数据核对时，丢失的真重复仍然超过这个功能能接受的数量，其中多数是规则读不出来的改写标题。
+
+| 关系 | 含义 | 上限 |
+| --- | --- | --- |
+| `same` | 标题键相同 | `same_title_max_distance` |
+| `compatible` | 只差城市、两边都在的国家、工作方式、性别标记、写法（`synonyms`）或词序 | `simhash_max_distance` |
+| `different` | 其他情况 | `different_title_max_distance`（`null`：不凭正文合并） |
+
+开启时，取上限内距离最近的候选，同距离取最早的。关闭时，取第一个在 `simhash_max_distance` 内的候选，不看标题。职级、地区（`scope_words`）和翻译过的标题都算不同。其余的键是比较时用的词表：`city_connectors`、`work_mode_words`、`seniority_words` 和 `ignore_patterns`。城市来自市场的城市表和 posting 自己的地点。
+
+出厂 `pipeline.yaml` 里那段注释列出了默认值，`pnpm config:check` 保证它和代码一致。要开启检查，在你的 `data/config/pipeline.yaml` 里写 `dedupe.title_guard.enabled: true`。这个文件会整份替换出厂文件，所以在你删掉它之前，其他出厂默认值不再跟随产品更新。
+
+检查只影响之后入库的 posting。已有的合并不变，`pnpm reprocess` 也不会重新匹配。再次关闭同样安全：已经分开的岗位保持分开，新 posting 回到旧规则。
+
+改动之前想看效果，可以用自己数据库的快照重放。这不会写入数据库。快照里有完整的 posting，请放在任何仓库之外：
+
+```bash
+pnpm simhash:analyze --export <文件> --compose-dir <安装目录>
+pnpm simhash:analyze --guard --input <文件> [--same-title-max N] [--seed N]
+```
+
+报告对比旧规则和当前配置，把 `same_title_max_distance` 从 3 扫到 8，列出丢失的合并、新增的合并和改变归属的 posting，并抽样列出已有合并里标题不同的部分。
+
 ## 公司和标题的匹配键
 
 判断两条 posting 是不是同一个岗位（以及同一家公司），靠的是匹配键：公司键是公司名转小写、去掉重音和法律形式（GmbH、Inc. 等），

@@ -1,9 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
+import { decideMatch } from "@/lib/pipeline/dedupe";
+import { normalizeDraft } from "@/lib/pipeline/normalize";
 import { hammingDistance, simhash } from "@/lib/pipeline/simhash";
 
-import { shippedPipeline } from "./helpers";
+import { draft, pipelineWith, shippedPipeline } from "./helpers";
 
 /**
  * Borderline cases behind `dedupe.simhash_max_distance` (calibrated on real data, see
@@ -46,5 +48,26 @@ describe("simhash_max_distance on borderline postings", () => {
     // Same title in two cities with different location blurbs is a true duplicate at distance 4-5 in the real data;
     // widening the threshold to catch it would also merge many different jobs (see the research note).
     expect(distance(jd("Berlin"), jd("Munich, Germany (hybrid, remote within the EU possible)"))).toBeGreaterThan(max);
+  });
+
+  it("merges it with the title check on, when the title is the same and the distance within the same-title limit", async () => {
+    const between = distance(jd("Berlin"), jd("Munich, Germany (hybrid, remote within the EU possible)"));
+    const limited = (limit: number) =>
+      pipelineWith((raw) => {
+        (raw.dedupe as Record<string, unknown>).title_guard = { enabled: true, same_title_max_distance: limit };
+      });
+    const decide = async (limit: number) => {
+      const guarded = limited(limit);
+      const normalized = normalizeDraft(draft({ title: "Backend Engineer", locations: [{ label: "Munich", city: "München", countryCode: "DE" }], description: jd("Munich, Germany (hybrid, remote within the EU possible)") }), guarded);
+      const candidate = { id: 1, title: "Backend Engineer", titleNorm: normalized.titleNorm, simhash: simhash(jd("Berlin"), options), locations: [{ label: "Berlin", city: "Berlin", countryCode: "DE", isPrimary: true }] };
+      return decideMatch(
+        { normalized, companyId: 1, companyName: "Northwind Labs GmbH", channelFamily: "ats", externalId: "x", rawPostingId: 2 },
+        { sameSource: async () => null, byCompanyTitle: async () => [], sameCompanyWithHash: async () => [candidate], relatedCompanyByTitle: async () => [] },
+        guarded,
+        new Set(),
+      );
+    };
+    expect((await decide(between)).decision?.detail).toMatchObject({ rule: "simhash", title: "same", distance: between, limit: between });
+    expect((await decide(between - 1)).decision).toBeNull();
   });
 });

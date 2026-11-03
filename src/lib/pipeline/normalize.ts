@@ -37,7 +37,7 @@ export interface NormalizedJob {
 }
 
 /** "(m/w/d)", "(f/m/x)", "(all genders)", "(gn)", "m/f/d" gender markers. */
-const GENDER_MARKER = /[([]?\s*\b(?:[mwfdxi*]\s*[/|\\]\s*[mwfdxi*](?:\s*[/|\\]\s*[mwfdxi*])?|all\s+genders?|gn)\b\s*[)\]]?/giu;
+export const GENDER_MARKER = /[([]?\s*\b(?:[mwfdxi*]\s*[/|\\]\s*[mwfdxi*](?:\s*[/|\\]\s*[mwfdxi*])?|all\s+genders?|gn)\b\s*[)\]]?/giu;
 
 /**
  * Title key for matching the same posting across sources: lower case, ß as ss, diacritics folded (`foldDiacritics`), gender

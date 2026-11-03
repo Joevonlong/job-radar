@@ -491,6 +491,24 @@ describe("visa check settings", () => {
     expect(issuePaths("pipeline", pipeline)).toEqual(["job_checks.ghost.thin_description.infer_from_headings"]);
   });
 
+  it("pipeline.yaml job_checks.ghost rules stay enabled when a partial override leaves out `enabled`", () => {
+    const pipeline = fixture("pipeline");
+    delete pipeline.config_version;
+    const overrides: Record<string, Record<string, unknown>> = {
+      thin_description: { min_words: 80 },
+      repost_label: { points: 3 },
+      reposted: { min_gap_days: 20 },
+      evergreen_wording: { points: 3 },
+      long_open: { first_seen_max_points: 2 },
+    };
+    type Ghost = { job_checks: { ghost: Record<string, { enabled: boolean }> } };
+    for (const [rule, override] of Object.entries(overrides)) {
+      pipeline.job_checks = { ghost: { [rule]: override } };
+      const parsed = configRegistry.pipeline.schema.parse(pipeline) as unknown as Ghost;
+      expect(parsed.job_checks.ghost[rule]?.enabled, rule).toBe(true);
+    }
+  });
+
   it("a saved view keeps a visa filter and rejects an unknown one", () => {
     const good = fixture("interests");
     good.views = [{ id: "sponsor", name: "Sponsor", filters: { visa: "offered" } }];

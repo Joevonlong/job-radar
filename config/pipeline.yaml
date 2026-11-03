@@ -6,7 +6,7 @@ config_version: 3
 batch_size: 200
 
 dedupe:
-  # Two jobs from the same company are merged when the 64-bit SimHash Hamming distance of their JD bodies is ≤ this value (rechecked 2026-10 on 621 real jobs, kept at 3; recheck with pnpm simhash:analyze)
+  # Two jobs from the same company with compatible titles are merged when the 64-bit SimHash Hamming distance of their JD bodies is ≤ this value (with title_guard.enabled: false, whatever their titles; rechecked on real jobs with pnpm simhash:analyze --guard)
   simhash_max_distance: 3
   # Different but related company names (one is a word prefix of the other, or same first word: "SIV.AG" / "SIV.AG - Service für …", "Allianz in Deutschland" / "Allianz Kunde und Markt GmbH") with the same title are also merged at Hamming distance ≤ this value (the same JD carries different boilerplate on different channels, so this is looser than same-company)
   cross_company_simhash_max_distance: 14
@@ -14,6 +14,26 @@ dedupe:
   simhash_shingle_words: 3
   # Bodies shorter than this many words get no SimHash (too short; different jobs would collide)
   simhash_min_words: 30
+  # The block below lists the title_guard defaults that apply while it is commented out. Uncomment it (remove "# " from
+  # every line between the markers, keeping the markers out) to change a value; enabled: true turns the title check on.
+  # pnpm config:check holds the block equal to the defaults in the code. See docs/extraction.md.
+  # >>> title_guard defaults
+  # title_guard:
+  #   enabled: false
+  #   same_title_max_distance: 8
+  #   different_title_max_distance: null
+  #   synonyms:
+  #     sr: senior
+  #     snr: senior
+  #     jr: junior
+  #   city_connectors: [in, at, bei, im, for, für]
+  #   work_mode_words: [remote, hybrid, on-site, onsite, home office, homeoffice, remote-first, fully remote, 100% remote, remote worldwide, 100% remote worldwide, mobiles arbeiten]
+  #   seniority_words: [junior, jr, mid, senior, sr, snr, staff, principal, lead, head, intern, werkstudent, praktikant]
+  #   scope_words: [eu, europe, emea, dach, apac, latam, nordics, benelux, americas]
+  #   ignore_patterns:
+  #     - '[(\[]?\s*\b(?:[mwfdx]|div(?:erse?)?)\s*[/|\\]\s*(?:[mwfdx]|div(?:erse?)?)\s*[/|\\]\s*(?:[mwfdx]|div(?:erse?)?)\b\s*[)\]]?'
+  #     - '\s[-–—|·]\s*[\p{L}\p{N}-]+\.(?:com|net|org|de)\s*$'
+  # <<< title_guard defaults
 
 lifecycle:
   # dormant_after_days is optional (schema default 30); 0 wakes dormant jobs at the next maintenance sweep.

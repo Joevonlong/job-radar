@@ -38,6 +38,7 @@ export const OVERLAY_RECORD_RULES: Readonly<Partial<Record<ConfigName, readonly 
   ],
   pipeline: [
     { path: "company.aliases", kind: "entries" },
+    { path: "dedupe.title_guard.synonyms", kind: "entries" },
     { path: "salary.fx_rates", kind: "entries" },
     // each entry's value (a list) is replaced as a whole; the market packs then add theirs (union)
     { path: "filter.city_aliases", kind: "entries" },

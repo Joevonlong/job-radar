@@ -7,6 +7,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Optional title check for duplicate merging.** `dedupe.title_guard` in `pipeline.yaml` can compare titles before a job
+  is merged on its description. It is off by default, so matching does not change, and no migration runs. The first cycle
+  after upgrading re-evaluates the filter once, with no AI cost. **Rollback:** an older version refuses
+  `title_guard` in `data/config/pipeline.yaml`, so remove the key first. See
+  [Merging duplicate jobs](docs/extraction.md#merging-duplicate-jobs).
 - **Your `models.yaml` is now an overlay on the shipped model catalog.** `data/config/models.yaml` used to replace the
   shipped `config/models.yaml` as a whole; it is now laid over it model by model: an entry with the same `id` (within a
   provider) replaces the shipped entry, a new `id` is added, `deprecated: true` with just an `id` hides a shipped model,

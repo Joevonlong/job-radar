@@ -11,6 +11,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
+
+import { titleGuardSchema } from "@/lib/config/schemas/pipeline";
 import { parse } from "yaml";
 
 import { migrateConfigDocument, parseConfigDocument, parseConfigTextWithVersion, searchSchema, type ConfigName, type PipelineConfig } from "@/lib/config";
@@ -121,7 +123,11 @@ describe.runIf(legacyText("pipeline") !== null)("pipeline.yaml: legacy -> migrat
   });
 
   it("everything that did not move is unchanged", () => {
-    for (const key of ["batch_size", "dedupe", "description", "workplace"]) expect(effective[key as keyof PipelineConfig]).toEqual(original[key]);
+    for (const key of ["batch_size", "description", "workplace"]) expect(effective[key as keyof PipelineConfig]).toEqual(original[key]);
+    // the title check has schema defaults when older files have none
+    const { title_guard: titleGuard, ...dedupe } = effective.dedupe;
+    expect(titleGuard).toEqual(titleGuardSchema.parse({}));
+    expect(dedupe).toEqual(original.dedupe);
     // the Arbeitnow channel added its family to apply_priority (as an aggregator); every other priority is as before
     const { arbeitnow: arbeitnowPriority, ...priorities } = effective.apply_priority;
     expect(arbeitnowPriority).toBe(4);
