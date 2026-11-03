@@ -5,7 +5,7 @@ import { expect, test, type Page } from "./fixtures";
 import { parse, stringify } from "yaml";
 
 /**
- * The ghost job check on the seeded e2e database (the seed runs it). Fictional seed job: "Data Engineer (Talent Pool)" at
+ * The ghost job check on the seeded e2e database (the seed runs it). Fictional seed job: "Data Engineer (Ingestion)" at
  * Lindwurm Data Systems: posted 200 days ago, relisted under a new id, says it is a talent pool, and its JD is short → likely.
  * The check is off by default: the specs turn it on in ui.yaml and put the default back. Rewrites ui.yaml: a project of the serial
  * chain (e2e/projects.ts).
@@ -13,7 +13,7 @@ import { parse, stringify } from "yaml";
 const CONFIG_DIR = process.env.E2E_CONFIG_DIR ?? "";
 const DEFAULTS_DIR = process.env.E2E_DEFAULTS_DIR ?? path.resolve("tests/fixtures/config/defaults");
 const UI_FILE = path.join(CONFIG_DIR, "ui.yaml");
-const GHOST = /Data Engineer \(Talent Pool\)/;
+const GHOST = /Data Engineer \(Ingestion\)/;
 
 test.describe.configure({ mode: "serial" });
 
