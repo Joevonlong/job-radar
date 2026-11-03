@@ -28,7 +28,7 @@ describe("errorFromHttp", () => {
       expect(errorFromHttp(404, { where: "x.test", bodyExcerpt: "   " })?.message).toBe("HTTP 404 from x.test");
     });
 
-    it.each(["Insufficient balance", "No credits left on this account", "Monthly QUOTA exceeded"])("a 400 saying %s is a budget failure", (body) => {
+    it.each(["Insufficient balance", "No credits left on this account", "Account is out of credits", "Monthly QUOTA exceeded"])("a 400 saying %s is a budget failure", (body) => {
       const error = errorFromHttp(400, { where: "api.example.test", bodyExcerpt: body });
       expect(error).toBeInstanceOf(BudgetExceededError);
       expect(error?.code).toBe("budget_exceeded");
@@ -38,6 +38,12 @@ describe("errorFromHttp", () => {
     it("another status, or a word that only contains one of those, stays unknown", () => {
       expect(errorFromHttp(404, { bodyExcerpt: "quota" })?.code).toBe("unknown");
       expect(errorFromHttp(400, { bodyExcerpt: "unbalanced parentheses in the query" })?.code).toBe("unknown");
+    });
+
+    it.each(["credit analyst", "balance sheet", "quota manager"])("a 400 echoing the search term %s stays unknown", (term) => {
+      const error = errorFromHttp(400, { bodyExcerpt: `Unsupported title: ${term}` });
+      expect(error?.code).toBe("unknown");
+      expect(error?.message).toContain(term);
     });
   });
 

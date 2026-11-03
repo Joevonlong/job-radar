@@ -130,7 +130,7 @@ const LINKEDIN_DENIED_STATUS = 999;
 /** Longest part of a provider's answer an error message quotes. */
 const REASON_MAX_CHARS = 120;
 /** What a provider says when an account has run out: some answer 400 instead of 402. */
-const OUT_OF_BUDGET_WORDS = /\b(?:balance|credits?|quota)\b/i;
+const OUT_OF_BUDGET_WORDS = /\b(?:insufficient\s+balance|no\s+credits|out\s+of\s+credits|quota\s+exceeded)\b/i;
 
 /**
  * The start of a provider's error answer, fit for an error message (messages are logged and stored with the run): one line, without
