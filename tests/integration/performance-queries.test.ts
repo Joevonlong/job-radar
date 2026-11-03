@@ -149,8 +149,14 @@ it("provides indexes whose keys match run, notification, pending raw and per-job
   expect(definitions.get("notifications_job_id_idx")).toContain("payload_json ->> 'jobId'");
   expect(definitions.get("control_requests_job_id_idx")).toContain("payload ->> 'jobId'");
   expect(definitions.get("raw_postings_pending_id_idx")).toMatch(/\(id\).*WHERE.*pending/);
-  // Force eligibility rather than a cost choice on these tiny fixtures; the one-year benchmark checks real plans/costs.
+  // Force eligibility rather than a cost choice; the one-year benchmark checks real plans/costs. The planner reads the statistics it
+  // last saw, which an earlier file's rows may have left, so give it rows where each index is the selective one, and fresh statistics.
   await db.transaction(async (tx) => {
+    await tx.insert(schema.channels).values(["fixture", "other"].map((id) => ({ id, family: "fixture", kind: "manual" }))).onConflictDoNothing();
+    await tx.execute(sql`insert into runs (channel_id, started_at, status)
+      select case when g % 20 = 0 then 'fixture' else 'other' end, '2025-01-01'::timestamptz + g * interval '4 hours', (case when g % 4 = 0 then 'succeeded' else 'failed' end)::run_status
+      from generate_series(1, 3000) g`);
+    await tx.execute(sql`analyze runs`);
     await tx.execute(sql`set local enable_seqscan = off`);
     await tx.execute(sql`set local enable_bitmapscan = off`);
     await tx.execute(sql`set local enable_sort = off`);

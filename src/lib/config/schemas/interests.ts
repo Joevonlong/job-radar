@@ -268,15 +268,27 @@ export function unknownViewFilterKeys(filters: unknown): string[] {
 }
 
 /**
+ * The date keys of `filters` whose value this version does not take: a hand-written typo, or a value a newer version offers. Only these
+ * two: their values are the ones that grow, and without one the view just shows more.
+ */
+export function invalidViewDateKeys(filters: unknown): Array<"within" | "dateBy"> {
+  if (!isRecord(filters)) return [];
+  const { within, dateBy } = strictViewFiltersSchema.shape;
+  return [...("within" in filters && !within.safeParse(filters.within).success ? ["within" as const] : []), ...("dateBy" in filters && !dateBy.safeParse(filters.dateBy).success ? ["dateBy" as const] : [])];
+}
+
+/**
  * Lenient about keys, strict about everything else: a key this version does not know (a newer version stored it; this one may be the
- * rollback target) is dropped before the strict schema runs, so one such key never fails the whole file. Known keys keep their strict
- * validation. The dropped keys are reported separately (`unknownViewFilterKeys`, a `config:check` warning), not silently lost.
+ * rollback target), or a `within` / `dateBy` value it does not take, is dropped before the strict schema runs, so one of them never fails
+ * the whole file. Other known keys keep their strict validation. What was dropped is reported separately (`unknownViewFilterKeys`,
+ * `invalidViewDateKeys`, `config:check` warnings), not silently lost.
  * Not `.passthrough()`: that would give `ViewFilters` an index signature and loosen every type derived from it.
  */
-export const viewFiltersSchema = z.preprocess(
-  (value) => (isRecord(value) ? Object.fromEntries(Object.entries(value).filter(([key]) => KNOWN_VIEW_FILTER_KEYS.has(key))) : value),
-  strictViewFiltersSchema,
-);
+export const viewFiltersSchema = z.preprocess((value) => {
+  if (!isRecord(value)) return value;
+  const invalid: readonly string[] = invalidViewDateKeys(value);
+  return Object.fromEntries(Object.entries(value).filter(([key]) => KNOWN_VIEW_FILTER_KEYS.has(key) && !invalid.includes(key)));
+}, strictViewFiltersSchema);
 
 const savedView = z.strictObject({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "id must be lowercase letters, digits or dashes"),

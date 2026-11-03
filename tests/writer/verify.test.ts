@@ -238,6 +238,38 @@ describe("figures", () => {
     expect(same.missing).toEqual([]);
   });
 
+  it("units in a row multiply: 3千万 is 30,000,000, not 3000", () => {
+    expect([...figures("3千万").keys]).toEqual(["30000000"]);
+    expect([...figures("2万亿").keys]).toEqual(["2000000000000"]);
+    expect([...figures("3千万元").keys]).toEqual(["30000000"]);
+    expect([...figures("3万倍").keys]).toEqual(["30000x"]);
+    const backed = verifySentence(sentence("融资3千万欧元。", "user", [{ source: "draft", quote: "30,000,000" }]), context({ draft: "融资30,000,000欧元。" }));
+    expect(backed.missing).toEqual([]);
+  });
+
+  it("an amount with thousands separators against a currency code is that amount, so 5万 matches EUR50,000 and 50,000EUR", () => {
+    for (const text of ["EUR50,000", "50,000EUR", "50,000eur", "USD50.000"]) expect([...figures(text).keys]).toEqual(["50000"]);
+    for (const quote of ["EUR50,000 a year", "50,000EUR a year"]) {
+      const backed = verifySentence(sentence("成本降低了5万。", "user", [{ source: "draft", quote }]), context({ draft: `saved ${quote}` }));
+      expect(backed.missing).toEqual([]);
+    }
+    expect(figures("S3 and K8s and v1").shown).toEqual([]);
+  });
+
+  it("a unit of your own matches whatever its case or compatibility form, in the file and in the text", () => {
+    const parse = (scale: Record<string, number>, multiple: string[] = []) => writerSchema.parse({ evidence: { figure_units: { scale, multiple } } }).evidence.figure_units;
+    const mega = parse({ M: 1_000_000 });
+    for (const text of ["5M", "5m"]) expect([...figures(text, mega).keys]).toEqual(["5000000"]);
+    const lower = parse({ m: 1_000_000 });
+    for (const text of ["5M", "5m", "５Ｍ"]) expect([...figures(text, lower).keys]).toEqual(["5000000"]);
+    const kilo = parse({ "㎏": 1000 });
+    for (const text of ["5㎏", "5kg", "5KG"]) expect([...figures(text, kilo).keys]).toEqual(["5000"]);
+    expect([...figures("5X", parse({}, ["x"])).keys]).toEqual(["5x"]);
+    expect([...figures("5x", parse({}, ["X"])).keys]).toEqual(["5x"]);
+    // Latin units do not chain: 5mm is not 5 million million
+    expect(figures("5mm", mega).shown).toEqual([]);
+  });
+
   it("the units come from evidence.figure_units: none configured means the word is just a word", () => {
     const none = writerSchema.parse({ evidence: { figure_units: { scale: {}, multiple: [] } } }).evidence.figure_units;
     expect(figures("5万", none).keys.has("5")).toBe(true);

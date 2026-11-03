@@ -10,7 +10,7 @@ import type { LengthUnit, QuestionKind } from "@/lib/config/schemas/writer";
 import type { Db } from "@/lib/db/client";
 import { getAnswerVersion, getApplicationQuestion } from "@/lib/db/repos/application-writer";
 import { getJobBreakdown, getJobForBreakdown } from "@/lib/db/repos/breakdowns";
-import { findLatestWriterRequests, findOpenWriterRequest, getControlRequest, insertControlRequest, type ControlRequest } from "@/lib/db/repos/control-requests";
+import { findLatestWriterRequests, findOpenWriterRequest, getControlRequest, insertWriterRequestUnlessOpen, type ControlRequest } from "@/lib/db/repos/control-requests";
 import { createProcessLogger } from "@/lib/logging/process-logger";
 import { TRANSLATION_FAILURE_CODES } from "@/lib/translation/errors";
 import { aiOutputLanguage } from "@/lib/i18n/config";
@@ -78,6 +78,13 @@ function selectionFor(spec: WriterRequestSpec, chosen: QuestionSelection): Quest
   return spec.mode === "polish" && spec.option === "language_only" ? { ...EMPTY_SELECTION, profile: false } : chosen;
 }
 
+/** Asking to write again joins the running write; anything else (your text, a review) would be dropped silently, so say so. */
+function joinOpenRequest(open: ControlRequest, spec: WriterRequestSpec): WriterRequestOutcome {
+  const openMode = typeof open.payload === "object" && open.payload !== null ? (open.payload as { mode?: unknown }).mode : undefined;
+  if (spec.mode === "draft" && (openMode === undefined || openMode === "draft")) return { state: "queued", requestId: open.id, existing: true };
+  return { state: "error", error: "busy" };
+}
+
 /**
  * Snapshot the question's material (and, to polish or review, the text to work on) and leave a `writer_job` request for the
  * ai-worker. A question has one open request at a time: asking again joins it.
@@ -90,12 +97,7 @@ export async function requestWriter(db: Db, input: WriterRequestInput, spec: Wri
   if (!job || !question) return { state: "error", error: "not_found" };
   await expireScrubbedRequests(db, { settings: writer });
   const open = await findOpenWriterRequest(db, { jobId: input.jobId, questionId: input.questionId });
-  if (open) {
-    // asking to write again joins the running write; anything else (your text, a review) would be dropped silently, so say so
-    const openMode = typeof open.payload === "object" && open.payload !== null ? (open.payload as { mode?: unknown }).mode : undefined;
-    if (spec.mode === "draft" && (openMode === undefined || openMode === "draft")) return { state: "queued", requestId: open.id, existing: true };
-    return { state: "error", error: "busy" };
-  }
+  if (open) return joinOpenRequest(open, spec);
 
   const breakdown = await getJobBreakdown(db, input.jobId);
   const content = breakdown ? parseStoredBreakdown(breakdown.promptVersion, breakdown.content) : null;
@@ -161,9 +163,11 @@ export async function requestWriter(db: Db, input: WriterRequestInput, spec: Wri
     },
     materials,
   };
-  const created = await insertControlRequest(db, { kind: "writer_job", payload });
-  log.info("manual request queued", { request: created.id, kind: created.kind, jobId: input.jobId });
-  return { state: "queued", requestId: created.id, existing: false };
+  // a second click may have got here too: the check above only saves building the snapshot
+  const { request, created } = await insertWriterRequestUnlessOpen(db, { jobId: input.jobId, questionId: input.questionId, payload });
+  if (!created) return joinOpenRequest(request, spec);
+  log.info("manual request queued", { request: request.id, kind: request.kind, jobId: input.jobId });
+  return { state: "queued", requestId: request.id, existing: false };
 }
 
 export type WriterRequestState =

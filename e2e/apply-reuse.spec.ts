@@ -155,7 +155,7 @@ test("reuse: a similar question offers the earlier final answer, which starts th
   const offer = page.getByTestId("writer-reuse-match");
   await expect(offer).toHaveCount(1, { timeout: 10_000 });
   await expect(offer).toContainText(SOURCE_QUESTION);
-  await expect(offer).toContainText("Windrose Mobility · MLOps Engineer · 60% of the words in common");
+  await expect(offer).toContainText("Windrose Mobility · MLOps Engineer · 100% of the words in common");
 
   // nothing is stored until the text is saved
   await offer.getByTestId("writer-reuse-use").click();

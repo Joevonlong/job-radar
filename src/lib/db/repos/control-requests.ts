@@ -436,7 +436,8 @@ export async function findLatestWriterRequests(db: Db, jobId: number): Promise<M
   const rows = await db
     .selectDistinctOn([sql`${controlRequests.payload} ->> 'questionId'`])
     .from(controlRequests)
-    .where(and(sql`${controlRequests.kind}::text = 'writer_job'`, sql`${controlRequests.payload} ->> 'jobId' = ${String(jobId)}`))
+    // the kind as the enum, so `control_requests_job_id_idx` narrows by kind and job (only the web asks, after its migrations ran)
+    .where(and(eq(controlRequests.kind, "writer_job"), sql`${controlRequests.payload} ->> 'jobId' = ${String(jobId)}`))
     .orderBy(sql`${controlRequests.payload} ->> 'questionId'`, desc(controlRequests.id));
   const out = new Map<number, ControlRequest>();
   for (const row of rows) {
@@ -447,7 +448,7 @@ export async function findLatestWriterRequests(db: Db, jobId: number): Promise<M
 }
 
 /** The open `writer_job` request of a question, or null. */
-export async function findOpenWriterRequest(db: Db, input: { jobId: number; questionId: number }): Promise<ControlRequest | null> {
+export async function findOpenWriterRequest(db: Executor, input: { jobId: number; questionId: number }): Promise<ControlRequest | null> {
   const [row] = await db
     .select()
     .from(controlRequests)
@@ -460,6 +461,19 @@ export async function findOpenWriterRequest(db: Db, input: { jobId: number; ques
     .orderBy(controlRequests.id)
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * Leave a `writer_job` request unless the question already has an open one, which is then returned instead. The check and the
+ * insert run under a lock per question, so two clicks at once cannot both pass the check and call the AI twice.
+ */
+export async function insertWriterRequestUnlessOpen(db: Db, input: { jobId: number; questionId: number; payload: unknown }): Promise<{ request: ControlRequest; created: boolean }> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`writer_job:${input.jobId}:${input.questionId}`}, 0))`);
+    const open = await findOpenWriterRequest(tx, input);
+    if (open) return { request: open, created: false };
+    return { request: await insertControlRequest(tx, { kind: "writer_job", payload: input.payload }), created: true };
+  });
 }
 
 export interface OpenRequestStats {

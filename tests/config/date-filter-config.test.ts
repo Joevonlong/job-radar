@@ -61,9 +61,32 @@ describe("saved views hold the date condition", () => {
     }
   });
 
-  it("rejects a range or a date field the URL would not take", () => {
-    for (const within of ["0d", "367d", "7", "7D", "week", 7]) expect(parseViews({ within }).success, String(within)).toBe(false);
-    expect(parseViews({ dateBy: "updated" }).success).toBe(false);
+  it("drops a range or a date field the URL would not take, keeps the rest of the view and of the file", () => {
+    const filtersOf = (filters: Json) => (configRegistry.interests.schema.parse(interests([{ id: "v", name: "V", default: false, filters }])) as { views: { filters: Json }[] }).views[0]?.filters;
+    for (const within of ["0d", "367d", "7", "7D", "week", 7]) expect(filtersOf({ city: "Berlin", within }), String(within)).toEqual({ city: "Berlin" });
+    expect(filtersOf({ within: "7d", dateBy: "updated" })).toEqual({ within: "7d" });
+    expect(filtersOf({ dateBy: "posted", within: "soon", from: "2026-10-01" })).toEqual({ dateBy: "posted", from: "2026-10-01" });
+  });
+
+  it("warns, with the path and the value's key, for each date key it dropped", () => {
+    const warnings = interestsRawWarnings(interests([{ id: "v", name: "V", default: false, filters: { within: "soon", dateBy: "updated", city: "Berlin" } }, { id: "w", name: "W", default: false, filters: { within: "7d" } }]));
+    expect(warnings.map((w) => [w.code, w.path.join(".")])).toEqual([
+      ["interests.invalid_view_date", "views.0.filters.within"],
+      ["interests.invalid_view_date", "views.0.filters.dateBy"],
+    ]);
+    expect(warnings[0]?.message).toContain('"within"');
+  });
+
+  it("other known keys stay strict, and a bad custom date still rejects the file", () => {
+    expect(parseViews({ minScore: 101 }).success).toBe(false);
+    expect(parseViews({ from: "soon" }).success).toBe(false);
+  });
+
+  it("the config editor accepts a dropped date key and warns", () => {
+    const text = JSON.stringify({ ...interests([{ id: "v", name: "V", default: false, filters: { city: "Berlin", within: "soon" } }]), config_version: currentConfigVersion("interests") });
+    const result = validateConfigText("interests", text);
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (result.ok) expect(result.warnings.map((w) => w.path)).toContain("views[0].filters.within");
   });
 
   it("loads a view file from before the date filter exactly as it did", () => {
