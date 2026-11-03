@@ -436,7 +436,7 @@ describe("in the processing cycle", () => {
     const visible = await addJob({ title: "Visible AI Engineer" });
     const hidden = await addJob({ title: "Hidden Werkstudent", contract: "student" });
     const result = await runCycle("manual", { registry: new ChannelRegistry(), config: config(), logger: silent, sleep: async () => {} });
-    expect(result.summary.steps.map((s) => s.name)).toEqual(["collect", "pipeline", "filter", "signals", "ai", "notify", "maintenance"]);
+    expect(result.summary.steps.map((s) => s.name)).toEqual(["collect", "pipeline", "filter", "signals", "replies", "ai", "notify", "maintenance"]);
     expect(result.summary.steps.find((s) => s.name === "filter")).toMatchObject({ status: "ok", result: { evaluated: 2, filteredOut: 1 } });
 
     const opts = { sort: "first_seen" as const, page: 1, pageSize: 20, timezone: "Europe/Berlin" };
