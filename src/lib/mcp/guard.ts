@@ -14,6 +14,11 @@ import type { CleanText, DescriptionDto, QuoteGuard } from "./dto";
 /** Unicode tag characters (U+E0000-U+E007F): invisible, and able to spell out a hidden text. */
 const TAG_CHARS = /[\u{E0000}-\u{E007F}]/gu;
 
+/** A text without invisible characters: what a client may store (a hidden text would stay in an answer the user copies out). */
+export function visibleText(text: string): string {
+  return stripInvisible(text).replace(TAG_CHARS, "");
+}
+
 /**
  * The cleaner of short third-party fields (title, company, locations, salary text, signal quotes, links). Without readable trap
  * settings only the invisible characters go (no instruction patterns to look for).
@@ -22,7 +27,7 @@ export function shortFieldCleaner(settings: TrapsConfig | null): CleanText {
   const patterns = settings ? instructionPatterns(settings) : [];
   const marker = settings?.ai_input.instruction_marker ?? null;
   return (text: string) => {
-    const visible = stripInvisible(text).replace(TAG_CHARS, "");
+    const visible = visibleText(text);
     if (marker !== null && patterns.length > 0 && findPatternHits(visible, patterns).length > 0) return marker;
     return visible;
   };
@@ -35,16 +40,21 @@ export function shortFieldCleaner(settings: TrapsConfig | null): CleanText {
  * short-field cleaner.
  */
 export function quoteGuard(strict: StrictCleanResult, description: string | null): QuoteGuard {
+  const guard = jdQuoteGuard(strict, description);
+  return (signal) => (signal.quoteSource === "description" ? guard(signal.quote, signal.quoteOffset) : strict.ok ? signal.quote : null);
+}
+
+/** The rule of `quoteGuard` for any quote of the JD: null when the JD is withheld, the finding's marker when it overlaps one. */
+export function jdQuoteGuard(strict: StrictCleanResult, description: string | null): (quote: string, offset: number | null) => string | null {
   if (!strict.ok) return () => null;
   const spans = strict.spans.filter((span) => span.kind !== "invisible");
-  if (spans.length === 0 || description === null) return (signal) => signal.quote;
-  return (signal) => {
-    if (signal.quoteSource !== "description") return signal.quote;
-    const start = signal.quoteOffset ?? description.indexOf(signal.quote);
-    if (start < 0) return signal.quote;
-    const end = start + signal.quote.length;
+  if (spans.length === 0 || description === null) return (quote) => quote;
+  return (quote, offset) => {
+    const start = offset ?? description.indexOf(quote);
+    if (start < 0) return quote;
+    const end = start + quote.length;
     const hit = spans.find((span) => span.offset < end && start < span.offset + span.length);
-    if (!hit) return signal.quote;
+    if (!hit) return quote;
     return hit.kind === "hidden" ? strict.markers.hidden : strict.markers.instruction;
   };
 }

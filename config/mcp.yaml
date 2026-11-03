@@ -1,10 +1,12 @@
-# Read-only MCP server (docs/mcp.md): lets an MCP client you configure yourself (Claude Desktop, Claude Code, ...) query your
-# jobs and applications. The client starts `pnpm mcp:serve` as a local child process and talks to it over stdio; no port is
-# opened, nothing can be written.
+# MCP server (docs/mcp.md): lets an MCP client you configure yourself (Claude Desktop, Claude Code, ...) query your jobs and
+# applications. The client starts `pnpm mcp:serve` as a local child process and talks to it over stdio; no port is opened. Nothing
+# can be written, except that `save_application_answer`, when you switch it on, adds answer versions; it cannot change or delete any.
 # Privacy: whatever the tools return is handed by your client to the model provider it uses (Anthropic for Claude, ...).
 # What may be returned is fixed in code: job facts, source links, scores and ranks, signals with their JD quotes, the JD after
 # AI-trap cleaning, and the status, dates, next step and interview rounds of your applications. Never returned: your profile,
 # match reasons and gaps, filter reasons and your salary floor, notes, emails, local paths, keys.
+# Only with `get_application_context` switched on: your application questions and answer versions, and the material you chose for
+# each question, which can include your profile summary, skills and languages, chosen stories and emphasis note.
 
 # Version of this file's structure; don't edit by hand (a migration script upgrades it when the structure changes)
 config_version: 1
@@ -20,6 +22,12 @@ tools:
   get_job: true
   # Your applications by status; `stale_only` lists the ones waiting longer than the reminder thresholds of notify.yaml
   list_applications: true
+  # Application writer (needs writer.yaml enabled). Off by default: this hands the questions, answer versions and material you chose
+  # for them (profile summary, skills, languages, chosen stories, emphasis) to your client's model provider
+  get_application_context: false
+  # Add one answer version to a question. Only adds: never changes or deletes a version and never sets the final answer. It is the
+  # only tool with a writable database connection
+  save_application_answer: false
 
 limits:
   # Most jobs or applications one call returns (1-100); the answer says when more matched

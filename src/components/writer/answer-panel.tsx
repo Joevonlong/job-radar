@@ -43,6 +43,7 @@ function useVersionLabel(): (version: Pick<WorkbenchVersion, "mode" | "variantId
   const tw = useTranslations("writer");
   return (version) => {
     if (version.mode === "manual") return t("manual");
+    if (version.mode === "mcp") return t("mcp");
     if (version.mode === "polish") return POLISH_OPTIONS.find((option) => option === version.variantId) ? tw(`polish.versionLabel.${version.variantId as PolishOption}`) : tw("polish.title");
     if (version.mode === "coach_rewrite") return tw("coach.rewriteLabel");
     const known = variantLabel(version.variantId);
@@ -164,6 +165,7 @@ export function AnswerPanel({ view, question, base, onBaseDone, enabled, timeZon
     profile: question.selection.profile && view.profile.available ? true : null,
     stories: question.selection.storyIds.filter((id) => stories.has(id)),
     emphasis: question.selection.emphasis.trim() === "" ? null : question.selection.emphasis,
+    company: !question.companyUpdated && view.company !== null && question.selection.company !== null && question.selection.company.fields.some((field) => view.company?.fields.some((entry) => entry.field === field)) ? true : null,
   };
   const fields = writeInputFields(material);
   const fieldsWithText: WriteInputField[] = writeInputFields({ ...material, draft: true });

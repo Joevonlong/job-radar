@@ -19,7 +19,7 @@ export interface VerifyContext {
   emphasis: string | null;
   /** The user's own draft (a later writing mode). */
   draft: string | null;
-  /** The company background (AI web search, a later step). */
+  /** The ticked fields of the company background (AI web search). */
   company: string | null;
   /** Technology and company names whose mention must be backed by the sentence's quotes. */
   entities: readonly string[];
@@ -178,7 +178,7 @@ export function figures(text: string, units: FigureUnits = defaultFigureUnits())
 }
 
 /** The figures of a sentence that its evidence text does not contain (shown as written in the sentence). */
-function missingFigures(sentence: string, evidence: string, units: FigureUnits): string[] {
+export function missingFigures(sentence: string, evidence: string, units: FigureUnits): string[] {
   const have = figures(evidence, units).keys;
   const out: string[] = [];
   for (const match of figureText(sentence).matchAll(figurePattern(foldedUnits(units).words))) {
@@ -331,16 +331,19 @@ export function verifySentence(raw: RawSentence, context: VerifyContext): Checke
     if (entity === context.companyName && backsCompany) continue;
     if (!mentions(quotes, entity)) missing.push(entity);
   }
+  const citesWeb = valid.some((entry) => entry.source === "company");
   // name-like words not found where the sentence may rest: for a claim about you only the valid quotes (a tool named in
-  // the JD is not one you used), otherwise also the JD and the company background
-  const lookIn = about === "user" ? quotes : [quotes, context.jd, context.company ?? ""].join("\n");
+  // the JD is not one you used), otherwise also the JD, and the company background only for a sentence that cites it: a name that
+  // is merely somewhere in the ticked web text must not pass in a sentence that then counts as backed
+  const lookIn = about === "user" ? quotes : [quotes, context.jd, citesWeb ? (context.company ?? "") : ""].join("\n");
   const needsCheck = candidates.filter((name) => !containsWords(lookIn, name) && !missing.some((entry) => normalize(entry) === normalize(name)));
 
   let status: SentenceStatus;
-  if (about === "framing" && !hasFacts) status = "framing";
+  if (about === "framing" && !hasFacts && !citesWeb) status = "framing";
   else if (valid.length === 0) status = "unsupported";
   else if (missing.length > 0 || needsCheck.length > 0) status = "partial";
-  else if (valid.every((entry) => entry.source === "company")) status = "web_unverified";
+  // a web quote next to a JD quote is still a claim from the web: only a sentence without one counts as backed
+  else if (citesWeb) status = "web_unverified";
   else status = "supported";
   return { text: raw.text, newParagraph: raw.newParagraph ?? false, about, status, evidence, missing: [...new Set(missing)], needsCheck };
 }

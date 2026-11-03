@@ -13,7 +13,12 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
 
-/** SHA-256 (hex) of the material: kept on the request and the versions after the material itself is cleared. */
+/** SHA-256 (hex) of a value, the same for the same content whatever its key order. */
+export function stableHash(value: unknown): string {
+  return createHash("sha256").update(stableJson(value)).digest("hex");
+}
+
+/** The hash of the material: kept on the request and the versions after the material itself is cleared. */
 export function materialsHash(materials: WriterMaterials): string {
-  return createHash("sha256").update(stableJson(materials)).digest("hex");
+  return stableHash(materials);
 }

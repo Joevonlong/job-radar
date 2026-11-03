@@ -235,6 +235,10 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   database a `profile_story_drafts` table (migration `0049_story_extract_drafts`), and the web image the `unpdf` dependency.
   A PDF is read in a worker thread stopped at `import.pdf_timeout_seconds` / `import.pdf_max_memory_mb`. Provider errors on this task and on `write`
   are logged and stored as their kind only. The evidence check now reads Latin magnitudes and multiples ($2M, 2.5M, 3 Mio, 10x).
+- **Company background in application answers.** Tick its fields on the workbench to quote them to the AI as data, or ask what they mean for your application; both stay unverified web text and back nothing about you. Migration `0052_application_fit_notes` runs on its own. See [Application writer](docs/application-writer.md#company-background-in-an-answer).
+- **Application writer tools for MCP clients, off by default.** `get_application_context` reads a job's writing material;
+  `save_application_answer` adds answer versions and can never change or delete one or set the final answer. See
+  [Writing answers from your client](docs/mcp.md#writing-answers-from-your-client).
 - **Handpicked Berlin channel (off by default).** Reads the public job index of handpickedberlin.com (Berlin, Munich, Hamburg
   and German remote, with the employer's own links), keeps postings in your places that pass the title prefilter, and offers the
   company boards behind them as candidates under Discovered boards (each candidate now shows where it was found). The site

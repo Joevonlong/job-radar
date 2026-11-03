@@ -1,5 +1,5 @@
 import { ConfigError, loadConfig } from "@/lib/config";
-import { MCP_TOOL_NAMES, mcpSchema, type McpConfig, type McpToolName } from "@/lib/config/schemas/mcp";
+import { MCP_TOOL_NAMES, MCP_WRITER_TOOL_NAMES, mcpSchema, type McpConfig, type McpToolName } from "@/lib/config/schemas/mcp";
 
 /**
  * mcp.yaml as the server and doctor read it. A file that is missing from both layers means the schema defaults (off); any other
@@ -17,6 +17,13 @@ export function readMcpSettings(load: () => McpConfig = () => loadConfig("mcp"))
 /** The tools mcp.yaml switches on, in their fixed order. */
 export function enabledTools(settings: McpConfig): McpToolName[] {
   return MCP_TOOL_NAMES.filter((name) => settings.tools[name]);
+}
+
+const isWriterTool = (name: McpToolName): boolean => (MCP_WRITER_TOOL_NAMES as readonly string[]).includes(name);
+
+/** The tools a client is offered: those switched on, without the writer tools while the application writer itself is off. */
+export function offeredTools(settings: McpConfig, writerEnabled: boolean): McpToolName[] {
+  return enabledTools(settings).filter((name) => writerEnabled || !isWriterTool(name));
 }
 
 /**

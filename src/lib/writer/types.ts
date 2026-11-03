@@ -3,12 +3,13 @@
  * constants only (no zod, no server code), so client components can import them.
  */
 import type { LengthUnit, QuestionKind } from "@/lib/config/schemas/writer";
+import type { CompanyResearchField } from "@/lib/research/fields";
 
 /** What a sentence is about, as the AI labels it (a first-person sentence is checked as `user` whatever the label). */
 export const SENTENCE_ABOUT = ["user", "company", "role", "framing"] as const;
 export type SentenceAbout = (typeof SENTENCE_ABOUT)[number];
 
-/** Where a piece of evidence comes from. `company` (the AI web search of the company) arrives with a later step. */
+/** Where a piece of evidence comes from. `company`: the AI web search of the company, ticked for the question. */
 export const EVIDENCE_SOURCES = ["jd", "profile", "story", "emphasis", "draft", "company"] as const;
 export type EvidenceSource = (typeof EVIDENCE_SOURCES)[number];
 
@@ -82,9 +83,11 @@ export interface QuestionSelection {
   /** Send the profile summary, skills and languages of me.yaml. */
   profile: boolean;
   emphasis: string;
+  /** The ticked fields of a company background, by the result they were ticked in. Never preselected: it is unverified web text. */
+  company: { researchId: number; fields: CompanyResearchField[] } | null;
 }
 
-export const EMPTY_SELECTION: QuestionSelection = { jdPoints: [], useJdText: false, storyIds: [], profile: true, emphasis: "" };
+export const EMPTY_SELECTION: QuestionSelection = { jdPoints: [], useJdText: false, storyIds: [], profile: true, emphasis: "", company: null };
 
 export interface QuestionSettings {
   text: string;
@@ -96,5 +99,5 @@ export interface QuestionSettings {
 }
 
 /** The parts of the AI input, in the order the disclosure lists them (`draft`: your own text, or the answer under review). */
-export const WRITE_INPUT_FIELDS = ["question", "settings", "job", "jd_points", "jd_excerpt", "profile", "stories", "emphasis", "draft"] as const;
+export const WRITE_INPUT_FIELDS = ["question", "settings", "job", "jd_points", "jd_excerpt", "profile", "stories", "emphasis", "company_background", "draft"] as const;
 export type WriteInputField = (typeof WRITE_INPUT_FIELDS)[number];

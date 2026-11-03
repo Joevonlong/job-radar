@@ -38,6 +38,7 @@ import { createAiRouter, createProvider } from "../src/lib/ai";
 import type { AiTransport } from "../src/lib/ai/types";
 import { createCompanyResearchHandler } from "../src/lib/control/company-research";
 import { createStoryExtractHandler } from "../src/lib/control/story-extract";
+import { createWriterFitHandler } from "../src/lib/control/writer-fit-job";
 import { createWriterJobHandler } from "../src/lib/control/writer-job";
 
 /** How long the stub cycle "runs": long enough for a test to see the running state. */
@@ -258,6 +259,13 @@ registerControlHandler(
     createRouter: () => createAiRouter({ config: loadConfig("ai"), providers: [createProvider(writerAi)], usage: null, health: null, quota: null, catalog: null, origin: "control" }),
   }),
 );
+// no note in e2e: the page's request and its queue are what is under test, and an empty note is a valid answer
+registerControlHandler(
+  "writer_fit",
+  createWriterFitHandler({
+    createRouter: () => createAiRouter({ config: loadConfig("ai"), providers: [createProvider({ ...writerAi, call: async () => ({ text: JSON.stringify({ items: [] }), model: "e2e-model", usage: { tokensIn: 10, tokensOut: 5 } }) })], usage: null, health: null }),
+  }),
+);
 
 // The company background too: the real handler runs (the checks of the answer, the stored result), only the AI is a stand-in
 // and nothing leaves the machine. One field has a source that is not https: the check must drop it.
@@ -333,7 +341,7 @@ const stopWatching = watchConfig(
 
 // What the settings, sources and interests pages offer, plus the ai-worker's AI test, breakdown, salary lookup, company background and writer (answered
 // here with stand-ins). The other AI requests (scoring, translation, ...) belong to the host ai-worker, which e2e does not run.
-const poller = runControlPoller({ db, signal: abort.signal, logger: createLogger({ sink: () => {} }), kinds: () => ["run_cycle", "rescore_stale", "run_suggest", "test_channel", "test_telegram", "test_ai", "models_sync", "breakdown_job", "salary_lookup", "company_research", "story_extract", "writer_job"], pollSeconds: () => POLL_SECONDS });
+const poller = runControlPoller({ db, signal: abort.signal, logger: createLogger({ sink: () => {} }), kinds: () => ["run_cycle", "rescore_stale", "run_suggest", "test_channel", "test_telegram", "test_ai", "models_sync", "breakdown_job", "salary_lookup", "company_research", "story_extract", "writer_job", "writer_fit"], pollSeconds: () => POLL_SECONDS });
 
 log("ready");
 while (!abort.signal.aborted) {
