@@ -180,7 +180,8 @@ test("a user file can be restored to the default content (after a backup), and '
   fs.writeFileSync(file("notify.yaml"), read("notify.yaml").replace(/^max_per_cycle: \d+/m, "max_per_cycle: 13"));
   await open(page, "&file=notify");
   await page.getByTestId("advanced-reset").click();
-  await expect(page.getByTestId("reset-dialog").locator('[data-diff="del"]').first()).toContainText("max_per_cycle: 13");
+  // the whole user file goes, so every line of it is listed as removed
+  await expect(page.getByTestId("reset-dialog").locator('[data-diff="del"]', { hasText: "max_per_cycle: 13" })).toBeVisible();
   await page.getByTestId("reset-confirm").click();
   await expect(page.getByTestId("advanced-reset")).toBeHidden();
   // the shipped file answers from now on
