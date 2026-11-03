@@ -28,6 +28,8 @@ describe("markets of a channel", () => {
     expect(settings).toMatchObject({ enabled: true, otherMarket: false, markets: ["DE"] });
     expect(settingsFromConfig("greenhouse", config).otherMarket).toBe(false);
     expect(settingsFromConfig("arbeitnow", config)).toMatchObject({ enabled: true, otherMarket: false, markets: ["DE"] });
+    // Berlin Design Network discovery ships switched off, bound to the German market
+    expect(settingsFromConfig("berlin_design_network", config)).toMatchObject({ enabled: false, otherMarket: false, markets: ["DE"] });
     // Handpicked Berlin is bound to the German market too, but ships switched off
     expect(settingsFromConfig("handpicked", config)).toMatchObject({ enabled: false, otherMarket: false, markets: ["DE"] });
     expect(settingsFromConfig("handpicked", channelsWith((raw) => { (raw.sources as Record<string, { enabled: boolean }>).handpicked!.enabled = true; }))).toMatchObject({ enabled: true, otherMarket: false });
@@ -77,6 +79,7 @@ describe("under another market", () => {
       expect(settingsFromConfig("arbeitsagentur", config)).toMatchObject({ enabled: false, otherMarket: true });
       expect(settingsFromConfig("arbeitnow", config)).toMatchObject({ enabled: false, otherMarket: true });
       expect(settingsFromConfig("handpicked", config)).toMatchObject({ enabled: false, otherMarket: true });
+      expect(settingsFromConfig("berlin_design_network", config)).toMatchObject({ enabled: false, otherMarket: true });
       expect(registry.enabled(config).map((c) => c.id)).toEqual(["greenhouse"]);
     } finally {
       tmp.cleanup();

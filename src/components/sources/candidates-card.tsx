@@ -20,7 +20,7 @@ const addBoardCandidateAction = withActionFeedback(rawAddBoardCandidateAction)((
 const dismissBoardCandidateAction = withActionFeedback(rawDismissBoardCandidateAction)(() => ({ status: "error", error: "write_failed" }));
 
 /** Discovery sources with a badge on the candidate row (message keys under `sources.discovery.foundBy`); other ids show none. */
-const FOUND_BY_BADGES = ["handpicked", "tavily", "brave"] as const;
+const FOUND_BY_BADGES = ["handpicked", "berlin_design_network", "tavily", "brave"] as const;
 const knownFoundBy = (id: string): id is (typeof FOUND_BY_BADGES)[number] => (FOUND_BY_BADGES as readonly string[]).includes(id);
 
 type Feedback = { tone: "ok" | "error"; text: string } | null;

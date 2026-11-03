@@ -58,12 +58,13 @@ describe("CandidatesCard", () => {
   });
 
   it.each(["en", "zh"] as const)("shows where a board was found, and nothing for a row without a source (%s)", (locale) => {
-    render(wrap(<CandidatesCard candidates={[candidate({ foundBy: ["handpicked", "tavily"] }), candidate({ token: "old-row", name: "Old Row", foundBy: [] }), candidate({ token: "odd", name: "Odd", foundBy: ["some_future_source"] })]} timeZone="UTC" />, locale));
+    render(wrap(<CandidatesCard candidates={[candidate({ foundBy: ["handpicked", "berlin_design_network", "tavily"] }), candidate({ token: "old-row", name: "Old Row", foundBy: [] }), candidate({ token: "odd", name: "Odd", foundBy: ["some_future_source"] })]} timeZone="UTC" />, locale));
     const rows = screen.getAllByTestId("candidate");
     const badges = within(rows[0] as HTMLElement).getAllByTestId("candidate-found-by");
-    expect(badges.map((b) => b.getAttribute("data-source"))).toEqual(["handpicked", "tavily"]);
+    expect(badges.map((b) => b.getAttribute("data-source"))).toEqual(["handpicked", "berlin_design_network", "tavily"]);
     expect(badges[0]).toHaveTextContent("Handpicked Berlin");
-    expect(badges[1]).toHaveTextContent("Tavily");
+    expect(badges[1]).toHaveTextContent("Berlin Design Network");
+    expect(badges[2]).toHaveTextContent("Tavily");
     expect(within(rows[1] as HTMLElement).queryByTestId("candidate-found-by")).toBeNull();
     expect(within(rows[2] as HTMLElement).queryByTestId("candidate-found-by")).toBeNull();
   });

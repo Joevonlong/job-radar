@@ -19,7 +19,7 @@ const GROUP_MEMBERS: Record<Exclude<RegistryGroup, "linkedin">, readonly Configu
   search_apis: ["jsearch", "jobspy-google"],
   email: ["gmail-alerts"],
   ats: ["greenhouse", "lever", "ashby", "personio", "smartrecruiters"],
-  discovery: ["tavily", "brave"],
+  discovery: ["tavily", "brave", "berlin_design_network"],
 };
 
 /** Channel id -> group. Every id of `CHANNEL_CONFIG_TABLE` must be here (a unit test keeps it so). */
@@ -45,6 +45,7 @@ export const CHANNEL_GROUP: Record<ConfiguredChannelId, RegistryGroup> = {
   personio: "ats",
   smartrecruiters: "ats",
   tavily: "discovery",
+  berlin_design_network: "discovery",
   brave: "discovery",
 };
 

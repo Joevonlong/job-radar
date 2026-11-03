@@ -307,7 +307,7 @@ Channels that ignore the search window also keep the base: widening fetches noth
 successful runs from counting as possibly-closed evidence:
 
 - Company ATS boards: Greenhouse, Lever, Ashby, Personio and SmartRecruiters.
-- Board discovery: Tavily and Brave.
+- Board discovery: Tavily, Brave and Berlin Design Network.
 - Gmail job alerts.
 - LinkedIn recommendations.
 
@@ -363,7 +363,7 @@ A widened run is not evidence for marking jobs possibly closed. A backfill windo
 like a normal run when no automatic catch-up widens it.
 
 Only keyword channels take the backfill window. Channels that read their own boards or inboxes instead of keyword
-queries (the ATS boards, the Arbeitnow feed, the Handpicked Berlin index, email alerts, the Brave / Tavily discovery sources, LinkedIn's session
+queries (the ATS boards, the Arbeitnow feed, the Handpicked Berlin index, email alerts, the Brave / Tavily / Berlin Design Network discovery sources, LinkedIn's session
 recommendations) run as usual within the same backfill run: their window is not widened and their runs are not marked
 as widened.
 
@@ -447,6 +447,34 @@ block, switched off, from the config update (`pnpm config:migrate`).
 - **Settings**: `base_url`, `user_agent`, `max_age_days`, `max_details_per_run`, `skip_known_boards`, `discover_boards`,
   `max_results`, `throttle` and `title_prefilter` under `sources.handpicked` (also on the settings page).
 
+## Berlin Design Network
+
+Berlin Design Network (`berlin_design_network`) finds company boards, not jobs. It reads the job list of
+[berlin-design-network.org](https://berlin-design-network.org/jobs) (about 90 postings of design and creative employers in
+Berlin, with a title, a company name and the employer's apply link, but no description and no posting page) and offers the
+company boards behind its links as candidates under "Discovered boards" on `/sources/registry`, with the badge "Berlin Design
+Network". Add one and the ATS channel reads all of that company's jobs, with their full descriptions. No key, no login. It is
+**off by default**: the employers are design and creative companies, which is noise unless you look for such roles. Set
+`sources.berlin_design_network.enabled: true` in `sources.yaml` (or switch it on at `/sources/registry`); an existing
+installation gets the block, switched off, from the config update (`pnpm config:migrate`).
+
+- **What a run does.** One request for the page, at most once every `interval_hours` (24; a run within the interval does
+  nothing). The page embeds its list as data (`__NEXT_DATA__`); the channel reads the apply link and the company name of each
+  entry and nothing else. Only links to an official Greenhouse, Lever, Ashby, Personio (`*.jobs.personio.de`) or SmartRecruiters
+  board count (roughly one in seven; LinkedIn, StepStone, join.com and company sites are ignored and never requested). A board
+  already in `ats_boards`, or already added or dismissed, is not offered again. No posting is stored and the channel has no
+  postings of its own to show.
+- **Contact details.** The page also lists the companies' contact e-mail addresses and phone numbers. The channel does not read,
+  store or log them; only the link and the company name are kept.
+- **Terms.** The site has no terms page and its `robots.txt` allows the path. The channel sends one request a day with a
+  descriptive `User-Agent`, follows redirects only within the site, and reads a 403 as blocked (the circuit opens; the other
+  channels keep running). If the page changes shape the run fails with a parse error and stores nothing. Switch the channel off
+  if the owner asks.
+- **Limits.** The list is small and design-heavy, and each posting expires after a month, so the set of boards changes slowly.
+  `*.jobs.personio.com` and other hosts without an ATS channel here give no candidate. The company name is only a hint for the
+  candidate row; check the board before you add it.
+- **Settings**: `base_url`, `user_agent` and `interval_hours` under `sources.berlin_design_network` (also on the settings page).
+
 ## Scraping
 
 Not every channel uses an official API. Some read public web pages or unofficial endpoints, and some act as your own
@@ -457,7 +485,7 @@ for a new installation** and need your explicit consent to switch on.
 |---|---|---|---|
 | Scraping | LinkedIn guest search (`linkedin-guest`), Indeed (`indeed`), StepStone (`stepstone`), XING (`xing`), Google Jobs via the sidecar (`jobspy-google`) | off | the site's terms may forbid it; your IP address can be rate limited or blocked |
 | Account automation | LinkedIn logged-in session (`linkedin-session`, `linkedin-session:recommended`) | off | uses your own account; the account can be restricted or banned |
-| Official APIs and public company feeds | Arbeitsagentur, [Arbeitnow](#arbeitnow), Greenhouse, Lever, Ashby, Personio, SmartRecruiters (on); [Handpicked Berlin](#handpicked-berlin) (off: the site has no terms); JSearch, Gmail alerts, Tavily, Brave (need your key or account) | on, or off until you add a key or switch it on | follow the provider's own terms and quotas |
+| Official APIs and public company feeds | Arbeitsagentur, [Arbeitnow](#arbeitnow), Greenhouse, Lever, Ashby, Personio, SmartRecruiters (on); [Handpicked Berlin](#handpicked-berlin) (off: the site has no terms); [Berlin Design Network](#berlin-design-network) (off: discovery only); JSearch, Gmail alerts, Tavily, Brave (need your key or account) | on, or off until you add a key or switch it on | follow the provider's own terms and quotas |
 | Paid scraping services | Bright Data, Apify, [Monid](monid.md) | on, but nothing happens without your token | a service scrapes for you; **this does not remove the terms-of-service risk**, which stays with you |
 
 How to switch one on:

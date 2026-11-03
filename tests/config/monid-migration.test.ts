@@ -8,6 +8,7 @@ import { parseDocument } from "yaml";
 import { migrateConfigDocument, validateConfigValue } from "@/lib/config";
 import { sources004 } from "@/lib/config/migrations/sources/004-monid";
 import { sources005 } from "@/lib/config/migrations/sources/005-handpicked";
+import { sources006 } from "@/lib/config/migrations/sources/006-berlin-design-network";
 
 import { FIXTURE_DEFAULTS_DIR } from "./helpers";
 
@@ -27,8 +28,8 @@ const migrate = (doc: ReturnType<typeof legacy>) => migrateConfigDocument("chann
 describe("Monid config migration", () => {
   it("adds the block after Apify, inserts into the old default cascade and stamps the version (later steps follow)", () => {
     const doc = legacy();
-    expect(migrate(doc)).toMatchObject({ from: 3, to: 5, applied: [sources004, sources005] });
-    expect(doc.get("config_version")).toBe(5);
+    expect(migrate(doc)).toMatchObject({ from: 3, to: 6, applied: [sources004, sources005, sources006] });
+    expect(doc.get("config_version")).toBe(6);
     const config = validateConfigValue("channels", doc.toJS(), "sources.yaml");
     expect(config.linkedin.cascade).toEqual(NEW_CASCADE);
     expect(config.linkedin.monid).toMatchObject({ enabled: true, monthly_budget_usd: 5, max_results: 300,

@@ -239,6 +239,11 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   (see [Sources](docs/sources.md#handpicked-berlin)). `pnpm config:migrate` adds the block (switched off) to `sources.yaml` (version 5)
   and `handpicked: 2` to `apply_priority` in a copied `pipeline.yaml` (version 4). Migration `0049_board_candidate_found_by` adds
   one column with a default; **rollback:** drop `found_by` from `ats_board_candidates` and delete the `handpicked` block and key again.
+- **Berlin Design Network discovery (off by default).** Reads the job list of berlin-design-network.org once a day and offers the
+  company boards behind its apply links (Greenhouse, Lever, Ashby, Personio, SmartRecruiters) as candidates under Discovered
+  boards; it stores no postings and never reads the companies' contact details. Set `sources.berlin_design_network.enabled: true`
+  (see [Sources](docs/sources.md#berlin-design-network)). `pnpm config:migrate` adds the block (switched off) to `sources.yaml`
+  (version 6); **rollback:** delete the block and set the version back to 5.
 - **Application writer: improve your own draft and a coach review.** Paste text you wrote in any language and get a new
   version in the answer's language, either fitted to the job or with only the language and wording changed (that option
   sends none of your ticked material). A version can also be reviewed: the AI rates it from 0 to 100 (marked as its

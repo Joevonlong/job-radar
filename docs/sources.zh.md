@@ -273,7 +273,7 @@ LinkedIn 会话搜索、guest、JSearch 等使用时间窗的通道会补窗，�
 不使用搜索时间窗的通道也保留基础窗口，因为扩大窗口取不到更多岗位，只会让其成功运行失去“可能已关闭”的证据资格：
 
 - 公司 ATS 招聘页：Greenhouse、Lever、Ashby、Personio、SmartRecruiters。
-- 招聘页发现：Tavily、Brave。
+- 招聘页发现：Tavily、Brave、Berlin Design Network。
 - Gmail 职位提醒邮件。
 - LinkedIn“为你推荐”。
 
@@ -319,7 +319,7 @@ pnpm cycle:run --backfill 36h
 与正常运行一样，已处理的查询会移到轮换队尾；补抓不保证处理每个查询。窗口变宽的运行不能作为标记岗位可能已下线的依据。
 补抓窗口不超过基础窗口，且自动补窗没有扩大窗口时，该运行按正常运行处理。
 
-只有关键词通道使用补抓窗口。不按关键词查询、而是读取自己的职位板或收件箱的通道（ATS 职位板、Arbeitnow 信息流、Handpicked Berlin 索引、邮件提醒、Brave / Tavily 发现来源、LinkedIn 登录态推荐）
+只有关键词通道使用补抓窗口。不按关键词查询、而是读取自己的职位板或收件箱的通道（ATS 职位板、Arbeitnow 信息流、Handpicked Berlin 索引、邮件提醒、Brave / Tavily / Berlin Design Network 发现来源、LinkedIn 登录态推荐）
 在同一次补抓运行中照常采集：窗口不放宽，它们的运行也不标记为窗口已放宽。
 
 ## 6. 常见异常怎么处理
@@ -388,6 +388,25 @@ Greenhouse、Workday 等，很多是小型创业公司）。不要 key，不用�
 - **设置**：`sources.handpicked` 下的 `base_url`、`user_agent`、`max_age_days`、`max_details_per_run`、`skip_known_boards`、
   `discover_boards`、`max_results`、`throttle` 和 `title_prefilter`（设置页上也有）。
 
+## Berlin Design Network
+
+Berlin Design Network（`berlin_design_network`）发现公司 board，不采集岗位。它读 [berlin-design-network.org](https://berlin-design-network.org/jobs)
+的岗位列表（大约 90 条柏林设计和创意行业雇主的岗位，只有标题、公司名和雇主的申请链接，没有描述，也没有岗位页），把链接背后的公司 board
+作为候选放进 `/sources/registry` 的“发现的 board”，带“Berlin Design Network”徽标。加入后，该公司的全部岗位由 ATS 通道读取，带完整描述。
+不要 key，不用登录。它**默认关闭**：这些雇主是设计和创意公司，除非你找这类岗位，否则只是噪音。要用它，在 `sources.yaml` 里设置
+`sources.berlin_design_network.enabled: true`（或在 `/sources/registry` 打开）；已有的安装由配置更新（`pnpm config:migrate`）补上这个块，默认关闭。
+
+- **每轮做什么。** 一次请求取页面，最多每 `interval_hours`（24）一次；间隔内的运行什么都不做。页面把列表作为数据内嵌（`__NEXT_DATA__`）；
+  通道只读每条的申请链接和公司名。只有指向官方 Greenhouse、Lever、Ashby、Personio（`*.jobs.personio.de`）或 SmartRecruiters board 的链接才算
+  （大约七分之一；LinkedIn、StepStone、join.com 和公司官网的链接一律忽略，也不会去请求）。已经在 `ats_boards` 里、或已经加入或忽略的 board 不再推荐。
+  不入库任何岗位，通道自己也没有岗位可显示。
+- **联系方式。** 页面还列出公司的联系邮箱和电话。通道不读、不存、不记日志；只保留链接和公司名。
+- **条款。** 该站没有条款页，`robots.txt` 允许这个路径。通道每天发一次请求，带说明性的 `User-Agent`，只在本站内跟随重定向，403 算被封
+  （熔断打开，其他通道照常运行）。页面结构变了，这一轮以解析错误失败，什么都不存。站主提出异议时关掉本通道。
+- **限制。** 列表小、偏设计，岗位一个月过期，所以 board 集合变化很慢。`*.jobs.personio.com` 等这里没有 ATS 通道的主机不产生候选。
+  公司名只是候选行的提示；加入前请自己确认 board。
+- **设置**：`sources.berlin_design_network` 下的 `base_url`、`user_agent` 和 `interval_hours`（设置页上也有）。
+
 ## 抓取
 
 并非每个通道都用官方 API。有些读取公开网页或非官方接口，有些以你自己登录的账号操作。多数招聘网站的服务条款禁止自动访问，
@@ -397,7 +416,7 @@ Greenhouse、Workday 等，很多是小型创业公司）。不要 key，不用�
 |---|---|---|---|
 | 抓取 | LinkedIn 游客搜索（`linkedin-guest`）、Indeed（`indeed`）、StepStone（`stepstone`）、XING（`xing`）、经 sidecar 的 Google Jobs（`jobspy-google`） | 关 | 网站条款可能禁止；你的 IP 可能被限流或封禁 |
 | 账号自动化 | LinkedIn 登录会话（`linkedin-session`、`linkedin-session:recommended`） | 关 | 使用你自己的账号；账号可能被限制或封禁 |
-| 官方 API 和公开的公司数据源 | Arbeitsagentur、[Arbeitnow](#arbeitnow)、Greenhouse、Lever、Ashby、Personio、SmartRecruiters（开）；[Handpicked Berlin](#handpicked-berlin)（关：该站没有条款）；JSearch、Gmail 提醒、Tavily、Brave（需要你的 key 或账号） | 开，或填 key、手动打开之前关 | 遵守各提供方自己的条款和配额 |
+| 官方 API 和公开的公司数据源 | Arbeitsagentur、[Arbeitnow](#arbeitnow)、Greenhouse、Lever、Ashby、Personio、SmartRecruiters（开）；[Handpicked Berlin](#handpicked-berlin)（关：该站没有条款）；[Berlin Design Network](#berlin-design-network)（关：只做发现）；JSearch、Gmail 提醒、Tavily、Brave（需要你的 key 或账号） | 开，或填 key、手动打开之前关 | 遵守各提供方自己的条款和配额 |
 | 付费抓取服务 | Bright Data、Apify、[Monid](monid.zh.md) | 开，但没有你的 token 就什么也不做 | 由服务替你抓取；**这并不能消除服务条款风险**，风险仍在你身上 |
 
 怎么打开：

@@ -18,7 +18,7 @@
 # Monthly cap used before starting paid collection runs (USD), shared by all paid channels.
 # Limits use configured prices; settled vendor charges are always recorded and may exceed the cap for one run.
 # (AI spend has its own cap: monthly_api_budget_usd in ai.yaml.)
-config_version: 5
+config_version: 6
 paid_total_monthly_budget_usd: 15
 
 # Circuit breaker: after failures consecutive failures a channel is marked unavailable (paused) and retried after cooldown_hours hours
@@ -425,6 +425,20 @@ sources:
     safesearch: strict
     interval_hours: 20 # don't search again within this many hours of the last discovery (once a day)
     max_queries_per_run: 40 # max searches per pass; when 5 ATS × groups × cities is more, each pass searches the ones that waited longest first
+  # Berlin Design Network: board discovery only, no postings. Reads the job list of berlin-design-network.org/jobs (one page, no key, no login)
+  # and offers the company boards its apply links point at (Greenhouse, Lever, Ashby, Personio) as candidates on /sources/registry. The list holds
+  # titles, company names and links only, so there is nothing to store. The site has no terms page and robots.txt allows the path; one request a day.
+  # Off by default: it lists design and creative employers in Berlin, which is noise unless you look for such roles. Set enabled: true to use it.
+  berlin_design_network:
+    enabled: false
+    # Runs only in these markets (home country ISO codes)
+    markets: [DE]
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 1000, max_delay_ms: 3000 }
+    max_results: 100 # not used: the channel stores no postings
+    base_url: https://berlin-design-network.org # the channel reads /jobs
+    user_agent: "JobRadar/2 (self-hosted job tracker)"
+    interval_hours: 24 # read the page at most this often
   jobspy_google:
     enabled: false # jobspy's Google Jobs scraping is unreliable, off by default
     company_queries: true # sends watched company names; see docs/privacy.md

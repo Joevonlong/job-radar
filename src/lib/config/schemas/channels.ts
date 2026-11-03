@@ -260,6 +260,22 @@ export const handpickedSettingsSchema = z.strictObject({
 export type HandpickedSettings = z.infer<typeof handpickedSettingsSchema>;
 
 /**
+ * `sources.berlin_design_network`: board discovery from the job list of Berlin Design Network (one page, read at most once per
+ * `interval_hours`). The list has links and company names only, so the channel stores no postings: the apply links that point at
+ * an official ATS board become candidates on /sources/registry.
+ */
+export const berlinDesignNetworkSettingsSchema = z.strictObject({
+  ...baseShape,
+  /** Site root; the channel reads `/jobs`. */
+  base_url: httpBaseUrl,
+  /** Sent as the `User-Agent` of the request. */
+  user_agent: nonEmptyString,
+  /** The page is read at most once per this many hours. */
+  interval_hours: positiveInt,
+});
+export type BerlinDesignNetworkSettings = z.infer<typeof berlinDesignNetworkSettingsSchema>;
+
+/**
  * `sources.jsearch`: JSearch (Google for Jobs) on RapidAPI. The API key comes from `JSEARCH_API_KEY`.
  * The RapidAPI plan counts requests: `monthly_request_limit` mirrors the plan's included requests and is
  * what the channel's usage is booked against (records = requests).
@@ -599,6 +615,7 @@ export const channelsSchema = z
       xing: xingSettingsSchema,
       arbeitnow: arbeitnowSettingsSchema,
       handpicked: handpickedSettingsSchema,
+      berlin_design_network: berlinDesignNetworkSettingsSchema,
       jsearch: jsearchChannel,
       greenhouse: greenhouseChannel,
       lever: leverChannel,

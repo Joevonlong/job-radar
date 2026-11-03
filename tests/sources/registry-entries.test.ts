@@ -11,12 +11,12 @@ describe("registry entries", () => {
     for (const id of Object.keys(CHANNEL_CONFIG_TABLE)) expect(CHANNEL_GROUP).toHaveProperty([id]);
   });
 
-  it("lists the 22 channels in group order (LinkedIn by cascade first), then the boards in file order", () => {
+  it("lists the 23 channels in group order (LinkedIn by cascade first), then the boards in file order", () => {
     const config = shippedChannels();
     const entries = buildRegistryEntries(config);
     const channels = entries.filter((e) => e.type === "channel");
-    expect(channels).toHaveLength(22);
-    expect(new Set(channels.map((e) => e.id)).size).toBe(22);
+    expect(channels).toHaveLength(23);
+    expect(new Set(channels.map((e) => e.id)).size).toBe(23);
     expect(channels.slice(0, config.linkedin.cascade.length).map((e) => e.id)).toEqual([...config.linkedin.cascade]);
     expect(channels[config.linkedin.cascade.length]?.id).toBe("linkedin-session:recommended");
     expect(channels.find((e) => e.id === "arbeitnow")?.group).toBe("job_boards");

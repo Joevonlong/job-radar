@@ -36,6 +36,7 @@ export const CHANNEL_CONFIG_TABLE = {
   smartrecruiters: { section: "sources", key: "smartrecruiters", usesQueries: false, statesPostedAt: true },
   brave: { section: "sources", key: "brave", usesQueries: false },
   tavily: { section: "sources", key: "tavily", usesQueries: false },
+  berlin_design_network: { section: "sources", key: "berlin_design_network", usesQueries: false },
   "gmail-alerts": { section: "sources", key: "gmail", usesQueries: false },
   "jobspy-google": { section: "sources", key: "jobspy_google", supportsCompanyQueries: true },
 } as const satisfies Record<string, ChannelConfigRef>;

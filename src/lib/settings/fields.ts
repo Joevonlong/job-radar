@@ -192,6 +192,7 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
     "sources.xing.markets",
     "sources.arbeitnow.markets",
     "sources.handpicked.markets",
+    "sources.berlin_design_network.markets",
   ],
   // Where the AI runs and the host worker's timings are edited in the YAML (operations parameters, machine paths).
   // The pre-score weights and tables (`scoring.priority`) are a form in the "scoring" block.
@@ -465,6 +466,11 @@ const channelsSections: SectionDef[] = [
     int("sources.handpicked.discover_boards.interval_hours", "discovery_interval"),
     bool("sources.handpicked.discover_boards.require_title_match", "handpicked_discover_title"),
     ...atsPrefilter("sources.handpicked"),
+  ]),
+  channelSection("berlin_design_network", "sources.berlin_design_network", [
+    text("sources.berlin_design_network.base_url", "base_url", { mono: true }),
+    text("sources.berlin_design_network.user_agent", "user_agent", { mono: true }),
+    int("sources.berlin_design_network.interval_hours", "discovery_interval"),
   ]),
   channelSection("jsearch", "sources.jsearch", [
     text("sources.jsearch.api_base_url", "api_base_url", { mono: true }),

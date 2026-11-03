@@ -3943,7 +3943,7 @@
     },
     "discovery": {
       "title": "Discovered boards",
-      "description": "Career boards that web search (Tavily or Brave) or the links on Handpicked Berlin turned up and that are not in ats_boards of sources.yaml yet. Adding one starts collecting it from the next cycle.",
+      "description": "Career boards that web search (Tavily or Brave), the links on Handpicked Berlin or the Berlin Design Network job list turned up and that are not in ats_boards of sources.yaml yet. Adding one starts collecting it from the next cycle.",
       "count": "{total} in total",
       "countFiltered": "{shown} match the filters, {total} in total",
       "statusNotApplied": "the status filter does not apply here",
@@ -3958,6 +3958,7 @@
       "foundByTitle": "Where this board was found",
       "foundBy": {
         "handpicked": "Handpicked Berlin",
+        "berlin_design_network": "Berlin Design Network",
         "tavily": "Tavily",
         "brave": "Brave"
       },

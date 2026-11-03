@@ -202,7 +202,7 @@ describe("sources.yaml", () => {
   it.runIf(legacyText("channels") !== null)("renames the remote-location keys, keeps every value", () => {
     const original = legacyValue("channels");
     const migrated = migrateText("channels", legacyText("channels") ?? "");
-    expect(migrated.steps).toBe(4);
+    expect(migrated.steps).toBe(5);
     const back = renameBack(parse(migrated.text) as Json, ["linkedin.brightdata.remote_locations", "linkedin.apify.remote_locations", "linkedin.session.site.remote_locations", "jobspy.remote_location"], [
       ["home_country", "eu_hire_in_de"],
       ["region", "eu_any"],
@@ -220,6 +220,9 @@ describe("sources.yaml", () => {
     // the fourth step added the Handpicked Berlin channel, switched off and bound to the German market
     expect(sources.handpicked).toMatchObject({ enabled: false, markets: ["DE"] });
     delete sources.handpicked;
+    // the fifth step added the Berlin Design Network discovery channel, switched off and bound to the German market
+    expect(sources.berlin_design_network).toMatchObject({ enabled: false, markets: ["DE"] });
+    delete sources.berlin_design_network;
     // The next step adds Monid and may insert it in the previous default cascade; project those additions out too.
     const linkedin = back.linkedin as Json;
     expect(linkedin.monid).toMatchObject({ enabled: true, monthly_budget_usd: Math.min(5, Number(back.paid_total_monthly_budget_usd)) });

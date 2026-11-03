@@ -118,9 +118,9 @@ describe("syncSourceRegistryRows", () => {
     const config = shippedChannels();
     const text = "# the file text";
     const result = await syncSourceRegistry(db, { config, text, at: new Date("2026-10-08T12:00:00Z") });
-    expect(result).toEqual({ upserted: 22 + config.ats_boards.length, removed: 0 });
+    expect(result).toEqual({ upserted: 23 + config.ats_boards.length, removed: 0 });
     const rows = await listSourceRegistryRows(db);
-    expect(rows.filter((r) => r.type === "channel")).toHaveLength(22);
+    expect(rows.filter((r) => r.type === "channel")).toHaveLength(23);
     expect(rows.find((r) => r.id === "board:greenhouse:zellwerk")).toMatchObject({ type: "ats_board", parentId: "greenhouse", enabled: true, params: { ats: "greenhouse", token: "zellwerk" } });
     expect(await readRegistrySyncState(db)).toEqual({ hash: hashConfigText(text), at: "2026-10-08T12:00:00.000Z", count: result.upserted });
     expect((await getRuntimeState(db, "sources.registry_synced"))?.key).toBe("sources.registry_synced");
