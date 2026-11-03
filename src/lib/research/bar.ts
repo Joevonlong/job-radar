@@ -33,6 +33,8 @@ type Initial = { state: "waiting"; stage: "pending" | "running"; auto?: true } |
 function fromParts(initial: Initial, result: { at: Date; expired: boolean } | null, now: Date, otherwise: ResearchItemStatus, offWins: boolean): ResearchItemStatus {
   if (initial?.state === "waiting") return { state: "running", stage: initial.stage, auto: initial.auto === true };
   if (offWins && otherwise.state === "off") return otherwise;
+  // with research off nothing can be pressed: a stored result stays listed, whatever a newer request did
+  if (!offWins && result) return { state: "done", ageDays: ageDays(result.at, now), expired: result.expired };
   if (initial?.state === "failed" && initial.error === "quota_guard") return { state: "deferred", resumeAt: initial.resumeAt ?? null };
   if (initial?.state === "failed" && initial.error !== "research_disabled") return { state: "failed", error: initial.error };
   if (result) return { state: "done", ageDays: ageDays(result.at, now), expired: result.expired };
@@ -45,7 +47,7 @@ async function companyStatus(db: Db, jobId: number, research: ResearchConfig, ai
   const latest = await findLatestCompanyResearch(db, { companyId: job.companyId, promptVersion: COMPANY_RESEARCH_PROMPT_VERSION, now });
   const initial = await readInitialCompanyResearchRequest(db, { jobId, companyId: job.companyId, fetchedAt: latest?.fetchedAt ?? null });
   const usable = ai !== null && companyResearchProviders(ai).length > 0;
-  const result = latest ? { at: latest.fetchedAt, expired: !companyResearchCurrent(latest, confirmedWebsiteDomain(job)) } : null;
+  const result = latest ? { at: latest.fetchedAt, expired: !companyResearchCurrent(latest, confirmedWebsiteDomain(job, research.company.non_company_hosts)) } : null;
   return fromParts(initial, result, now, usable && research.enabled ? { state: "missing" } : { state: "off", settingsTab: "ai" }, research.enabled);
 }
 

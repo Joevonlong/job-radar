@@ -11,6 +11,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Writer and Gmail replies fixes.** The usage-cap notice in the application writer now reads like the other AI panels. The evidence check no longer reads a spaced single letter as a unit (`5 m` is a 5; `$5 m` and `3 x` still count). Gmail replies skip mail from a Gmail alias of the mailbox, and a mail that fails every cycle no longer holds a batch slot: `replies.yaml` gets `max_fetches_per_cycle` (default 100; a `replies.yaml` you already have needs no change, but older code refuses the new key, so remove it before rolling back).
 - **StepStone now only requests URLs its `robots.txt` permits.** The channel used to send `?sort=2&ag=…&radius=…&page=…`, which
   StepStone's current `robots.txt` disallows; it now sends a single `?q=<keyword>` parameter. Trade-off: one request per keyword
   and place (about 25 results in StepStone's own order, no paging, no newest-first sort), and the look-back window is applied

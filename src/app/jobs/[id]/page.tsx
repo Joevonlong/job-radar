@@ -80,6 +80,7 @@ import { ghostEnabled } from "@/lib/ghost/settings";
 import { buildGhostCheckView, GHOST_TOOLTIP_REASONS, ghostMarkText, ghostShortMessage } from "@/lib/ghost/view";
 import { readInitialBreakdownRequest } from "@/lib/control/breakdown-request";
 import { countApplicationAnswers } from "@/lib/db/repos/application-writer";
+import { writerEntryHref } from "@/lib/writer/entry";
 import { readWriterEnabled } from "@/lib/writer/settings";
 import { readInitialTranslateRequest, readPartialTranslation } from "@/lib/control/translate-request";
 import { toJobTranslation } from "@/lib/translation/service";
@@ -236,7 +237,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const answers = await countApplicationAnswers(getDb(), job.id);
   const writerEnabled = readWriterEnabled();
   // the workbench, or (off and nothing written yet) the setting that turns it on
-  const writeHref = writerEnabled || answers.questions > 0 ? `/jobs/${job.id}/apply` : "/settings?tab=workflow";
+  const writeHref = writerEntryHref({ jobId: job.id, enabled: writerEnabled, questions: answers.questions });
   const { view: breakdownView, extraQuotes } = buildBreakdownView({
     row: breakdownRow,
     description: job.description,

@@ -7,7 +7,7 @@ export type PsqlTarget = { container: string } | { composeDir: string };
 const READ_ONLY = "PGOPTIONS=-c default_transaction_read_only=on";
 const PSQL = ["psql", "-U", "jobradar", "-d", "jobradar", "-At", "-c"];
 
-/** The `docker` command line for one query; the session cannot write, whatever the query says. */
+/** The `docker` command line for one query. The session starts read-only, which guards against mistakes; a query could still switch that off itself (SET, or BEGIN READ WRITE), so this is not a sandbox for queries you do not trust. */
 export function psqlInvocation(target: PsqlTarget, query: string): { args: string[]; cwd?: string } {
   if ("composeDir" in target) return { args: ["compose", "exec", "-T", "-e", READ_ONLY, "db", ...PSQL, query], cwd: target.composeDir };
   return { args: ["exec", "-e", READ_ONLY, target.container, ...PSQL, query] };

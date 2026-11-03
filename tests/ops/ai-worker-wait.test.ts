@@ -360,3 +360,29 @@ describe("ai_worker_wait_fresh", () => {
     }
   });
 });
+
+describe("ai_worker_service_pid temporary file", () => {
+  it.each(["SIGTERM", "SIGHUP"] as const)("is removed when the subshell running it gets %s mid-call", async (sig) => {
+    const tmpdir = path.join(tmp, "tmpdir");
+    fs.mkdirSync(tmpdir, { recursive: true });
+    const vars = Object.entries({ PATH: `${bin}:/usr/bin:/bin`, HOME: tmp, TMPDIR: tmpdir, STUB_LAUNCHCTL_SLEEP: "5" }).map(([k, v]) => `${k}=${v}`);
+    // the call runs in a command substitution, like the install script's service_pid
+    const child = spawn("/usr/bin/env", ["-i", ...vars, "/bin/bash", "-c", `source "${lib}"; x="$(ai_worker_service_pid launchd ${LABEL} 30)"; echo "got=$x"`], { stdio: "ignore", detached: true });
+    const done = new Promise<void>((resolve) => child.on("exit", () => resolve()));
+    try {
+      const until = Date.now() + 3000;
+      while (!fs.readdirSync(tmpdir).some((n) => n.startsWith("ai-worker-pid."))) {
+        if (Date.now() > until) throw new Error("temporary file not created");
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      // the whole group, as a terminal or a service manager would signal it
+      process.kill(-(child.pid ?? 0), sig);
+      await done;
+      await new Promise((r) => setTimeout(r, 300));
+      expect(fs.readdirSync(tmpdir).filter((n) => n.startsWith("ai-worker-"))).toEqual([]);
+    } finally {
+      if (child.exitCode === null && child.signalCode === null && child.pid) process.kill(-child.pid, "SIGKILL");
+      await done;
+    }
+  });
+});

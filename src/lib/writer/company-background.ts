@@ -48,7 +48,7 @@ export function companySnapshot(input: {
     const entry = research.fields[field];
     if (!ticked.has(field) || !entry) return [];
     const text = companyFieldText(entry.text);
-    if (text === "" || (traps !== null && firstInstruction(text, traps) !== null)) return [];
+    if (text === "" || (traps !== null && (firstInstruction(text, traps) !== null || firstInstruction(text.normalize("NFKC"), traps) !== null))) return [];
     return [{ field, text, sourceUrl: httpsUrlOrNull(entry.sourceUrl) }];
   });
   return { snapshot: fields.length === 0 ? null : { researchId: research.id, expired: research.expired, fields }, updated: false };

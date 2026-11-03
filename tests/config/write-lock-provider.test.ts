@@ -93,6 +93,44 @@ describe("isLockedConfigPath", () => {
   });
 });
 
+describe("isLockedConfigPath and symbolic links", () => {
+  it("sees through a link to the config or profile directory, a link to a file in it, and a link to a file not there yet", () => {
+    const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "not-config-")));
+    try {
+      fs.mkdirSync(tmp.configDir, { recursive: true });
+      fs.mkdirSync(tmp.profileDir, { recursive: true });
+      fs.symlinkSync(tmp.configDir, path.join(elsewhere, "dir-link"));
+      fs.symlinkSync(tmp.profileDir, path.join(elsewhere, "profile-link"));
+      fs.writeFileSync(target(), "x: 1\n");
+      fs.symlinkSync(target(), path.join(elsewhere, "file-link.yaml"));
+      fs.symlinkSync(path.join(tmp.configDir, "not-yet.yaml"), path.join(elsewhere, "dangling.yaml"));
+      fs.symlinkSync(path.join(elsewhere, "dir-link"), path.join(elsewhere, "chain"));
+      expect(isLockedConfigPath(path.join(elsewhere, "dir-link", "new.yaml"))).toBe(true);
+      expect(isLockedConfigPath(path.join(elsewhere, "profile-link", "me.yaml"))).toBe(true);
+      expect(isLockedConfigPath(path.join(elsewhere, "file-link.yaml"))).toBe(true);
+      expect(isLockedConfigPath(path.join(elsewhere, "dangling.yaml"))).toBe(true);
+      expect(isLockedConfigPath(path.join(elsewhere, "chain", "deep", "new.yaml"))).toBe(true);
+      expect(isLockedConfigPath(path.join(elsewhere, "plain.yaml"))).toBe(false);
+    } finally {
+      fs.rmSync(elsewhere, { recursive: true, force: true });
+    }
+  });
+
+  it("a link whose target is outside stays unlocked, and a link loop does not hang", () => {
+    const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "not-config-")));
+    try {
+      fs.mkdirSync(path.join(elsewhere, "real"));
+      fs.symlinkSync(path.join(elsewhere, "real"), path.join(elsewhere, "ok-link"));
+      fs.symlinkSync(path.join(elsewhere, "b"), path.join(elsewhere, "a"));
+      fs.symlinkSync(path.join(elsewhere, "a"), path.join(elsewhere, "b"));
+      expect(isLockedConfigPath(path.join(elsewhere, "ok-link", "x.yaml"))).toBe(false);
+      expect(isLockedConfigPath(path.join(elsewhere, "a"))).toBe(false);
+    } finally {
+      fs.rmSync(elsewhere, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("withConfigWriteLock", () => {
   it("holds one session per call chain, shares it when nested, and releases it afterwards", async () => {
     const state = session(async () => true);

@@ -46,7 +46,7 @@ export async function getCompanyResearchContext(db: Db, input: { jobId: number; 
     providers,
     unrestricted: ai ? companyResearchUnrestricted(ai) : false,
     latest,
-    domainChanged: latest !== null && job !== null && latest.domainUsed !== confirmedWebsiteDomain(job),
+    domainChanged: latest !== null && job !== null && latest.domainUsed !== confirmedWebsiteDomain(job, research?.company.non_company_hosts ?? []),
     initialRequest: job ? await readInitialCompanyResearchRequest(db, { jobId: input.jobId, companyId: job.companyId, fetchedAt: latest?.fetchedAt ?? null }) : null,
     usedToday: availability === "enabled" ? await countCompanyResearchRequests(db, now) : 0,
     maxPerDay: research?.company.max_per_day ?? 0,

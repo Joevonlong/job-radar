@@ -123,6 +123,19 @@ export async function replyInputOf(input: {
   };
 }
 
+/**
+ * One Gmail mailbox has many spellings: dots in the name do not count, and `name+anything` is the same box, at gmail.com or googlemail.com.
+ * Only these two domains are folded (for any other host that is the provider's choice and cannot be told from here).
+ */
+export function canonicalMailbox(address: string): string {
+  const lower = address.trim().toLowerCase();
+  const at = lower.lastIndexOf("@");
+  if (at < 0) return lower;
+  const domain = lower.slice(at + 1);
+  if (domain !== "gmail.com" && domain !== "googlemail.com") return lower;
+  return `${lower.slice(0, at).split("+")[0]!.replaceAll(".", "")}@gmail.com`;
+}
+
 /** The rules on one local message (`pnpm replies:check --eml`): no mailbox, no database. */
 export async function classifyEml(source: Buffer, config: RepliesConfig): Promise<{ category: ReplyCategory; suspiciousInstruction: boolean }> {
   const parsed = await simpleParser(source, { skipImageLinks: true, skipTextToHtml: true, skipTextLinks: true, skipHtmlToText: true });
@@ -165,9 +178,9 @@ export async function readReplies(options: ReadRepliesOptions): Promise<ReplyRun
       if (isAbortError(error) || signal.aborted) throw error;
       throw classifyImapError(error, LABEL_SETTING);
     }
-    const own = credentials.user.toLowerCase();
+    const own = canonicalMailbox(credentials.user);
     const inWindow = listed.filter((header) => header.receivedAt.getTime() >= since.getTime());
-    const headers = inWindow.filter((header) => header.from.trim().toLowerCase() !== own);
+    const headers = inWindow.filter((header) => canonicalMailbox(header.from) !== own);
     result.ownSkipped = inWindow.length - headers.length;
     const known = db ? await findKnownReplyKeys(db, headers.map(dedupeKeyOf)) : new Set<string>();
     const seen = new Set<string>();
@@ -180,12 +193,16 @@ export async function readReplies(options: ReadRepliesOptions): Promise<ReplyRun
       })
       .sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime() || a.uid - b.uid);
     result.fresh = fresh.length;
-    const batch = fresh.slice(0, config.max_messages_per_cycle);
+    // A mail that fails every cycle is never stored, so it is always "fresh" and, oldest first, would take a slot of the batch for good: only
+    // mail that was read uses a slot. The fetch window is `max_fetches_per_cycle`, so one cycle never works through a whole backlog of bad mail.
+    const limit = config.max_messages_per_cycle;
+    const batch = fresh.slice(0, Math.max(config.max_fetches_per_cycle, limit));
     const candidates = db ? await listReplyCandidates(db, config.match.candidate_statuses) : [];
     const threads = db ? await listConfirmedThreads(db, [...new Set(batch.flatMap((header) => (header.threadId ? [header.threadId] : [])))]) : [];
 
     for (const header of batch) {
       signal.throwIfAborted();
+      if (result.read >= limit) break;
       const oversized = header.size !== undefined && header.size > config.max_message_bytes;
       let source: Buffer | null;
       try {

@@ -104,12 +104,12 @@ async function writeRunActivity(db: Db, input: { jobId: number; process: Activit
 }
 
 /** Is there anything for this part to do? Cached parts need no run; a part that is off is said so. */
-async function itemNeed(db: Db, item: ResearchItem, input: { jobId: number; now: Date; breakdown: BreakdownSettingsState; salary: SalarySettingsState }): Promise<AutoResearchItemState | "run"> {
+async function itemNeed(db: Db, item: ResearchItem, input: { jobId: number; now: Date; nonCompanyHosts: readonly string[]; breakdown: BreakdownSettingsState; salary: SalarySettingsState }): Promise<AutoResearchItemState | "run"> {
   if (item === "company") {
     const job = await getJobForCompanyResearch(db, input.jobId);
     if (!job) return "failed";
     const latest = await findLatestCompanyResearch(db, { companyId: job.companyId, promptVersion: COMPANY_RESEARCH_PROMPT_VERSION, now: input.now });
-    return companyResearchCurrent(latest, confirmedWebsiteDomain(job)) ? "cached" : "run";
+    return companyResearchCurrent(latest, confirmedWebsiteDomain(job, input.nonCompanyHosts)) ? "cached" : "run";
   }
   if (item === "breakdown") {
     if (input.breakdown.state === "error" || !input.breakdown.config.enabled) return "disabled";
@@ -154,7 +154,7 @@ async function run(db: Db, input: { jobId: number; event: ResearchAutoTrigger; n
   const items: ResearchAutoItems = {};
   const toQueue: ResearchItem[] = [];
   for (const item of research.auto.items) {
-    let state = await itemNeed(db, item, { jobId: input.jobId, now: input.now, breakdown, salary });
+    let state = await itemNeed(db, item, { jobId: input.jobId, now: input.now, nonCompanyHosts: research.company.non_company_hosts, breakdown, salary });
     if (state === "run" && item !== "breakdown") {
       const task = item === "company" ? "company_research" : "salary_lookup";
       const providers = item === "company" ? companyResearchProviders(ai) : salaryLookupProviders(ai);

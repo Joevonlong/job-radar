@@ -42,14 +42,14 @@ export interface UploadTextLimits {
   minChars: number;
   /** `import.pdf_timeout_seconds`, in milliseconds. */
   pdfTimeoutMs: number;
-  /** `import.pdf_max_memory_mb`. */
+  /** `import.pdf_max_memory_mb`: the heap limit of the reading thread (off-heap memory is not counted; the time limit is the real guard). */
   pdfMaxMemoryMb: number;
   /** Aborted when the client goes away: reading stops. */
   signal?: AbortSignal;
 }
 
 /**
- * The PDF's text layer, read in a worker thread that is killed at the time limit, at the memory limit or when the client
+ * The PDF's text layer, read in a worker thread that is killed at the time limit, at the heap limit or when the client
  * goes away. It gets a copy of the bytes (they move to the thread), no environment and the file's text nowhere but in the
  * message back. No OCR: a scanned page has no text.
  */

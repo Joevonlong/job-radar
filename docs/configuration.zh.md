@@ -140,7 +140,7 @@ pnpm config:example               # 列出示例配置；`pnpm config:example <i
 
 ### Gmail 回信（`replies.yaml`）
 
-默认关闭（`enabled: false`）。用本地规则只读一个 Gmail 标签，在 `/pipeline` 上建议改状态，每条都由你确认。`label`、`lookback_days`、`max_messages_per_cycle`、`body_scan_chars`、`max_message_bytes`；`categories`（按语言分组的正则，`categories.*` 按语言合并）；`match`（状态、权重、`min_score`、`min_margin`、发件方列表）；`transitions`（每个类别从哪个状态建议什么）；`storage`（主题和引文长度、`decided_retention_days`）；`panel.undo_days`；`doctor.pending_warn_days`。见 [gmail-replies.zh.md](gmail-replies.zh.md)。
+默认关闭（`enabled: false`）。用本地规则只读一个 Gmail 标签，在 `/pipeline` 上建议改状态，每条都由你确认。`label`、`lookback_days`、`max_messages_per_cycle`（每轮读取并存下的邮件数）、`max_fetches_per_cycle`（每轮取回的邮件数，含失败的）、`body_scan_chars`、`max_message_bytes`；`categories`（按语言分组的正则，`categories.*` 按语言合并）；`match`（状态、权重、`min_score`、`min_margin`、发件方列表）；`transitions`（每个类别从哪个状态建议什么）；`storage`（主题和引文长度、`decided_retention_days`）；`panel.undo_days`；`doctor.pending_warn_days`。见 [gmail-replies.zh.md](gmail-replies.zh.md)。
 
 ### 公司背景（`research.yaml`）
 

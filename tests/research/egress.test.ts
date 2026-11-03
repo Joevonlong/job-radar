@@ -34,20 +34,20 @@ describe("what a company lookup sends out", () => {
   });
 
   it("treats only a domain the user confirmed as confirmed", () => {
-    expect(confirmedWebsiteDomain({ websiteDomain: "acme-robotics.com", websiteDomainSource: "user" })).toBe("acme-robotics.com");
-    expect(confirmedWebsiteDomain({ websiteDomain: "acme-inferred.com", websiteDomainSource: "inferred" })).toBeNull();
-    expect(confirmedWebsiteDomain({ websiteDomain: null, websiteDomainSource: null })).toBeNull();
+    expect(confirmedWebsiteDomain({ websiteDomain: "acme-robotics.com", websiteDomainSource: "user" }, [])).toBe("acme-robotics.com");
+    expect(confirmedWebsiteDomain({ websiteDomain: "acme-inferred.com", websiteDomainSource: "inferred" }, [])).toBeNull();
+    expect(confirmedWebsiteDomain({ websiteDomain: null, websiteDomainSource: null }, [])).toBeNull();
   });
 
   it("does not trust a stored row: a confirmed domain that is not a public name is not used", () => {
     for (const bad of ["192.168.1.1", "fritz.box", "printer.local", "169.254.169.254"]) {
-      expect(confirmedWebsiteDomain({ websiteDomain: bad, websiteDomainSource: "user" }), bad).toBeNull();
+      expect(confirmedWebsiteDomain({ websiteDomain: bad, websiteDomainSource: "user" }, []), bad).toBeNull();
     }
   });
 
   it("gives the claude-cli web tool arguments for the allowed sites and the confirmed domain only", () => {
-    const confirmed = confirmedWebsiteDomain({ websiteDomain: "acme-robotics.com", websiteDomainSource: "user" });
-    const inferred = confirmedWebsiteDomain({ websiteDomain: "acme-inferred.com", websiteDomainSource: "inferred" });
+    const confirmed = confirmedWebsiteDomain({ websiteDomain: "acme-robotics.com", websiteDomainSource: "user" }, []);
+    const inferred = confirmedWebsiteDomain({ websiteDomain: "acme-inferred.com", websiteDomainSource: "inferred" }, []);
     const domains = [...publicWebsiteDomains(["linkedin.com", "kununu.com"]), ...(confirmed !== null ? [confirmed] : []), ...(inferred !== null ? [inferred] : [])];
     const args = claudeWebToolArgs(webLimits(domains, 8).allowedDomains).join(" ");
     expect(args).toContain("WebFetch(domain:acme-robotics.com)");
