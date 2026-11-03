@@ -1,7 +1,12 @@
 {
-  "sha": "5164f944e5acc13c58723fc438a7f825a434fad4",
+  "sha": "74b5a8c56f1be6b12eb2ecfafa464136a6ba48ee",
   "set": "edited",
   "files": {
+    "currentScores": {
+      "layer": "default",
+      "hash": "c740ff25cf5ef9d1f88c0f63e6c32c1c3c728b006c5594e1e9292b9f2f0f10f6",
+      "valid": true
+    },
     "schedule": {
       "layer": "user",
       "hash": "9102a2244781afb741b8f62a29e9b54892dd12d4c436d787269cf3ab073924b0",
@@ -19,7 +24,7 @@
     },
     "channels": {
       "layer": "user",
-      "hash": "051a8152cf4a1965eae71cd532f4daa4204a39e5facd5351d398e758cf1ba032",
+      "hash": "2e9f710a266f51f8e8a965f3da3627cfebce752ba6323f8bc5e4662cbeed2f27",
       "valid": true
     },
     "ai": {
@@ -49,7 +54,7 @@
     },
     "pipeline": {
       "layer": "user",
-      "hash": "e10180b295ecd8a88f9a752532199b9a54ffb8387a3248f1471574fdb44aa87f",
+      "hash": "0b245550fae794f914f882a70113c8403ffe228f7d71298c938b57803c81ad8d",
       "valid": true
     },
     "pipelineBoard": {
@@ -92,6 +97,11 @@
       "hash": "3adb443f725dfd68bf0e4e88abd52e795d95c472173c040ba41ef36cf824b27a",
       "valid": true
     },
+    "research": {
+      "layer": "default",
+      "hash": "dc0772e3030c47b7e8e59b42b55fb7163e78a812f5f3712fecad6a69f76fa371",
+      "valid": true
+    },
     "signalPresets": {
       "layer": "default",
       "hash": "823dbb7602e146b018a2ec3689fa56718d998eb542282d0743560978e077ab2f",
@@ -117,12 +127,22 @@
       "hash": "0dcbb38aefa83d33d093a4d55794c37234c58598cab4b90d912521882f74d8dc",
       "valid": true
     },
+    "writer": {
+      "layer": "default",
+      "hash": "c32294b6c02804785ec92ec641ebdf1b831119d86c3b1827d5a79614af431eb6",
+      "valid": true
+    },
     "me": {
       "layer": "missing",
       "hash": null,
       "valid": true
     },
     "preferences": {
+      "layer": "missing",
+      "hash": null,
+      "valid": true
+    },
+    "stories": {
       "layer": "missing",
       "hash": null,
       "valid": true

@@ -7,6 +7,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Berlin Startup Jobs now starts by itself on existing German installs.** The new Berlin Startup Jobs channel is on by
+  default for installs whose market is Germany, so the next cycle after upgrading starts reading it. To turn it off, set
+  `sources.berlinstartupjobs.enabled: false` in `data/config/sources.yaml`.
 - **Optional title check for duplicate merging.** `dedupe.title_guard` in `pipeline.yaml` can compare titles before a job
   is merged on its description. It is off by default, so matching does not change, and no migration runs. The first cycle
   after upgrading re-evaluates the filter once, with no AI cost. **Rollback:** an older version refuses

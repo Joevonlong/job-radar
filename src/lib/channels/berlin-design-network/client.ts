@@ -2,6 +2,7 @@ import type { BerlinDesignNetworkSettings } from "@/lib/config";
 
 import type { BoardLink } from "../discovery/harvest";
 import { ChannelError } from "../errors";
+import { readTextUpTo } from "../http";
 import type { ChannelContext } from "../types";
 import { extractJsonAfter } from "../web/embedded";
 import { jobSchema, nextDataSchema } from "./schema";
@@ -11,6 +12,8 @@ export const JOBS_PATH = "jobs";
 
 const NEXT_DATA_ANCHOR = '<script id="__NEXT_DATA__"';
 const MAX_REDIRECTS = 3;
+/** The job list page is a few hundred KB; a body beyond this is not the page. */
+const MAX_PAGE_BYTES = 4 * 1024 * 1024;
 
 type ClientSettings = Pick<BerlinDesignNetworkSettings, "base_url" | "user_agent">;
 
@@ -25,7 +28,11 @@ export async function fetchJobsPage(ctx: ChannelContext, settings: ClientSetting
   const origin = new URL(url).origin;
   for (let hop = 0; ; hop += 1) {
     const response = await ctx.http.request(url, { headers: { "User-Agent": settings.user_agent, Accept: "text/html" }, redirect: "manual" });
-    if (response.status < 300 || response.status >= 400) return response.text();
+    if (response.status < 300 || response.status >= 400) {
+      const page = response.textUpTo ? await response.textUpTo(MAX_PAGE_BYTES) : await readTextUpTo(response, MAX_PAGE_BYTES);
+      if (page.truncated) throw new ChannelError("parse", "the job list page is larger than expected");
+      return page.text;
+    }
     const location = response.headers.get("location");
     await response.cancel?.();
     let next: URL | null = null;
