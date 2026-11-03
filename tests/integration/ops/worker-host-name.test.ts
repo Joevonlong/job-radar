@@ -96,10 +96,9 @@ describe("a host name on its way through application_name", () => {
     expect(holderStatus(pid, "elsewhere.invalid")).toMatchObject({ status: 0, json: { status: "other" } });
   });
 
-  it("two non-ASCII hosts of the same shape are not told apart, which the pid in the name makes harmless", async () => {
+  it("two non-ASCII hosts of the same shape are told apart: the name carries their bytes", async () => {
     const pid = await startHolder(NON_ASCII_HOST);
-    // Every byte outside printable ASCII becomes `_`: a host of the same shape produces the same name.
-    expect(instanceApplicationName("ai-worker", pid, "服务-münchen")).toBe(instanceApplicationName("ai-worker", pid, NON_ASCII_HOST));
-    expect(holderStatus(pid + 1, "服务-münchen")).toMatchObject({ status: 0, json: { status: "other" } });
+    expect(instanceApplicationName("ai-worker", pid, "服务-münchen")).not.toBe(instanceApplicationName("ai-worker", pid, NON_ASCII_HOST));
+    expect(holderStatus(pid, "服务-münchen")).toMatchObject({ status: 0, json: { status: "other" } });
   });
 });

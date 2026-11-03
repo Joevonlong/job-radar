@@ -93,7 +93,7 @@ process cwd (`lsof -a -d cwd -p PID -Fn` on macOS, `/proc/PID/cwd` on Linux). Ed
 unknown ownership blocks writes. Any such worker PID other than the confirmed target service PID blocks writes; the
 message lists those PIDs. A failed scan also blocks writes. `--holder --pid <expected> --host <host>` compares the
 worker's published application name, including its 63-byte truncation, without trying to recover a truncated host; a host
-name with characters outside printable ASCII is written with `_` in that name, and both sides compare it that way.
+name with characters outside printable ASCII is written as `%` and its UTF-8 bytes in that name, and both sides compare it that way.
 `--no-ai-worker` still checks the holder, host processes and the installed service's release; it only permits that target
 service PID, or no holder and no installed service, with no other worker process. `--settle 0` uses the same checks,
 without a receipt wait: the service must point at the target release, its PID must hold the instance lock and stay

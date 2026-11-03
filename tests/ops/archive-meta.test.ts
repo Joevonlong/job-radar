@@ -95,7 +95,7 @@ function write(file: string, content: string, mode = 0o644): void {
   fs.writeFileSync(file, content, { mode });
 }
 
-describe.each(KINDS)("$flavour: backup.sh packs the marker, restore.sh puts the archive back", { timeout: 180_000 }, (kind) => {
+describe.each(KINDS.filter((kind) => kind.skip === null))("$flavour: backup.sh packs the marker, restore.sh puts the archive back", { timeout: 180_000 }, (kind) => {
   let root = "";
   let app = "";
   let out = "";
