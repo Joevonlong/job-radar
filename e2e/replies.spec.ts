@@ -61,8 +61,9 @@ test("a reply changes nothing until it is confirmed, and the undo takes it back"
 
 test("the same on a phone, in dark mode", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.emulateMedia({ colorScheme: "dark" });
+  await page.addInitScript(() => localStorage.setItem("theme", "dark"));
   await page.goto("/pipeline");
+  await expect(page.locator("html")).toHaveClass(/dark/);
   await page.getByTestId("replies-toggle").click();
   const row = page.getByTestId("reply-row").first();
   await expect(row.getByTestId("reply-confirm")).toBeVisible();

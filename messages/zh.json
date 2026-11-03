@@ -7453,6 +7453,7 @@
       "step__pipeline": "处理岗位",
       "step__filter": "筛选",
       "step__signals": "信号复核",
+      "step__replies": "Gmail 回信",
       "step__ai": "AI 处理",
       "step__notify": "发送通知",
       "step__maintenance": "维护",

@@ -134,7 +134,7 @@ export const openImapSession: MailSessionFactory = async (options) => {
             uid: message.uid,
             messageId: envelope?.messageId?.trim() || null,
             from: envelope?.from?.[0]?.address?.trim() ?? "",
-            fromName: envelope?.from?.[0]?.name?.trim() ?? "",
+            ...(envelope?.from?.[0]?.name?.trim() ? { fromName: envelope.from[0].name.trim() } : {}),
             subject: envelope?.subject?.trim() ?? "",
             receivedAt: Number.isNaN(receivedAt.getTime()) ? new Date(0) : receivedAt,
             ...(message.threadId ? { threadId: String(message.threadId) } : {}),

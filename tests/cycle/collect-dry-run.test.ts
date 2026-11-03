@@ -43,6 +43,7 @@ describe("dry run", () => {
       ["pipeline", "skipped"],
       ["filter", "skipped"],
       ["signals", "skipped"],
+      ["replies", "skipped"],
       ["ai", "skipped"],
       ["notify", "skipped"],
       ["maintenance", "skipped"],
@@ -295,6 +296,6 @@ describe("cancellation", () => {
     expect(result.status).toBe("failed");
     expect(result.summary.aborted).toBe(true);
     expect(collectOf(result).aborted).toBe(true);
-    expect(result.summary.steps.filter((s) => s.status === "skipped")).toHaveLength(6);
+    expect(result.summary.steps.filter((s) => s.status === "skipped")).toHaveLength(7);
   });
 });

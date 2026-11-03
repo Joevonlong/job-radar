@@ -7453,6 +7453,7 @@
       "step__pipeline": "Process postings",
       "step__filter": "Filter",
       "step__signals": "Review signals",
+      "step__replies": "Gmail replies",
       "step__ai": "AI processing",
       "step__notify": "Notify",
       "step__maintenance": "Maintenance",
