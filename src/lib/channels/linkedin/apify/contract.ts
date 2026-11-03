@@ -123,12 +123,13 @@ function fill(value: unknown, values: TemplateValues): unknown {
 type KeyValueEntry = { key: unknown; value: unknown };
 
 function isKeyValueList(value: unknown): value is KeyValueEntry[] {
-  return Array.isArray(value) && value.length > 0 && value.every((entry) => typeof entry === "object" && entry !== null && "key" in entry && "value" in entry);
+  return Array.isArray(value) && value.every((entry) => typeof entry === "object" && entry !== null && "key" in entry && "value" in entry);
 }
 
 /**
  * `remote_input` over `input_template`: a key replaces the template's, except that two `{key, value}` lists are merged
- * by `key` (the remote entry wins), so a remote parameter does not drop the template's time window.
+ * by `key` (the remote entry wins), so a remote parameter does not drop the template's time window; an empty list changes
+ * nothing. A list of any other shape still replaces the template's.
  */
 export function remoteTemplate(template: Readonly<Record<string, unknown>>, remote: Readonly<Record<string, unknown>>): Record<string, unknown> {
   const merged: Record<string, unknown> = { ...template };

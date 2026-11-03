@@ -87,6 +87,16 @@ describe("buildActorInputs: the exact window", () => {
     expect(urlParam(input)).toEqual([{ key: "f_TPR", value: "r60" }]);
   });
 
+  it("treats an empty remote list as no change, the window stays", () => {
+    const [input] = buildActorInputs({ ...remote, windowHours: 10 }, settings({ remote_input: { urlParam: [] } }), 5, fixtureMarket());
+    expect(urlParam(input)).toEqual([{ key: "f_TPR", value: "r36000" }]);
+  });
+
+  it("lets a list of another shape replace the template's list", () => {
+    const [input] = buildActorInputs(remote, settings({ remote_input: { urlParam: ["f_WT=2"] } }), 5, fixtureMarket());
+    expect(urlParam(input)).toEqual(["f_WT=2"]);
+  });
+
   it("still replaces any other kind of value", () => {
     expect(remoteTemplate({ locations: ["{location}"], a: 1 }, { locations: ["Remote"], a: 2 })).toEqual({ locations: ["Remote"], a: 2 });
     expect(remoteTemplate({ list: [{ key: "x", value: "1" }] }, { list: "none" })).toEqual({ list: "none" });

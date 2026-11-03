@@ -65,6 +65,16 @@ describe("sources.yaml 7 -> 8", () => {
     expect(run(before).text).toBe(before);
   });
 
+  it("leaves the template alone when date_posted was edited, the new template would not read it", () => {
+    const before = file(OLD).replace("    # my note\n", '    date_posted: { day: day, week: week, month: month, any: "" }\n    # my note\n');
+    expect(run(before).text).toBe(before);
+  });
+
+  it("migrates next to the old shipped date_posted", () => {
+    const before = file(OLD).replace("    # my note\n", '    date_posted: { day: r86400, week: r604800, month: r2592000, any: "" }\n    # my note\n');
+    expect(run(before).value.linkedin?.apify?.input_template).toHaveProperty("urlParam");
+  });
+
   it("migrates a template without an actor_id, the default actor is inherited", () => {
     const { value } = run(file(OLD).replace("    actor_id: valig/linkedin-jobs-scraper\n", ""));
     expect(value.linkedin?.apify?.input_template).toHaveProperty("urlParam");

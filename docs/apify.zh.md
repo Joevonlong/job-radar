@@ -20,7 +20,7 @@
 | `remote_locations` | 远程查询按 `search.yaml: remote_scope` 用的 location |
 | `date_posted` | 模板使用 actor 粗档位过滤时 `{date_posted}` 的取值：窗口 ≤24 小时 / ≤7 天 / ≤30 天 / 更长（空 = 不带这个键）。默认模板不用它 |
 | `input_template` | actor 输入模板；字符串里可用 `{keywords}` `{location}` `{date_posted}` `{posted_within_seconds}` `{limit}`（整串是 `"{limit}"` 时变成数字），值为空的键会被省掉 |
-| `remote_input` | 远程查询在模板上叠加的键（默认 `urlParam: f_WT=2`）；同名键替换模板的值，但两边都是 `{key, value}` 列表时按 `key` 合并，同一 `key` 以远程为准 |
+| `remote_input` | 远程查询在模板上叠加的键（默认 `urlParam: f_WT=2`）；同名键替换模板的值，但两边都是 `{key, value}` 列表时按 `key` 合并，同一 `key` 以远程为准，空列表不改变模板。其他形状的列表会替换模板的列表，模板里的 `f_TPR` 也随之丢失 |
 
 `input_template`、`remote_input`、`date_posted` 在设置页不显示（actor 专用的数据），直接改 YAML。
 
