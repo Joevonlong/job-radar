@@ -66,6 +66,8 @@ then calls the host's `sync` to flush it to disk. A failed dump, unreadable arch
 file and stops the backup (and a deployment waiting for it). This check does not replace a full restore drill.
 Manual backups are named `manual` and are **never pruned by the automatic retention policy**; delete them yourself when you no longer need them.
 
+Before merging duplicate companies, take `scripts/ops/backup.sh --label pre-company-merge`. That backup is the last resort: restoring it also loses everything collected and done after it, so undo a wrong merge with `pnpm companies:merge --undo` first (see [Merging duplicate companies](extraction.md#merging-duplicate-companies)).
+
 The configuration is kept as well: `scripts/ops/backup.sh` writes a same-named `….config.tgz` next to the `.dump`, containing the user config directory `data/config/` (without `.backup/` and `.web-session-secret`) and the profile `data/profile/`. They are not in the database and not in git, so this is one of the only copies of them. The runner's daily backup writes the same archive (see section 1).
 
 ```bash

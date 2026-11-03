@@ -247,6 +247,8 @@ export const pipelineSchema = z.strictObject({
     aliases: z.record(nonEmptyString, z.array(nonEmptyString)),
     /** Companies known to be recruiters / staffing agencies (names; legal suffixes are ignored). Added to the packs'. */
     agency_names: extraStringList,
+    /** Words at the end of a company name that `pnpm companies:merge --suggest` ignores for its second tier ("Group", "Germany"): candidates for a person to check, nothing is merged by them. */
+    duplicate_tail_words: z.array(nonEmptyString).default([]),
   }),
 
   agency: z.strictObject({

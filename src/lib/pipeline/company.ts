@@ -102,6 +102,37 @@ export function storedCompanyKeys(row: Pick<CompanyMatchRow, "name" | "nameNorm"
   return [row.nameNorm, ...[row.name, ...row.aliases].map((name) => normalizeCompanyKey(name, legalSuffixes))].filter((key) => key !== "");
 }
 
+export interface StoredAliasIndex {
+  /** Alias key -> the one company that stores a spelling with this key. */
+  targets: Map<string, number>;
+  /** Keys that the aliases of several companies give: they redirect nowhere. */
+  ambiguous: Array<{ key: string; companyIds: number[] }>;
+}
+
+/**
+ * Where a posting's key may be redirected when it has no company row of its own: the keys of the stored `aliases` only (a
+ * company's own name and `name_norm` find it anyway). A key that the aliases of two companies give stays undecided.
+ */
+export function buildStoredAliasIndex(rows: ReadonlyArray<{ id: number; aliases: readonly string[] }>, legalSuffixes: readonly string[]): StoredAliasIndex {
+  const idsByKey = new Map<string, Set<number>>();
+  for (const row of rows) {
+    for (const alias of row.aliases) {
+      const key = normalizeCompanyKey(alias, legalSuffixes);
+      if (key === "") continue;
+      const ids = idsByKey.get(key) ?? new Set<number>();
+      ids.add(row.id);
+      idsByKey.set(key, ids);
+    }
+  }
+  const index: StoredAliasIndex = { targets: new Map(), ambiguous: [] };
+  for (const [key, ids] of idsByKey) {
+    const [only, ...more] = ids;
+    if (only !== undefined && more.length === 0) index.targets.set(key, only);
+    else index.ambiguous.push({ key, companyIds: [...ids] });
+  }
+  return index;
+}
+
 /** Stored company keys and display names indexed once for all company filters in a request. */
 export interface CompanyMatchIndex {
   idsByKey: Map<string, number[]>;

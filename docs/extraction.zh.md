@@ -121,6 +121,64 @@ LinkedIn 游客通道与登录、付费通道使用相同的数字岗位 id，�
 `li-` 前缀，原始内容和来源链接保留。若升级到一半已经存下两种 id 写法，两条原始记录都保留，匹配时仍视为同一个身份。以前已生成的重复
 岗位不会自动合并。
 
+## 合并重复公司
+
+同一家公司可能存成 `companies` 里的两行，通常是某个来源给的是 slug 写法（`Alephalpha` 和 `Aleph Alpha`）。这时 `/companies` 显示两行，关注或拉黑也只落在其中一行。`pnpm companies:merge` 列出疑似重复，合并你确认的那些对。它不会自己合并，也不进周期。
+
+```bash
+pnpm companies:merge --suggest [--tier 1|2]        # 列候选，格式就是计划文件的格式
+pnpm companies:merge --pair FROM:INTO              # 一对的试运行（可重复）
+pnpm companies:merge --plan plan.txt               # 计划文件的试运行
+pnpm companies:merge --plan plan.txt --apply       # 执行合并
+pnpm companies:merge --undo MERGE_ID [--apply]     # 撤销一次合并的试运行或执行
+pnpm companies:merge --list                        # 合并记录
+```
+
+计划文件每行一个 `FROM_ID INTO_ID`，`#` 后面是注释。`FROM` 是被删掉的行，`INTO` 是留下的行。退出码 0 表示全部成功或无事可做；1 表示有一对失败或被拒绝、周期或 reprocess 占着锁，或有薪资查询、公司背景请求正在运行；2 表示参数或计划文件有错。
+
+**候选。** 第 1 档：两行的已存键或解析后的键相同，或去掉连字符后键相同，这些都是同一家公司的不同拼写。第 2 档：去掉结尾的词（`pipeline.yaml` 的 `company.duplicate_tail_words`）后键相同，或名字在 `(`、`|`、`–`、` - `、`,` 前的部分相同。第 2 档也会找出母子公司（Allianz / Allianz Services），要逐组自己看。建议的方向先留不是 token 写法的行，其次是有标记的行，第 1 档再其次是带词间分隔的拼写，而不是连写的形式（留 `Aleph Alpha`，不留 `Alephalpha`），然后是岗位多的行，最后是 id 小的行；想留另一行，就在计划里调换两个 id。
+
+**步骤。**
+
+1. `pnpm companies:merge --suggest --tier 1 > plan.txt`，看一遍，删改。
+2. `pnpm companies:merge --plan plan.txt`，看试运行。它不写库、不拿锁，跑在只读事务里。
+3. `scripts/ops/backup.sh --label pre-company-merge`，见[备份与恢复](backup-restore.zh.md#2-手动备份)。
+4. `pnpm companies:merge --plan plan.txt --apply`，记下打印的合并 id。筛选结果在下一轮周期自动重算，不用手动跑。
+
+每一对一个事务。失败的一对不留痕迹，其他对照常执行。同一个计划再跑一次，做完的对报“已合并”，退出码 0。
+
+**合并做什么。**
+
+| 项 | 结果 |
+|---|---|
+| 名字和键 | 留 `INTO` 的。想留另一个名字就调换方向 |
+| 岗位 | 全部移到 `INTO`，申请、收藏、打分跟着走。同标题的岗位保持分开，试运行报数量 |
+| 别名 | `FROM` 的名字和别名并入 `INTO` |
+| ATS | `INTO` 有就留自己的，没有才取 `FROM` 的 |
+| 关注和拉黑 | 合起来。一行关注、另一行拉黑的一对会被拒绝：先在 `/companies` 取消一个 |
+| 官网域名 | 你确认过的优先；两个都确认过取较晚的。试运行对落选的那个发警告 |
+| 公司背景和薪资查询 | 移到 `INTO`，薪资缓存键跟着改。两边的结果都留，读取时取最新 |
+| `interests.yaml` 的 `watched_companies` | 不改文件。只匹配 `FROM` 的条目不再生效，所以 `INTO` 得到存储的关注标记，输出提示你改文件 |
+| `ui.yaml` 的 `trusted_companies` | 不改文件。条目不再匹配时输出会说明 |
+| 偏好里的 `exclude_companies` | 不改文件。它也比对别名，所以**合并后，排除 `FROM` 的条目会排除整个 `INTO`**。试运行会警告 |
+| 市场包的 `visa.exclude_companies` | 只比对键，下一轮周期按 `INTO` 的键重算 |
+
+**新帖子。** 帖子的键没有自己的公司行、但等于某家公司已存别名的键时，归到那家公司，这样合并掉的拼写不会再长出来。键有自己的行时仍归到那一行。两家公司的别名算出同一个键时不重定向，pipeline 记一条警告。这里认的是已存别名：从 `pipeline.yaml` 删掉别名并不能再拆开公司。
+
+**撤销。** `--undo MERGE_ID --apply` 按原 id 恢复 `FROM` 行，把记录里的岗位、薪资查询（连同原来的键）、公司背景移回去，并去掉这次合并加上的别名。`INTO` 的标记、ATS、官网域名只有仍等于合并后的值时才还原，否则保留，输出会列出来。这些情况撤销会被拒绝：这次合并已经撤销过；另一行已经占用了 `FROM` 的键；`INTO` 不在了；之后还有涉及这两行且仍生效的合并（先撤销那一次）。
+
+合并后进来的内容，撤销无法全部还原，所以试运行和执行都打印 `INTO` 名下新岗位的数量和相关岗位上新来源的数量：
+
+- 用 `FROM` 拼写的帖子在 `INTO` 下建的新岗位留在原处。撤销后跑 `pnpm reprocess --channel <通道>`：唯一来源写成 `FROM` 的岗位回到 `FROM`。
+- 并进已有岗位的帖子（同标题同城，或描述几乎一样）不会被拆开。如果它在合并中获胜，还可能改写了那条岗位的标题和描述。这种只有恢复备份才能还原。
+
+两行合并期间也共用薪资缓存键，这段时间新做的查询留在 `INTO`。所以第 2 档合并后要尽快确认，有错当天撤销。
+
+**限制。**
+
+- 撤销一个 slug 写法的行时，如果 `sources.yaml` 的 `ats_boards` 里有它的看板，撤销留不住：下一轮的显示名同步会再折叠一次，而且没有合并记录。
+- 显示名同步和键刷新做的折叠不写合并记录，`--undo` 撤销不了。
+
 ## 来源行的地点
 
 岗位详情页的来源区每行显示该来源自己写的地点（`job_sources.location_label`；`pnpm reprocess` 会补上已有来源的地点）。一个岗位由同一公司 ATS 的多份 posting 合并而成时（Databricks 各办公室），靠它区分每行。

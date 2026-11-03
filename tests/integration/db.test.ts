@@ -29,6 +29,7 @@ const EXPECTED_TABLES = [
   "ats_boards",
   "channels",
   "companies",
+  "company_merges",
   "company_research",
   "control_requests",
   "cycles",

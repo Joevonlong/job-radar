@@ -143,6 +143,64 @@ change between those channels does not create another job. Upgrading removes the
 raw payloads and source links are kept. If a partial upgrade already stored both spellings, both records remain readable
 and match the same identity. Previously duplicated jobs are not automatically merged.
 
+## Merging duplicate companies
+
+One company can end up as two rows in `companies`, usually through a source that gives a slug (`Alephalpha` next to `Aleph Alpha`). `/companies` then shows two rows and a watch or blacklist mark lands on only one of them. `pnpm companies:merge` lists likely duplicates and merges the pairs you confirm. It never merges anything on its own and is not part of a cycle.
+
+```bash
+pnpm companies:merge --suggest [--tier 1|2]        # list candidates, in the plan file's format
+pnpm companies:merge --pair FROM:INTO              # dry run for one pair (repeatable)
+pnpm companies:merge --plan plan.txt               # dry run for a plan file
+pnpm companies:merge --plan plan.txt --apply       # merge
+pnpm companies:merge --undo MERGE_ID [--apply]     # dry run, or undo one merge
+pnpm companies:merge --list                        # the recorded merges
+```
+
+A plan file has one `FROM_ID INTO_ID` per line, and everything after `#` is a comment. `FROM` is the row that goes, `INTO` the row that stays. Exit code 0 means everything succeeded or there was nothing to do; 1 means a pair failed or was refused, a cycle or reprocess holds the lock, or a salary or company background request is running; 2 means bad arguments or a bad plan file.
+
+**Candidates.** Tier 1: the two rows share a stored or resolved key, or have the same key once hyphens are removed. These have been spelling differences of one company. Tier 2: the keys match after removing a word from the end (`company.duplicate_tail_words` in `pipeline.yaml`), or the names match before a `(`, `|`, `–`, ` - ` or `,`. Tier 2 also finds parents and subsidiaries (Allianz / Allianz Services), so check each group yourself. A suggested direction keeps a row that is not written like a token, then a marked row, then in tier 1 the spelling with word breaks over its run-together form (`Aleph Alpha`, not `Alephalpha`), then the row with more jobs, then the older id; swap the two ids in the plan to keep the other one.
+
+**Steps.**
+
+1. `pnpm companies:merge --suggest --tier 1 > plan.txt`, then read it and delete or change lines.
+2. `pnpm companies:merge --plan plan.txt`, and read the dry run. It writes nothing, takes no lock and runs in a read-only transaction.
+3. `scripts/ops/backup.sh --label pre-company-merge`, see [Backup and restore](backup-restore.md#2-manual-backup).
+4. `pnpm companies:merge --plan plan.txt --apply`, and note the merge ids it prints. The filter results are recalculated by the next cycle; there is nothing to run by hand.
+
+Each pair is its own transaction. A pair that fails leaves no trace and the others still run. Running the same plan again reports the finished pairs as already merged and exits 0.
+
+**What a merge does.**
+
+| Item | Result |
+|---|---|
+| Name and key | Those of `INTO`. Swap the direction to keep the other name |
+| Jobs | All move to `INTO`, with their applications, favourites and scores. Jobs with the same title stay separate; the dry run counts them |
+| Aliases | The name and aliases of `FROM` join those of `INTO` |
+| ATS | `INTO` keeps its own; it takes the one of `FROM` only when it has none |
+| Watch and blacklist | Combined. A pair with one row watched and the other blacklisted is refused: clear one on `/companies` first |
+| Website domain | A domain you confirmed wins; of two confirmed, the later one. The dry run warns about the other |
+| Company backgrounds and salary lookups | Move to `INTO`, and the salary cache keys follow. Both sides' results are kept and the newest is read |
+| `watched_companies` in `interests.yaml` | Not edited. An entry that matched only `FROM` stops matching, so `INTO` gets the stored watched mark and the output asks you to edit the file |
+| `trusted_companies` in `ui.yaml` | Not edited. The output says when an entry stops matching |
+| `exclude_companies` in the preferences | Not edited. It compares aliases too, so **an entry for `FROM` excludes all of `INTO` after the merge**. The dry run warns about it |
+| `visa.exclude_companies` in a market pack | Compares the key only, and is recalculated with the key of `INTO` in the next cycle |
+
+**New postings.** A posting whose key has no company row of its own, but equals the key of an alias stored on a company, goes to that company, so a merged spelling does not grow its row back. A key with a row of its own stays on that row. A key that the aliases of two companies give is not redirected, and the pipeline logs a warning. Stored aliases are what count here: removing an alias from `pipeline.yaml` does not separate companies again.
+
+**Undo.** `--undo MERGE_ID --apply` restores the `FROM` row with its original id, moves the recorded jobs, salary lookups (with their original keys) and backgrounds back, and removes the aliases this merge added. The marks, ATS and website domain of `INTO` return only if they still have the values the merge left; otherwise they stay, and the output names them. Undo is refused when the merge was already undone, another row now has the key of `FROM`, `INTO` is gone, or a later merge that is still in force involves these rows (undo that one first).
+
+Undo cannot put back everything that arrived after the merge, so its dry run and its run both print the count of new jobs on `INTO` and of new postings on the jobs concerned:
+
+- A new job on `INTO` from a posting spelled like `FROM` stays there. After the undo, run `pnpm reprocess --channel <channel>`: a job whose only source spells `FROM` moves back to `FROM`.
+- A posting that was merged into an existing job (same title and city, or a near-identical description) is not separated again. If it won, it may also have rewritten that job's title and description. Only restoring a backup reverses that.
+
+While the two rows are merged they also share salary cache keys, and a lookup made in that time stays with `INTO`. So check a tier 2 merge soon after it runs, and undo it the same day if it is wrong.
+
+**Limits.**
+
+- Undoing a merge of a slug-spelled row that also has a board in `ats_boards` (`sources.yaml`) does not last: the next cycle's display-name sync folds the row again without a merge record.
+- Folds made by the display-name sync or by a key refresh write no merge record, so `--undo` cannot reverse them.
+
 ## Location on source rows
 
 Each row of the source section on a job's detail page shows the location that source itself wrote (`job_sources.location_label`; `pnpm reprocess` fills in the location of existing sources). When a job is merged from several postings of the same company's ATS (for example the various Databricks offices), this is what tells the rows apart.

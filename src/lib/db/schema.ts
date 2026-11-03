@@ -350,6 +350,30 @@ export const companies = pgTable(
 );
 
 /**
+ * One merge of a duplicate company row (`pnpm companies:merge`), written in the transaction of the merge so that it can be undone.
+ * The company ids carry no foreign key: the removed row is gone, and the kept one may later be merged too.
+ */
+export const companyMerges = pgTable(
+  "company_merges",
+  {
+    id: id(),
+    fromCompanyId: bigint("from_company_id", { mode: "number" }).notNull(),
+    intoCompanyId: bigint("into_company_id", { mode: "number" }).notNull(),
+    /** The whole `companies` row before it was deleted. */
+    fromRow: jsonb("from_row").notNull(),
+    /** The kept row's aliases, ATS board, marks and website domain before the merge. */
+    intoBefore: jsonb("into_before").notNull(),
+    /** The same fields after the merge: an undo restores a field only while it still has this value. */
+    intoAfter: jsonb("into_after").notNull(),
+    /** What moved to the kept row: `{ jobIds, salary: [{ id, lookupKey }], research: [id] }`, with the salary lookups' old keys. */
+    moved: jsonb("moved").notNull(),
+    mergedAt: timestamptz("merged_at").notNull().defaultNow(),
+    undoneAt: timestamptz("undone_at"),
+  },
+  (t) => [index("company_merges_from_idx").on(t.fromCompanyId), index("company_merges_into_idx").on(t.intoCompanyId)],
+);
+
+/**
  * The date a job is filtered by when "posted" is chosen: the posted date, the first-seen date where the posting has none. Only a
  * comparison value, never stored back (an unknown posted date stays unknown). The `jobs` table index and the /jobs date filter both
  * build it here, so the query can use the index.
