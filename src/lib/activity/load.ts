@@ -65,7 +65,7 @@ export async function loadActivityDetail(rootId: string, searchParams: Promise<A
     const queryLabels = resolveQueryLabels(loadConfig("search"), t, companies, storedCompanyQueryKeys(cycle?.summaryJson));
     const day = dayInZone(detail.root.startedAt, timeZone);
     const aiParams = new URLSearchParams({ range: "custom", from: day, to: day });
-    const task = ({ "request.translate_job": "translate", "request.breakdown_job": "breakdown", "request.score_jobs": "score", "request.rescore_stale": "score", "request.salary_lookup": "salary_lookup", "request.run_suggest": "suggest", "request.test_ai": "probe" } as Record<string, string>)[detail.root.name];
+    const task = ({ "request.translate_job": "translate", "request.breakdown_job": "breakdown", "request.score_jobs": "score", "request.rescore_stale": "score", "request.salary_lookup": "salary_lookup", "request.company_research": "company_research", "request.run_suggest": "suggest", "request.test_ai": "probe" } as Record<string, string>)[detail.root.name];
     if (task) aiParams.set("task", task);
     return { state: "ready" as const, ...detail, url: { ...url, page }, config, timeZone, today, queries, events, queryLabels,
       display: displayStatus(detail.root), spans: detail.spans.map((span) => ({ ...span, display: displayChildStatus(span, detail.root) })),

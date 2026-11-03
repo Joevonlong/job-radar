@@ -17,6 +17,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
   would leave it without the shipped models. Run `pnpm models:export --full` before downgrading: it writes the complete
   catalog to your file (the old one is backed up in `data/config/.backup/editor/`). The `models_sync` enum value stays in the
   database; older code ignores it. See [Before downgrading](docs/ai-providers.md#before-downgrading).
+- **Company background.** A new database table, three new columns on `companies` and a new `research.yaml`, off by default;
+  no action is needed. **Rollback:** the migration is additive and older code ignores it and the new file. Older code refuses
+  `ai.yaml` if a form save wrote `tasks.company_research` (or `reasoning_effort_by_task.company_research`) into it: delete those
+  keys first. See [Company background](docs/research.md#before-rolling-back).
 - **Saved views keep the date filter.** A view saved with a quick range (`within: 7d` or `month`) stores the range and
   recomputes it on the day it is opened; `dateBy: posted` records that it compares the posted date (a view without `dateBy`
   compares first seen, as before). Existing views load unchanged. **Rollback:** 2.0.1 checks `interests.yaml` strictly and
@@ -230,6 +234,10 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   [--update-prices] [--dry-run]`; `pnpm models:export --full` writes the complete catalog (for a downgrade). See
   [AI providers](docs/ai-providers.md#checklist-for-a-new-model-release). The refresh has limits in `ai.yaml` `model_list`
   (`timeout_seconds`, `max_response_bytes`, `max_name_chars`; defaults added when missing, `config_version` unchanged).
+- **Company background on the job page.** Off by default (`research.yaml`, Settings → Research). One click asks an AI provider with
+  web search what the company does, its size, funding, reviews and recent news; each field shows its source and is marked as
+  unverified. Only the company name, and a website domain you confirmed, are sent. Each field is checked in code before it is
+  stored, and one result serves every job of the company. See [Company background](docs/research.md).
 - **Application writer: export and reuse.** The workbench exports every final answer as one Markdown file built in the browser,
   offers an earlier final answer of another job as the starting text when you add a similar question (a local word-overlap
   check, no AI call; `reuse` in `writer.yaml`, defaults added when missing, `config_version` unchanged) and warns while that

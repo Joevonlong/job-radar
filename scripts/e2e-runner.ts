@@ -36,6 +36,7 @@ import { loadBaseCurrency } from "../src/lib/signals/floor";
 import { ACK_NAMES, isAckName } from "../src/lib/settings/tabs";
 import { createAiRouter, createProvider } from "../src/lib/ai";
 import type { AiTransport } from "../src/lib/ai/types";
+import { createCompanyResearchHandler } from "../src/lib/control/company-research";
 import { createWriterJobHandler } from "../src/lib/control/writer-job";
 
 /** How long the stub cycle "runs": long enough for a test to see the running state. */
@@ -257,6 +258,40 @@ registerControlHandler(
   }),
 );
 
+// The company background too: the real handler runs (the checks of the answer, the stored result), only the AI is a stand-in
+// and nothing leaves the machine. One field has a source that is not https: the check must drop it.
+const researchAi: AiTransport = {
+  id: "claude-cli",
+  availability: () => ({ available: true }),
+  plannedModel: () => "e2e-model",
+  async call() {
+    await sleep(STUB_TEST_MS);
+    const fact = (text: string, url: string) => ({ text, source_url: url });
+    return {
+      text: JSON.stringify({
+        summary: fact("Builds analytics software for manufacturers.", "https://www.example-analytics.de/about"),
+        industry: fact("Industrial software", "https://www.example-analytics.de/about"),
+        size: { ...fact("About 120 people", "https://www.linkedin.com/company/example-analytics"), employees: 120 },
+        founded: null,
+        headquarters: fact("Bremen, Germany", "https://www.example-analytics.de/imprint"),
+        funding: fact("Rumoured Series B", "http://news.example-site.de/analytics"),
+        products: null,
+        workingLanguage: null,
+        reviews: null,
+        recentNews: { ...fact("Opened a second office\nHired a new CTO", "https://news.example-site.de/analytics"), date: "2026-09-12" },
+      }),
+      model: "e2e-model",
+      usage: { tokensIn: 100, tokensOut: 50 },
+    };
+  },
+};
+registerControlHandler(
+  "company_research",
+  createCompanyResearchHandler({
+    createRouter: () => createAiRouter({ config: loadConfig("ai"), providers: [createProvider(researchAi)], usage: null, health: null, quota: null, catalog: null, origin: "control" }),
+  }),
+);
+
 await recordAllConfigLoaded(db);
 await syncSourceRegistry(db, { config: loadConfig("channels"), text: readConfigText("channels") }).catch(() => {});
 const stopWatching = watchConfig(
@@ -270,9 +305,9 @@ const stopWatching = watchConfig(
   { pollMs: 300, debounceMs: 50 },
 );
 
-// What the settings, sources and interests pages offer, plus the ai-worker's AI test, breakdown, salary lookup and writer (answered
+// What the settings, sources and interests pages offer, plus the ai-worker's AI test, breakdown, salary lookup, company background and writer (answered
 // here with stand-ins). The other AI requests (scoring, translation, ...) belong to the host ai-worker, which e2e does not run.
-const poller = runControlPoller({ db, signal: abort.signal, logger: createLogger({ sink: () => {} }), kinds: () => ["run_cycle", "rescore_stale", "run_suggest", "test_channel", "test_telegram", "test_ai", "models_sync", "breakdown_job", "salary_lookup", "writer_job"], pollSeconds: () => POLL_SECONDS });
+const poller = runControlPoller({ db, signal: abort.signal, logger: createLogger({ sink: () => {} }), kinds: () => ["run_cycle", "rescore_stale", "run_suggest", "test_channel", "test_telegram", "test_ai", "models_sync", "breakdown_job", "salary_lookup", "company_research", "writer_job"], pollSeconds: () => POLL_SECONDS });
 
 log("ready");
 while (!abort.signal.aborted) {

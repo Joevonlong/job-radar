@@ -338,9 +338,13 @@ export const companies = pgTable(
     atsToken: text("ats_token"),
     watched: boolean("watched").notNull().default(false),
     blacklisted: boolean("blacklisted").notNull().default(false),
+    /** The company's own website. Only `user` (confirmed by the user) may reach an AI provider; `inferred` comes from third-party postings. */
+    websiteDomain: text("website_domain"),
+    websiteDomainSource: text("website_domain_source"),
+    websiteDomainConfirmedAt: timestamptz("website_domain_confirmed_at"),
     createdAt: createdAt(),
   },
-  (t) => [unique("companies_name_norm_uq").on(t.nameNorm)],
+  (t) => [unique("companies_name_norm_uq").on(t.nameNorm), check("companies_website_domain_source_check", sql`${t.websiteDomainSource} in ('user', 'inferred')`)],
 );
 
 /**
@@ -781,6 +785,37 @@ export const salaryLookups = pgTable(
   ],
 );
 
+/**
+ * Company backgrounds found by an AI provider with web search (C3: AI estimates, never written into `companies` or `jobs`). One
+ * company's result serves all its jobs. `result_json` is the checked answer (`lib/research/verify.ts`: only fields with a source
+ * that passed the trap and range checks); a failed lookup keeps its `error_code`, has no result and is never served from the cache.
+ */
+export const companyResearch = pgTable(
+  "company_research",
+  {
+    id: id(),
+    companyId: bigint("company_id", { mode: "number" })
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    jobId: bigint("job_id", { mode: "number" }).references(() => jobs.id, { onDelete: "set null" }),
+    status: text("status").notNull(),
+    resultJson: jsonb("result_json"),
+    domainUsed: text("domain_used"),
+    provider: text("provider"),
+    model: text("model"),
+    promptVersion: integer("prompt_version").notNull(),
+    errorCode: text("error_code"),
+    fetchedAt: timestamptz("fetched_at").notNull().defaultNow(),
+    expiresAt: timestamptz("expires_at"),
+  },
+  (t) => [
+    index("company_research_company_idx").on(t.companyId, t.promptVersion, t.fetchedAt.desc()),
+    // the job's foreign key (a job deleted) looks rows up by this
+    index("company_research_job_idx").on(t.jobId),
+    check("company_research_status_check", sql`${t.status} in ('ok', 'failed')`),
+  ],
+);
+
 /** Which layer found an AI trap, how serious it is, and where its quote comes from. */
 export const trapLayerEnum = pgEnum("trap_layer", ["rule", "ai"]);
 export const trapSeverityEnum = pgEnum("trap_severity", ["trap", "suspicious"]);
@@ -1125,7 +1160,7 @@ export const runnerHeartbeats = pgTable(
 
 // ---------------------------------------------------------------- web -> runner control
 
-export const controlRequestKindEnum = pgEnum("control_request_kind", ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup", "writer_job", "models_sync"]);
+export const controlRequestKindEnum = pgEnum("control_request_kind", ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup", "writer_job", "models_sync", "company_research"]);
 export const controlRequestStatusEnum = pgEnum("control_request_status", ["pending", "running", "done", "failed"]);
 
 /**

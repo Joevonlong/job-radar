@@ -1,4 +1,5 @@
 import { breakdownJobHandler } from "./breakdown-job";
+import { companyResearchHandler } from "./company-research";
 import { registerControlHandler } from "./handlers";
 import { modelsSyncHandler } from "./models-sync";
 import { rescoreStaleHandler } from "./rescore";
@@ -27,5 +28,6 @@ export function registerAiControlHandlers(): void {
   registerControlHandler("salary_lookup", salaryLookupHandler);
   registerControlHandler("writer_job", writerJobHandler);
   registerControlHandler("models_sync", modelsSyncHandler);
+  registerControlHandler("company_research", companyResearchHandler);
   registerSuggestHandler();
 }

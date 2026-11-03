@@ -14,6 +14,7 @@ import { configRegistry, LAYERED_CONFIG_NAMES, resetConfigCache, USER_CONFIG_NAM
  * see `REPO_DEFAULTS_DIR`). vitest points `JOB_RADAR_DEFAULTS_DIR` here for every test (vitest*.config.ts).
  * The delivery-audit.yaml fixture freezes the initial ledger configuration independently of the shipped file.
  * writer.yaml and profile.example/stories.yaml freeze the experience library's first shipped versions.
+ * research.yaml freezes the company background's first shipped version.
  */
 export const FIXTURE_DEFAULTS_DIR = path.resolve(import.meta.dirname, "../fixtures/config/defaults");
 /** The repository's real defaults directory: a test may only check that it is valid, never what it contains. */

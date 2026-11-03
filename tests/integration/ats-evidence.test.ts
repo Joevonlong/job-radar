@@ -70,8 +70,9 @@ async function source(db: Db, jobId: number, externalId: string, channelId: stri
 }
 
 async function overdueJob(db: Db, name: string, token: string | undefined, channelId = "greenhouse") {
-  const [employer] = await db.insert(schema.companies).values({ name, nameNorm: name.toLowerCase() }).returning();
   // This fixture also runs before the dormancy migration: name only columns present in that schema.
+  const [employer] = await db.execute<{ id: string }>(sql`
+    insert into companies (name, name_norm) values (${name}, ${name.toLowerCase()}) returning id`);
   const [job] = await db.execute<{ id: string }>(sql`
     insert into jobs (company_id, title, title_norm, status, first_seen_at, last_seen_at)
     values (${employer!.id}, 'Overdue role', 'overdue role', 'active', ${lastSeen.toISOString()}::timestamptz, ${lastSeen.toISOString()}::timestamptz)

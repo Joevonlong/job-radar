@@ -1,6 +1,6 @@
 # Settings Page and Manual Actions
 
-`/settings` edits eleven config files with forms (`schedule.yaml`, `search.yaml`, `sources.yaml`, `ai.yaml`, `breakdown.yaml`, `salary.yaml`, `notify.yaml`, `ui.yaml`, `insights.yaml`, `resume.yaml`, `writer.yaml`); every other file (`pipeline.yaml`, `models.yaml`, `interests.yaml`, anything added later) and the keys the forms do not cover can be edited as raw text in the "Advanced" tab. Before saving, it validates with the same zod schema the runner uses, and writes back to the user config directory (default `data/config/`; each tab's description shows the actual path; the first time you save a file that only exists in the shipped defaults, it is generated from the default file as a base, see [`configuration.md`](configuration.md)), preserving YAML comments. Once the runner hot-reloads, the save bar shows "runner loaded" (when the runner has no heartbeat this changes to "runner is not running", so it never contradicts the sidebar's OFFLINE). Keys that are not on the page (for example `test_channel`, `manual_triggers`) stay in the YAML for you to edit.
+`/settings` edits twelve config files with forms (`schedule.yaml`, `search.yaml`, `sources.yaml`, `ai.yaml`, `breakdown.yaml`, `salary.yaml`, `research.yaml`, `notify.yaml`, `ui.yaml`, `insights.yaml`, `resume.yaml`, `writer.yaml`); every other file (`pipeline.yaml`, `models.yaml`, `interests.yaml`, anything added later) and the keys the forms do not cover can be edited as raw text in the "Advanced" tab. Before saving, it validates with the same zod schema the runner uses, and writes back to the user config directory (default `data/config/`; each tab's description shows the actual path; the first time you save a file that only exists in the shipped defaults, it is generated from the default file as a base, see [`configuration.md`](configuration.md)), preserving YAML comments. Once the runner hot-reloads, the save bar shows "runner loaded" (when the runner has no heartbeat this changes to "runner is not running", so it never contradicts the sidebar's OFFLINE). Keys that are not on the page (for example `test_channel`, `manual_triggers`) stay in the YAML for you to edit.
 
 ## Sources tab: query rotation and catch-up
 
@@ -182,6 +182,15 @@ The "Salary" tab (after "Breakdown") edits `data/config/salary.yaml`: the benchm
 in the YAML (Advanced tab). The lookup is off by default; which AI runs it is the task "Salary lookup" on the AI tab
 (default claude-cli, then the Anthropic API; only providers that can search the web are used, and codex-cli, if you add
 it, searches without a domain limit). See [salary.md](salary.md).
+
+## Research tab: company background
+
+The "Research" tab (after "Salary") edits `data/config/research.yaml`: the switch (`enabled`) and the limits of the company
+background (`company.ttl_days`, `max_per_day`, `max_searches`, `timeout_seconds`). The allowed sites, the hosts never taken
+as a company's website and the plausible ranges are edited in the YAML (Advanced tab). It is off by default; which AI runs it is
+the task "Company background" on the AI tab (default claude-cli, then the Anthropic API; only providers that can search the web are
+used, and codex-cli, if you add it, searches without a domain limit). The ai-worker reads the file afresh for every request, so
+turning it off also stops what is still queued. See [research.md](research.md).
 
 ## Manual triggers and tests
 

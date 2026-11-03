@@ -80,6 +80,7 @@ const DEFAULT_HANDLERS: Record<ControlRequestKind, ControlHandler> = {
   test_telegram: testTelegramHandler,
   test_ai: noHandler,
   salary_lookup: noHandler,
+  company_research: noHandler,
   writer_job: noHandler,
   models_sync: noHandler,
 };

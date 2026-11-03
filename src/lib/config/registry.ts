@@ -19,6 +19,7 @@ import { pipelineSchema } from "./schemas/pipeline";
 import { pipelineBoardSchema } from "./schemas/pipeline-board";
 import { preferencesSchema } from "./schemas/preferences";
 import { resumeSchema } from "./schemas/resume";
+import { researchSchema } from "./schemas/research";
 import { salarySchema } from "./schemas/salary";
 import { signalPresetsSchema } from "./schemas/signal-presets";
 import { storiesSchema } from "./schemas/stories";
@@ -63,6 +64,8 @@ export const configRegistry = {
   traps: { file: "traps.yaml", location: "config", kind: "shipped", schema: trapsSchema },
   /** Salary benchmark (role families, window), deep links and the on-demand AI salary lookup. */
   salary: { file: "salary.yaml", location: "config", kind: "user", schema: salarySchema },
+  /** The company background on the job page (AI with web search, off by default). */
+  research: { file: "research.yaml", location: "config", kind: "user", schema: researchSchema },
   /** Starting points of the "add a category" dialog on /interests (shipped: a user copy replaces it as a whole). */
   signalPresets: { file: "signal-presets.yaml", location: "config", kind: "shipped", schema: signalPresetsSchema },
   deliveryAudit: { file: "delivery-audit.yaml", location: "config", kind: "shipped", schema: deliveryAuditSchema },

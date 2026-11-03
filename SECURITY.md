@@ -90,10 +90,11 @@ Job Radar is a single-user tool that you run on your own machine:
 - Containers: web, runner and jobspy drop every Linux capability and run with `no-new-privileges`; web and jobspy have a
   read-only root file system (tmpfs for `/tmp` and the Next cache); runner and jobspy have memory caps
   (`RUNNER_MEM_LIMIT`, `JOBSPY_MEM_LIMIT`). The database keeps the capabilities its entrypoint needs.
-- **AI calls run without tools, with one exception.** Every AI call (scoring, signals, translation, summaries,
-  suggestions, breakdown, trap checks) runs with no tools at all: no shell, no files, no web. The single exception is the
-  salary lookup, a button on the job page that is off until you turn it on in `salary.yaml`: it may search the public
-  web. The task list is fixed in the code, not in any setting. Be aware of what the limits are and are not:
+- **AI calls run without tools, with two exceptions.** Every AI call (scoring, signals, translation, summaries,
+  suggestions, breakdown, trap checks, writing) runs with no tools at all: no shell, no files, no web. The exceptions are
+  two buttons on the job page, each off until you turn it on: the salary lookup (`salary.yaml`) and the company background
+  (`research.yaml`). They may search the public web. The task list is fixed in the code, not in any setting. Be aware of
+  what the limits are and are not. For the salary lookup:
   - only the company name, job title, city, country and seniority go into the request, never your profile or the JD;
     the pages the AI reads are untrusted text. Checks before storing cover source-link format and plausible ranges;
     Job Radar has not checked the sources or figures. Lookup results are only displayed: they never enter the salary
@@ -105,6 +106,16 @@ Job Radar is a single-user tool that you run on your own machine:
   - with the Anthropic API, search results are limited to those domains by the API (an empty list means no search);
   - public suffixes such as `co.uk` or `github.io` are refused in that list;
   - with `codex-cli` (only if you add it to the task), web search has no domain limit at all.
+
+  For the company background the same provider limits apply, with `company.allowed_domains` as the list, and:
+  - only the company name and a website domain you confirmed yourself go into the request. A domain inferred from postings never
+    enters the request or the list of pages that may be opened, because anyone can write any link into a posting. A confirmed
+    domain must be a public name (no address, no local or reserved name, no public suffix), checked again when it is read back;
+    a public name can still point at a private address (a `*.nip.io` name, say). This name check is the limit; there is no network
+    boundary;
+  - the answer is untrusted: each field needs a public `https` source, and a field with invisible characters, text written at an
+    AI (the patterns of `traps.yaml`, whether or not the trap scan is on) or an impossible value is dropped before storing.
+    If `traps.yaml` cannot be read, the lookup fails. What is stored is rendered as plain text, and no other AI task reads it.
 - `tailscale serve` gives every device of your tailnet the same access as the Mac itself; restrict it with Tailscale ACLs
   if other people or untrusted devices share the tailnet.
 

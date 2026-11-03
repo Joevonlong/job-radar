@@ -461,10 +461,12 @@ export const aiSchema = z.strictObject({
     /** The AI trap check; optional like `breakdown`. */
     traps: task.default({}),
     /**
-     * The on-demand salary lookup, the one task allowed to search the web (`src/lib/ai/web-tasks.ts`). Optional; the
+     * The on-demand salary lookup, one of the tasks allowed to search the web (`src/lib/ai/web-tasks.ts`). Optional; the
      * default leaves codex-cli out (its web search cannot be limited to domains): only providers that can search the web are tried.
      */
     salary_lookup: task.default({ order: ["claude-cli", "anthropic"] }),
+    /** The company background, the other web task: same default order, for the same reason. */
+    company_research: task.default({ order: ["claude-cli", "anthropic"] }),
     /** The application writer (never searches the web); optional like `breakdown`. */
     write: task.default({}),
   }),

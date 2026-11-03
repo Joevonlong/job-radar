@@ -137,6 +137,10 @@ web 和 runner 启动时会补缺，升级冻结期间跳过补缺。已有安�
 旧文件加载时会在内存里迁移；在 v2 文件里加回这个键会因“未知键”而校验失败。卡片说明见 [salary.zh.md](salary.zh.md)，
 升级和回滚说明见[更新日志](../CHANGELOG.md)。
 
+### 公司背景（`research.yaml`）
+
+新文件，默认关闭（`enabled: false`）。没有这个文件的安装使用出厂默认值，打开之前什么都不变。每次请求都重新读取。加载文件时，站点列表会拒绝私有地址、本地名称和公共后缀。见 [research.zh.md](research.zh.md)。
+
 ### LinkedIn Monid（`sources.yaml`）
 
 默认级联为 Bright Data → Apify → Monid → session → guest。Monid 需要 `.env` 中的 `MONID_API_KEY`，

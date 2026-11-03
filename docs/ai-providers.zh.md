@@ -50,7 +50,7 @@ router、强制刷新和其他选项以先到者为准。合并进轮次 late �
 `tasks.<task>.order`，没有就用全局 `order`（`api` 表示 `api_order`）。某个 provider 不可用时（没安装、已登出、触顶后冷却中、超过每日上限、
 没有 key），下一个接手，所以**该任务列表里的每一个 provider 都可能收到这个任务的文本**：岗位描述，评分时还有提示词需要的画像字段。
 设置 → AI → 路由按任务列出这份清单，数据来自已保存的 `ai.yaml`；首次设置向导的 AI 步骤在你开启 provider 之前也会说明。订阅 CLI（`claude`、`codex`）
-通过你自己的账号把文本发给 Anthropic / OpenAI；API provider（Anthropic、OpenAI、DeepSeek、小米 MiMo）发给厂商的 API；OpenRouter 再转给该模型的某个上游 provider。联网搜索任务（`salary_lookup`）只使用能联网搜索的 provider。
+通过你自己的账号把文本发给 Anthropic / OpenAI；API provider（Anthropic、OpenAI、DeepSeek、小米 MiMo）发给厂商的 API；OpenRouter 再转给该模型的某个上游 provider。联网搜索任务（`salary_lookup`、`company_research`）只使用能联网搜索的 provider。
 具体哪些内容会离开你的电脑、厂商如何处理，见 [privacy.zh.md](privacy.zh.md)。不想让某个厂商收到文本，就关掉对应的 provider。
 
 ## OpenAI API 和 OpenRouter
@@ -80,7 +80,7 @@ router、强制刷新和其他选项以先到者为准。合并进轮次 late �
 OpenRouter 把每个请求转给所选模型的某个上游 provider，它可能和 OpenRouter 不是同一家公司（例如默认模型的上游可能是 DeepSeek）。
 见 [privacy.zh.md](privacy.zh.md)。
 
-两者都不能联网搜索：`salary_lookup` 会跳过它们。
+两者都不能联网搜索：`salary_lookup` 和 `company_research` 会跳过它们。
 
 ## 登录
 
@@ -117,7 +117,9 @@ translation:
 - **时间预算**：`cycle_budget_minutes`（默认 30）限制一轮里打分、信号占用的时间，超过就留到下一轮；这一轮没有新岗位时用 `idle_cycle_budget_minutes`（默认 10）。`cycle_budget_minutes` 也限制每次重打过期分数、打分积压或指定岗位的控制请求：开始下一条前检查预算，已经开始的岗位会走完 provider 回退链，因此可能多用这一条的耗时。设置页和“立即打分”会显示预算用尽及剩余岗位数。修改预算后，下一个请求使用新值。0 = 不限。所有 provider 都在冷却 / 关闭 / 到上限时，AI 步骤直接跳过（cycle 摘要里写明原因）。
 - **任务 `breakdown`**：岗位拆解，默认沿用全局顺序（codex 优先，理由同翻译：输出长，订阅 CLI 没有 4096 输出上限）；可用 `tasks.breakdown.order` 单独排，codex 推理强度用 `reasoning_effort_by_task.breakdown`。默认关闭，见 [breakdown.zh.md](breakdown.zh.md)。
 - **任务 `write`**：申请问题的回答和动机信、优化你自己的稿和教练审阅（[application-writer.zh.md](application-writer.zh.md)），只在 `writer.yaml: enabled` 为 true 且你按**生成**、**优化**或**审阅**时调用。不联网搜索。默认跟全局顺序；动机信要多个版本，需要的输出超过全局 `max_output_tokens`，所以 `tasks.write` 可以单独设 `max_output_tokens` 和 `api_timeout_seconds`（两者都只对 API 服务商生效，任何任务都能设）。回答在上限处被截断时请求以 `output_truncated` 失败。
-- **任务 `salary_lookup`**：按需查薪资（[salary.zh.md](salary.zh.md)），是**唯一**可以用工具（网页搜索）的 AI 调用。默认顺序 `[claude-cli, anthropic]`；只尝试能搜网页的 provider（OpenAI API、OpenRouter、DeepSeek、MiMo 跳过）；允许搜网页的任务清单写死在代码里（`src/lib/ai/web-tasks.ts`），任何设置都不能让别的任务上网。可以把 codex-cli 加进 `tasks.salary_lookup.order`，但它的网页搜索不能限定域名（设置页会提示）。
+- **联网任务**：`salary_lookup` 和 `company_research` 是**仅有的**可以用工具（网页搜索）的 AI 调用。任务清单写死在代码里（`src/lib/ai/web-tasks.ts`），任何设置都不能往里加任务。
+- **任务 `company_research`**：按需查公司背景（[research.zh.md](research.zh.md)），只在 `research.yaml: enabled` 为 true 且你按下按钮时运行。只发送公司名和你确认过的官网域名。默认顺序 `[claude-cli, anthropic]`，provider 规则与 `salary_lookup` 相同。
+- **任务 `salary_lookup`**：按需查薪资（[salary.zh.md](salary.zh.md)）。默认顺序 `[claude-cli, anthropic]`；只尝试能搜网页的 provider（OpenAI API、OpenRouter、DeepSeek、MiMo 跳过）；允许搜网页的任务清单写死在代码里（`src/lib/ai/web-tasks.ts`），任何设置都不能让别的任务上网。可以把 codex-cli 加进 `tasks.salary_lookup.order`，但它的网页搜索不能限定域名（设置页会提示）。
 - **推送先于翻译**：ai-worker 先做打分和信号，然后立刻推送，最后才翻译（翻译标了 `late`，不影响推送内容）。
 - **看状态**：`/sources` 的"AI provider 健康度"显示每个 provider 的状态（可用 / 未配置 / 已关闭 / 未登录 / 已达每日上限 / 已达 Job Radar 用量上限到几点 / 冷却到几点）、用量上限窗口内 Job Radar 自己的调用数对比 `hard_requests`、今日请求数对比上限、最近一次成功和失败；每行有"测试"按钮。设置页 AI 标签的顺序列表和下拉用同一份状态标出不可用的 provider。
 - **模型目录**：两个文件分工——`config/models.yaml` 是随产品发布的**目录**，你自己的新增写在 `data/config/models.yaml`、叠在它上面（见[新模型上线清单](#新模型上线清单)）（每个 provider 有哪些模型：`id`、显示名 `label`、`aliases`、API 的 `price`、codex 的 `reasoning_efforts` / `cli_default`、`deprecated`、`notes`），`data/config/ai.yaml` 是**选择**（`providers.<名字>.model` / `strong_model`、`tasks.<任务>.models`）。`ai.yaml` 照常单独加载，不依赖 `models.yaml`；选中的模型必须在对应 provider 的目录里，`pnpm config:check`（多一行 `ai.yaml ↔ models.yaml`）和设置页保存时检查：不在目录 / codex 推理强度不被模型支持 = 错误，选中已停用的模型 = 警告。
@@ -166,7 +168,7 @@ pnpm models:sync --provider openrouter --update-prices [--filter <词>]
 
 - **工具始终关闭**，与 `trim_context` 无关。`codex exec` 没有工具白名单，所以 ai-worker 用 feature 自己做一个：每个已安装的 Codex 版本第一次用时运行一次 `codex features list`（`CODEX_HOME` 指向空的临时目录：不涉及登录，也不调用模型），把列出的**每一个** feature 都关掉，只留下几个只影响客户端怎么连 API 的（`enable_request_compression`、`content_item_kinds`、`compaction_image_budget`、`unbounded_connection_retries`、`fast_mode`、`api_key_model_discovery`、`auth_elicitation`、`guardian_approval`、`guardian_reuse_parent_compaction`；只认这些确切的名字，新的 `guardian_*` feature 和其他 feature 一样会被关掉）。所以 Codex 新版本加的 feature 默认是关的。另有一组固定的工具 feature（shell 和 exec、多 agent、apps 和插件、记忆、生成图片、浏览器和电脑操作、MCP elicitation、hooks、code mode、worktrees、web 搜索、权限申请、网络代理等）无论如何都关，列不出来时就只关这一组（运行 Codex 的进程，即 ai-worker 或 `pnpm ai:probe`，会对每个安装警告一次，因为这时新版本加的 feature 会保持开启；并发调用共用一次列表，失败的列表不缓存，下次调用会重试）；`disable_features` 里的名字再加上去。全部以 `-c features.<名字>=false` 传入（不用 `--disable`：名字未知时它会让 CLI 直接退出，`-c` 会忽略），后面跟 `web_search="disabled"`、`include_apply_patch_tool=false`、`tools.view_image=false`、`approval_policy="never"`。这些参数排在所有参数之后，`ai.yaml` 里的任何东西都不能把工具重新打开；`disable_features` 只能往里加。只读沙箱兜底。
 - **`trim_context`**：true 时精简 Codex 自带的 agent 上下文。任务自己的 system prompt 写进临时目录的 `instructions.md`，用 `-c model_instructions_file="…"` 当基础指令，stdin 只放 user prompt，`config_overrides` 里的键值以 `-c 键=值` 传入（关技能清单、多 agent、权限/环境/协作说明）。实测同一条打分 prompt：输入 token 约 1.6 万 → 约 0.28 万。false = 旧行为（system + user 一起走 stdin，Codex 默认上下文），工具照样关闭。那组安全参数（只读沙箱、`--ephemeral`、`--ignore-user-config`、`--ignore-rules`、空临时目录）两种模式都保留。
-- **`config_overrides`**：只传设为 `false` 的裁剪上下文开关：`skills.include_instructions`、`agents.enabled`、`include_*_instructions` / `include_*_context`。其他键或值（`mcp_servers.*`、`model_provider*`、`sandbox*`、`approval*`、`shell_environment_policy*`、`profile*`、`features.*` 等）一律忽略；ai-worker 启动时在日志里警告，doctor 的 `config.guards` 列出来。`web_search` 本来就始终关闭（只有任务 `salary_lookup` 例外：它得到 `web_search="live"`，其他 feature 仍全部关闭；Codex 的搜索没有域名限制），写了它会被静默略过，不警告。
+- **`config_overrides`**：只传设为 `false` 的裁剪上下文开关：`skills.include_instructions`、`agents.enabled`、`include_*_instructions` / `include_*_context`。其他键或值（`mcp_servers.*`、`model_provider*`、`sandbox*`、`approval*`、`shell_environment_policy*`、`profile*`、`features.*` 等）一律忽略；ai-worker 启动时在日志里警告，doctor 的 `config.guards` 列出来。`web_search` 本来就始终关闭（只有联网任务 `salary_lookup` 和 `company_research` 例外：它们得到 `web_search="live"`，其他 feature 仍全部关闭；Codex 的搜索没有域名限制），写了它会被静默略过，不警告。
 - **`reasoning_effort` / `reasoning_effort_by_task`**：以 `-c model_reasoning_effort="…"` 传入，默认 `low`，可按任务覆盖（minimal|low|medium|high|xhigh|max|ultra）。`model` 不写就用 CLI 内置的默认模型（0.162.0 是 gpt-6.1-sol），**不是** `~/.codex/config.toml` 里选的（调用带 `--ignore-user-config`）。
 - **`max_concurrency`**：同一进程里 codex 调用同时最多几个（默认 3），超出的排队；排队的调用被取消就直接退出队列，超时从进程启动算起，不含排队时间。
 - **`auth_retry_seconds`**：第一次遇到登录（auth）错误，等这么多秒（默认 5）重试一次，再失败才算登录过期。这是为了多个进程共用 `~/.codex/auth.json`、同时刷新 token 的撞车。0 = 不重试。
@@ -178,7 +180,7 @@ pnpm models:sync --provider openrouter --update-prices [--filter <词>]
 
 `claude -p` 带 `--tools ""`（完全没有工具：不能跑 shell、不能读写文件、不能上网）、`--strict-mcp-config`（不加载任何设置文件里的 MCP server）、`--safe-mode`（不加载 CLAUDE.md、hooks、插件、技能）、`--no-session-persistence`（不往 `~/.claude/projects` 写任何东西）和自己的 `--system-prompt`，在空的临时目录里运行。
 
-唯一的例外是任务 `salary_lookup`：不用 `--tools ""`，而是 `--tools "WebSearch,WebFetch"`（没有 shell、文件和 MCP）、对 `salary.yaml: lookup.allowed_fetch_domains` 里的主机（各自再加 `www.`）预先放行的 `--allowedTools WebSearch "WebFetch(domain:<主机>)" ...`，`--permission-mode dontAsk`（没有预先放行的工具调用一律拒绝），以及 `--setting-sources project`：你自己 `~/.claude/settings.json` 里的权限规则（比如放行 WebFetch）不会扩大这个名单。这是 CLI 自己的权限检查，不是网络边界；WebSearch 本身也不受这些域名限制。需要 `claude` 2.1.296 或更新（在 `-p` 下核对过）；版本更旧或读不出来时，查询直接失败，不会换别的参数去跑。
+唯一的例外是联网任务 `salary_lookup` 和 `company_research`：不用 `--tools ""`，而是 `--tools "WebSearch,WebFetch"`（没有 shell、文件和 MCP）、对该任务的主机（各自再加 `www.`；`salary.yaml: lookup.allowed_fetch_domains`，或 `research.yaml: company.allowed_domains` 加上你确认的官网域名）预先放行的 `--allowedTools WebSearch "WebFetch(domain:<主机>)" ...`，`--permission-mode dontAsk`（没有预先放行的工具调用一律拒绝），以及 `--setting-sources project`：你自己 `~/.claude/settings.json` 里的权限规则（比如放行 WebFetch）不会扩大这个名单。这是 CLI 自己的权限检查，不是网络边界；WebSearch 本身也不受这些域名限制。需要 `claude` 2.1.296 或更新（在 `-p` 下核对过）；版本更旧或读不出来时，查询直接失败，不会换别的参数去跑。
 
 ## ai-worker 不从 ai.yaml 接受的东西
 
