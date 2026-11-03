@@ -9,7 +9,7 @@
 import { z } from "zod";
 
 /** The cycle steps in run order (mirrors `CYCLE_STEP_NAMES` of `./steps`, which pulls in the whole runner). */
-export const STEP_NAMES = ["collect", "pipeline", "filter", "signals", "ai", "notify", "maintenance"] as const;
+export const STEP_NAMES = ["collect", "pipeline", "filter", "signals", "replies", "ai", "notify", "maintenance"] as const;
 export type StepName = (typeof STEP_NAMES)[number];
 
 export type StepStatus = "ok" | "partial" | "failed" | "skipped";

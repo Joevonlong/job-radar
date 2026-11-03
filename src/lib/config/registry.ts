@@ -18,6 +18,7 @@ import { notifySchema } from "./schemas/notify";
 import { pipelineSchema } from "./schemas/pipeline";
 import { pipelineBoardSchema } from "./schemas/pipeline-board";
 import { preferencesSchema } from "./schemas/preferences";
+import { repliesSchema } from "./schemas/replies";
 import { resumeSchema } from "./schemas/resume";
 import { researchSchema } from "./schemas/research";
 import { salarySchema } from "./schemas/salary";
@@ -77,6 +78,8 @@ export const configRegistry = {
   jobArchive: { file: "job-archive.yaml", location: "config", kind: "shipped", schema: jobArchiveSchema },
   /** The application writer and the limits of the experience library; off by default, every key has a default. */
   writer: { file: "writer.yaml", location: "config", kind: "user", schema: writerSchema },
+  /** Job-reply emails of one Gmail label: rules, matching and suggested changes the user confirms; off by default. */
+  replies: { file: "replies.yaml", location: "config", kind: "user", schema: repliesSchema },
   me: { file: "me.yaml", location: "profile", kind: "user", schema: meSchema },
   preferences: { file: "preferences.yaml", location: "profile", kind: "user", schema: preferencesSchema },
   /** The experience library (projects and achievements); not read by scoring. */

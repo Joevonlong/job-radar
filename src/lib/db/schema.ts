@@ -1137,6 +1137,52 @@ export const applicationEvents = pgTable(
   (t) => [index("application_events_application_at_idx").on(t.applicationId, t.at)],
 );
 
+/** What a job-reply email is, decided by rules. `unclassified`: the rules could not decide, the user picks. */
+export const replyCategoryEnum = pgEnum("reply_category", ["interview_invite", "rejection", "offer", "info_request", "acknowledgement", "other", "unclassified"]);
+export const replyMatchEnum = pgEnum("reply_match", ["matched", "ambiguous", "unmatched"]);
+/** `info`: only recorded. `pending` waits for the user; the others are the user's decision or what came of it. */
+export const replyStateEnum = pgEnum("reply_state", ["pending", "applied", "dismissed", "reverted", "superseded", "info"]);
+
+/**
+ * One job-reply email read from the user's label: what the rules made of it, and what the user decided. A judgement, so it stays in
+ * its own table (only a confirmation writes to `applications`). Never the full text: a clipped subject, one quote, the sender's domain,
+ * and where the original is (`raw_ref`); subject and quote are cleared some time after the decision.
+ */
+export const emailReplies = pgTable(
+  "email_replies",
+  {
+    id: id(),
+    /** Message-ID, or `uidvalidity:uid` for a message without one. */
+    dedupeKey: text("dedupe_key").notNull(),
+    messageId: text("message_id"),
+    threadId: text("thread_id"),
+    senderDomain: text("sender_domain").notNull(),
+    receivedAt: timestamptz("received_at").notNull(),
+    rawRef: text("raw_ref").notNull(),
+    subject: text("subject"),
+    quote: text("quote"),
+    suspiciousInstruction: boolean("suspicious_instruction").notNull().default(false),
+    category: replyCategoryEnum("category").notNull(),
+    userCategory: replyCategoryEnum("user_category"),
+    match: replyMatchEnum("match").notNull(),
+    applicationId: bigint("application_id", { mode: "number" }).references(() => applications.id, { onDelete: "set null" }),
+    jobId: bigint("job_id", { mode: "number" }).references(() => jobs.id, { onDelete: "set null" }),
+    matchScore: numeric("match_score", { precision: 6, scale: 2, mode: "number" }),
+    candidates: jsonb("candidates").notNull().default(sql`'[]'::jsonb`),
+    suggestion: jsonb("suggestion").notNull().default(sql`'{"kind":"none"}'::jsonb`),
+    state: replyStateEnum("state").notNull().default("pending"),
+    decidedAt: timestamptz("decided_at"),
+    eventId: bigint("event_id", { mode: "number" }).references(() => applicationEvents.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique("email_replies_dedupe_key_uq").on(t.dedupeKey),
+    index("email_replies_pending_idx").on(t.state).where(sql`${t.state} = 'pending'`),
+    index("email_replies_application_idx").on(t.applicationId),
+    index("email_replies_thread_idx").on(t.threadId),
+  ],
+);
+
 // ---------------------------------------------------------------- ops
 
 /**

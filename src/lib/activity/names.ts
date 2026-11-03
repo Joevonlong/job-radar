@@ -5,7 +5,7 @@ export const PROCESSES = ["runner", "ai-worker", "cli", "web"] as const;
 export const SPAN_STATUSES = ["running", "ok", "partial", "failed", "skipped", "interrupted"] as const;
 export const EVENT_LEVELS = ["info", "warn", "error"] as const;
 export const SPAN_NAMES = [
-  "cycle", "step.collect", "step.pipeline", "step.filter", "step.signals", "step.ai", "step.notify", "step.maintenance", "step.ai_late",
+  "cycle", "step.collect", "step.pipeline", "step.filter", "step.signals", "step.replies", "step.ai", "step.notify", "step.maintenance", "step.ai_late",
   "collect.query", "ai.score", "ai.signals", "ai.traps", "ai.translate", "ai.breakdown", "ai.research",
   "request.run_cycle", "request.rescore_stale", "request.run_suggest", "request.run_ai", "request.translate_job", "request.breakdown_job",
   "request.score_jobs", "request.test_channel", "request.test_ai", "request.test_telegram", "request.salary_lookup", "request.writer_job", "request.writer_fit", "request.models_sync", "request.company_research", "request.story_extract",

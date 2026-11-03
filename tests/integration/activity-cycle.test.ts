@@ -119,14 +119,14 @@ describe("cycle activity persistence", () => {
     } finally { await worker.close(); }
   });
 
-  it("persists one terminal root, seven terminal steps and query children with complete collect progress", async () => {
+  it("persists one terminal root, eight terminal steps and query children with complete collect progress", async () => {
     const observed = observeFinishes(activity);
     const result = await run(undefined, { activity: observed.recorder });
     expect(result.status).toBe("succeeded");
     await activity.flush();
     const { spans } = await activityRows(connection.db);
     const rootId = rootIdForCycle(result.cycleId!);
-    expect(spans).toHaveLength(11);
+    expect(spans).toHaveLength(12);
     expect(spans.find((s) => s.id === rootId)).toMatchObject({ scope: "cycle", name: "cycle", cycleId: result.cycleId, parentId: null, rootId, status: "ok" });
     const steps = spans.filter((s) => s.parentId === rootId);
     expect(steps.map((s) => s.name).sort()).toEqual(CYCLE_STEP_NAMES.map((name) => `step.${name}`).sort());
@@ -143,7 +143,7 @@ describe("cycle activity persistence", () => {
     }
     expect(collect).toMatchObject({ progressDone: 3, progressTotal: 3 });
     expect(spans.every((s) => s.status === "ok" && s.finishedAt !== null)).toBe(true);
-    expect([...observed.finishes.values()]).toEqual(Array(11).fill(1));
+    expect([...observed.finishes.values()]).toEqual(Array(12).fill(1));
     // Replaying a flush cannot produce a second terminal record or alter the first finish.
     await activity.flush();
     expect((await activityRows(connection.db)).spans).toEqual(spans);
@@ -199,7 +199,7 @@ describe("cycle activity persistence", () => {
     const { spans } = await activityRows(connection.db);
     expect(spans.find((s) => s.name === "cycle")).toMatchObject({ status: "interrupted", reasonCode: "cycle_cancelled" });
     const pending = spans.filter((s) => s.name.startsWith("step.") && s.name !== "step.collect");
-    expect(pending).toHaveLength(6);
+    expect(pending).toHaveLength(7);
     expect(pending.every((s) => s.status === "skipped" && s.reasonCode === "cycle_cancelled")).toBe(true);
     expect(spans.every((s) => s.status !== "running" && s.finishedAt !== null)).toBe(true);
   });
@@ -291,7 +291,7 @@ describe("cycle activity persistence", () => {
         durations.push(performance.now() - started);
         snapshots.push(await summarize(result));
         const persisted = await activityRows(connection.db);
-        if (index === 0) expect(persisted.spans).toHaveLength(11);
+        if (index === 0) expect(persisted.spans).toHaveLength(12);
         if (index === 1 || index === 3) expect(persisted).toEqual({ spans: [], events: [] });
         if (index === 2) {
           expect(persisted.spans).toHaveLength(1);

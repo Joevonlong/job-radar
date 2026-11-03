@@ -36,6 +36,10 @@ export const OVERLAY_RECORD_RULES: Readonly<Partial<Record<ConfigName, readonly 
     { path: "linkedin.monid.input_template", kind: "opaque" },
     { path: "linkedin.monid.remote_input", kind: "opaque" },
   ],
+  replies: [
+    // one group of patterns per language: the user adds a language, the shipped ones keep following the product
+    { path: "categories.*", kind: "entries" },
+  ],
   pipeline: [
     { path: "company.aliases", kind: "entries" },
     { path: "dedupe.title_guard.synonyms", kind: "entries" },

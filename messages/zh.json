@@ -1037,6 +1037,7 @@
         "pipeline": "处理",
         "filter": "过滤",
         "signals": "薪资信号",
+        "replies": "Gmail 回信",
         "ai": "打分",
         "notify": "推送",
         "maintenance": "维护"
@@ -1047,6 +1048,7 @@
         "pipeline": "抓到的岗位还没整理成岗位卡片，所以下面的数字暂时不全。已抓到的都留着，下一轮会补处理。",
         "filter": "岗位还没按你的底线过滤，「通过过滤」暂时没有数。下一轮会重新过滤。",
         "signals": "信号还没识别，排序值可能偏低。下一轮会补识别。",
+        "replies": "这轮没有读回信。别的步骤不依赖它，下一轮会补上。",
         "ai": "岗位还没有 AI 打分。检查 AI worker 是否在运行（「来源」页有它的状态）；它恢复后会补打分。",
         "notify": "Telegram 推送没有发出。检查「设置」里的推送配置和网络。",
         "maintenance": "清理和过期检查没有完成，不影响今天的岗位。"
@@ -1056,6 +1058,7 @@
         "pipeline": "只有一部分抓到的岗位整理成了岗位卡片，其余下一轮补处理。",
         "filter": "只有一部分岗位按你的底线过滤过，其余下一轮补过滤。",
         "signals": "只识别了一部分岗位的信号，其余下一轮补识别。",
+        "replies": "这轮只读了部分回信，下一轮会补上。",
         "ai": "只有一部分岗位打了分，其余等 AI worker 补打分。",
         "notify": "Telegram 推送只发出了一部分：没发出去的岗位，只要还在推送窗口内，下一轮会再试；如果还没配置 Telegram，去「设置」填好。",
         "maintenance": "清理和过期检查只做了一部分，不影响今天的岗位。"
@@ -5590,7 +5593,8 @@
       "applied": "📨 已申请超过 {days, plural, other {# 天}}没有回音",
       "section": "<b>{heading}</b>（{count}）",
       "item": "• {title} — {company}（{days, plural, other {# 天}}）",
-      "more": "… 还有 {count} 条"
+      "more": "… 还有 {count} 条",
+      "pendingReplies": "✉ {count} 封求职回信待确认"
     },
     "alert": {
       "circuitOpenTitle": "通道 {channel} 已熔断",
@@ -6278,6 +6282,19 @@
           "on": "已打开：你配置的 MCP 客户端能读取岗位和申请（工具：{tools}）。工具返回的内容会交给该客户端所用的模型服务商，见 docs/mcp.zh.md",
           "off": "未打开（mcp.yaml 的 enabled: false，默认）",
           "configError": "mcp.yaml 读不出来：{problem}",
+          "configHint": "pnpm config:check 会指出是哪一项"
+        },
+        "replies": {
+          "title": "Gmail 回信",
+          "off": "关闭（replies.yaml enabled: false，默认）",
+          "noCredentials": "已开启，但没有设置 GMAIL_USER 和 GMAIL_APP_PASSWORD，所以不会读标签",
+          "noCredentialsHint": "加到 .env，见 docs/gmail-replies.zh.md",
+          "neverRead": "已开启，但标签 {label} 还没读过",
+          "neverReadHint": "下一轮会读。如果一直这样，看 /sources 上的 replies 步骤",
+          "on": "已开启：标签 {label}，上次读取 {ago}，{pending} 封待确认",
+          "stale": "有 {count} 封回信已等待超过 {days} 天",
+          "staleHint": "到 /pipeline 处理",
+          "configError": "读不了 replies.yaml：{problem}",
           "configHint": "pnpm config:check 会指出是哪一项"
         },
         "deliveries": {
@@ -7439,6 +7456,7 @@
       "step__pipeline": "处理岗位",
       "step__filter": "筛选",
       "step__signals": "信号复核",
+      "step__replies": "Gmail 回信",
       "step__ai": "AI 处理",
       "step__notify": "发送通知",
       "step__maintenance": "维护",
@@ -8158,6 +8176,76 @@
       "rewriteLabel": "教练改写",
       "droppedDimensions": "已略去：{count} 条未配置维度的评分。",
       "droppedSuggestions": "已略去：{count} 条指向不存在句子的建议。"
+    }
+  },
+  "replies": {
+    "category": {
+      "interview_invite": "面试邀请",
+      "rejection": "拒信",
+      "offer": "Offer",
+      "info_request": "要求补材料",
+      "acknowledgement": "已收到申请",
+      "other": "其他",
+      "unclassified": "未分类"
+    },
+    "suggestion": {
+      "status": "建议从 {from} 改为 {to}",
+      "interview": "建议把下一步设为：{action}",
+      "send_materials": "建议把下一步设为：{action}，截止 {due}",
+      "mismatch": "这个申请现在是 {from}，和这封信对不上，请检查关联",
+      "none": "无需改动"
+    },
+    "nextAction": {
+      "interview": "约面试时间",
+      "send_materials": "发送对方要求的材料"
+    },
+    "eventNote": "Gmail 回信：{category}，{date}",
+    "panel": {
+      "title": "Gmail 回信",
+      "open": "{count} 封回信等你决定",
+      "none": "没有等你决定的回信",
+      "note": "建议来自本地规则。你确认之前什么都不会变，邮箱也只读不写。",
+      "recent": "最近确认的",
+      "noApplication": "没有关联申请",
+      "ambiguous": "可能属于多个申请",
+      "unmatched": "没找到对应的申请",
+      "from": "来自 {domain}",
+      "received": "收到于 {date}",
+      "noSubject": "（无主题）",
+      "suspicious": "这封信里有像是写给 AI 的指令，请到 Gmail 里看原文。",
+      "confirm": "确认",
+      "dismiss": "忽略",
+      "undo": "撤销",
+      "category": "类别",
+      "link": "申请",
+      "candidate": "{company} · {title}"
+    },
+    "card": {
+      "chip": "✉ {count}",
+      "chipLabel": "{count} 封 Gmail 回信等你决定"
+    },
+    "toast": {
+      "confirmed": "已确认",
+      "undone": "已撤销",
+      "dismissed": "已忽略",
+      "linked": "已关联",
+      "categorized": "类别已改",
+      "superseded": "这个申请的状态已经变了，所以没有改动",
+      "stale": "这封回信已经处理过了",
+      "failed": "没有成功，请再试一次"
+    },
+    "cli": {
+      "summary": "标签里新邮件 {fresh} 封，读取 {read} 封，保存 {stored} 封",
+      "categories": "类别：{list}",
+      "matches": "匹配：{list}",
+      "preview": "预览：什么都没有保存。加 --write 才保存。",
+      "writeOff": "replies.yaml 的 enabled 是 false。先改成 true 再用 --write。",
+      "noCredentials": "没有设置 GMAIL_USER 和 GMAIL_APP_PASSWORD（见 docs/gmail-replies.zh.md）。",
+      "failed": "读不了这个标签：{message}",
+      "emlCategory": "类别：{category}",
+      "emlSuspicious": "含有像指令的文字：{value}",
+      "filterIntro": "把下面这段贴进 Gmail 搜索，再用它建一个过滤器，打上标签“{label}”（勾选“也应用于匹配的会话”）：",
+      "filterEmpty": "还没有处于候选状态的申请，所以这里只列出 ATS 发件域名。"
     }
   }
 }

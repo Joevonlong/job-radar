@@ -28,8 +28,8 @@ describe("openImapSession against an in-process IMAP server (imapflow, no networ
     const session = await openImapSession(options(server.port));
     const headers = await session.listSince(new Date("2026-10-01T00:00:00Z"));
     expect(headers).toEqual([
-      { uid: 2, messageId: "<m2@alerts.example.test>", from: "alert@indeed.com", subject: "Alert 2", receivedAt: DATE },
-      { uid: 1, messageId: "<m1@alerts.example.test>", from: "alert@indeed.com", subject: "Alert 1", receivedAt: DATE },
+      { uid: 2, messageId: "<m2@alerts.example.test>", from: "alert@indeed.com", subject: "Alert 2", receivedAt: DATE, uidValidity: "1" },
+      { uid: 1, messageId: "<m1@alerts.example.test>", from: "alert@indeed.com", subject: "Alert 1", receivedAt: DATE, uidValidity: "1" },
     ]);
     const source = await session.fetchSource(1);
     expect(source?.toString("utf8")).toContain("Message-ID: <m1@alerts.example.test>");

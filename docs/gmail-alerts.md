@@ -2,6 +2,8 @@
 
 The `gmail-alerts` channel reads the job alert emails that LinkedIn, StepStone, Indeed and XING send to your Gmail, and turns the job cards in each email into job data. These platforms have already filtered by the keywords and cities you subscribed to, and this path **never touches any platform's anti-bot defences**, so it only needs read-only access to one label and never sends or deletes mail.
 
+Replies from companies are a separate, optional feature with its own label: see [gmail-replies.md](gmail-replies.md).
+
 ## What it does and does not do
 - IMAP (imapflow) plus an app password, **read-only** on one label (default `JobAlerts`): it opens the mailbox read-only with `EXAMINE` and reads message bodies with `BODY.PEEK`. It **does not mark as read, move, delete or label**; the code contains no call that writes to the mailbox.
 - The parser is chosen by sender domain (`sources.gmail.senders` in `sources.yaml`). Each job card in an email -> one raw posting (title, company, location, link; salary and summary if present).

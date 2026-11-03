@@ -44,6 +44,7 @@
 | [mcp.zh.md](mcp.zh.md) | 在 Claude Desktop、Claude Code 等 MCP 客户端里问你的岗位和申请：可选的 MCP 服务（`pnpm mcp:serve`、`mcp.yaml`）、工具、给什么和永远不给什么，以及默认关闭的两个申请写作工具 |
 | [telegram.zh.md](telegram.zh.md) | 建 bot、拿 chat id |
 | [gmail-alerts.zh.md](gmail-alerts.zh.md) | 两步验证、应用专用密码、标签、订阅职位提醒 |
+| [gmail-replies.zh.md](gmail-replies.zh.md) | 从一个标签读公司回信，建议改状态，确认或撤销 |
 | [linkedin-session.zh.md](linkedin-session.zh.md) | `pnpm auth:linkedin`、每日页面上限、遇到验证页怎么办 |
 | [jsearch.zh.md](jsearch.zh.md)、[tavily.zh.md](tavily.zh.md)、[apify.zh.md](apify.zh.md)、[brightdata.zh.md](brightdata.zh.md)、[monid.zh.md](monid.zh.md) | 需要 key 或付费的通道：key、额度和预算 |
 | [development.md](development.md) | 给贡献者：代码结构、测试、e2e、约定（英文） |

@@ -18,7 +18,7 @@ const MAX_EVIDENCE = 200;
 const TEXT_ATTRIBUTES = new Set(["alt", "title", "aria-label", "aria-description", "placeholder", "label"]);
 const DEFAULT_TEXT: Rgba = { r: 0, g: 0, b: 0, a: 1 };
 
-interface Context {
+export interface Context {
   /** Inherited text colour; null = the browser default (black). */
   color: Rgba | null;
   /** Nearest background an ancestor (or the element) sets inline; null = none set. */
@@ -55,7 +55,7 @@ function ownBackground(el: Element, declarations: Map<string, string>): Rgba | n
 }
 
 /** Why `el` hides its content, or null. The first enabled method that applies wins. */
-function hiddenBy(el: Element, declarations: Map<string, string>, context: Context, settings: TrapsConfig["hidden"]): Hidden | null {
+export function hiddenBy(el: Element, declarations: Map<string, string>, context: Context, settings: TrapsConfig["hidden"]): Hidden | null {
   const on = settings.methods;
   const attrs = el.attribs;
   if (on.hidden_attribute && "hidden" in attrs) return { method: "hidden_attribute", evidence: "hidden" };
@@ -123,7 +123,7 @@ function hiddenBy(el: Element, declarations: Map<string, string>, context: Conte
   return null;
 }
 
-function childContext(el: Element, declarations: Map<string, string>, context: Context): Context {
+export function childContext(el: Element, declarations: Map<string, string>, context: Context): Context {
   return { color: textColorOf(el, declarations) ?? context.color, background: ownBackground(el, declarations) ?? context.background };
 }
 

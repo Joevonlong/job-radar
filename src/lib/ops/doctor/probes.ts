@@ -33,8 +33,11 @@ import { redact } from "./helpers";
 import { resolveHostDatabaseUrl } from "./database-url";
 import { probeDeliveries } from "./deliveries";
 import { enabledTools, readMcpSettings } from "@/lib/mcp/settings";
+import { countStalePendingReplies, countPendingReplies } from "@/lib/db/repos/replies";
+import { getRuntimeState } from "@/lib/db/repos/runtime-state";
+import { mailboxCredentials, REPLIES_LAST_READ_KEY } from "@/lib/replies/step";
 
-import type { CommandOutcome, DiskSpace, DoctorContext, DoctorProbes, HttpOutcome, McpProbe, OwnershipScan, TrapsProbe } from "./types";
+import type { CommandOutcome, DiskSpace, DoctorContext, DoctorProbes, HttpOutcome, McpProbe, OwnershipScan, RepliesProbe, TrapsProbe } from "./types";
 
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 const MAX_BODY_CHARS = 4096;
@@ -233,6 +236,7 @@ export function createRealProbes(options: RealProbeOptions): DoctorProbes {
     unscoredJobs: () => countUnscoredJobs(getDb()),
     traps: (now) => probeTraps(now),
     mcp: async () => probeMcp(),
+    replies: (now) => probeReplies(now),
     deliveries: () => probeDeliveries(),
     currentScores: () => currentScoresHealth(getDb()),
     profile: async () => readProfileReadiness(),
@@ -317,6 +321,26 @@ function probeMcp(): McpProbe {
   } catch (error) {
     return { state: "config_error", problem: error instanceof ConfigError ? firstConfigProblem(error) : "unreadable" };
   }
+}
+
+/** `data.replies`: the switch, whether the mailbox credentials are set, and what waits. Off asks nothing of the database. */
+async function probeReplies(now: Date): Promise<RepliesProbe> {
+  let settings;
+  try {
+    settings = loadConfig("replies");
+  } catch (error) {
+    if (error instanceof ConfigError) return { state: "config_error", problem: firstConfigProblem(error) };
+    throw error;
+  }
+  const base = { state: "ok" as const, enabled: settings.enabled, label: settings.label, credentials: mailboxCredentials() !== null, warnDays: settings.doctor.pending_warn_days };
+  if (!settings.enabled) return { ...base, lastReadAt: null, pending: 0, stalePending: 0 };
+  const db = getDb();
+  const [lastRead, pending, stalePending] = await Promise.all([
+    getRuntimeState(db, REPLIES_LAST_READ_KEY),
+    countPendingReplies(db),
+    countStalePendingReplies(db, new Date(now.getTime() - settings.doctor.pending_warn_days * 86_400_000)),
+  ]);
+  return { ...base, lastReadAt: lastRead?.updatedAt ?? null, pending, stalePending };
 }
 
 /** `data.traps`: traps.yaml and the counts; a missing table is `stats: null`, not an error. */

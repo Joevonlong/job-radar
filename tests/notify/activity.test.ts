@@ -5,6 +5,7 @@ import type { Db } from "@/lib/db/client";
 import * as applications from "@/lib/db/repos/applications";
 import * as favorites from "@/lib/db/repos/favorites";
 import * as notifications from "@/lib/db/repos/notifications";
+import * as replies from "@/lib/db/repos/replies";
 import { createUpdateHandler, type UpdateHandlerDeps } from "@/lib/notify/poller";
 import { runReminders } from "@/lib/notify/reminders";
 import { createTelegramClient, type TelegramUpdate } from "@/lib/notify/telegram-client";
@@ -44,6 +45,7 @@ beforeEach(() => {
   vi.spyOn(notifications, "getLastNotificationAt").mockResolvedValue(null);
   vi.spyOn(notifications, "recordNotification").mockResolvedValue({ id: 1, kind: "reminder", cycleId: null, payloadJson: null, sentAt: now, telegramMessageId: null });
   vi.spyOn(applications, "listStaleApplications").mockResolvedValue({ total: 0, items: [] });
+  vi.spyOn(replies, "countPendingReplies").mockResolvedValue(0);
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -130,6 +132,12 @@ describe("reminder activity", () => {
     if (outcome === "quiet") test.reminders.config.quiet_hours = { ...test.reminders.config.quiet_hours, enabled: true, start: "11:00", end: "13:00" };
     expect(await runReminders(test.reminders)).toBe(outcome);
     expect(test.spans).toEqual([]);
+  });
+
+  it("sends the reminder when only replies are waiting", async () => {
+    const test = setup();
+    vi.mocked(replies.countPendingReplies).mockResolvedValue(2);
+    expect(await runReminders(test.reminders)).toBe("sent");
   });
 
   it.each(["sent", "empty", "failed"] as const)("records %s once with both totals", async (outcome) => {

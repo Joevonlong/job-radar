@@ -1,5 +1,6 @@
 import { noopRecorder, spanScope } from "@/lib/activity";
 import { listStaleApplications } from "@/lib/db/repos/applications";
+import { countPendingReplies } from "@/lib/db/repos/replies";
 import { getLastNotificationAt, NOTIFICATION_KINDS, recordNotification } from "@/lib/db/repos/notifications";
 
 import { formatReminders, type ReminderSection } from "./format";
@@ -12,7 +13,8 @@ import type { NotifyDeps } from "./types";
  * The daily application reminder: "interested" for more than N days without
  * applying, "applied" for more than M days without an answer. One message per local day at
  * `reminders.send_at` (or later the same day if the runner was down); a day with nothing due is
- * recorded as `{ empty: true }` so it is not re-checked all day.
+ * recorded as `{ empty: true }` so it is not re-checked all day. Replies from Gmail that wait for a decision
+ * add one line with their number and the board's link: no subject, company or sender of a mail reaches Telegram.
  */
 
 export type ReminderOutcome = "disabled" | "not_due" | "quiet" | "empty" | "sent" | "failed";
@@ -28,9 +30,10 @@ export async function runReminders(deps: NotifyDeps): Promise<ReminderOutcome> {
   if (isQuietHours(now, deps.timeZone, config.quiet_hours)) return "quiet";
 
   const { interested_days, applied_days, max_items } = config.reminders;
-  const [interested, applied] = await Promise.all([
+  const [interested, applied, pendingReplies] = await Promise.all([
     listStaleApplications(deps.db, { status: "interested", before: new Date(now.getTime() - interested_days * DAY_MS), limit: max_items }),
     listStaleApplications(deps.db, { status: "applied", before: new Date(now.getTime() - applied_days * DAY_MS), limit: max_items }),
+    countPendingReplies(deps.db),
   ]);
   const span = (deps.activity ?? noopRecorder).systemRoot("system.reminder");
   const scope = spanScope(span);
@@ -42,16 +45,16 @@ export async function runReminders(deps: NotifyDeps): Promise<ReminderOutcome> {
       { heading: text.t("reminders.applied", { days: applied_days }), total: applied.total, items: applied.items },
     ];
 
-    if (interested.total === 0 && applied.total === 0) {
+    if (interested.total === 0 && applied.total === 0 && pendingReplies === 0) {
       await recordNotification(deps.db, { kind: NOTIFICATION_KINDS.reminder, payload: { empty: true }, sentAt: now });
       scope.set("ok");
       return "empty";
     }
     try {
-      const message = await deps.client.sendMessage({ chatId: deps.chatId, text: formatReminders({ sections, now, publicBaseUrl: config.public_base_url }, text) });
+      const message = await deps.client.sendMessage({ chatId: deps.chatId, text: formatReminders({ sections, pendingReplies, now, publicBaseUrl: config.public_base_url }, text) });
       await recordNotification(deps.db, {
         kind: NOTIFICATION_KINDS.reminder,
-        payload: { interested: interested.total, applied: applied.total },
+        payload: { interested: interested.total, applied: applied.total, pendingReplies },
         sentAt: deps.now(),
         telegramMessageId: message.messageId,
       });

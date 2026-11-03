@@ -79,7 +79,7 @@ TELEGRAM_ALLOWED_USER_IDS=123456789
 | 徽章 | 岗位有的每个信号类别一个，按 `/interests` 的顺序：图标加 Telegram 语言（`language.yaml: notify.locale`）的类别名称（没有这种语言的名称时用另一种），如 📈 股权；金额类显示统一换算的年薪区间（💰 €85–105k）· 👀 关注公司 · 需德语 B2；标签类和已删除的类别不做徽章 |
 | 告警 | 通道熔断、登录态失效 / LinkedIn 验证页、预算 80% / 100%、AI provider 全部失败、一轮没跑完；同一类（类型 + 对象）`alerts.dedupe_hours`（24）小时内只发一次。Job Radar 的 AI 用量上限（[ai-providers.zh.md](ai-providers.zh.md)）：订阅 CLI 窗口满或报告限制时发一条，恢复可用时发一条；只在状态变化时发，`quota_guard.alert_dedupe_hours`（6）防状态来回抖动 |
 | 其他功能排队的告警 | 别的功能（如备份）往 `notifications` 里写 `alert.<类型>` 的未发送行，下一轮 notify 会发出去并回填消息 id；同样按 类型 + `key` 24 小时去重（重复的直接标记为已处理，不发） |
-| 申请提醒 | 每天一条（`reminders.send_at`，默认 09:00，按 `schedule.yaml` 的时区）："感兴趣"超过 `interested_days` 天还没申请、"已申请"超过 `applied_days` 天没回音；当天没有就不发 |
+| 申请提醒 | 每天一条（`reminders.send_at`，默认 09:00，按 `schedule.yaml` 的时区）："感兴趣"超过 `interested_days` 天还没申请、"已申请"超过 `applied_days` 天没回音；当天没有就不发。等你决定的 Gmail 回信（[gmail-replies.zh.md](gmail-replies.zh.md)）只加一行数量和看板链接，不含邮件内容 |
 
 静默时段（`quiet_hours`，默认 22:00–07:00，按 `schedule.yaml` 的 timezone）：汇总和岗位消息等静默结束后的第一轮再推（岗位首次出现后、或拿到分数后 `candidate_window_hours`（48）小时内都还是候选：用"立即打分"或积压打分晚拿到分的旧岗位，达到门槛也会在下一轮推送）；告警默认不受影响（`alerts_exempt`）；申请提醒落在静默时段里就等到静默结束。
 

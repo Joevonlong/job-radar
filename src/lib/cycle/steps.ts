@@ -17,7 +17,7 @@ import { aiStep } from "@/lib/ai/step";
 import { collectStep } from "./collect";
 
 /** Processing-cycle steps in execution order. */
-export const CYCLE_STEP_NAMES = ["collect", "pipeline", "filter", "signals", "ai", "notify", "maintenance"] as const;
+export const CYCLE_STEP_NAMES = ["collect", "pipeline", "filter", "signals", "replies", "ai", "notify", "maintenance"] as const;
 export type CycleStepName = (typeof CYCLE_STEP_NAMES)[number];
 
 /** Framework services the steps share for one cycle. */
@@ -72,6 +72,7 @@ const DEFAULT_STEPS: Record<CycleStepName, CycleStepFn> = {
   pipeline: noop,
   filter: noop,
   signals: noop,
+  replies: noop,
   ai: aiStep,
   notify: noop,
   maintenance: noop,

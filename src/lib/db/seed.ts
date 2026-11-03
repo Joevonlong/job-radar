@@ -33,6 +33,7 @@ import { syncSourceRegistryRows } from "./repos/source-registry";
 import {
   aiUsage,
   applications,
+  emailReplies,
   atsBoards,
   channels,
   companies,
@@ -62,6 +63,7 @@ import {
  */
 
 export const SEED_EXTERNAL_PREFIX = "seed:";
+const SEED_REPLY_PREFIX = "seed:reply:";
 
 /** A signal category id (the default ids, plus `visa`: a category the default config does not have, so it stays hidden until one is added on /interests). */
 type SignalTier = string;
@@ -821,6 +823,7 @@ async function removePreviousSeed(db: ScoreTx, pipeline: PipelineConfig): Promis
     await db.delete(jobs).where(inArray(jobs.id, jobIds)); // sources, signals, scores cascade
   }
   await db.delete(rawPostings).where(like(rawPostings.externalId, `${SEED_EXTERNAL_PREFIX}%`));
+  await db.delete(emailReplies).where(like(emailReplies.dedupeKey, `${SEED_REPLY_PREFIX}%`));
 
   await db.delete(notifications).where(sql`${notifications.payloadJson} ->> 'seed' = 'true'`);
   const seededCycles = await db.select({ id: cycles.id }).from(cycles).where(sql`${cycles.summaryJson} ->> 'seed' = 'true'`);
@@ -1168,6 +1171,32 @@ async function insertSeed(db: Executor, input: { now: Date; tz: string; pipeline
         favoriteCount += 1;
       }
     }
+
+    // A reply from Gmail waits on the board: an interview invite for the application at Tidewater Robotics (fictional, like every seed).
+    const replyKey = "tidewater-ml";
+    const replyJob = jobIdByKey.get(replyKey);
+    if (replyJob === undefined) throw new Error(`seed: job ${replyKey} is missing`);
+    const [replyApplication] = await tx.select({ id: applications.id, status: applications.status }).from(applications).where(eq(applications.jobId, replyJob)).limit(1);
+    if (!replyApplication) throw new Error(`seed: job ${replyKey} has no application`);
+    await tx.insert(emailReplies).values({
+      dedupeKey: `${SEED_REPLY_PREFIX}interview`,
+      messageId: `<${SEED_REPLY_PREFIX}interview@careers.tidewater-robotics.example>`,
+      threadId: null,
+      senderDomain: "careers.tidewater-robotics.example",
+      receivedAt: new Date(now.getTime() - 2 * 60 * 60 * 1000),
+      rawRef: "imap:JobReplies#uidvalidity=1;uid=1",
+      subject: "Invitation to an interview at Tidewater Robotics",
+      quote: "We would like to invite you to an interview for the role.",
+      suspiciousInstruction: false,
+      category: "interview_invite",
+      match: "matched",
+      applicationId: replyApplication.id,
+      jobId: replyJob,
+      matchScore: 6,
+      candidates: [{ applicationId: replyApplication.id, jobId: replyJob, score: 6, hits: ["company", "title"] }],
+      suggestion: { kind: "status", from: replyApplication.status, to: "interviewing" },
+      state: "pending",
+    });
 
     // The best new job of the latest cycle was pushed to Telegram (the summary block "pushed" has something to count).
     const pushedKey = "mosaik-health";

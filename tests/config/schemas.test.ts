@@ -36,6 +36,7 @@ const FILES: Record<ConfigName, string> = {
   me: "profile.example/me.yaml",
   preferences: "profile.example/preferences.yaml",
   stories: "profile.example/stories.yaml",
+  replies: "replies.yaml",
 };
 
 type Json = Record<string, unknown>;

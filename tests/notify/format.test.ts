@@ -319,6 +319,12 @@ describe("formatReminders", () => {
     ]);
   });
 
+  it("adds the number of waiting replies with the board's link, and nothing of the mails", () => {
+    const text = formatReminders({ now, publicBaseUrl: "https://radar.example.test/", pendingReplies: 2, sections: [] }, ZH);
+    expect(text.split("\n")).toEqual(["<b>📋 申请提醒</b>", "", '<a href="https://radar.example.test/pipeline">✉ 2 封求职回信待确认</a>']);
+    expect(formatReminders({ now, publicBaseUrl: null, pendingReplies: 0, sections: [] }, ZH)).not.toContain("✉");
+  });
+
   it("never exceeds the message limit", () => {
     const items = Array.from({ length: 60 }, (_, i) => ({ jobId: i + 1, title: "T".repeat(80), companyName: "C".repeat(50), statusChangedAt: ago(10) }));
     const text = formatReminders({ now, publicBaseUrl: "https://radar.example.test", sections: [{ heading: "h", total: 60, items }] }, ZH);

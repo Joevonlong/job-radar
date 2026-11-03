@@ -34,6 +34,7 @@ const EXPECTED_TABLES = [
   "cycles",
   "delivery_items",
   "email_messages",
+  "email_replies",
   "interest_suggestions",
   "job_breakdowns",
   "job_closure_overrides",
