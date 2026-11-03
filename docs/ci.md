@@ -766,6 +766,10 @@ reporting, 5 minutes for cleanup (including its 240-second grace), and one 5-min
 
 A deploy step of a historical commit is run again (at most twice, with a growing pause, each retry logged) when its build output shows a failed Google Fonts fetch (`internal/font/google`); any other failure fails at once.
 
+#### Free disk space
+
+First step of the transition job. Some runners come with a 72 GB root disk instead of 145 GB, and the scenarios build images about ten times. Removes the unused pre-installed toolchains `/usr/local/lib/android`, `/usr/share/dotnet`, `/opt/ghc`, `/usr/local/.ghcup` and `/opt/hostedtoolcache/CodeQL` (no later step uses them; Node comes from `actions/setup-node`) and prints `df -h /` before and after. Plain shell; a failure only prints a warning. After each deploy hop, `tests/transition/run.sh` prints the use of `/` and, when `CI=true` and `GITHUB_ACTIONS` are set and `/` is at or above `DISK_PRUNE_THRESHOLD` (80%, at the top of the script), runs `docker builder prune -af` and `docker image prune -f` (build cache and dangling images; tagged images stay). Below the threshold nothing is pruned, so the cache keeps speeding up the builds. It calls the real docker itself: the docker guard still refuses prune for the scripts under test, and nothing is pruned outside CI.
+
 #### Check out the repository
 
 `actions/checkout` with `fetch-depth: 0`: the scenarios check out the earlier versions.

@@ -852,6 +852,14 @@ jobs:
     # Per leg: setup/launch <=25m + deadline 65m + reporting <=1m + cleanup 5m + upload 5m = 101m (19m spare).
     timeout-minutes: 120
     steps:
+      - name: Free disk space
+        timeout-minutes: 5
+        # Some runners come with a 72 GB root disk; the scenarios build images about ten times. Unused pre-installed
+        # toolchains go first (none of the later steps uses them; Node comes from setup-node). Never fails the job.
+        run: |
+          df -h / || true
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || echo "::warning::the disk cleanup failed"
+          df -h / || true
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 5
