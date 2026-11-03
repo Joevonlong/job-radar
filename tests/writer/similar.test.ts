@@ -27,6 +27,61 @@ describe("similarity", () => {
   });
 });
 
+describe("similarity without the words every question has", () => {
+  const stopwords = writerSchema.parse({}).reuse.stopwords;
+
+  it("a question about strengths and one about weaknesses are not alike", () => {
+    expect(similarity("What is your greatest strength?", "What is your greatest weakness?")).toBeGreaterThan(0.55);
+    expect(similarity("What is your greatest strength?", "What is your greatest weakness?", stopwords)).toBeLessThan(0.55);
+    expect(similarity("Was ist Ihre größte Stärke?", "Was ist Ihre größte Schwäche?", stopwords)).toBeLessThan(0.55);
+    expect(similarity("你最大的优点是什么", "你最大的缺点是什么", stopwords)).toBeLessThan(0.55);
+  });
+
+  it("the same question for another company still matches", () => {
+    expect(similarity("Why do you want to work at Acme?", "Why do you want to work at Initech?", stopwords)).toBeGreaterThanOrEqual(0.55);
+    expect(similarity("Why do you want to work here?", "Why do you want to work at our company?", stopwords)).toBeGreaterThanOrEqual(0.55);
+  });
+
+  it("questions made only of such words are compared as written", () => {
+    expect(similarity("What is it?", "What is it?", stopwords)).toBe(1);
+    expect(similarity("What is it?", "Describe a conflict", stopwords)).toBe(0);
+  });
+
+  it("rankSimilar leaves the look-alike out, and stopwords are compared like the words of a question", () => {
+    const candidates = [{ text: "What is your greatest weakness?" }, { text: "What is your greatest strength, really?" }];
+    expect(rankSimilar("What is your greatest strength?", candidates, { minSimilarity: 0.55, maxCandidates: 3, stopwords }).map((entry) => entry.text)).toEqual(["What is your greatest strength, really?"]);
+    expect(similarity("WÄS foo bar", "was foo baz", ["Wäs"])).toBeCloseTo(1 / 3, 5);
+  });
+});
+
+describe("old company names that read like ordinary words", () => {
+  const company = (name: string) => ({ company: name, names: [name] });
+
+  it("a short name counts only as written and not as the first word of a sentence", () => {
+    expect(mentionedCompanies("It is what it is. IT supports it.", [company("It")])).toEqual([]);
+    expect(mentionedCompanies("I would love to join It as an engineer.", [company("It")])).toEqual(["It"]);
+    expect(mentionedCompanies("Turn it on. We rely on it.", [company("ON")])).toEqual([]);
+    expect(mentionedCompanies("I admire ON for its shoes.", [company("ON")])).toEqual(["ON"]);
+    expect(mentionedCompanies("SAP is why I applied.", [company("SAP")])).toEqual(["SAP"]);
+  });
+
+  it("the short form without the legal form keeps the case of the stored name", () => {
+    const it = { company: "It GmbH", names: ["It GmbH", "it"] };
+    expect(mentionedCompanies("It works, and it scales in IT.", [it])).toEqual([]);
+    expect(mentionedCompanies("I would love to join It soon.", [it])).toEqual(["It GmbH"]);
+  });
+
+  it("a name that is a plain word counts only capitalised", () => {
+    expect(mentionedCompanies("We hit our target and used meta tags.", [company("Target"), company("Meta")])).toEqual([]);
+    expect(mentionedCompanies("At Target I led it. META hired me. 我在Meta工作", [company("Target"), company("Meta")])).toEqual(["Target", "Meta"]);
+  });
+
+  it("a name that is no plain word is still found whatever its case", () => {
+    expect(mentionedCompanies("I enjoyed gitlab and ACME LABS.", [company("GitLab"), company("Acme Labs")])).toEqual(["GitLab", "Acme Labs"]);
+    expect(mentionedCompanies("Bei Müller und MULLER", [company("Müller")])).toEqual(["Müller"]);
+  });
+});
+
 describe("rankSimilar", () => {
   const candidates = [
     { id: "newest", text: "Why do you want to work at Initech?" },
@@ -94,7 +149,7 @@ describe("old company names", () => {
 
 describe("the reuse section of writer.yaml", () => {
   it("a file without it loads with the defaults, and a partial one keeps the rest", () => {
-    expect(parseConfigText("writer", "config_version: 1\nenabled: true\n").reuse).toEqual({ min_similarity: expect.any(Number), max_candidates: expect.any(Number), min_question_words: expect.any(Number) });
+    expect(parseConfigText("writer", "config_version: 1\nenabled: true\n").reuse).toEqual({ stopwords: expect.any(Array), min_similarity: expect.any(Number), max_candidates: expect.any(Number), min_question_words: expect.any(Number) });
     const partial = parseConfigText("writer", "config_version: 1\nreuse:\n  max_candidates: 5\n").reuse;
     expect(partial.max_candidates).toBe(5);
     expect(partial.min_similarity).toBe(writerSchema.parse({}).reuse.min_similarity);

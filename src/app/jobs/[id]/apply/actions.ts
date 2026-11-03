@@ -277,6 +277,7 @@ export async function saveManualVersionAction(input: { jobId: number; questionId
   try {
     const { writer } = readWriterInputs();
     if (writer === null) return { ok: false, error: "config_error" };
+    if (!writer.enabled) return { ok: false, error: "disabled" };
     const db = getDb();
     const { jobId, questionId, parentVersionId, text } = parsed.data;
     const question = await getApplicationQuestion(db, { jobId, questionId });
@@ -345,7 +346,7 @@ export async function findSimilarAnswersAction(input: { jobId: number; text: str
     // too short a question says too little to compare
     if (questionTokens(text).size < writer.reuse.min_question_words) return { ok: true, matches: [] };
     const suffixes = legalSuffixes();
-    const ranked = rankSimilar(text, await listReusableAnswers(db, { excludeJobId: jobId }), { minSimilarity: writer.reuse.min_similarity, maxCandidates: writer.reuse.max_candidates });
+    const ranked = rankSimilar(text, await listReusableAnswers(db, { excludeJobId: jobId }), { minSimilarity: writer.reuse.min_similarity, maxCandidates: writer.reuse.max_candidates, stopwords: writer.reuse.stopwords });
     const matches: SimilarAnswer[] = [];
     for (const entry of ranked) {
       const answer = await getReusableAnswerText(db, { versionId: entry.versionId, excludeJobId: jobId });
@@ -369,6 +370,7 @@ export async function saveBaseVersionAction(input: { jobId: number; questionId: 
   try {
     const { writer } = readWriterInputs();
     if (writer === null) return { ok: false, error: "config_error" };
+    if (!writer.enabled) return { ok: false, error: "disabled" };
     const db = getDb();
     const { jobId, questionId, sourceVersionId, text } = parsed.data;
     const question = await getApplicationQuestion(db, { jobId, questionId });

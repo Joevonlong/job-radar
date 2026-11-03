@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 
-import { adoptSuggestionAction, findSimilarAnswersAction, saveBaseVersionAction } from "@/app/jobs/[id]/apply/actions";
+import { adoptSuggestionAction, findSimilarAnswersAction, saveBaseVersionAction, saveManualVersionAction } from "@/app/jobs/[id]/apply/actions";
 import { writerSchema, type WriterConfig } from "@/lib/config";
 import { closeDb, getDb, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
@@ -57,6 +57,27 @@ afterAll(async () => {
   await closeDb();
 });
 
+describe("saving a version while the writer is off", () => {
+  it("is refused like the rest of the workbench, and stores nothing; the writer on, both save", async () => {
+    const oldJob = await addJob("Acme GmbH", "Engineer");
+    const oldQuestion = await addQuestion(oldJob, "Why do you want to join us?");
+    const final = await addVersion(oldQuestion.id, "I like Acme.", { jobId: oldJob });
+    const job = await addJob("Initech", "Engineer");
+    const question = await addQuestion(job, "Why do you want to join?");
+    const parent = await addVersion(question.id, "A first text.", null);
+
+    settings.writer = writer({ enabled: false });
+    expect(await saveManualVersionAction({ jobId: job, questionId: question.id, parentVersionId: parent, text: "Edited." })).toEqual({ ok: false, error: "disabled" });
+    expect(await saveBaseVersionAction({ jobId: job, questionId: question.id, sourceVersionId: final, text: "Started." })).toEqual({ ok: false, error: "disabled" });
+    expect(await listAnswerVersions(db(), [question.id])).toHaveLength(1);
+
+    settings.writer = writer();
+    expect(await saveManualVersionAction({ jobId: job, questionId: question.id, parentVersionId: parent, text: "Edited." })).toMatchObject({ ok: true });
+    expect(await saveBaseVersionAction({ jobId: job, questionId: question.id, sourceVersionId: final, text: "Started." })).toMatchObject({ ok: true });
+    expect(await listAnswerVersions(db(), [question.id])).toHaveLength(3);
+  });
+});
+
 describe("findSimilarAnswersAction", () => {
   it("rejects input that is not valid", async () => {
     for (const input of [{ jobId: 0, text: "Why us?" }, { jobId: -3, text: "Why us?" }, { jobId: 1.5, text: "Why us?" }, { jobId: 1, text: "   " }, { jobId: 1, text: "x".repeat(10_001) }, { jobId: 1, text: "Why us?", extra: true }]) {
@@ -84,7 +105,7 @@ describe("findSimilarAnswersAction", () => {
     const result = await findSimilarAnswersAction({ jobId: here, text: "Why do you want to join Initech?" });
     expect(result).toEqual({
       ok: true,
-      matches: [{ versionId, question: "Why do you want to join Acme?", answer: "Acme answer", company: "Acme GmbH", companyNames: ["Acme GmbH", "acme"], jobTitle: "Backend Engineer", percent: 75 }],
+      matches: [{ versionId, question: "Why do you want to join Acme?", answer: "Acme answer", company: "Acme GmbH", companyNames: ["Acme GmbH", "acme"], jobTitle: "Backend Engineer", percent: 60 }],
     });
     // from the other job's own page its own answer is not offered back; the first job's final answer is
     const fromAcme = await findSimilarAnswersAction({ jobId: acme, text: "Why do you want to join Acme?" });
