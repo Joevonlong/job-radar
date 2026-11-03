@@ -134,13 +134,17 @@ export async function resetRuleDerivedFacts(db: Executor): Promise<number> {
  * Same-source match: the job that already holds a posting with this external id from any channel of
  * the same family (e.g. the same LinkedIn job delivered by two LinkedIn channels).
  */
+/** The external ids that name the same posting. A partial upgrade may already hold both guest spellings: match legacy ids too without discarding either raw payload. */
+export function sameSourceExternalIds(family: string, externalId: string): string[] {
+  const canonicalId = family === "linkedin" ? externalId.replace(/^li-/, "") : externalId;
+  return family === "linkedin" ? [canonicalId, `li-${canonicalId}`] : [canonicalId];
+}
+
 export async function findJobByFamilyExternalId(
   db: Executor,
   input: { family: string; externalId: string; excludeRawPostingId: number },
 ): Promise<Job | null> {
-  // A partial upgrade may already hold both guest spellings. Match legacy ids too without discarding either raw payload.
-  const canonicalId = input.family === "linkedin" ? input.externalId.replace(/^li-/, "") : input.externalId;
-  const externalIds = input.family === "linkedin" ? [canonicalId, `li-${canonicalId}`] : [canonicalId];
+  const externalIds = sameSourceExternalIds(input.family, input.externalId);
   const [row] = await db
     .select({ jobId: jobSources.jobId })
     .from(jobSources)
@@ -166,23 +170,32 @@ export async function listJobsByCompanyTitle(db: Executor, companyId: number, ti
     .orderBy(asc(jobs.id));
 }
 
+/** A job as the SimHash passes compare it. `locationsJson` is unchecked JSON: read it with `storedLocations`. */
+export interface SimhashCandidateRow {
+  id: number;
+  simhash: string | null;
+  title: string;
+  titleNorm: string;
+  locationsJson: unknown;
+}
+
+export interface RelatedCandidateRow extends SimhashCandidateRow {
+  companyNameNorm: string;
+}
+
 /** Jobs of one company that have a SimHash (cross-source near-duplicate candidates). */
-export async function listJobsWithSimhash(db: Executor, companyId: number): Promise<Array<Pick<Job, "id" | "simhash">>> {
+export async function listJobsWithSimhash(db: Executor, companyId: number): Promise<SimhashCandidateRow[]> {
   return db
-    .select({ id: jobs.id, simhash: jobs.simhash })
+    .select({ id: jobs.id, simhash: jobs.simhash, title: jobs.title, titleNorm: jobs.titleNorm, locationsJson: jobs.locationsJson })
     .from(jobs)
     .where(and(eq(jobs.companyId, companyId), isNotNull(jobs.simhash)))
     .orderBy(asc(jobs.id));
 }
 
 /** Jobs of other companies with the same normalized title and a SimHash (cross-company near-duplicate candidates), with their company's key. */
-export async function listJobsOfOtherCompaniesByTitle(
-  db: Executor,
-  companyId: number,
-  titleNorm: string,
-): Promise<Array<Pick<Job, "id" | "simhash"> & { companyNameNorm: string }>> {
+export async function listJobsOfOtherCompaniesByTitle(db: Executor, companyId: number, titleNorm: string): Promise<RelatedCandidateRow[]> {
   return db
-    .select({ id: jobs.id, simhash: jobs.simhash, companyNameNorm: companies.nameNorm })
+    .select({ id: jobs.id, simhash: jobs.simhash, title: jobs.title, titleNorm: jobs.titleNorm, locationsJson: jobs.locationsJson, companyNameNorm: companies.nameNorm })
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .where(and(eq(jobs.titleNorm, titleNorm), isNotNull(jobs.simhash), ne(jobs.companyId, companyId)))

@@ -1,10 +1,18 @@
 /**
- * Calibrate the SimHash dedupe threshold on real data (left over from the pipeline work). READ-ONLY.
+ * Calibrate the SimHash dedupe rules on real data. READ-ONLY.
  *
- *   pnpm simhash:analyze [--container job-radar-db-1] [--max 10] [--input postings.ndjson]
+ *   pnpm simhash:analyze --export <file> [--container job-radar-db-1 | --compose-dir <dir>]
+ *   pnpm simhash:analyze --guard --input <file> [--same-title-max N] [--seed N]
+ *   pnpm simhash:analyze [--container job-radar-db-1 | --compose-dir <dir>] [--max 10] [--input postings.ndjson]
  *
- * Reads every parsed raw posting and its job link (`job_sources`) through `docker exec <container> psql` in a
- * read-only session (or from an NDJSON file with {id, channel_id, job_id, payload_json} per line), normalizes each
+ * `--export` writes a snapshot (every raw posting, the links to jobs, the stored jobs) from a read-only session and prints
+ * its sha256. Keep it outside any repository.
+ *
+ * `--guard --input` replays the production matching and merging over a snapshot under the old rule, the current config and a
+ * sweep of `same_title_max_distance`, and lists the merges lost, added and moved, with an audit of the stored merges.
+ *
+ * Without `--guard` it reads every parsed raw posting and its job link (`job_sources`) from a read-only session (or from an
+ * NDJSON file with {id, channel_id, job_id, payload_json} per line), normalizes each
  * with the production code (channel `parse`, `normalizeDraft`, `simhash`), then prints all pairs of postings whose
  * Hamming distance is 0..max, with company / title / city so a human can judge duplicate vs different job:
  *
@@ -17,17 +25,21 @@
  * job titles, company names and cities are printed.
  */
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { loadPipeline } from "../src/lib/market";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 import { registerBuiltinChannels } from "../src/lib/channels/builtin";
 import { defaultRegistry } from "../src/lib/channels/registry";
 import { normalizedPostingDraftSchema } from "../src/lib/channels/types";
+import { exportSnapshotLines, parseSnapshot, PARSED_POSTINGS_QUERY, STORED_JOBS_QUERY } from "../src/lib/db/queries/dedupe-snapshot";
+import { runReadonlyPsql, type PsqlTarget } from "../src/lib/db/readonly-psql";
 import type { JobLocation } from "../src/lib/domain/types";
 import { resolveCompanyName } from "../src/lib/pipeline/company";
 import { sameCity } from "../src/lib/pipeline/dedupe";
 import { normalizeDraft } from "../src/lib/pipeline/normalize";
+import { buildGuardReport, withTitleGuard } from "../src/lib/pipeline/replay";
 import { hammingDistance } from "../src/lib/pipeline/simhash";
 
 interface Row {
@@ -57,22 +69,6 @@ interface Pair {
   b: Posting;
 }
 
-const QUERY = `select row_to_json(t) from (
-  select r.id, r.channel_id, (select min(s.job_id) from job_sources s where s.raw_posting_id = r.id) as job_id, r.payload_json
-  from raw_postings r where r.parse_status = 'parsed' order by r.id) t`;
-
-const JOBS_QUERY = `select row_to_json(t) from (
-  select j.id, c.name_norm as company_key, c.name as company, j.title, j.title_norm, j.simhash,
-    j.locations_json->0->>'city' as city, (select count(*) from job_sources s where s.job_id = j.id) as sources
-  from jobs j join companies c on c.id = j.company_id where j.simhash is not null order by j.id) t`;
-
-function psql(container: string, query: string): string {
-  return execFileSync("docker", ["exec", "-e", "PGOPTIONS=-c default_transaction_read_only=on", container, "psql", "-U", "jobradar", "-d", "jobradar", "-At", "-c", query], {
-    encoding: "utf8",
-    maxBuffer: 1 << 30,
-  });
-}
-
 interface JobRow {
   id: number;
   company_key: string;
@@ -91,8 +87,8 @@ function lines<T>(text: string): T[] {
     .map((line) => JSON.parse(line) as T);
 }
 
-function loadRows(input: string | undefined, container: string): Row[] {
-  const text = input ? readFileSync(input, "utf8") : psql(container, QUERY);
+function loadRows(input: string | undefined, target: PsqlTarget): Row[] {
+  const text = input ? readFileSync(input, "utf8") : runReadonlyPsql(target, PARSED_POSTINGS_QUERY);
   return text
     .split("\n")
     .filter((line) => line.trim() !== "")
@@ -142,18 +138,57 @@ function replay(postings: Posting[], current: number, max: number): void {
   console.log("");
 }
 
-function main(): number {
+const productSha = (): string => execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+
+function exportSnapshot(file: string, target: PsqlTarget): void {
+  const lines = exportSnapshotLines((query) => runReadonlyPsql(target, query), { exportedAt: new Date().toISOString(), productSha: productSha() });
+  const text = `${lines.join("\n")}\n`;
+  writeFileSync(file, text);
+  console.log(`${lines[0]}\nsha256 ${createHash("sha256").update(text).digest("hex")}`);
+}
+
+async function guardReport(file: string, options: { sameTitleMax?: number; seed: number }): Promise<void> {
+  const text = readFileSync(file, "utf8");
+  const config = withTitleGuard(loadPipeline(), { enabled: true, ...(options.sameTitleMax === undefined ? {} : { sameTitleMax: options.sameTitleMax }) });
+  const report = await buildGuardReport({ snapshot: parseSnapshot(text), sha256: createHash("sha256").update(text).digest("hex"), productSha: productSha(), config, seed: options.seed, registry: defaultRegistry });
+  process.stdout.write(report.text);
+}
+
+async function main(): Promise<number> {
   const { values } = parseArgs({
-    options: { container: { type: "string", default: "job-radar-db-1" }, max: { type: "string", default: "10" }, input: { type: "string" } },
+    options: {
+      container: { type: "string", default: "job-radar-db-1" },
+      "compose-dir": { type: "string" },
+      max: { type: "string", default: "10" },
+      input: { type: "string" },
+      export: { type: "string" },
+      guard: { type: "boolean", default: false },
+      "same-title-max": { type: "string" },
+      seed: { type: "string", default: "20261012" },
+    },
     strict: true,
   });
+  const target: PsqlTarget = values["compose-dir"] ? { composeDir: values["compose-dir"] } : { container: values.container as string };
+  if (values.export) {
+    exportSnapshot(values.export, target);
+    return 0;
+  }
   const max = Number(values.max);
   const config = loadPipeline();
   registerBuiltinChannels(defaultRegistry);
+  if (values.guard) {
+    if (!values.input) {
+      console.error("--guard needs --input <snapshot>: export one first with --export <file>");
+      return 2;
+    }
+    const sameTitleMax = values["same-title-max"];
+    await guardReport(values.input, { seed: Number(values.seed), ...(sameTitleMax === undefined ? {} : { sameTitleMax: Number(sameTitleMax) }) });
+    return 0;
+  }
 
   const postings: Posting[] = [];
   let skipped = 0;
-  for (const row of loadRows(values.input, values.container as string)) {
+  for (const row of loadRows(values.input, target)) {
     try {
       const channel = defaultRegistry.get(row.channel_id);
       if (!channel) throw new Error("unknown channel");
@@ -226,7 +261,7 @@ function main(): number {
 
   replay(postings, config.dedupe.simhash_max_distance, max);
   if (values.input) return 0;
-  const jobs = lines<JobRow>(psql(values.container as string, JOBS_QUERY));
+  const jobs = lines<JobRow>(runReadonlyPsql(target, STORED_JOBS_QUERY));
   const jobPairs: { d: number; a: JobRow; b: JobRow }[] = [];
   for (let i = 0; i < jobs.length; i += 1) {
     for (let j = i + 1; j < jobs.length; j += 1) {
@@ -248,4 +283,4 @@ function main(): number {
   return 0;
 }
 
-process.exitCode = main();
+process.exitCode = await main();

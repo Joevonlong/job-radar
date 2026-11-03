@@ -1,10 +1,9 @@
 import { maintainCurrentScores } from "@/lib/cycle/current-scores";
 import { noopSpan, type SpanHandle } from "@/lib/activity";
-import { ChannelError } from "@/lib/channels/errors";
 import { createHttpClient } from "@/lib/channels/http";
 import { createPublicOnlyFetch, sharedPublicOnlyFetch } from "@/lib/net/public-fetch";
 import type { ChannelRegistry } from "@/lib/channels/registry";
-import { normalizedPostingDraftSchema, type ChannelLogger } from "@/lib/channels/types";
+import type { ChannelLogger } from "@/lib/channels/types";
 import { loadCompanies, loadConfig, type PipelineConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import type { Db } from "@/lib/db/client";
@@ -19,11 +18,12 @@ import { loadBaseCurrency } from "@/lib/signals/floor";
 
 import { resolveCompanyName } from "./company";
 import { syncCompanyDisplayNames } from "./company-names";
-import { fieldsOf, fieldsOfJob, findMatchingJob, mergeJobFields, type MatchKind } from "./dedupe";
+import { applyMerge, fieldsOf, fieldsOfJob, findMatchingJob, sourceWins, type MatchKind } from "./dedupe";
 import { refreshIdentityKeysIfStale, splitMergedJobs, type IdentityKeyRefreshResult, type SplitMergedResult } from "./identity-keys";
 import { runMaintenance, type MaintenanceResult } from "./lifecycle";
 import { refreshSalariesIfStale, type SalaryRefreshResult } from "./refresh-salary";
-import { normalizeDraft, type NormalizedJob } from "./normalize";
+import type { NormalizedJob } from "./normalize";
+import { describeError, MAX_REASON_CHARS, parseAndNormalize } from "./prepare";
 import { dormancyReady } from "@/lib/db/repos/dormancy";
 import { backfillChangeFingerprints } from "@/lib/db/repos/change-fingerprints";
 
@@ -33,8 +33,6 @@ export { normalizeDraft, normalizeTitle, type NormalizedJob } from "./normalize"
 export { refreshSalaries, refreshSalariesIfStale, salaryFingerprint, type SalaryRefreshResult } from "./refresh-salary";
 export { refreshIdentityKeys, refreshIdentityKeysIfStale, type IdentityKeyRefreshResult, type SplitMergedResult } from "./identity-keys";
 
-/** Longest error text kept in a log line or a result sample. */
-const MAX_REASON_CHARS = 300;
 /** Failure samples listed in the step result. */
 const MAX_FAILURE_SAMPLES = 10;
 
@@ -68,6 +66,8 @@ export interface PipelineResult {
   created: number;
   /** Postings folded into an existing job found by this rule. */
   merged: Record<MatchKind, number>;
+  /** Of the new jobs, those the SimHash pass held apart from a job with another title that the old rule would have joined. Not merges, and not in `merged`. */
+  titleGuard: { blocked: number };
   /** Re-parsed postings (their payload changed) that updated the job they already belonged to. */
   updated: number;
   relisted: number;
@@ -79,45 +79,12 @@ export interface PipelineResult {
   failures: PipelineFailureSample[];
 }
 
-function describeError(error: unknown): string {
-  if (error instanceof ChannelError) return `${error.code}: ${error.message}`.slice(0, MAX_REASON_CHARS);
-  if (error instanceof Error) return `${error.name}: ${error.message}`.slice(0, MAX_REASON_CHARS);
-  return "unknown error";
-}
-
-/** Draft validation problems as "field: message" lines, without the offending values. */
-function describeDraftIssues(error: { issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey>; message: string }> }): string {
-  return error.issues
-    .slice(0, 5)
-    .map((i) => `${i.path.map(String).join(".") || "(root)"}: ${i.message}`)
-    .join("; ");
-}
-
 type Outcome =
   | { kind: "skipped" }
-  | { kind: "created" }
+  | { kind: "created"; blockedByTitle: boolean }
   | { kind: "merged"; by: MatchKind; relisted?: boolean }
   | { kind: "updated"; relisted?: boolean }
   | { kind: "parse_failed"; reason: string };
-
-/** Channel `parse` + draft validation + normalization; failures become a reason string. */
-function parseAndNormalize(raw: RawPosting, options: Omit<PipelineOptions, "relist">): { ok: true; normalized: NormalizedJob; family: string } | { ok: false; reason: string } {
-  const channel = options.registry.get(raw.channelId);
-  if (!channel) return { ok: false, reason: `unknown channel "${raw.channelId}" (not registered in this process)` };
-  let draft;
-  try {
-    const parsed = normalizedPostingDraftSchema.safeParse(channel.parse(raw.payloadJson));
-    if (!parsed.success) return { ok: false, reason: `invalid draft from ${raw.channelId}: ${describeDraftIssues(parsed.error)}`.slice(0, MAX_REASON_CHARS) };
-    draft = parsed.data;
-  } catch (error) {
-    return { ok: false, reason: `parse failed: ${describeError(error)}`.slice(0, MAX_REASON_CHARS) };
-  }
-  try {
-    return { ok: true, normalized: normalizeDraft(draft, options.config), family: channel.family };
-  } catch (error) {
-    return { ok: false, reason: `normalize failed: ${describeError(error)}`.slice(0, MAX_REASON_CHARS) };
-  }
-}
 
 /** The posting's own location texts joined ("Berlin, Germany; Munich, Germany"); null when it names none. */
 function sourceLocationLabel(locations: NormalizedJob["locations"]): string | null {
@@ -136,15 +103,17 @@ async function persist(db: Db, raw: RawPosting, normalized: NormalizedJob, famil
 
     let job: Job | null = existingSource ? await getJob(tx, existingSource.jobId) : null;
     let outcome: Outcome = { kind: "updated" };
+    let blockedByTitle = false;
     if (!job) {
-      const match = await findMatchingJob(
+      const found = await findMatchingJob(
         tx,
         { normalized, companyId: company.id, companyName: normalized.companyName, channelFamily: family, externalId: raw.externalId, rawPostingId: raw.id },
         config,
       );
-      if (match) {
-        job = match.job;
-        outcome = { kind: "merged", by: match.kind };
+      blockedByTitle = found.blockedByTitle;
+      if (found.match) {
+        job = found.match.job;
+        outcome = { kind: "merged", by: found.match.kind };
       }
     }
 
@@ -172,18 +141,16 @@ async function persist(db: Db, raw: RawPosting, normalized: NormalizedJob, famil
         skills: incoming.skills,
       });
       jobId = created.id;
-      outcome = { kind: "created" };
+      outcome = { kind: "created", blockedByTitle };
     } else {
       const otherBest = await bestOtherPriority(tx, job.id, raw.id);
-      const wins = otherBest === null || priority <= otherBest;
-      const merged = mergeJobFields(fieldsOfJob(job), incoming, wins);
+      const merged = applyMerge(fieldsOfJob(job), incoming, sourceWins(priority, otherBest), company.id);
       const seenAgain = raw.fetchedAt.getTime() > job.lastSeenAt.getTime();
       const relisted = await updateJob(
         tx,
         job.id,
         {
           ...merged,
-          ...(wins ? { companyId: company.id } : {}),
           ...(seenAgain ? { lastSeenAt: raw.fetchedAt, status: statusWhenSeenAgain(job), ...(await dormancyReady(tx) ? { dormantAt: null } : {}) } : {}),
         },
         { observedAt: raw.fetchedAt, observedRunId: raw.runId, minGapDays: options.relist.minGapDays },
@@ -220,6 +187,7 @@ export async function runPipeline(db: Db, options: PipelineOptions): Promise<Pip
     parsed: 0,
     created: 0,
     merged: { same_source: 0, exact_key: 0, simhash: 0 },
+    titleGuard: { blocked: 0 },
     updated: 0,
     relisted: 0,
     parseFailed: 0,
@@ -266,7 +234,10 @@ export async function runPipeline(db: Db, options: PipelineOptions): Promise<Pip
           if (outcome.kind === "skipped") continue;
           if ((outcome.kind === "merged" || outcome.kind === "updated") && outcome.relisted) result.relisted += 1;
           result.parsed += 1;
-          if (outcome.kind === "created") result.created += 1;
+          if (outcome.kind === "created") {
+            result.created += 1;
+            if (outcome.blockedByTitle) result.titleGuard.blocked += 1;
+          }
           else if (outcome.kind === "merged") result.merged[outcome.by] += 1;
           else result.updated += 1;
         } catch (error) {
@@ -360,7 +331,7 @@ export async function pipelineStep(ctx: CycleStepContext): Promise<StepResult> {
   const result = await runPipeline(db, { ...options, activity: ctx.activity });
   const salaryRefresh = await refreshStoredSalaries(db, options);
   const salaryBenchmark = await rebuildSalaryBenchmark(db, ctx.logger);
-  ctx.logger.info("pipeline done", { processed: result.processed, created: result.created, parseFailed: result.parseFailed, deferred: result.deferred, salariesChanged: salaryRefresh?.changed ?? 0 });
+  ctx.logger.info("pipeline done", { processed: result.processed, created: result.created, blockedByTitle: result.titleGuard.blocked, parseFailed: result.parseFailed, deferred: result.deferred, salariesChanged: salaryRefresh?.changed ?? 0 });
   const withRefresh = salaryRefresh ? { ...result, salaryRefresh } : result;
   return { status: result.deferred > 0 ? "partial" : "ok", result: salaryBenchmark ? { ...withRefresh, salaryBenchmark } : withRefresh };
 }

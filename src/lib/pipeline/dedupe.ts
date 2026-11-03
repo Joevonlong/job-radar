@@ -2,19 +2,33 @@ import { z } from "zod";
 
 import type { PipelineConfig } from "@/lib/config";
 import type { Executor } from "@/lib/db/executor";
-import { findJobByFamilyExternalId, getJob, listJobsByCompanyTitle, listJobsOfOtherCompaniesByTitle, listJobsWithSimhash, type Job } from "@/lib/db/repos/jobs";
+import { findJobByFamilyExternalId, getJob, listJobsByCompanyTitle, listJobsOfOtherCompaniesByTitle, listJobsWithSimhash, type Job, type SimhashCandidateRow } from "@/lib/db/repos/jobs";
 import { jobLocationSchema, type JobLocation } from "@/lib/domain/types";
 
 import { resolveCompanyName } from "./company";
 import { cityKeys } from "./geography";
 import type { NormalizedJob } from "./normalize";
 import { hammingDistance } from "./simhash";
+import { compileTitleGuard, selectSimhashCandidate, type SimhashCandidate, type TitleRelation } from "./title-guard";
 
 export type MatchKind = "same_source" | "exact_key" | "simhash";
+
+/** The pass that matched; the related-company pass still counts as `simhash` in `MatchKind`. */
+export type MatchRule = "same_source" | "exact_key" | "simhash" | "related_company";
+
+/** Why a posting joined a job. `title` is set by the two SimHash passes while the title guard is on. */
+export interface MatchDetail {
+  rule: MatchRule;
+  title: TitleRelation | null;
+  distance: number | null;
+  limit: number | null;
+  comparedTitle: string | null;
+}
 
 export interface JobMatch {
   job: Job;
   kind: MatchKind;
+  detail: MatchDetail;
 }
 
 const locationsSchema = z.array(jobLocationSchema);
@@ -60,51 +74,130 @@ export interface MatchInput {
   rawPostingId: number;
 }
 
+/** Same company with a SimHash (the SimHash pass). `locations` went through `storedLocations`. */
+export interface MatchCandidate extends SimhashCandidate {
+  locations: JobLocation[];
+}
+
+/** Other company, same title key (the related-company pass). */
+export interface RelatedCandidate extends MatchCandidate {
+  companyNameNorm: string;
+}
+
 /**
- * The existing job a new posting belongs to, if any, trying in order:
+ * What the passes read, one call per pass that is reached: a pass that matches leaves the later ones unread. Every list is
+ * in id order. The database shell and the offline replay each provide these.
+ */
+export interface MatchLoaders {
+  sameSource(): Promise<{ id: number } | null>;
+  byCompanyTitle(): Promise<Array<{ id: number; locations: JobLocation[] }>>;
+  sameCompanyWithHash(): Promise<MatchCandidate[]>;
+  relatedCompanyByTitle(): Promise<RelatedCandidate[]>;
+}
+
+export interface MatchDecision {
+  jobId: number;
+  rule: MatchRule;
+  detail: MatchDetail;
+}
+
+export interface DecideResult {
+  decision: MatchDecision | null;
+  /** No pass matched, and the SimHash pass held back a candidate of another title the old rule would have merged. */
+  blockedByTitle: boolean;
+}
+
+const plainDecision = (jobId: number, rule: MatchRule): DecideResult => ({ decision: { jobId, rule, detail: { rule, title: null, distance: null, limit: null, comparedTitle: null } }, blockedByTitle: false });
+
+/**
+ * The job a new posting belongs to, if any, trying in order:
  * 1. same source: a posting with the same external id from the same channel family;
  * 2. exact key: same company, same normalized title, same city (never for an empty title key);
- * 3. SimHash: same company and description SimHash within `dedupe.simhash_max_distance` bits.
- * 4. related company: another company whose name is a variant of this one's (see `relatedCompanyKeys`), same
- *    normalized title and a SimHash within `dedupe.cross_company_simhash_max_distance` (counted as `simhash`).
- * The oldest candidate wins, so repeated runs merge into the same job.
+ * 3. SimHash: same company, description SimHash within the limit of the two titles' relation (see `selectSimhashCandidate`);
+ * 4. related company: another company whose name is a variant of this one's (see `relatedCompanyKeys`), same normalized title
+ *    and a SimHash within `dedupe.cross_company_simhash_max_distance`.
+ * Ids in `exclude` count as absent in every pass. Passes 1, 2 and 4 take the oldest candidate, so repeated runs merge into the
+ * same job. Reads no database itself: production and the offline replay share it.
  */
-export async function findMatchingJob(db: Executor, input: MatchInput, config: PipelineConfig): Promise<JobMatch | null> {
-  const sameSource = await findJobByFamilyExternalId(db, {
-    family: input.channelFamily,
-    externalId: input.externalId,
-    excludeRawPostingId: input.rawPostingId,
-  });
-  if (sameSource) return { job: sameSource, kind: "same_source" };
+export async function decideMatch(input: MatchInput, loaders: MatchLoaders, config: PipelineConfig, exclude: ReadonlySet<number>): Promise<DecideResult> {
+  const present = <T extends { id: number }>(rows: readonly T[]): T[] => rows.filter((row) => !exclude.has(row.id));
+  const { normalized } = input;
+
+  const sameSource = await loaders.sameSource();
+  if (sameSource && !exclude.has(sameSource.id)) return plainDecision(sameSource.id, "same_source");
 
   // a title without letters or digits keys as "": that says nothing about which job it is, so only the other passes can match it
-  if (input.normalized.titleNorm !== "") {
-    const candidates = await listJobsByCompanyTitle(db, input.companyId, input.normalized.titleNorm);
-    const exact = candidates.find((job) => sameCity(storedLocations(job), input.normalized.locations));
-    if (exact) return { job: exact, kind: "exact_key" };
+  if (normalized.titleNorm !== "") {
+    const exact = present(await loaders.byCompanyTitle()).find((job) => sameCity(job.locations, normalized.locations));
+    if (exact) return plainDecision(exact.id, "exact_key");
   }
 
-  const hash = input.normalized.simhash;
-  if (hash !== null) {
-    for (const candidate of await listJobsWithSimhash(db, input.companyId)) {
-      if (candidate.simhash === null) continue;
-      if (hammingDistance(hash, candidate.simhash) <= config.dedupe.simhash_max_distance) {
-        const job = await getJob(db, candidate.id);
-        if (job) return { job, kind: "simhash" };
-      }
-    }
+  const hash = normalized.simhash;
+  if (hash === null) return { decision: null, blockedByTitle: false };
+
+  const guard = config.dedupe.title_guard;
+  const compiled = compileTitleGuard(guard, config.market);
+  const incoming = { title: normalized.title, titleNorm: normalized.titleNorm, locations: normalized.locations, simhash: hash };
+  const { selected, blocked } = selectSimhashCandidate(incoming, present(await loaders.sameCompanyWithHash()), config.dedupe, compiled);
+  if (selected) {
+    const detail: MatchDetail = { rule: "simhash", title: selected.relation, distance: selected.distance, limit: selected.limit, comparedTitle: selected.candidate.title };
+    return { decision: { jobId: selected.candidate.id, rule: "simhash", detail }, blockedByTitle: false };
   }
-  if (hash !== null && input.normalized.titleNorm !== "") {
+
+  if (normalized.titleNorm !== "") {
     const companyKey = resolveCompanyName(input.companyName, config).nameNorm;
-    for (const candidate of await listJobsOfOtherCompaniesByTitle(db, input.companyId, input.normalized.titleNorm)) {
+    const limit = config.dedupe.cross_company_simhash_max_distance;
+    for (const candidate of present(await loaders.relatedCompanyByTitle())) {
       if (candidate.simhash === null || !relatedCompanyKeys(companyKey, candidate.companyNameNorm)) continue;
-      if (hammingDistance(hash, candidate.simhash) <= config.dedupe.cross_company_simhash_max_distance) {
-        const job = await getJob(db, candidate.id);
-        if (job) return { job, kind: "simhash" };
-      }
+      const distance = hammingDistance(hash, candidate.simhash);
+      if (distance > limit) continue;
+      const detail: MatchDetail = { rule: "related_company", title: guard.enabled ? "same" : null, distance, limit, comparedTitle: candidate.title };
+      return { decision: { jobId: candidate.id, rule: "related_company", detail }, blockedByTitle: false };
     }
   }
-  return null;
+  return { decision: null, blockedByTitle: blocked };
+}
+
+/** Run a loader at most once. */
+function once<T>(load: () => Promise<T>): () => Promise<T> {
+  let result: Promise<T> | null = null;
+  return () => (result ??= load());
+}
+
+const candidateOf = (row: SimhashCandidateRow): MatchCandidate => ({ id: row.id, simhash: row.simhash, title: row.title, titleNorm: row.titleNorm, locations: storedLocations(row) });
+
+export interface FindMatchResult {
+  match: JobMatch | null;
+  blockedByTitle: boolean;
+}
+
+/**
+ * `decideMatch` on the database. A job that is gone by the time it is fetched counts as absent: the decision is made again
+ * without it, so the next eligible candidate gets its turn.
+ */
+export async function findMatchingJob(db: Executor, input: MatchInput, config: PipelineConfig): Promise<FindMatchResult> {
+  const fetched = new Map<number, Job>();
+  const remember = (job: Job): Job => {
+    fetched.set(job.id, job);
+    return job;
+  };
+  const loaders: MatchLoaders = {
+    sameSource: once(async () => {
+      const job = await findJobByFamilyExternalId(db, { family: input.channelFamily, externalId: input.externalId, excludeRawPostingId: input.rawPostingId });
+      return job && { id: remember(job).id };
+    }),
+    byCompanyTitle: once(async () => (await listJobsByCompanyTitle(db, input.companyId, input.normalized.titleNorm)).map((job) => ({ id: remember(job).id, locations: storedLocations(job) }))),
+    sameCompanyWithHash: once(async () => (await listJobsWithSimhash(db, input.companyId)).map(candidateOf)),
+    relatedCompanyByTitle: once(async () => (await listJobsOfOtherCompaniesByTitle(db, input.companyId, input.normalized.titleNorm)).map((row) => ({ ...candidateOf(row), companyNameNorm: row.companyNameNorm }))),
+  };
+  const exclude = new Set<number>();
+  for (;;) {
+    const { decision, blockedByTitle } = await decideMatch(input, loaders, config, exclude);
+    if (!decision) return { match: null, blockedByTitle };
+    const job = fetched.get(decision.jobId) ?? (await getJob(db, decision.jobId));
+    if (job) return { match: { job, kind: decision.rule === "related_company" ? "simhash" : decision.rule, detail: decision.detail }, blockedByTitle: false };
+    exclude.add(decision.jobId);
+  }
 }
 
 // ---------------------------------------------------------------- merge
@@ -146,7 +239,7 @@ export function fieldsOf(n: NormalizedJob): JobFields {
   };
 }
 
-export function fieldsOfJob(job: Job): JobFields {
+export function fieldsOfJob(job: Pick<Job, keyof JobFields>): JobFields {
   return {
     title: job.title,
     titleNorm: job.titleNorm,
@@ -224,4 +317,15 @@ export function mergeJobFields(existing: JobFields, incoming: JobFields, incomin
     isAgency: existing.isAgency || incoming.isAgency,
     skills: [...new Set([...existing.skills, ...incoming.skills])],
   };
+}
+
+/** A new source wins a job's fields when no other source has a better apply-link priority. */
+export function sourceWins(priority: number, otherBest: number | null): boolean {
+  return otherBest === null || priority <= otherBest;
+}
+
+/** The job's fields after a posting joined it; a winning source also brings its company. */
+export function applyMerge(job: JobFields, incoming: JobFields, wins: boolean, incomingCompanyId: number): JobFields & { companyId?: number } {
+  const merged = mergeJobFields(job, incoming, wins);
+  return wins ? { ...merged, companyId: incomingCompanyId } : merged;
 }

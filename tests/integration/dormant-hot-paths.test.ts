@@ -66,7 +66,7 @@ it("excludes dormancy from each automatic scan, review, preview, bonus and AI qu
   const pipeline = shippedPipeline();
   const normalized = normalizeDraft({ title: dormant.title, companyName: company!.name, locations: [], workplace: "unknown", description: dormant.description ?? "", applyUrl: null, sourceUrl: null }, pipeline);
   const matched = await findMatchingJob(db, { normalized, companyId: company!.id, companyName: company!.name, channelFamily: "manual", externalId: "incoming", rawPostingId: 0 }, pipeline);
-  expect(matched?.job.id).toBe(dormant.id);
+  expect(matched.match?.job.id).toBe(dormant.id);
 });
 
 it("default lists, company counts, navigation and palette agree while explicit statuses include dormant jobs", async () => {

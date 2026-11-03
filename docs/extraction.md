@@ -48,6 +48,49 @@ The `contract` section: student / internship is judged only from the title and t
 
 When the same job has differently written company names in different sources ("SIV.AG" / "SIV.AG - Service für Informationsverarbeitung AG", "Allianz in Deutschland" / "Allianz Kunde und Markt GmbH"), duplicates used to be searched for only under the same company name, so merges were missed. Now two postings are merged only if the company names are related (one is a word-prefix of the other, or the first word is the same), the titles are identical, and the SimHash distance is ≤ `dedupe.cross_company_simhash_max_distance` (default 14, wider than the same-company `simhash_max_distance`, because the same JD has different boilerplate on StepStone and LinkedIn). Duplicates already in the database are not merged retroactively; this only applies to jobs that come in afterwards.
 
+## Merging duplicate jobs
+
+A new posting joins an existing job when one of four checks finds one, in this order:
+
+1. **Same source**: the same external id from the same channel family.
+2. **Exact key**: same company, same normalized title, same city.
+3. **Description**: same company and a SimHash of the description within a limit.
+4. **Related company**: a company whose name is a variant of this one's, the same normalized title, and a SimHash within
+   `dedupe.cross_company_simhash_max_distance`.
+
+Companies often reuse one description for different levels and directions, so check 3 alone can merge different jobs. The
+optional title check, `dedupe.title_guard` in `pipeline.yaml`, compares the titles first. It is off by default: a check of
+real data still lost more true duplicates than this feature accepts, mostly titles reworded in ways no rule can read.
+
+| Relation | Means | Limit |
+| --- | --- | --- |
+| `same` | the normalized titles are equal | `same_title_max_distance` |
+| `compatible` | the titles differ only by a city, a country both postings are in, a work mode, a gender marker, spelling (`synonyms`) or word order | `simhash_max_distance` |
+| `different` | anything else | `different_title_max_distance` (`null`: never on the description alone) |
+
+With the check on, the nearest candidate within its limit wins, then the oldest. With it off, the first candidate within
+`simhash_max_distance` wins, whatever its title. Levels, regions (`scope_words`) and translated titles count as different.
+The other keys are the word lists the comparison uses: `city_connectors`, `work_mode_words`, `seniority_words` and
+`ignore_patterns`. Cities come from the market's table and the postings' own locations.
+
+The commented block in the shipped `pipeline.yaml` lists the defaults, and `pnpm config:check` holds it equal to the code.
+To turn the check on, your `data/config/pipeline.yaml` needs `dedupe.title_guard.enabled: true`. That file replaces the
+shipped one as a whole, so the other shipped defaults stop following product updates until you delete it.
+
+The check applies to postings filed from then on. Merges already made stay, and `pnpm reprocess` does not match jobs again.
+Turning it back off is equally safe: jobs kept apart stay apart, and new postings follow the old rule.
+
+To see what a change would do before making it, replay a snapshot of your own database. Nothing is written to it, and the
+snapshot holds full postings, so keep it outside any repository:
+
+```bash
+pnpm simhash:analyze --export <file> --compose-dir <installation directory>
+pnpm simhash:analyze --guard --input <file> [--same-title-max N] [--seed N]
+```
+
+The report compares the old rule with the current config, sweeps `same_title_max_distance` from 3 to 8, and lists the merges
+lost, the merges added and the postings moved to another job, plus a sample of stored merges whose titles differ.
+
 ## Company and title keys
 
 Postings are matched to the same job (and to the same company) by keys: the company key is the company name in lower case

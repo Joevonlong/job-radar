@@ -26,6 +26,33 @@ const amountRange = z.strictObject({ min: nonNegativeNumber, max: nonNegativeNum
 
 const periodFactors = z.strictObject(Object.fromEntries(SALARY_PERIODS.map((p) => [p, z.number().positive()])) as Record<(typeof SALARY_PERIODS)[number], z.ZodNumber>);
 
+const hammingBits = z.number().int().min(0).max(64);
+
+/**
+ * `dedupe.title_guard`: whether the same-company SimHash pass looks at the titles first (see `src/lib/pipeline/title-guard.ts`).
+ * `pnpm config:check` holds the commented block in the shipped pipeline.yaml equal to these defaults.
+ */
+export const titleGuardSchema = z.strictObject({
+  /** false (the default): the old rule (any title, within `simhash_max_distance`). */
+  enabled: z.boolean().default(false),
+  /** Limit for titles with the same key. */
+  same_title_max_distance: hammingBits.default(8),
+  /** Limit for titles that do not relate; null: never merge them on the description alone. */
+  different_title_max_distance: hammingBits.nullable().default(null),
+  /** Single title words read as another word or words ("sr" -> "senior"). */
+  synonyms: z.record(z.string().regex(/^\S+$/, "must be a single word"), nonEmptyString).default({ sr: "senior", snr: "senior", jr: "junior" }),
+  /** Words that join a city to the end of a title ("... in Nuremberg"). */
+  city_connectors: z.array(nonEmptyString).default(["in", "at", "bei", "im", "for", "für"]),
+  /** Segments that only say how the work is done. */
+  work_mode_words: z.array(nonEmptyString).default(["remote", "hybrid", "on-site", "onsite", "home office", "homeoffice", "remote-first", "fully remote", "100% remote", "remote worldwide", "100% remote worldwide", "mobiles arbeiten"]),
+  /** A lone work-mode word at the start of a title goes only when one of these follows ("Remote Senior Engineer", not "Remote Sensing Engineer"). */
+  seniority_words: z.array(nonEmptyString).default(["junior", "jr", "mid", "senior", "sr", "snr", "staff", "principal", "lead", "head", "intern", "werkstudent", "praktikant"]),
+  /** Regions: a segment equal to one is never stripped, whatever else it could be. */
+  scope_words: z.array(nonEmptyString).default(["eu", "europe", "emea", "dach", "apac", "latam", "nordics", "benelux", "americas"]),
+  /** Applied to the title first (ignoring case): gender markers the built-in rule only half removes ("(m/w/div)", "(w/m/divers)"), a site name at the end ("... - example.com"). */
+  ignore_patterns: z.array(regexString).default(["[(\\[]?\\s*\\b(?:[mwfdx]|div(?:erse?)?)\\s*[/|\\\\]\\s*(?:[mwfdx]|div(?:erse?)?)\\s*[/|\\\\]\\s*(?:[mwfdx]|div(?:erse?)?)\\b\\s*[)\\]]?", "\\s[-–—|·]\\s*[\\p{L}\\p{N}-]+\\.(?:com|net|org|de)\\s*$"]),
+});
+
 /** `job_checks.visa` when the file has none (the visa check of the `signals` step, docs/visa-sponsorship.md). */
 export const VISA_CHECK_DEFAULTS = { per_cycle_limit: 2000, max_quotes: 3, quote_max_chars: 280, negation_words_before: 6, negation_words_after: 5, heading_max_chars: 60 } as const;
 
@@ -67,7 +94,7 @@ const ghostCheckSchema = z
     /** Open for a long time: days since the trusted posted date (else since first seen, at most `first_seen_max_points`). */
     long_open: z
       .strictObject({
-        enabled: z.boolean().default(true),
+        enabled: z.boolean().default(false),
         /** The highest tier whose `days` are reached gives its points. */
         tiers: z
           .array(z.strictObject({ days: ghostDays, points: ghostPoints }))
@@ -80,17 +107,17 @@ const ghostCheckSchema = z
       })
       .default({ ...GHOST_CHECK_DEFAULTS.long_open, tiers: GHOST_CHECK_DEFAULTS.long_open.tiers.map((tier) => ({ ...tier })) }),
     /** The source labels the posting "reposted" (the market packs' `ghost.repost_label_patterns`). */
-    repost_label: z.strictObject({ enabled: z.boolean().default(true), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.repost_label.points) }).default(GHOST_CHECK_DEFAULTS.repost_label),
+    repost_label: z.strictObject({ enabled: z.boolean().default(false), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.repost_label.points) }).default(GHOST_CHECK_DEFAULTS.repost_label),
     /** The same channel listed it again under a new id at least `min_gap_days` later, at the same place. */
     reposted: z
-      .strictObject({ enabled: z.boolean().default(true), min_gap_days: ghostDays.default(GHOST_CHECK_DEFAULTS.reposted.min_gap_days), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.reposted.points) })
+      .strictObject({ enabled: z.boolean().default(false), min_gap_days: ghostDays.default(GHOST_CHECK_DEFAULTS.reposted.min_gap_days), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.reposted.points) })
       .default(GHOST_CHECK_DEFAULTS.reposted),
     /** The JD says it is a talent pool / always open (the market packs' `ghost.evergreen_patterns`). */
-    evergreen_wording: z.strictObject({ enabled: z.boolean().default(true), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.evergreen_wording.points) }).default(GHOST_CHECK_DEFAULTS.evergreen_wording),
+    evergreen_wording: z.strictObject({ enabled: z.boolean().default(false), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.evergreen_wording.points) }).default(GHOST_CHECK_DEFAULTS.evergreen_wording),
     /** A JD from a full-text source with fewer than `min_words` words, or without a duties section. */
     thin_description: z
       .strictObject({
-        enabled: z.boolean().default(true),
+        enabled: z.boolean().default(false),
         min_words: z.number().int().min(0).max(5000).default(GHOST_CHECK_DEFAULTS.thin_description.min_words),
         points: ghostPoints.default(GHOST_CHECK_DEFAULTS.thin_description.points),
         /**
@@ -164,7 +191,7 @@ export const pipelineSchema = z.strictObject({
   batch_size: positiveInt,
 
   dedupe: z.strictObject({
-    /** Two postings of the same company merge when their description SimHashes differ in at most this many of 64 bits. */
+    /** Two postings of the same company with compatible titles merge when their description SimHashes differ in at most this many of 64 bits (with `title_guard.enabled: false`: whatever their titles). */
     simhash_max_distance: z.number().int().min(0).max(64),
     /** Words per shingle the SimHash is built from. */
     /** Same title and a related company name (one is a word-prefix of the other, or they share the first word: "SIV.AG" / "SIV.AG - Service für …", "Allianz in Deutschland" / "Allianz Kunde und Markt"): merge when the SimHash distance is within this many bits. Looser than `simhash_max_distance` because a StepStone and a LinkedIn copy of one JD differ in boilerplate. */
@@ -172,6 +199,8 @@ export const pipelineSchema = z.strictObject({
     simhash_shingle_words: positiveInt,
     /** Descriptions with fewer words get no SimHash (too short to compare reliably). */
     simhash_min_words: positiveInt,
+    /** The title condition of the same-company SimHash pass; each field has a default, so files without it keep working. */
+    title_guard: titleGuardSchema.prefault({}),
   }),
 
   lifecycle: z.strictObject({
