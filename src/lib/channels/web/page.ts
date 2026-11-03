@@ -1,12 +1,20 @@
 import { ChannelError, looksBlocked } from "../errors";
-import type { ChannelContext } from "../types";
+import type { ChannelContext, HttpResponse } from "../types";
 
 /** Fetching HTML pages of the job boards: politeness headers, "gone" pages, bot-detection pages. */
 
 export interface PageRequest {
   url: string;
   userAgent: string;
+  /**
+   * When set, redirects are not followed blindly: each hop's target must pass this check (a site whose robots.txt limits which URLs may be
+   * requested), or the request fails without asking for it. Without it redirects are followed as `fetch` does.
+   */
+  allowRedirectTo?: (target: URL) => boolean;
 }
+
+const REDIRECT_STATUSES = [301, 302, 303, 307, 308] as const;
+const MAX_REDIRECT_HOPS = 5;
 
 /** Statuses that mean "this posting is not there (any more)", not a failure. */
 const GONE_STATUSES = [404, 410] as const;
@@ -24,13 +32,41 @@ function headers(userAgent: string): Record<string, string> {
  * 403 and verification pages arrive as `blocked` and must end the query: do not try again.
  */
 export async function fetchHtml(ctx: ChannelContext, request: PageRequest): Promise<string | null> {
-  const response = await ctx.http.request(request.url, { headers: headers(request.userAgent), allowStatus: GONE_STATUSES });
+  const response = await requestChecked(ctx, request);
   if (GONE_STATUSES.some((status) => status === response.status)) return null;
   try {
     return await response.text();
   } catch (error) {
     throw new ChannelError("network", `reading the response of ${new URL(request.url).host} failed`, { cause: error });
   }
+}
+
+async function requestChecked(ctx: ChannelContext, request: PageRequest): Promise<HttpResponse> {
+  const { allowRedirectTo } = request;
+  if (allowRedirectTo === undefined) return ctx.http.request(request.url, { headers: headers(request.userAgent), allowStatus: GONE_STATUSES });
+  let url = request.url;
+  for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
+    const response = await ctx.http.request(url, {
+      headers: headers(request.userAgent),
+      allowStatus: [...GONE_STATUSES, ...REDIRECT_STATUSES],
+      redirect: "manual",
+    });
+    if (!REDIRECT_STATUSES.some((status) => status === response.status)) return response;
+    const location = response.headers.get("location");
+    await response.cancel?.();
+    let target: URL | null = null;
+    try {
+      target = location === null ? null : new URL(location, url);
+    } catch {
+      target = null;
+    }
+    const host = new URL(url).host;
+    if (target === null || !allowRedirectTo(target)) {
+      throw new ChannelError("unknown", `${host}: redirected to a URL the site's robots.txt does not permit, not followed`, { retryable: false });
+    }
+    url = target.toString();
+  }
+  throw new ChannelError("unknown", `${new URL(request.url).host}: too many redirects`, { retryable: false });
 }
 
 /**

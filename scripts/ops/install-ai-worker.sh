@@ -747,8 +747,10 @@ check_stopping() { [[ "$STOPPING" == 1 ]] && fail_switch "interrupted (SIG$STOP_
 
 # ---- step 3: the new definition ----------------------------------------------------------------------------------
 check_stopping 3
-TMP_DEF="$(mktemp "${TMPDIR:-/tmp}/ai-worker-definition.XXXXXX")" || fail_switch "cannot create a temporary file"
-TMP_PID="$(mktemp "${TMPDIR:-/tmp}/ai-worker-pid.XXXXXX")" || fail_switch "cannot create a temporary file"
+# the names are known before the files exist (mktemp -u), so a signal at any point still finds them for on_exit to remove
+TMP_DEF="$(mktemp -u "${TMPDIR:-/tmp}/ai-worker-definition.XXXXXX")" || fail_switch "cannot create a temporary file"
+TMP_PID="$(mktemp -u "${TMPDIR:-/tmp}/ai-worker-pid.XXXXXX")" || fail_switch "cannot create a temporary file"
+( set -C; umask 077; : > "$TMP_DEF" && : > "$TMP_PID" ) || fail_switch "cannot create a temporary file"
 chmod 600 "$TMP_DEF"
 render_definition "$LABEL" "$DB_URL" > "$TMP_DEF" || fail_switch "cannot render the definition"
 if [[ "$MANAGER" == launchd ]]; then plutil -lint "$TMP_DEF" >/dev/null || fail_switch "the generated plist is not valid"; fi

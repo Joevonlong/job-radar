@@ -298,11 +298,11 @@ collect:
   windows without a deploy; switching off query rotation alone does not turn off catch-up.
 
 LinkedIn session searches, guest, JSearch and other channels that use the window catch up, including the single-query
-Arbeitnow scan. **Bright Data, Apify and Monid do not automatically catch up yet:** they are billed per record, use coarse
-date ranges and do not return results newest first. They always keep the base window, losing the gap beyond it; a run
-that meets the coverage rules still counts for the family, so a later channel will not recover that gap. Catch-up will
-be enabled for each of these channels only after exact-window requests and newest-first results under its active
-settings have been measured.
+Arbeitnow scan. **Bright Data, Apify and Monid do not automatically catch up yet:** they are billed per record and do not return
+results newest first, and Bright Data and Monid also use coarse date ranges (Apify's default template requests the exact
+window). They always keep the base window, losing the gap beyond it; a run that meets the coverage rules still counts
+for the family, so a later channel will not recover that gap. Catch-up will be enabled for each of these channels only
+after exact-window requests and newest-first results under its active settings have been measured.
 
 Channels that ignore the search window also keep the base: widening fetches nothing extra and would only stop their
 successful runs from counting as possibly-closed evidence:
@@ -552,6 +552,18 @@ If you switch scraping channels on: read the terms of every site, keep volumes l
 default schedule), do not republish collected data, and prefer official APIs, company career boards and your own job-alert
 emails. You are responsible for how you use them.
 
+**StepStone and its robots.txt.** StepStone's `robots.txt` (checked 2026-11-03) disallows `/jobs/*?*` and allows only a search
+URL with a single `q=` parameter. The channel therefore sends exactly one form,
+`/jobs/<keyword>/in-<city>?q=<keyword>` (nationwide without the city for remote and company queries), and nothing else:
+no `sort`, `ag` (look-back), `radius`, `wfh` or `page` parameter. Consequences: one request per keyword and place returns
+about 25 results in StepStone's own order (relevance, not newest first), there is no paging, and the look-back window is
+applied afterwards from each posting's date, so a window of one day keeps only the few of those 25 that are that new.
+The radius is StepStone's default for the city, and a remote query searches nationwide and keeps postings that mention
+home office ("home office possible" or "only"). The `radius_km` and `max_pages` settings of `sources.stepstone` no longer
+exist (the config update removes them; XING keeps its own). Coverage is lower than before, so StepStone is best used
+together with Arbeitsagentur and the company boards. Posting pages are requested without a query, as before. If StepStone
+changes its `robots.txt`, the rule is a single constant in `src/lib/channels/stepstone/client.ts`.
+
 ### Disclaimer
 
 Some sources read public web pages or unofficial endpoints. Job boards' terms of service may forbid automated access,
@@ -578,7 +590,7 @@ Capacity is at most `max_per_cycle × cycles per day` company queries per unit p
 
 Before storing results, successfully parsed employers must match the query or another watched company. Parse failures keep their raw payload for diagnosis. `runs.fetched` counts the provider's answer before filtering; new counts include only retained postings. Logs report `company_mismatch` and up to three employer names. Legal entities, subsidiaries and brands are not automatically merged: watch each spelling or add `pipeline.yaml: company.aliases` ([extraction](extraction.md#company-and-title-keys)). Common short names can consume result slots with unrelated hits; prefer an ATS board when available. Arbeitsagentur uses its free-text `was` fallback plus this employer check.
 
-How each channel asks: LinkedIn through Bright Data, Apify and the session searches the company name in your home country with no remote filter; JSearch sends one request, `<company> in <home country>`, without `work_from_home`; StepStone and XING search the name nationwide, without a city, radius, home-office or remote filter, and without the title prefilter, because a job title does not contain the company name.
+How each channel asks: LinkedIn through Bright Data, Apify and the session searches the company name in your home country with no remote filter; JSearch sends one request, `<company> in <home country>`, without `work_from_home`; StepStone and XING search the name nationwide, without a city, radius, home-office or remote filter (StepStone sends only `?q=`, see above), and without the title prefilter, because a job title does not contain the company name.
 
 **Pages of other employers are not opened.** When a channel's result list names the employer (Arbeitsagentur, LinkedIn session, JSearch, StepStone, XING), a company query opens the detail page of an entry only if its employer is the searched company or another watched company. The rest stay list data and are dropped by the check above, so they use up no page, detail request, daily page limit or `max_details_per_query`. An entry that names no employer is opened, as before. The check does not cover the jobspy channels, whose sidecar fetches descriptions itself.
 
@@ -587,7 +599,7 @@ How each channel asks: LinkedIn through Bright Data, Apify and the session searc
 - Bright Data: `cost_per_1k_usd` per 1000 records, after the free allowance.
 - Apify: `price_per_1k_usd` per 1000 records plus `run_start_usd` per query.
 - JSearch: `pages_per_query` requests per query against `monthly_request_limit`, then `overage_cost_per_request_usd` each.
-- StepStone and XING: free, but each query is one search request series and the matching employer's pages are opened like any other.
+- StepStone and XING: free, but each query is one search request (StepStone: one, no paging; XING: a few pages) and the matching employer's pages are opened like any other.
 
 `monthly_budget_usd` of the channel and `paid_total_monthly_budget_usd` still cap the total: when a budget runs out, the query goes to the next channel of the cascade or is skipped, as for keyword queries. With the defaults (3 companies per cycle, 24 hours apart, 25 results) ten watched companies use at most 7,500 results a month on one paid channel.
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { writerSchema } from "@/lib/config/schemas/writer";
+import { defaultFigureUnits, writerSchema } from "@/lib/config/schemas/writer";
 import { diffSentences } from "@/lib/writer/diff";
-import { countStatuses, figures, isFirstPerson, nameCandidates, normalize, verifySentence, verifySuggestion, type RawSentence, type VerifyContext } from "@/lib/writer/verify";
+import { countStatuses, figures, isFirstPerson, missingFigures, nameCandidates, normalize, verifySentence, verifySuggestion, type RawSentence, type VerifyContext } from "@/lib/writer/verify";
 
 const config = writerSchema.parse({}).evidence;
 
@@ -254,9 +254,19 @@ describe("figures", () => {
     expect(unbacked.missing).toEqual(["2M"]);
     // digits inside a word stay names
     expect(figures("S3, K8s, 5mm").shown).toEqual([]);
-    // a single-letter unit does not stack on k: 5km is a name, 5k and 5 m are figures
+    // a single-letter unit does not stack on k: 5km is a name, 5k and 5M are figures; with a space the letter is a word (5 m of cable), not a unit
     expect(figures("ran 5km").shown).toEqual([]);
-    expect([...figures("5k users, 5 m users").keys]).toEqual(["5000", "5000000"]);
+    expect([...figures("5k users, 5M users").keys]).toEqual(["5000", "5000000"]);
+    expect([...figures("a wall 5 m high, 3 b").keys]).toEqual(["5", "3"]);
+    // after a currency sign or code a spaced letter is an amount; a spaced x is still a multiple
+    expect([...figures("raised $5 m, EUR 5 M, 3 x").keys]).toEqual(["5000000", "3x"]);
+    expect(figures("$5M").keys).toEqual(figures("$5 m").keys);
+    for (const [claim, evidence] of [["raised $5 m", "5 years"], ["€5 M ARR", "worked 5 years"], ["grew revenue 3 x", "3 years"]] as const) {
+      expect(missingFigures(claim, evidence, defaultFigureUnits()).length, claim).toBeGreaterThan(0);
+    }
+    expect(missingFigures("a wall 5 m high", "5 metres", defaultFigureUnits())).toEqual([]);
+    // a longer word stays a unit with a space
+    expect([...figures("5 million users").keys]).toEqual(["5000000"]);
   });
 
   it("units in a row multiply: 3千万 is 30,000,000, not 3000", () => {

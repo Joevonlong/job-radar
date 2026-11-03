@@ -76,7 +76,7 @@ describe("linkedin-apify request", () => {
 
   it("leaves the keyword request unchanged", () => {
     expect(buildActorInputs(apifyQuery(), settings(), 25, market)).toEqual([
-      { keywords: '"AI Engineer" OR "LLM Engineer"', location: "Berlin, Germany", datePosted: "r86400", limit: 25 },
+      { keywords: '"AI Engineer" OR "LLM Engineer"', location: "Berlin, Germany", urlParam: [{ key: "f_TPR", value: "r86400" }], limit: 25 },
     ]);
   });
 });
@@ -148,34 +148,35 @@ describe("jsearch request", () => {
 describe("stepstone", () => {
   const settings = () => shippedChannels().sources.stepstone;
   const NOW = new Date("2026-10-07T12:00:00Z");
-  const extra = (over: Record<string, unknown> = {}): Record<string, unknown> => ({ ...settings(), enabled: true, max_pages: 1, ...over });
+  const extra = (over: Record<string, unknown> = {}): Record<string, unknown> => ({ ...settings(), enabled: true, ...over });
   const DETAILS: Record<string, string> = { "90000001": "detail-berlin.html", "90000003": "detail-multicity.html", "90000004": "detail-no-jsonld.html" };
   const site = (log: URL[]): Handler => ({ url }) => {
     if (url.pathname.startsWith("/jobs/")) {
       log.push(url);
-      return htmlResponse(200, fixtureHtml("stepstone", Number(url.searchParams.get("page") ?? "1") > 1 ? "search-empty.html" : "search-berlin.html"));
+      return htmlResponse(200, fixtureHtml("stepstone", "search-berlin.html"));
     }
     const file = DETAILS[/-(\d+)-inline\.html$/.exec(url.pathname)?.[1] ?? ""];
     return file ? htmlResponse(200, fixtureHtml("stepstone", file)) : htmlResponse(404, "not found");
   };
 
-  it("builds a nationwide company URL: no city, radius or home-office filter", () => {
-    const url = new URL(stepstoneSearchUrl(settings(), { keyword: "Nordlicht Bank", location: null, kind: "company", windowHours: 24, page: 2 }) ?? "");
+  it("builds a nationwide company URL: no city, radius or home-office filter, only the q= parameter robots.txt permits", () => {
+    const url = new URL(stepstoneSearchUrl(settings(), { keyword: "Nordlicht Bank", location: null, kind: "company" }) ?? "");
     expect(url.pathname).toBe("/jobs/nordlicht-bank");
-    expect(Object.fromEntries(url.searchParams)).toEqual({ sort: "2", ag: "age_1", page: "2" });
-    // a city or the radius cannot slip in through `location` either
-    const stray = new URL(stepstoneSearchUrl(settings(), { keyword: "Nordlicht Bank", location: "Berlin", kind: "company", windowHours: 24, page: 1 }) ?? "");
+    expect(url.search).toBe("?q=nordlicht-bank");
+    // a city cannot slip in through `location` either
+    const stray = new URL(stepstoneSearchUrl(settings(), { keyword: "Nordlicht Bank", location: "Berlin", kind: "company" }) ?? "");
     expect(stray.pathname).toBe("/jobs/nordlicht-bank");
-    expect(stray.searchParams.has("radius")).toBe(false);
+    expect(stray.search).toBe("?q=nordlicht-bank");
   });
 
-  it("builds the same URLs as before for city and remote searches", () => {
-    const located = new URL(stepstoneSearchUrl(settings(), { keyword: "KI", location: "Berlin", kind: "city", windowHours: 24, page: 1 }) ?? "");
+  it("builds city and remote searches with the same single parameter", () => {
+    const located = new URL(stepstoneSearchUrl(settings(), { keyword: "KI", location: "Berlin", kind: "city" }) ?? "");
     expect(located.pathname).toBe("/jobs/ki/in-berlin");
-    expect(located.searchParams.get("radius")).toBe(String(settings().radius_km));
-    const remote = new URL(stepstoneSearchUrl(settings(), { keyword: "KI", location: null, kind: "remote", windowHours: 24, page: 1 }) ?? "");
-    expect(remote.searchParams.get("wfh")).toBe("1");
-    expect(stepstoneSearchUrl(settings(), { keyword: "KI", location: "Berlin", windowHours: 24, page: 1 })).toBe(stepstoneSearchUrl(settings(), { keyword: "KI", location: "Berlin", kind: "city", windowHours: 24, page: 1 }));
+    expect(located.search).toBe("?q=ki");
+    const remote = new URL(stepstoneSearchUrl(settings(), { keyword: "KI", location: null, kind: "remote" }) ?? "");
+    expect(remote.pathname).toBe("/jobs/ki");
+    expect(remote.search).toBe("?q=ki");
+    expect(stepstoneSearchUrl(settings(), { keyword: "KI", location: "Berlin" })).toBe(stepstoneSearchUrl(settings(), { keyword: "KI", location: "Berlin", kind: "city" }));
   });
 
   const companyQuery = () => asCompany(searchQuery({ windowHours: 24 * 60, maxResults: 10 }), "Nordlicht Bank");
@@ -185,8 +186,7 @@ describe("stepstone", () => {
     const { ctx } = makeContext(site(urls), extra({ fetch_details: false }));
     const postings = await createStepstoneChannel({ now: () => NOW }).collect(companyQuery(), ctx);
     expect(urls[0]?.pathname).toBe("/jobs/nordlicht-bank");
-    expect(urls[0]?.searchParams.has("radius")).toBe(false);
-    expect(urls[0]?.searchParams.has("wfh")).toBe(false);
+    expect(urls[0]?.search).toBe("?q=nordlicht-bank");
     expect(postings.length).toBeGreaterThan(3);
   });
 

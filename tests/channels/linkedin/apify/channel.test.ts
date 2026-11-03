@@ -43,7 +43,7 @@ describe("input generation", () => {
     expect(apify.requests).toHaveLength(1);
     const request = apify.requests[0];
     expect(request).toMatchObject({ method: "POST", path: "/v2/acts/valig~linkedin-jobs-scraper/run-sync-get-dataset-items" });
-    expect(request?.body).toEqual({ keywords: '"AI Engineer" OR "LLM Engineer"', location: "Berlin, Germany", datePosted: "r86400", limit: 10 });
+    expect(request?.body).toEqual({ keywords: '"AI Engineer" OR "LLM Engineer"', location: "Berlin, Germany", urlParam: [{ key: "f_TPR", value: "r86400" }], limit: 10 });
     expect(Object.fromEntries(request?.query ?? [])).toEqual({
       format: "json",
       timeout: "300",
@@ -64,16 +64,30 @@ describe("input generation", () => {
     expect(apify.requests[0]?.body).toEqual({
       keywords: '"AI Engineer" OR "LLM Engineer"',
       location: "European Union",
-      datePosted: "r86400",
       limit: 10,
-      urlParam: [{ key: "f_WT", value: "2" }],
+      urlParam: [{ key: "f_TPR", value: "r86400" }, { key: "f_WT", value: "2" }],
     });
   });
 
-  it("maps window hours to the actor's look-back values, and leaves the key out beyond a month", async () => {
+  it("requests each query's own window in seconds and never a sort", async () => {
     const apify = fakeApify();
     const channel = makeChannel();
     const { ctx } = await harness(channel, apify);
+    for (const windowHours of [10, 24, 25, 721]) await channel.collect(berlinQuery({ windowHours }), ctx);
+    expect(apify.requests.map((r) => r.body.urlParam)).toEqual(["r36000", "r86400", "r90000", "r2595600"].map((value) => [{ key: "f_TPR", value }]));
+    for (const request of apify.requests) {
+      expect(request.body).not.toHaveProperty("datePosted");
+      expect(JSON.stringify(request.body)).not.toContain("sortBy");
+    }
+  });
+
+  it("a template with {date_posted} maps window hours to the actor's look-back values, and leaves the key out beyond a month", async () => {
+    const apify = fakeApify();
+    const channel = makeChannel();
+    const config = apifyConfig((block) => {
+      block.input_template = { keywords: "{keywords}", location: "{location}", datePosted: "{date_posted}", limit: "{limit}" };
+    });
+    const { ctx } = await harness(channel, apify, { config });
     for (const windowHours of [10, 24, 25, 168, 169, 720, 721]) await channel.collect(berlinQuery({ windowHours }), ctx);
     expect(apify.requests.map((r) => r.body.datePosted)).toEqual(["r86400", "r86400", "r604800", "r604800", "r2592000", "r2592000", undefined]);
   });

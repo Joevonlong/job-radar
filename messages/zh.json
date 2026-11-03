@@ -8009,7 +8009,7 @@
         "provider_error": "AI 服务商报错，请重试。",
         "network": "连不上 AI 服务商，请重试。",
         "budget": "AI API 本月预算已用完。",
-        "quota_guard": "已达到 Job Radar 自己的 AI 用量上限。{time, select, none {稍后会自动继续。} other {{time} 后可再用。}}",
+        "quota_guard": "已达 Job Radar 的 AI 用量上限（只统计 Job Radar 自己的调用）。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}",
         "unavailable": "现在没有可用的 AI 服务商。请检查 CLI 登录或 API key 后重试。",
         "failed": "生成失败，请重试。",
         "invalid_payload": "请求无效。",

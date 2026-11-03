@@ -267,7 +267,7 @@ collect:
   设为 `max_catch_up_hours: 0` 可关闭补窗、恢复基础窗口，无需部署；只关闭查询轮换不会关闭补窗。
 
 LinkedIn 会话搜索、guest、JSearch 等使用时间窗的通道会补窗，只有一个查询的 Arbeitnow 扫描也一样。
-**Bright Data、Apify 和 Monid 暂不自动补窗：**它们按条计费，时间档位较粗，结果也不按新到旧返回，因此始终使用基础窗口，
+**Bright Data、Apify 和 Monid 暂不自动补窗：**它们按条计费，结果也不按新到旧返回，Bright Data 和 Monid 的时间档位还较粗（Apify 的默认模板请求精确时间窗），因此始终使用基础窗口，
 超出窗口的缺口会丢失；只要这次运行符合覆盖规则，仍算整个家族的覆盖，后续通道不会再补回这段缺口。
 各通道只有在当前设置下能请求精确时间窗、按新到旧返回结果，并经实测确认后，才会启用自动补窗。
 
@@ -463,6 +463,14 @@ Berlin Design Network（`berlin_design_network`）发现公司 board，不采集
 如果你打开抓取类通道：阅读每个网站的条款，保持低请求量（少量关键词、少量城市、默认的调度），不要再发布采集到的数据，
 能用官方 API、公司招聘页和你自己的职位提醒邮件就优先用。使用方式由你自己负责。
 
+**StepStone 与它的 robots.txt。** StepStone 的 `robots.txt`（2026-11-03 核对）禁止 `/jobs/*?*`，只放行带单个 `q=` 参数的搜索 URL。
+因此通道只发一种形式：`/jobs/<关键词>/in-<城市>?q=<关键词>`（远程和公司查询不带城市，全国范围），不再带 `sort`、`ag`（回看窗口）、
+`radius`、`wfh`、`page` 任何参数。后果：每个关键词、每个城市一次请求，返回约 25 条，顺序由 StepStone 决定（相关度，不是最新优先），
+不能翻页，回看窗口改为事后按每条岗位的发布时间过滤，所以窗口只有一天时，这 25 条里只有少数能留下。半径用 StepStone 对该城市的默认值；
+远程查询在全国范围搜索，保留提到居家办公（"可居家办公"或"仅居家办公"）的岗位。`sources.stepstone` 的 `radius_km` 和 `max_pages` 不再存在
+（配置升级会删掉它们；XING 仍保留自己的）。覆盖面比以前小，StepStone 最好和 Arbeitsagentur 以及公司看板一起用。岗位详情页的请求不变（不带查询参数）。
+如果 StepStone 改了 `robots.txt`，规则集中在 `src/lib/channels/stepstone/client.ts` 的一个常量里。
+
 ### 免责声明
 
 部分来源读取公开网页或非官方接口。招聘网站的服务条款可能禁止自动访问，页面也会不经通知地改版。Job Radar 是个人工具：它限制请求频率，
@@ -485,7 +493,7 @@ Job Radar 是独立项目，与它能读取或连接的任何招聘网站、雇�
 
 入库前，仅保留雇主归一 key 命中本查询或其他关注公司的结果；解析失败的原始记录仍保留供流水线诊断。`runs.fetched` 是后过滤前的返回数，新增数只计实际保留的岗位。日志计 `company_mismatch` 并列出至多三个雇主名。法律实体、子公司和品牌不会自动合并：分别关注或在 `pipeline.yaml: company.aliases` 添加别名，见[提取](extraction.zh.md)。常见短名容易让别家的结果占满上限，能配 ATS 看板时优先用看板。Arbeitsagentur 采用 `was` 自由文本备用查询，再校验雇主。
 
-各通道的查询方式：LinkedIn 的 Bright Data、Apify 和 session 通道用公司名加本国名搜索，不加远程过滤；JSearch 发一次请求 `<公司> in <本国>`，不带 `work_from_home`；StepStone 和 XING 按名字全国搜索，不带城市、半径、居家办公或远程过滤，也不做标题预筛（岗位标题里不会有公司名）。
+各通道的查询方式：LinkedIn 的 Bright Data、Apify 和 session 通道用公司名加本国名搜索，不加远程过滤；JSearch 发一次请求 `<公司> in <本国>`，不带 `work_from_home`；StepStone 和 XING 按名字全国搜索，不带城市、半径、居家办公或远程过滤（StepStone 只发 `?q=`，见上文），也不做标题预筛（岗位标题里不会有公司名）。
 
 **其他雇主的详情页不打开。**结果列表里已有雇主名的通道（Arbeitsagentur、LinkedIn session、JSearch、StepStone、XING），公司查询只在雇主是被搜的公司或另一家关注公司时才打开该条的详情页。其余的只保留列表数据，随后被上面的雇主校验丢弃，因此不占页面、详情请求、每日页面上限，也不占 `max_details_per_query`。没写雇主名的条目照旧打开。这条规则不覆盖 jobspy 通道，它的描述由 sidecar 自己抓取。
 
@@ -494,7 +502,7 @@ Job Radar 是独立项目，与它能读取或连接的任何招聘网站、雇�
 - Bright Data：免费额度之后每 1000 条 `cost_per_1k_usd`。
 - Apify：每 1000 条 `price_per_1k_usd`，每条查询另加 `run_start_usd`。
 - JSearch：每条查询 `pages_per_query` 次请求，先计入 `monthly_request_limit`，超出后每次 `overage_cost_per_request_usd`。
-- StepStone、XING：免费；每条查询是一组搜索请求，匹配雇主的详情页与其他查询一样打开。
+- StepStone、XING：免费；StepStone 每条查询一次搜索请求（不翻页），XING 几页，匹配雇主的详情页与其他查询一样打开。
 
 通道的 `monthly_budget_usd` 和 `paid_total_monthly_budget_usd` 仍然封顶：预算用完时，查询转给级联的下一个通道或被跳过，与关键词查询一致。默认值下（每轮 3 家、间隔 24 小时、25 条结果），10 家关注公司在一个付费通道上每月至多 7,500 条结果。
 

@@ -47,7 +47,7 @@ export async function requestCompanyResearch(
   const now = input.now ?? new Date();
   if (!input.force) {
     const latest = await findLatestCompanyResearch(db, { companyId: job.companyId, promptVersion: COMPANY_RESEARCH_PROMPT_VERSION, now });
-    if (companyResearchCurrent(latest, confirmedWebsiteDomain(job))) return { state: "cached" };
+    if (companyResearchCurrent(latest, confirmedWebsiteDomain(job, input.research.company.non_company_hosts))) return { state: "cached" };
   }
   const reserved = await reserveCompanyResearchRequest(db, { companyId: job.companyId, jobId: input.jobId, force: input.force, ...(input.origin ? { origin: input.origin } : {}), maxPerDay: input.research.company.max_per_day, now });
   if (reserved.state === "quota") return { state: "error", error: "quota" };

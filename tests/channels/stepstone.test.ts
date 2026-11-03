@@ -5,7 +5,7 @@ import { MIN_DETAILS_FOR_LAYOUT_CHECK } from "@/lib/channels/details";
 import { ChannelError, PartialCollectError } from "@/lib/channels/errors";
 import { registerBuiltinChannels } from "@/lib/channels/builtin";
 import { ChannelRegistry, settingsFromConfig } from "@/lib/channels/registry";
-import { ageFacet, fetchDetail, fetchSearchPage, MAX_SLUG_LENGTH, postingUrl, searchUrl } from "@/lib/channels/stepstone/client";
+import { fetchDetail, fetchSearchPage, MAX_SLUG_LENGTH, postingUrl, searchUrl } from "@/lib/channels/stepstone/client";
 import { createStepstoneChannel } from "@/lib/channels/stepstone";
 import { parseLocations, parseStepstonePayload } from "@/lib/channels/stepstone/parse";
 import { payloadSchema, type StepstonePayload } from "@/lib/channels/stepstone/schema";
@@ -17,8 +17,7 @@ import { fixtureHtml, htmlResponse, makeContext, searchQuery, type Handler } fro
 
 const NOW = new Date("2026-10-07T12:00:00Z");
 const settings = () => shippedChannels().sources.stepstone;
-/** One result page per keyword unless a test asks for more: the fixture site has a second page that is empty. */
-const extra = (over: Record<string, unknown> = {}): Record<string, unknown> => ({ ...settings(), enabled: true, max_pages: 1, ...over });
+const extra = (over: Record<string, unknown> = {}): Record<string, unknown> => ({ ...settings(), enabled: true, ...over });
 
 const DETAIL_FIXTURES: Record<string, string> = {
   "90000001": "detail-berlin.html",
@@ -26,15 +25,14 @@ const DETAIL_FIXTURES: Record<string, string> = {
   "90000004": "detail-no-jsonld.html",
 };
 
-/** Search URLs get the recorded result page (page 2 and later are empty), posting URLs the recorded posting page. */
+/** Search URLs get the recorded result page, posting URLs the recorded posting page. */
 function site(options: { search?: string; details?: Record<string, string>; onSearch?: (url: URL) => void } = {}): Handler {
   const search = options.search ?? "search-berlin.html";
   const details = options.details ?? DETAIL_FIXTURES;
   return ({ url }) => {
     if (url.pathname.startsWith("/jobs/")) {
       options.onSearch?.(url);
-      const page = Number(url.searchParams.get("page") ?? "1");
-      return htmlResponse(200, fixtureHtml("stepstone", page > 1 ? "search-empty.html" : search));
+      return htmlResponse(200, fixtureHtml("stepstone", search));
     }
     const id = /-(\d+)-inline\.html$/.exec(url.pathname)?.[1] ?? "";
     const file = details[id];
@@ -53,7 +51,9 @@ describe("configuration", () => {
   it("rejects unknown keys and a missing user agent", () => {
     expect(() => channelsWith((raw) => ((raw.sources as Record<string, Record<string, unknown>>).stepstone!.extra_key = 1))).toThrow();
     expect(() => channelsWith((raw) => ((raw.sources as Record<string, Record<string, unknown>>).stepstone!.user_agent = " "))).toThrow();
-    expect(() => channelsWith((raw) => ((raw.sources as Record<string, Record<string, unknown>>).stepstone!.max_pages = 0))).toThrow();
+    // robots.txt permits no radius and no paging: the keys are gone, not just ignored
+    expect(() => channelsWith((raw) => ((raw.sources as Record<string, Record<string, unknown>>).stepstone!.max_pages = 2))).toThrow();
+    expect(() => channelsWith((raw) => ((raw.sources as Record<string, Record<string, unknown>>).stepstone!.radius_km = 30))).toThrow();
   });
 
   it("is registered with the built-in channels and backed by its config block", () => {
@@ -65,35 +65,100 @@ describe("configuration", () => {
   });
 });
 
+/**
+ * The rules of StepStone's robots.txt (`User-agent: *`, checked 2026-11-03) that apply to a /jobs/ search URL, evaluated like RFC 9309:
+ * the longest matching rule wins, Allow on a tie, `*` is a wildcard, `$` an end anchor.
+ */
+const ROBOTS_JOBS_RULES: ReadonlyArray<readonly ["Allow" | "Disallow", string]> = [
+  ["Disallow", "/*?*"],
+  ["Disallow", "/jobs/vollzeit/"],
+  ["Disallow", "/jobs/teilzeit/"],
+  ["Allow", "/jobs/teilzeit/in-*"],
+  ["Disallow", "/jobs/teilzeit/in-*?*"],
+  ["Allow", "/jobs/teilzeit/in-*?q=*"],
+  ["Disallow", "/jobs/home-office/"],
+  ["Disallow", "/jobs/*?*"],
+  ["Allow", "/jobs/*?q=*"],
+  ["Disallow", "/jobs/*?q*&*"],
+  ["Allow", "/?lang=*"],
+];
+
+function robotsAllows(url: URL): boolean {
+  const target = url.pathname + url.search;
+  let best: { allow: boolean; length: number } | null = null;
+  for (const [kind, rule] of ROBOTS_JOBS_RULES) {
+    const anchored = rule.endsWith("$");
+    const pattern = (anchored ? rule.slice(0, -1) : rule).split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+    if (!new RegExp(`^${pattern}${anchored ? "$" : ""}`).test(target)) continue;
+    const length = rule.length;
+    const allow = kind === "Allow";
+    if (best === null || length > best.length || (length === best.length && allow)) best = { allow, length };
+  }
+  return best?.allow ?? true;
+}
+
 describe("search URLs", () => {
-  const base = { base_url: "https://www.stepstone.de/", user_agent: "ua", radius_km: 30 };
+  const base = { base_url: "https://www.stepstone.de/", user_agent: "ua" };
 
-  it("builds a located search: keyword slug, city, newest first, window filter, radius", () => {
-    const url = new URL(searchUrl(base, { keyword: "Machine Learning Engineer", location: "München", windowHours: 24, page: 1 }) ?? "");
+  it("builds a located search: keyword slug, city, and the single q= parameter robots.txt permits", () => {
+    const url = new URL(searchUrl(base, { keyword: "Machine Learning Engineer", location: "München" }) ?? "");
     expect(url.origin + url.pathname).toBe("https://www.stepstone.de/jobs/machine-learning-engineer/in-m%C3%BCnchen");
-    expect(Object.fromEntries(url.searchParams)).toEqual({ sort: "2", ag: "age_1", radius: "30" });
+    expect(url.search).toBe("?q=machine-learning-engineer");
   });
 
-  it("builds the remote search: nationwide, home office only, no radius; later pages carry page=", () => {
-    const url = new URL(searchUrl(base, { keyword: "KI-Entwickler", location: null, windowHours: 100, page: 3 }) ?? "");
-    expect(url.pathname).toBe("/jobs/ki-entwickler");
-    expect(Object.fromEntries(url.searchParams)).toEqual({ sort: "2", ag: "age_7", wfh: "1", page: "3" });
+  it("builds the remote and the company search nationwide, without a city", () => {
+    const remote = new URL(searchUrl(base, { keyword: "KI-Entwickler", location: null, kind: "remote" }) ?? "");
+    expect(remote.pathname).toBe("/jobs/ki-entwickler");
+    expect(remote.search).toBe("?q=ki-entwickler");
+    const company = new URL(searchUrl(base, { keyword: "Acme Robotics GmbH", location: "Berlin", kind: "company" }) ?? "");
+    expect(company.pathname).toBe("/jobs/acme-robotics-gmbh");
+    expect(company.search).toBe("?q=acme-robotics-gmbh");
   });
 
-  it("maps the look-back window to the widest filter that covers it, none beyond a week", () => {
-    expect(ageFacet(10)).toBe("age_1");
-    expect(ageFacet(24)).toBe("age_1");
-    expect(ageFacet(25)).toBe("age_7");
-    expect(ageFacet(168)).toBe("age_7");
-    expect(ageFacet(169)).toBeNull();
-    const url = new URL(searchUrl(base, { keyword: "x", location: "Berlin", windowHours: 500, page: 1 }) ?? "");
-    expect(url.searchParams.has("ag")).toBe(false);
+  it("never builds a URL robots.txt disallows: no query other than a lone q=, whatever the keyword, city or kind", () => {
+    const keywords = ["AI Engineer", "Vollzeit", "Home Office", "Teilzeit", "Machine Learning Engineer", "KI-Entwickler", "C++ & Rust", "a&b=c", "x?y=1", "Müller & Söhne", "\"quoted\" OR other", "100% remote", "a/b"];
+    const places: Array<string | null> = ["Berlin", "München", "Frankfurt (Oder)", "Halle & Saale", "Köln?sort=2", null];
+    let built = 0;
+    for (const keyword of keywords) {
+      for (const location of places) {
+        for (const kind of ["city", "remote", "company", undefined] as const) {
+          const raw = searchUrl(base, { keyword, location, kind });
+          if (raw === null) continue;
+          built += 1;
+          const url = new URL(raw);
+          expect([...url.searchParams.keys()], raw).toEqual(["q"]);
+          expect(url.search, raw).toMatch(/^\?q=[^&=?]+$/);
+          expect(url.hash).toBe("");
+          expect(url.pathname.startsWith("/jobs/"), raw).toBe(true);
+          expect(robotsAllows(url), raw).toBe(true);
+        }
+      }
+    }
+    expect(built).toBeGreaterThan(100);
+  });
+
+  it("has no URL for the listing words robots.txt disallows below /jobs/ when a city follows, but searches them nationwide", () => {
+    expect(searchUrl(base, { keyword: "Vollzeit", location: "Berlin" })).toBeNull();
+    expect(searchUrl(base, { keyword: "Home Office", location: "Berlin" })).toBeNull();
+    expect(robotsAllows(new URL("https://www.stepstone.de/jobs/vollzeit/in-berlin?q=vollzeit"))).toBe(false);
+    expect(robotsAllows(new URL("https://www.stepstone.de/jobs/home-office/in-berlin?q=home-office"))).toBe(false);
+    // /jobs/teilzeit/in-* is re-allowed for ?q=, and a nationwide slug has no "/" after it
+    expect(searchUrl(base, { keyword: "Teilzeit", location: "Berlin" })).toBe("https://www.stepstone.de/jobs/teilzeit/in-berlin?q=teilzeit");
+    for (const keyword of ["Vollzeit", "Home Office"]) expect(robotsAllows(new URL(searchUrl(base, { keyword, location: null }) ?? ""))).toBe(true);
+  });
+
+  it("the robots matcher refuses the forms the channel used to send", () => {
+    expect(robotsAllows(new URL("https://www.stepstone.de/jobs/ai-engineer/in-berlin?sort=2&ag=age_1&radius=30"))).toBe(false);
+    expect(robotsAllows(new URL("https://www.stepstone.de/jobs/ai-engineer?sort=2&wfh=1&page=3"))).toBe(false);
+    expect(robotsAllows(new URL("https://www.stepstone.de/jobs/ai-engineer/in-berlin?q=ai-engineer&page=2"))).toBe(false);
+    expect(robotsAllows(new URL("https://www.stepstone.de/jobs/ai-engineer/in-berlin?q=ai-engineer"))).toBe(true);
+    expect(robotsAllows(new URL("https://www.stepstone.de/jobs/ai-engineer/in-berlin"))).toBe(true);
   });
 
   it("has no URL for a keyword without a usable slug or one that is too long for the site", () => {
-    expect(searchUrl(base, { keyword: "!!!", location: "Berlin", windowHours: 24, page: 1 })).toBeNull();
-    expect(searchUrl(base, { keyword: "x".repeat(MAX_SLUG_LENGTH + 1), location: "Berlin", windowHours: 24, page: 1 })).toBeNull();
-    expect(searchUrl(base, { keyword: "x".repeat(MAX_SLUG_LENGTH), location: "Berlin", windowHours: 24, page: 1 })).not.toBeNull();
+    expect(searchUrl(base, { keyword: "!!!", location: "Berlin" })).toBeNull();
+    expect(searchUrl(base, { keyword: "x".repeat(MAX_SLUG_LENGTH + 1), location: "Berlin" })).toBeNull();
+    expect(searchUrl(base, { keyword: "x".repeat(MAX_SLUG_LENGTH), location: "Berlin" })).not.toBeNull();
   });
 
   it("keeps posting URLs on the configured site and drops the tracking query", () => {
@@ -106,7 +171,7 @@ describe("search URLs", () => {
 describe("search page", () => {
   it("reads the embedded results with their sections and the page count", async () => {
     const { ctx } = makeContext(site(), extra());
-    const page = await fetchSearchPage(ctx, settings(), "https://www.stepstone.de/jobs/ai-engineer/in-berlin");
+    const page = await fetchSearchPage(ctx, settings(), "https://www.stepstone.de/jobs/ai-engineer/in-berlin?q=ai-engineer");
     expect(page.items).toHaveLength(8);
     expect(page.items.map((i) => i.section)).toEqual(["main", "main", "main", "main", "main", "main", "semantic", "semantic"]);
     expect(page.items[0]).toMatchObject({ id: 90000001, title: "Senior Applied AI Engineer (m/w/d)", workFromHome: "2" });
@@ -116,7 +181,7 @@ describe("search page", () => {
 
   it("reads the recommended filler of a thin search", async () => {
     const { ctx } = makeContext(site({ search: "search-remote.html" }), extra());
-    const page = await fetchSearchPage(ctx, settings(), "https://www.stepstone.de/jobs/ai-engineer?wfh=1");
+    const page = await fetchSearchPage(ctx, settings(), "https://www.stepstone.de/jobs/ai-engineer?q=ai-engineer");
     expect(page.items.some((i) => i.section === "recommended")).toBe(true);
   });
 
@@ -151,6 +216,31 @@ describe("search page", () => {
     expect(fixtureHtml("stepstone", "search-berlin.html")).toMatch(/captcha/i);
     const { ctx } = makeContext(site(), extra());
     await expect(fetchSearchPage(ctx, settings(), "https://www.stepstone.de/jobs/x")).resolves.toBeDefined();
+  });
+});
+
+describe("search redirects", () => {
+  const url = "https://www.stepstone.de/jobs/ai-engineer/in-berlin?q=ai-engineer";
+  const redirect = (location: string): Handler => ({ url: u }) =>
+    u.pathname === "/jobs/ai-engineer/in-berlin" ? htmlResponse(302, "", { Location: location }) : htmlResponse(200, fixtureHtml("stepstone", "search-berlin.html"));
+
+  it("follows a redirect to a permitted search URL", async () => {
+    const { ctx, calls } = makeContext(redirect("/jobs/ai-engineer/in-berlin-mitte?q=ai-engineer"), extra());
+    await expect(fetchSearchPage(ctx, settings(), url)).resolves.toMatchObject({ rejected: 0 });
+    expect(calls.map((c) => c.url.pathname)).toEqual(["/jobs/ai-engineer/in-berlin", "/jobs/ai-engineer/in-berlin-mitte"]);
+  });
+
+  it.each([
+    "/jobs/ai-engineer/in-berlin?sort=2&q=ai-engineer",
+    "/jobs/ai-engineer/in-berlin?q=ai-engineer&page=2",
+    "/jobs/vollzeit/in-berlin?q=vollzeit",
+    "/jobs/ai-engineer/in-berlin",
+    "/work/in-berlin?radius=30",
+    "https://evil.example/jobs/ai-engineer/in-berlin?q=x",
+  ])("does not follow a redirect to %s", async (location) => {
+    const { ctx, calls } = makeContext(redirect(location), extra());
+    await expect(fetchSearchPage(ctx, settings(), url)).rejects.toMatchObject({ code: "unknown", retryable: false });
+    expect(calls).toHaveLength(1);
   });
 });
 
@@ -243,7 +333,7 @@ describe("collect", () => {
     // the VP (3 Oct) and Agentic AI (2 Oct) postings are outside the 24 h window, the Kotlin backend title does not match
     const search = calls[0]!.url;
     expect(search.pathname).toBe("/jobs/ai-engineer/in-berlin");
-    expect(Object.fromEntries(search.searchParams)).toMatchObject({ sort: "2", ag: "age_1", radius: "30" });
+    expect(search.search).toBe("?q=ai-engineer");
     expect(calls[0]!.headers["User-Agent"]).toBe(settings().user_agent);
     // one search + one page per posting, paced by the throttle between requests
     expect(calls).toHaveLength(1 + 5);
@@ -275,8 +365,7 @@ describe("collect", () => {
     const remote = searchQuery({ location: null, remote: true, remoteScope: "home_country", windowHours: 168, keywords: ["AI Engineer"] });
     const { postings, calls } = await collectAll({ fetch_details: false }, remote, site({ search: "search-remote.html", onSearch: (u) => urls.push(u) }));
     expect(urls[0]?.pathname).toBe("/jobs/ai-engineer");
-    expect(Object.fromEntries(urls[0]!.searchParams)).toMatchObject({ wfh: "1", ag: "age_7" });
-    expect(urls[0]?.searchParams.has("radius")).toBe(false);
+    expect(urls[0]?.search).toBe("?q=ai-engineer");
     // the recommended filler is not an answer; fetch_details: false means no posting requests
     expect(calls).toHaveLength(1);
     const ids = postings.map((p) => p.externalId);
@@ -301,14 +390,37 @@ describe("collect", () => {
     expect(postings.map((p) => payloadSchema.parse(p.payload).detail !== null)).toEqual([true, false, false]);
   });
 
-  it("reads further pages up to max_pages and stops at the last page", async () => {
-    const pages: string[] = [];
-    await collectAll({ max_pages: 3, fetch_details: false }, searchQuery({ maxResults: 100 }), site({ onSearch: (u) => pages.push(u.searchParams.get("page") ?? "1") }));
-    // page 2 is empty in this fixture site: the series ends there, not at max_pages
-    expect(pages).toEqual(["1", "2"]);
-    const single: string[] = [];
-    await collectAll({ max_pages: 1, fetch_details: false }, searchQuery({ maxResults: 100 }), site({ onSearch: (u) => single.push(u.searchParams.get("page") ?? "1") }));
-    expect(single).toEqual(["1"]);
+  it("sends one search request per keyword and place, never a further page", async () => {
+    const searches: string[] = [];
+    const { calls } = await collectAll({ fetch_details: false }, searchQuery({ maxResults: 100 }), site({ onSearch: (u) => searches.push(u.pathname + u.search) }));
+    expect(searches).toEqual(["/jobs/ai-engineer/in-berlin?q=ai-engineer"]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("never requests a URL that robots.txt disallows, for city, remote and company queries alike", async () => {
+    const searches: URL[] = [];
+    const onSearch = (u: URL) => searches.push(u);
+    const keywords = ["AI Engineer", "KI-Entwickler"];
+    await collectAll({ fetch_details: true }, searchQuery({ keywords, maxResults: 100 }), site({ onSearch }));
+    await collectAll({ fetch_details: false }, searchQuery({ keywords, location: null, remote: true, remoteScope: "home_country", windowHours: 168 }), site({ search: "search-remote.html", onSearch }));
+    await collectAll({ fetch_details: false }, { ...searchQuery({ keywords: ["Acme Robotics GmbH"], location: null }), keywordGroup: "company:acme-robotics-gmbh", company: { name: "Acme Robotics GmbH", key: "acme-robotics-gmbh" } }, site({ onSearch }));
+    expect(searches.length).toBe(2 + 2 + 1);
+    for (const url of searches) {
+      expect(robotsAllows(url), url.href).toBe(true);
+      expect([...url.searchParams.keys()], url.href).toEqual(["q"]);
+    }
+  });
+
+  it("drops postings that do not mention home office from a remote query, since the wfh filter cannot be sent", async () => {
+    const remote = searchQuery({ location: null, remote: true, remoteScope: "home_country", windowHours: 168, keywords: ["AI Engineer"] });
+    const html = fixtureHtml("stepstone", "search-remote.html");
+    const onSite = html.replace('"workFromHome":"2"', '"workFromHome":"0"');
+    expect(onSite).not.toBe(html);
+    const { postings } = await collectAll({ fetch_details: false }, remote, site({ search: "search-remote.html", onSearch: () => undefined }));
+    expect(postings.map((p) => p.externalId)).toEqual(["90000009"]);
+    const handler: Handler = () => htmlResponse(200, onSite);
+    const { postings: none } = await collectAll({ fetch_details: false }, remote, handler);
+    expect(none).toEqual([]);
   });
 
   it("keeps everything of the window when the title prefilter is off", async () => {
@@ -491,37 +603,28 @@ describe("collect", () => {
       });
     });
 
-    describe("a later page or keyword fails", () => {
-      const request = (slug: string, page: number) => (url: URL) =>
-        url.pathname.startsWith(`/jobs/${slug}/`) && (url.searchParams.get("page") ?? "1") === String(page);
+    describe("a later keyword fails", () => {
+      const KEYWORDS = ["AI Engineer", "KI Engineer"];
+      const request = (slug: string) => (url: URL) => url.pathname.startsWith(`/jobs/${slug}/`);
       const settle = (promise: Promise<unknown>) => promise.then((value) => ({ value }), (error: unknown) => ({ error }));
-      const run = (fails: (url: URL) => boolean, kind: Interruption, keywords = ["AI Engineer"], over: Record<string, unknown> = {}) => {
-        const made = makeContext(site(), extra({ max_pages: 3, fetch_details: false, ...over }));
+      const run = (fails: (url: URL) => boolean, kind: Interruption, keywords = KEYWORDS, over: Record<string, unknown> = {}) => {
+        const made = makeContext(site(), extra({ fetch_details: false, ...over }));
         return { made, result: settle(createStepstoneChannel({ now: () => NOW }).collect(searchQuery({ keywords }), failingHttp(made.ctx, fails, kind))) };
       };
-      const pageOne = async () => (await collectAll({ fetch_details: false })).postings.map((p) => p.externalId);
+      const firstKeyword = async () => (await collectAll({ fetch_details: false })).postings.map((p) => p.externalId);
 
       for (const kind of INTERRUPTIONS) {
-        it(`keeps page 1 when page 2 fails (${kind}) and passes the failure on unchanged`, async () => {
-          const { made, result } = run(request("ai-engineer", 2), kind);
+        it(`keeps the earlier keyword when a later keyword fails (${kind}) and passes the failure on unchanged`, async () => {
+          const { made, result } = run(request("ki-engineer"), kind);
           const error = ((await result) as { error: PartialCollectError }).error;
           expect(error).toBeInstanceOf(PartialCollectError);
           expect(error.cause).toMatchObject({ code: kind, retryable: interruption(kind).retryable, tripsCircuit: interruption(kind).tripsCircuit });
-          expect(error.postings.map((p) => p.externalId)).toEqual(await pageOne());
+          expect(error.postings.map((p) => p.externalId)).toEqual(await firstKeyword());
           expect(made.calls).toHaveLength(1);
         });
 
-        it(`keeps the earlier keyword when a later keyword fails (${kind})`, async () => {
-          const { made, result } = run(request("ki-engineer", 1), kind, ["AI Engineer", "KI Engineer"], { max_pages: 1 });
-          const error = ((await result) as { error: PartialCollectError }).error;
-          expect(error).toBeInstanceOf(PartialCollectError);
-          expect(error.cause.code).toBe(kind);
-          expect(error.postings.map((p) => p.externalId)).toEqual(await pageOne());
-          expect(made.calls).toHaveLength(1);
-        });
-
-        it(`fails as before when page 1 fails (${kind})`, async () => {
-          const { made, result } = run(request("ai-engineer", 1), kind, ["AI Engineer", "KI Engineer"]);
+        it(`fails as before when the first search fails (${kind})`, async () => {
+          const { made, result } = run(request("ai-engineer"), kind);
           const { error } = (await result) as { error: ChannelError };
           expect(error).toBeInstanceOf(ChannelError);
           expect(error).not.toBeInstanceOf(PartialCollectError);
@@ -531,7 +634,7 @@ describe("collect", () => {
       }
 
       it("opens no posting page after the failure", async () => {
-        const { made, result } = run(request("ai-engineer", 2), "network", ["AI Engineer"], { fetch_details: true });
+        const { made, result } = run(request("ki-engineer"), "network", KEYWORDS, { fetch_details: true });
         expect(((await result) as { error: unknown }).error).toBeInstanceOf(PartialCollectError);
         expect(made.calls.every((c) => c.url.pathname.startsWith("/jobs/"))).toBe(true);
       });
@@ -540,8 +643,8 @@ describe("collect", () => {
         const first = await collectAll();
         expect(first.postings.some((p) => (p.payload as { detail: unknown }).detail !== null)).toBe(true);
         const stored = new Map(first.postings.map((p) => [p.externalId, p.payload]));
-        const made = makeContext(site(), extra({ max_pages: 3, reuse_known_details: false }), { known: { payloads: async () => stored } });
-        const result = await settle(createStepstoneChannel({ now: () => NOW }).collect(searchQuery(), failingHttp(made.ctx, request("ai-engineer", 2), "network")));
+        const made = makeContext(site(), extra({ reuse_known_details: false }), { known: { payloads: async () => stored } });
+        const result = await settle(createStepstoneChannel({ now: () => NOW }).collect(searchQuery({ keywords: KEYWORDS }), failingHttp(made.ctx, request("ki-engineer"), "network")));
         const error = (result as { error: PartialCollectError }).error;
         expect(error).toBeInstanceOf(PartialCollectError);
         expect(error.postings.map((p) => p.payload)).toEqual(first.postings.map((p) => p.payload));
@@ -551,10 +654,10 @@ describe("collect", () => {
       it("still uses the details this cycle already fetched, without a new request", async () => {
         const signal = new AbortController().signal;
         const channel = createStepstoneChannel({ now: () => NOW });
-        const first = await channel.collect(searchQuery(), makeContext(site(), extra({ max_pages: 3 }), { signal }).ctx);
+        const first = await channel.collect(searchQuery(), makeContext(site(), extra(), { signal }).ctx);
         expect(first.some((p) => (p.payload as { detail: unknown }).detail !== null)).toBe(true);
-        const made = makeContext(site(), extra({ max_pages: 3, reuse_known_details: false }), { signal });
-        const result = await settle(channel.collect(searchQuery(), failingHttp(made.ctx, request("ai-engineer", 2), "network")));
+        const made = makeContext(site(), extra({ reuse_known_details: false }), { signal });
+        const result = await settle(channel.collect(searchQuery({ keywords: KEYWORDS }), failingHttp(made.ctx, request("ki-engineer"), "network")));
         const error = (result as { error: PartialCollectError }).error;
         expect(error).toBeInstanceOf(PartialCollectError);
         expect(error.postings.map((p) => p.payload)).toEqual(first.map((p) => p.payload));
@@ -562,7 +665,7 @@ describe("collect", () => {
       });
 
       it("keeps the postings and the original cause when the budget refuses them after the failure", async () => {
-        const made = makeContext(site(), extra({ max_pages: 3, fetch_details: false }));
+        const made = makeContext(site(), extra({ fetch_details: false }));
         const refusing: ChannelContext = {
           ...made.ctx,
           budget: {
@@ -572,17 +675,17 @@ describe("collect", () => {
             },
           },
         };
-        const result = await settle(createStepstoneChannel({ now: () => NOW }).collect(searchQuery(), failingHttp(refusing, request("ai-engineer", 2), "network")));
+        const result = await settle(createStepstoneChannel({ now: () => NOW }).collect(searchQuery({ keywords: KEYWORDS }), failingHttp(refusing, request("ki-engineer"), "network")));
         const error = (result as { error: PartialCollectError }).error;
         expect(error).toBeInstanceOf(PartialCollectError);
         expect(error.cause.code).toBe("network");
-        expect(error.postings.map((p) => p.externalId)).toEqual(await pageOne());
+        expect(error.postings.map((p) => p.externalId)).toEqual(await firstKeyword());
       });
     });
 
     it("rejects an unusable sources.yaml block without any request", async () => {
       const channel = createStepstoneChannel({ now: () => NOW });
-      const made = makeContext(site(), { ...extra(), max_pages: 0 });
+      const made = makeContext(site(), { ...extra(), max_pages: 2 });
       await expect(channel.collect(searchQuery(), made.ctx)).rejects.toBeInstanceOf(ChannelError);
       expect(made.calls).toHaveLength(0);
     });

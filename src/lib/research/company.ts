@@ -44,7 +44,7 @@ export async function runCompanyResearch(db: Db, router: AiRouter, jobId: number
   if (!opts.config.enabled) return { status: "failed", error: "disabled" };
   const job = await getJobForCompanyResearch(db, jobId);
   if (!job) return { status: "failed", error: "not_found" };
-  const confirmedDomain = confirmedWebsiteDomain(job);
+  const confirmedDomain = confirmedWebsiteDomain(job, company.non_company_hosts);
 
   if (!opts.force) {
     const latest = await findLatestCompanyResearch(db, { companyId: job.companyId, promptVersion: COMPANY_RESEARCH_PROMPT_VERSION, now: now() });

@@ -9,6 +9,14 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 - **Gmail replies (optional, off by default).** Reads one Gmail label read-only with local rules and suggests status changes on `/pipeline`, each confirmed by you and undoable. No AI reads the mails and no mail content leaves the machine. See `docs/gmail-replies.md`. Adds the table `email_replies`.
 
+### Changed
+
+- **Writer and Gmail replies fixes.** The usage-cap notice in the application writer now reads like the other AI panels. The evidence check no longer reads a spaced single letter as a unit (`5 m` is a 5; `$5 m` and `3 x` still count). Gmail replies skip mail from a Gmail alias of the mailbox, and a mail that fails every cycle no longer holds a batch slot: `replies.yaml` gets `max_fetches_per_cycle` (default 100; a `replies.yaml` you already have needs no change, but older code refuses the new key, so remove it before rolling back).
+- **StepStone now only requests URLs its `robots.txt` permits.** The channel used to send `?sort=2&ag=…&radius=…&page=…`, which
+  StepStone's current `robots.txt` disallows; it now sends a single `?q=<keyword>` parameter. Trade-off: one request per keyword
+  and place (about 25 results in StepStone's own order, no paging, no newest-first sort), and the look-back window is applied
+  afterwards, so StepStone finds fewer postings than before. See [Sources](docs/sources.md#scraping).
+
 ### Upgrade notes
 
 - **Your config files now hold only what differs from the shipped ones.** A file in `data/config/` is laid over the shipped
@@ -20,6 +28,17 @@ and the project uses [Semantic Versioning](https://semver.org/).
   are explained in [Your file is an overlay](docs/configuration.md#your-file-is-an-overlay). Restart `pnpm mcp:serve` and other
   processes you started by hand. **Rollback:** older code refuses an overlay, so run `pnpm config:migrate --to-full --write`
   first, with web and runner stopped and the database up; see [Rollback](docs/deploy.md#5-rollback).
+- **`sources.stepstone.radius_km` and `max_pages` are removed** (`sources.yaml` config version 9; the config update deletes
+  them, and `pnpm config:check` passes on the result). **Rollback:** the update also raises `config_version` of `sources.yaml`, and an older version refuses a file with a
+  newer version. Restore the file from `data/config/.backup/<timestamp>/` (the copy from before the update), or add
+  `radius_km: 30` and `max_pages: 2` under `sources.stepstone` **and** set `config_version: 8` (the value before this update;
+  `config_version: 7` if you also roll back the Apify change). XING keeps its own.
+- **Apify LinkedIn searches now request the query's exact window** (`f_TPR=r<seconds>`, for example `r36000` for 10 hours) instead of the actor's 24-hour, week or month filter, so fewer billed records fall outside the window. Results are still not newest first, because the actor ignores `sortBy=DD`, so catch-up stays off for this channel.
+
+### Upgrade notes
+
+- **`sources.yaml` moves to `config_version: 8`.** The migration rewrites `linkedin.apify.input_template` only when it is the old shipped template of the default actor; an edited template, one for another actor, or one next to an edited `date_posted` keeps working as before. In `remote_input`, a `{key, value}` list now merges by `key` with the template's list instead of replacing it. If your `sources.yaml` sets `linkedin.apify.date_posted` but no `input_template`, it now follows the new shipped template and your `date_posted` is no longer read; to keep it, copy the old template (with `datePosted: "{date_posted}"`) into your file. **Rollback:** an older version refuses a `config_version: 8` file, and any config write can produce one: `pnpm config:migrate --write`, but also saving settings. Check the version in `data/config/sources.yaml` before downgrading. If it is 8, restore a version 7 backup from `data/config/.backup/` if you have one (it loses later edits), or set the template back to `datePosted: "{date_posted}"` without `urlParam` and set `config_version: 7`.
+- **Cron times and daylight saving.** With the croner 11 update, interval crons (such as `*/30 * * * *`) may run extra in the repeated hour at fall back and skip the spring gap; fixed-time crons (07:00, 17:00, 09:00) still run once. A fixed time inside the spring gap now runs at the first valid time after it. See `docs/configuration.md`.
 - **Berlin Startup Jobs now starts by itself on existing German installs.** The new Berlin Startup Jobs channel is on by
   default for installs whose market is Germany, so the next cycle after upgrading starts reading it. To turn it off, set
   `sources.berlinstartupjobs.enabled: false` in `data/config/sources.yaml`.

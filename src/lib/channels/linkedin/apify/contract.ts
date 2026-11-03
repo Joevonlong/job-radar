@@ -6,6 +6,7 @@ import type { ChannelMarket } from "../../market";
 import { searchKind } from "../../query";
 import type { SearchQuery } from "../../types";
 import { keywordStrings } from "../brightdata/contract";
+import { postedWithinSeconds } from "../date-window";
 
 /**
  * Apify API v2 contract for the LinkedIn Apify channel. One query = one synchronous run:
@@ -82,11 +83,12 @@ export interface TemplateValues {
   location: string;
   limit: number;
   datePosted: string;
+  postedWithinSeconds: number;
 }
 
-const PLACEHOLDER = /\{(keywords|location|limit|date_posted)\}/g;
+const PLACEHOLDER = /\{(keywords|location|limit|date_posted|posted_within_seconds)\}/g;
 
-function fill(value: unknown, values: Pick<TemplateValues, "keywords" | "location" | "limit" | "datePosted">): unknown {
+function fill(value: unknown, values: TemplateValues): unknown {
   if (typeof value === "string") {
     // a string that is exactly "{limit}" becomes a number, so the actor's integer field stays an integer
     if (value === "{limit}") return values.limit;
@@ -98,6 +100,8 @@ function fill(value: unknown, values: Pick<TemplateValues, "keywords" | "locatio
           return values.location;
         case "limit":
           return String(values.limit);
+        case "posted_within_seconds":
+          return String(values.postedWithinSeconds);
         default:
           return values.datePosted;
       }
@@ -114,6 +118,26 @@ function fill(value: unknown, values: Pick<TemplateValues, "keywords" | "locatio
     return out;
   }
   return value;
+}
+
+type KeyValueEntry = { key: unknown; value: unknown };
+
+function isKeyValueList(value: unknown): value is KeyValueEntry[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "object" && entry !== null && "key" in entry && "value" in entry);
+}
+
+/**
+ * `remote_input` over `input_template`: a key replaces the template's, except that two `{key, value}` lists are merged
+ * by `key` (the remote entry wins), so a remote parameter does not drop the template's time window; an empty list changes
+ * nothing. A list of any other shape still replaces the template's.
+ */
+export function remoteTemplate(template: Readonly<Record<string, unknown>>, remote: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...template };
+  for (const [key, value] of Object.entries(remote)) {
+    const base = merged[key];
+    merged[key] = isKeyValueList(base) && isKeyValueList(value) ? [...base.filter((entry) => !value.some((r) => r.key === entry.key)), ...value] : value;
+  }
+  return merged;
 }
 
 /** The location sent to the actor: `City, Country` for a located query, the configured location for a remote one, the home country for a company query. */
@@ -134,9 +158,9 @@ export function buildActorInputs(
   const keywords = keywordStrings(query.keywords);
   if (keywords.length === 0) throw new Error("apify: the query has no keywords");
   const range = dateRangeFor(query.windowHours);
-  const template = query.remote ? { ...settings.input_template, ...settings.remote_input } : settings.input_template;
+  const template = query.remote ? remoteTemplate(settings.input_template, settings.remote_input) : settings.input_template;
   return keywords.map((keyword) => {
-    const input = fill(template, { keywords: keyword, location: locationFor(query, settings, market), limit, datePosted: settings.date_posted[range.key] });
+    const input = fill(template, { keywords: keyword, location: locationFor(query, settings, market), limit, datePosted: settings.date_posted[range.key], postedWithinSeconds: postedWithinSeconds(query.windowHours) });
     if (typeof input !== "object" || input === null || Array.isArray(input)) throw new Error("apify: input_template must be an object");
     return input as Record<string, unknown>;
   });

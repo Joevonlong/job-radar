@@ -7,7 +7,7 @@ import { createCycleCache } from "../web/cache";
 import { createTitleFilter, interleave, isWithinWindow, parseDate, windowCutoff } from "../web/select";
 import { loadKnownDetails, storedDetailOf } from "../known";
 import { searchKind } from "../query";
-import { ANSWER_SECTIONS, fetchDetail, fetchSearchPage, postingUrl, searchUrl } from "./client";
+import { ANSWER_SECTIONS, HOME_OFFICE_VALUES, fetchDetail, fetchSearchPage, postingUrl, searchUrl } from "./client";
 import { parseStepstonePayload } from "./parse";
 import { payloadSchema, type StepstoneDetail, type StepstoneListItem, type StepstonePayload } from "./schema";
 
@@ -45,50 +45,53 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
       first = false;
     };
 
-    // ---- search: one request series per keyword. The page lists the answers (`main`) newest first, then
-    // the loose matches (`semantic`) newest first; the `ag` filter already limits both to the look-back window
-    // A failing page ends the search; what earlier pages (and keywords) returned is kept and handed on with the failure.
+    // ---- search: one request per keyword. robots.txt only permits `?q=` on a search URL, so there is no time sort, no `ag`
+    // look-back filter, no radius and no paging: the page lists up to ~25 answers (`main`, then loose `semantic` matches) in StepStone's
+    // order, and the look-back window is applied here from each posting's date.
+    // A failing request ends the search; what earlier keywords returned is kept and handed on with the failure.
     const perKeyword: StepstoneListItem[][] = [];
-    const stats = { pages: 0, results: 0, outsideSections: 0, outsideWindow: 0, titleRejected: 0 };
+    const stats = { pages: 0, results: 0, outsideSections: 0, notHomeOffice: 0, outsideWindow: 0, titleRejected: 0, availablePages: 0 };
     let interrupted: ChannelError | null = null;
     search: for (const keyword of query.keywords) {
       const kept: StepstoneListItem[] = [];
       perKeyword.push(kept);
-      for (let page = 1; page <= settings.max_pages && kept.length < query.maxResults; page += 1) {
-        const url = searchUrl(settings, { keyword, location, kind, windowHours: query.windowHours, page });
-        if (url === null) {
-          ctx.logger.warn("keyword cannot be searched on stepstone, skipped", { query: query.id });
-          break;
+      const url = searchUrl(settings, { keyword, location, kind });
+      if (url === null) {
+        ctx.logger.warn("keyword cannot be searched on stepstone, skipped", { query: query.id });
+        continue;
+      }
+      await pace();
+      let result;
+      try {
+        result = await fetchSearchPage(ctx, settings, url);
+      } catch (error) {
+        if (!(error instanceof ChannelError)) throw error;
+        interrupted = error;
+        break search;
+      }
+      stats.pages += 1;
+      stats.results += result.items.length;
+      stats.availablePages += result.pageCount ?? 0;
+      for (const item of result.items) {
+        if (!ANSWER_SECTIONS.has(item.section ?? "main")) {
+          stats.outsideSections += 1;
+          continue;
         }
-        await pace();
-        let result;
-        try {
-          result = await fetchSearchPage(ctx, settings, url);
-        } catch (error) {
-          if (!(error instanceof ChannelError)) throw error;
-          interrupted = error;
-          break search;
+        // the nationwide remote search cannot ask StepStone for home-office jobs (`wfh` is not permitted): filter here
+        if (kind === "remote" && !HOME_OFFICE_VALUES.has(item.workFromHome ?? "")) {
+          stats.notHomeOffice += 1;
+          continue;
         }
-        stats.pages += 1;
-        stats.results += result.items.length;
-        for (const item of result.items) {
-          if (!ANSWER_SECTIONS.has(item.section ?? "main")) {
-            stats.outsideSections += 1;
-            continue;
-          }
-          const posted = parseDate(item.datePosted);
-          if (!isWithinWindow(posted, cutoff)) {
-            stats.outsideWindow += 1;
-            continue;
-          }
-          if (!keepTitle(item.title)) {
-            stats.titleRejected += 1;
-            continue;
-          }
-          kept.push(item);
+        const posted = parseDate(item.datePosted);
+        if (!isWithinWindow(posted, cutoff)) {
+          stats.outsideWindow += 1;
+          continue;
         }
-        const lastPage = result.pageCount !== null && page >= result.pageCount;
-        if (result.items.length === 0 || lastPage) break;
+        if (!keepTitle(item.title)) {
+          stats.titleRejected += 1;
+          continue;
+        }
+        kept.push(item);
       }
     }
     const selected = interleave(perKeyword, query.maxResults, (item) => String(item.id));

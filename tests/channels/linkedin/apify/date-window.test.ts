@@ -122,6 +122,7 @@ describe("observation and week boundaries", () => {
     ].map((postedDate, index) => ({ ...JOB, id: String(7_000_001 + index), postedDate }));
     const config = apifyConfig((block) => {
       block.date_posted = { day: "day", week: "week", month: "month", any: "" };
+      block.input_template = { keywords: "{keywords}", location: "{location}", datePosted: "{date_posted}", limit: "{limit}" };
     });
     const apify = fakeApify([response(201, items)]);
     const channel = createApifyChannel({ pricePer1kUsd: () => 0.4, environment: ENV, now: () => new Date(EVENING) });

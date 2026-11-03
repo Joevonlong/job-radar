@@ -8009,7 +8009,7 @@
         "provider_error": "The AI provider reported an error. Try again.",
         "network": "The AI provider could not be reached. Try again.",
         "budget": "The monthly budget for the AI API is used up.",
-        "quota_guard": "Job Radar's own AI usage cap is reached. {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
+        "quota_guard": "Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
         "unavailable": "No AI provider is available right now. Check the CLI logins or API keys and try again.",
         "failed": "Writing failed. Please try again.",
         "invalid_payload": "The request was not valid.",

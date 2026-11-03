@@ -12,7 +12,10 @@ enabled: false
 label: JobReplies
 # How far back each cycle looks. A longer window finds older mail after a pause; handled mail is never read twice.
 lookback_days: 30
+# Most mails read and stored per cycle (a mail that fails is not stored and does not count against this)
 max_messages_per_cycle: 50
+# Most mails fetched per cycle, failed ones included: a mail that fails every cycle must not hold up the rest or make a cycle fetch a whole backlog
+max_fetches_per_cycle: 100
 # How much of the visible text the rules read (the start of a mail is what counts; quoted history is ignored)
 body_scan_chars: 4000
 # A larger message has attachments and is not downloaded: only its headers are judged, and the log says so

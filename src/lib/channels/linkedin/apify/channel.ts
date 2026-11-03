@@ -63,8 +63,8 @@ export function createApifyChannel(options: ApifyChannelOptions): Channel {
     kind: "paid",
     usesQueries: true,
     supportsCompanyQueries: true,
-    // Billed per record with coarse date ranges and no newest-first order: stretching would mostly buy old postings.
-    // Return true only after exact second-level requests and newest-first results under current settings have been measured.
+    // Billed per record, and the default actor ignores `sortBy=DD` (measured): a wider window would be filled by relevance, not by the newest postings.
+    // Return true only after newest-first results under current settings have been measured.
     supportsCatchUp: () => false,
     estimateCost: (paidRecords) => (paidRecords * options.pricePer1kUsd()) / 1000,
     isConfigured: () => tokenOf() !== undefined && (options.actorId === undefined || options.actorId().trim() !== ""),
@@ -154,7 +154,7 @@ export function createApifyChannel(options: ApifyChannelOptions): Channel {
         ...(ctx.cycle.id === null ? { dryRun: true, note: "dry run: the actor was billed, but nothing is stored or added to the persisted monthly usage" } : {}),
       });
 
-      // Local time window for ranges shorter than LinkedIn's discrete one (the actor filters by day / week / month only).
+      // Local time window for ranges shorter than LinkedIn's discrete one; a second check when the template requests the exact window.
       const { rangeHours } = dateRangeFor(query.windowHours);
       const observedAt = now().getTime();
       const cutoff = query.windowHours < rangeHours ? observedAt - query.windowHours * MS_PER_HOUR : null;

@@ -102,12 +102,46 @@ export function currentConfigWriteLock(): Pick<ConfigWriteLockSession, "fence"> 
   return held.getStore() ?? null;
 }
 
-/** Under the user config or profile directory: a writer there must hold the lock. */
+/**
+ * `file` with every symbolic link on its way followed, also the ones in the part that does not exist yet (a link to a file that is
+ * not there is followed to where that file would be). A loop or a path with too many links is returned as far as it got.
+ */
+function followLinks(file: string): string {
+  let pending = path.resolve(file).split(path.sep).filter(Boolean);
+  let current = path.parse(path.resolve(file)).root;
+  for (let hops = 0; pending.length > 0; ) {
+    const [name, ...rest] = pending as [string, ...string[]];
+    const next = path.join(current, name);
+    let target: string | null = null;
+    try {
+      if (fs.lstatSync(/*turbopackIgnore: true*/ next).isSymbolicLink()) target = fs.readlinkSync(/*turbopackIgnore: true*/ next);
+    } catch {
+      // not there (yet): what is left cannot hold a link
+      return path.join(next, ...rest);
+    }
+    if (target === null) {
+      current = next;
+      pending = rest;
+      continue;
+    }
+    if (++hops > 40) return path.join(next, ...rest);
+    const resolved = path.resolve(current, target);
+    current = path.parse(resolved).root;
+    pending = [...resolved.split(path.sep).filter(Boolean), ...rest];
+  }
+  return current;
+}
+
+/** Under the user config or profile directory (as spelled, or through symbolic links): a writer there must hold the lock. */
 export function isLockedConfigPath(file: string): boolean {
-  const resolved = path.resolve(file);
+  const spelled = path.resolve(file);
+  const followed = followLinks(file);
   return [getConfigDir(), getProfileDir()].some((dir) => {
-    const relative = path.relative(path.resolve(dir), resolved);
-    return relative !== "" && !relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative);
+    const lexical = path.resolve(dir);
+    return [[lexical, spelled], [followLinks(lexical), followed]].some(([root, candidate]) => {
+      const relative = path.relative(root!, candidate!);
+      return relative !== "" && !relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative);
+    });
   });
 }
 

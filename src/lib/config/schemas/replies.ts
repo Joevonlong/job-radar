@@ -52,7 +52,10 @@ export const repliesSchema = z.strictObject({
   /** The one Gmail label (= IMAP mailbox) that is read, read-only. */
   label: nonEmptyString,
   lookback_days: positiveInt,
+  /** Most messages read and stored per cycle; a message that fails is not stored and does not count. */
   max_messages_per_cycle: positiveInt,
+  /** Most messages fetched per cycle, failed ones included (at least `max_messages_per_cycle` is always allowed): a message that fails every cycle must not hold up the rest, nor make a cycle fetch a whole backlog. */
+  max_fetches_per_cycle: positiveInt.default(100),
   /** How much of the visible body the patterns and the company-name check read. */
   body_scan_chars: positiveInt,
   /** A larger message is not downloaded (it has attachments): only its headers decide, and the log says so. */

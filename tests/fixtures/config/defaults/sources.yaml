@@ -16,7 +16,7 @@
 
 # 所有付费采集通道每月合计花费的上限（美元）；各通道实际花费之和不得超过它，由预算控制执行。
 # （AI 费用另有上限，见 ai.yaml 的 monthly_api_budget_usd。）
-config_version: 8
+config_version: 10
 paid_total_monthly_budget_usd: 15
 
 # 熔断：连续失败 failures 次后，通道标为不可用，冷却 cooldown_hours 小时后再试
@@ -100,7 +100,8 @@ linkedin:
     input_template:
       keywords: "{keywords}"
       location: "{location}"
-      datePosted: "{date_posted}"
+      urlParam:
+        - { key: f_TPR, value: "r{posted_within_seconds}" }
       limit: "{limit}"
     # 远程查询在模板上叠加的键：LinkedIn 的 f_WT=2 是"远程"工作方式
     remote_input:
@@ -227,8 +228,6 @@ sources:
     max_results: 50
     base_url: https://www.stepstone.de
     user_agent: "JobRadar/0.1 (personal job search)"
-    radius_km: 30 # 城市周边半径
-    max_pages: 2 # 每个关键词最多翻几页（每页 25 条，按发布时间排序）
     fetch_details: true # 是否为每条岗位再取详情页（JD 正文只在详情页里）
     max_details_per_query: 25
     reuse_known_details: true # 库里已有详情的岗位不再打开详情页，沿用库里的

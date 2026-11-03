@@ -48,7 +48,9 @@ import { sources004 } from "./sources/004-monid";
 import { sources005 } from "./sources/005-handpicked";
 import { sources006 } from "./sources/006-berlin-design-network";
 import { sources007 } from "./sources/007-berlinstartupjobs";
-import { sourcesOverlayFormat } from "./sources/008-overlay-format";
+import { sources008 } from "./sources/008-apify-exact-window";
+import { sources009 } from "./sources/009-stepstone-robots";
+import { sourcesOverlayFormat } from "./sources/010-overlay-format";
 import { trapsOverlayFormat } from "./traps/002-overlay-format";
 import type { ConfigMigration } from "./types";
 import { ui002 } from "./ui/002-visibility-blocks";
@@ -61,7 +63,7 @@ export const CONFIG_MIGRATIONS: Readonly<Partial<Record<ConfigName, readonly Con
   activityLog: [activityLogOverlayFormat],
   ai: [ai002, ai003, aiOverlayFormat],
   breakdown: [breakdownOverlayFormat],
-  channels: [sources002, sources003, sources004, sources005, sources006, sources007, sourcesOverlayFormat],
+  channels: [sources002, sources003, sources004, sources005, sources006, sources007, sources008, sources009, sourcesOverlayFormat],
   currentScores: [currentScoresOverlayFormat],
   deliveryAudit: [deliveryAuditOverlayFormat],
   insights: [insights002, insightsOverlayFormat],

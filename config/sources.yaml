@@ -18,7 +18,7 @@
 # Monthly cap used before starting paid collection runs (USD), shared by all paid channels.
 # Limits use configured prices; settled vendor charges are always recorded and may exceed the cap for one run.
 # (AI spend has its own cap: monthly_api_budget_usd in ai.yaml.)
-config_version: 8
+config_version: 10
 paid_total_monthly_budget_usd: 15
 
 # Circuit breaker: after failures consecutive failures a channel is marked unavailable (paused) and retried after cooldown_hours hours
@@ -100,15 +100,17 @@ linkedin:
     # location used for remote queries (remote_scope in search.yaml); unset keys follow the market (home_country = market country name, region = region / country name)
     remote_locations:
       worldwide: Worldwide
-    # How this actor expresses the "date posted" filter (LinkedIn f_TPR): window ≤24 hours / ≤7 days / ≤30 days / longer (empty = key omitted)
+    # Value of {date_posted} for a template that uses a coarse filter: window ≤24 hours / ≤7 days / ≤30 days / longer (empty = no value). The default template below does not use it
     date_posted: { day: r86400, week: r604800, month: r2592000, any: "" }
-    # Actor input template: {keywords} (keyword group joined as "A" OR "B"), {location}, {date_posted}, {limit} (becomes a number when the whole string is "{limit}")
+    # Actor input template: {keywords} (keyword group joined as "A" OR "B"), {location}, {date_posted}, {posted_within_seconds} (the query window in seconds), {limit} (becomes a number when the whole string is "{limit}")
+    # f_TPR is LinkedIn's date filter and takes any number of seconds. sortBy=DD is not sent: this actor ignores it
     input_template:
       keywords: "{keywords}"
       location: "{location}"
-      datePosted: "{date_posted}"
+      urlParam:
+        - { key: f_TPR, value: "r{posted_within_seconds}" }
       limit: "{limit}"
-    # Keys added on top of the template for remote queries: LinkedIn's f_WT=2 is the "remote" work mode
+    # Keys added on top of the template for remote queries (two key/value lists merge by key): LinkedIn's f_WT=2 is the "remote" work mode
     remote_input:
       urlParam:
         - { key: f_WT, value: "2" }
@@ -225,6 +227,9 @@ sources:
     max_results: 100
   # StepStone / XING: JSON embedded in the public search pages, plain HTTP, no browser, no login. On 403 / a verification page it stops at once (blocked), no retry.
   # Search results match loosely: only jobs whose title matches this query's keywords or include_terms are kept (see title_prefilter); the rest get no detail fetch.
+  # StepStone: its robots.txt only permits a search URL with a single q= parameter (/jobs/<keyword>/in-<city>?q=<keyword>), so there is no radius, no
+  # sort by date and no paging: one request per keyword and place returns about 25 results in StepStone's own order, and the look-back window is applied
+  # afterwards from each posting's date. Remote queries search nationwide and keep home-office-only postings.
   stepstone:
     enabled: false # scraping channel, off by default: read "Scraping" in docs/sources.md before switching it on (setup wizard or /sources/registry)
     company_queries: true # sends watched company names; see docs/privacy.md
@@ -235,8 +240,6 @@ sources:
     max_results: 50
     base_url: https://www.stepstone.de
     user_agent: "JobRadar/0.1 (personal job search)"
-    radius_km: 30 # radius around the city
-    max_pages: 2 # max pages per keyword (25 results per page, sorted by posting date)
     fetch_details: true # whether to also fetch the detail page of each job (the JD body is only on the detail page)
     max_details_per_query: 25
     reuse_known_details: true # jobs whose details are already in the DB don't get their detail page opened again, the stored details are reused

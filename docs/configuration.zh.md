@@ -169,7 +169,7 @@ pnpm config:example               # 列出示例配置；`pnpm config:example <i
 
 ### Gmail 回信（`replies.yaml`）
 
-默认关闭（`enabled: false`）。用本地规则只读一个 Gmail 标签，在 `/pipeline` 上建议改状态，每条都由你确认。`label`、`lookback_days`、`max_messages_per_cycle`、`body_scan_chars`、`max_message_bytes`；`categories`（按语言分组的正则，`categories.*` 按语言合并）；`match`（状态、权重、`min_score`、`min_margin`、发件方列表）；`transitions`（每个类别从哪个状态建议什么）；`storage`（主题和引文长度、`decided_retention_days`）；`panel.undo_days`；`doctor.pending_warn_days`。见 [gmail-replies.zh.md](gmail-replies.zh.md)。
+默认关闭（`enabled: false`）。用本地规则只读一个 Gmail 标签，在 `/pipeline` 上建议改状态，每条都由你确认。`label`、`lookback_days`、`max_messages_per_cycle`（每轮读取并存下的邮件数）、`max_fetches_per_cycle`（每轮取回的邮件数，含失败的）、`body_scan_chars`、`max_message_bytes`；`categories`（按语言分组的正则，`categories.*` 按语言合并）；`match`（状态、权重、`min_score`、`min_margin`、发件方列表）；`transitions`（每个类别从哪个状态建议什么）；`storage`（主题和引文长度、`decided_retention_days`）；`panel.undo_days`；`doctor.pending_warn_days`。见 [gmail-replies.zh.md](gmail-replies.zh.md)。
 
 ### 公司背景（`research.yaml`）
 
@@ -529,6 +529,10 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 出厂文件里没有这一段（只以注释给出）；要改时才加到 `data/config/schedule.yaml`（没写的键用默认值）。定时轮次等待期间，runner 不启动别的手动轮次（其他按钮照常执行），所以连续点几次“立即采集”不会让它一直等下去；它开跑后，排队中被它覆盖的请求记为完成。手动轮次从不等待：runner 一次处理一个请求，等着的请求会挡住其他按钮。正在运行的那一轮已经覆盖了手动请求时（全部通道的定时轮次），请求记为完成，按钮显示那一轮；否则照旧以“另一轮正在运行”失败。启动时的补跑和 `pnpm run doctor`（`cycle.last`）判断有没有错过时段时，只算采了全部通道的轮次。等待中的轮次还没有记录行：这时部署排空 runner 不会等它（重启后由补跑执行）；等待超过 `doctor.cycle_grace_minutes` 时，`cycle.last` 在它开跑前会报这个时段错过了。LinkedIn 来源组成级联，采全部通道的一轮只用级联里第一个可用的来源，所以级联里靠后的来源的“立即采集”不会被它覆盖。
 
 回退到不认识 `partial_cycle_wait` 的版本之前，先删掉 `data/config/schedule.yaml` 里的这一段：旧版本拒绝未知的键。
+
+## Cron 时间与夏令时
+
+只有一个固定时间的 cron（如 `0 7 * * 1-5`）在换钟日每天只运行一次：春季跳过的时段里，它在跳过之后的第一个有效时间运行；秋季重复的那一小时里只运行一次。间隔型 cron（含多个小时、分钟或秒，如 `*/30 * * * *`）在秋季回拨的重复小时里可能多运行，在春季跳过的时段里则跳过那些时间。
 
 ## 日志级别（`schedule.yaml` 的 `logging.level`、`JOB_RADAR_LOG_LEVEL`）
 

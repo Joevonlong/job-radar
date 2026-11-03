@@ -70,6 +70,12 @@ V1=4dd8d03d30ea5a8a8bfc75c5926c96ee95e5751e
 V2=2656364ccf62aceca508cf05d214cc25e745cf47
 V3=b3f69b09a72f1457a40bdd31393dc541623d8e4e
 
+# A deploy step of a historical commit builds images whose Google Fonts are fetched at build time; that fetch fails now and
+# then. Such a step (and only such a step: its output names internal/font/google) is run again, FONT_RETRY_MAX more times
+# at most, FONT_RETRY_BACKOFF seconds times the attempt number apart. See tests/transition/step-retry.sh.
+FONT_RETRY_MAX=2
+FONT_RETRY_BACKOFF=30
+
 SCENARIOS="A,B"
 ARTIFACTS=""
 while [[ $# -gt 0 ]]; do
@@ -282,23 +288,13 @@ EOF
 # in_project <command…>: in the checkout, with the project's name and doctor URL in the environment
 in_project() { (cd "$DIR" && COMPOSE_PROJECT_NAME="$P" JOB_RADAR_DOCTOR_WEB_URL="http://127.0.0.1:$WEB_PORT" "$@"); }
 
-STEP=0
-# logged <label> <want rc list> <command…>: runs it with its output in step-<n>-<label>.log (and on the console)
-logged() {
-  local label="$1" want="$2" rc=0 log
-  shift 2
-  STEP=$((STEP + 1)); log="$root/step-$(printf '%02d' "$STEP")-$label.log"
-  echo "-- step $STEP: $label: $*"
-  "$@" > "$log" 2>&1 || rc=$?
-  tail -n 40 "$log"
-  [[ " $want " == *" $rc "* ]] || die "step $STEP ($label): exit $rc, expected one of: $want (full output: $log)"
-  LAST_LOG="$log"
-}
+# shellcheck source=tests/transition/step-retry.sh
+source "$REPO/tests/transition/step-retry.sh"
 LAST_LOG=""
 log_has() { grep -qF -- "$1" "$LAST_LOG" || die "step $STEP: the output lacks: $1"; }
 log_lacks() { ! grep -qF -- "$1" "$LAST_LOG" || die "step $STEP: the output has: $1"; }
 
-deploy() { logged "deploy-$1" "0 2" in_project bash scripts/ops/deploy.sh --skip-pull --no-backup --no-prune --no-drain --settle "${2:-5}" --wait-timeout 600; }
+deploy() { RETRY_FONT_FETCH=1 logged "deploy-$1" "0 2" in_project bash scripts/ops/deploy.sh --skip-pull --no-backup --no-prune --no-drain --settle "${2:-5}" --wait-timeout 600; }
 checkout() { git -C "$DIR" checkout -q --detach "$1"; }
 stop_web_runner() { logged stop-web-runner 0 in_project docker compose -p "$P" stop web runner; }
 release_of() { echo "$DIR/data/releases/ai-worker/$1"; }

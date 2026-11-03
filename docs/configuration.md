@@ -202,7 +202,7 @@ See [salary.md](salary.md) for the cards and [the changelog](../CHANGELOG.md) fo
 
 ### Gmail replies (`replies.yaml`)
 
-Off by default (`enabled: false`). Reads one Gmail label read-only with local rules and suggests status changes on `/pipeline`; you confirm each one. `label`, `lookback_days`, `max_messages_per_cycle`, `body_scan_chars`, `max_message_bytes`; `categories` (patterns per language, `categories.*` merge language by language); `match` (statuses, weights, `min_score`, `min_margin`, `company_scan_chars`, `common_word_names`, `ats_vendor_names`, sender lists); `transitions` (what each category suggests from which status); `storage` (subject and quote lengths, `decided_retention_days`); `panel.undo_days`; `doctor.pending_warn_days`. See [gmail-replies.md](gmail-replies.md).
+Off by default (`enabled: false`). Reads one Gmail label read-only with local rules and suggests status changes on `/pipeline`; you confirm each one. `label`, `lookback_days`, `max_messages_per_cycle` (mails read and stored per cycle), `max_fetches_per_cycle` (mails fetched, failed ones included), `body_scan_chars`, `max_message_bytes`; `categories` (patterns per language, `categories.*` merge language by language); `match` (statuses, weights, `min_score`, `min_margin`, `company_scan_chars`, `common_word_names`, `ats_vendor_names`, sender lists); `transitions` (what each category suggests from which status); `storage` (subject and quote lengths, `decided_retention_days`); `panel.undo_days`; `doctor.pending_warn_days`. See [gmail-replies.md](gmail-replies.md).
 
 ### Company background (`research.yaml`)
 
@@ -702,6 +702,10 @@ first available source only, so a "Collect now" of a later source in the cascade
 
 Before rolling back to a version without `partial_cycle_wait`, remove the block from `data/config/schedule.yaml`:
 older versions reject unknown keys.
+
+## Cron times and daylight saving
+
+A cron with one fixed time (such as `0 7 * * 1-5`) runs once per day on clock-change days: in the spring gap it runs at the first valid time after it, and in the repeated autumn hour it runs once. An interval cron (several hours, minutes or seconds, such as `*/30 * * * *`) may run extra in the repeated hour at fall back and skips the times inside the gap at spring forward.
 
 ## Log level (`schedule.yaml` `logging.level`, `JOB_RADAR_LOG_LEVEL`)
 
