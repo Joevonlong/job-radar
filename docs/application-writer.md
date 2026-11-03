@@ -218,7 +218,7 @@ The removal only reaches the request row:
 | `evidence.quote_max_chars` | `160` | Longest quote the AI may give |
 | `evidence.min_quote_chars` | `4` | Shortest quote that counts as evidence, unless it is exactly a known name |
 | `evidence.first_person` | en / de / zh words | Words that make a sentence one about you |
-| `evidence.figure_units` | `scale`: 万 萬 亿 億 千; `multiple`: 倍 | Words right after a digit that change the figure: `scale` multiplies it (5万 is 50,000), `multiple` makes it a multiple that matches only a multiple |
+| `evidence.figure_units` | `scale`: 万 萬 亿 億 千; `multiple`: 倍 | Words right after a digit that change the figure: `scale` multiplies it (5万 is 50,000), `multiple` makes it a multiple that matches only a multiple. Case and compatibility forms do not count (`M` is `m`, `㎏` is `kg`); Chinese, Japanese or Korean units may stand in a row (3千万) |
 | `evidence.names` | quoted, mixed tokens, capitalised words (German: only two or more in a row) | What the check treats as a name |
 
 Which AI writes is the `write` task in `ai.yaml` (order, model, and for the API providers `max_output_tokens` /

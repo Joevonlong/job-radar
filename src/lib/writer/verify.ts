@@ -67,15 +67,44 @@ function primaryLanguage(code: string): string {
 // CJK text has no spaces: a figure may sit directly against Han, kana or Hangul characters ("下降了40%的"), unlike one against Latin letters (S3, K8s).
 const CJK_CLASS = String.raw`\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}`;
 type FigureUnits = WriterEvidenceConfig["figure_units"];
-/** The figure pattern; its fourth group is a unit of `evidence.figure_units` right after the digits (none when none are configured). */
-const figurePattern = (units: FigureUnits): RegExp => {
-  const words = [...Object.keys(units.scale), ...units.multiple].sort((a, b) => b.length - a.length).map((word) => word.replace(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`));
-  const unit = words.length > 0 ? `(${words.join("|")})?` : "()";
+/** How units are compared: text is read in NFKC and a unit's case does not count, so `㎏`, `kg` and `KG` are one unit, in the file and in the text. */
+const foldUnit = (unit: string): string => unit.normalize("NFKC").toLowerCase();
+const escapeRegExp = (word: string): string => word.replace(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`);
+const ONLY_CJK = new RegExp(`^[${CJK_CLASS}]+$`, "u");
+const anyOf = (words: readonly string[]): string =>
+  [...words]
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRegExp)
+    .join("|");
+/** The configured units in the form they are compared in. */
+function foldedUnits(units: FigureUnits): { scale: Map<string, number>; multiple: Set<string>; words: string[] } {
+  const scale = new Map(Object.entries(units.scale).map(([word, factor]) => [foldUnit(word), factor]));
+  const multiple = new Set(units.multiple.map(foldUnit));
+  return { scale, multiple, words: [...scale.keys(), ...multiple] };
+}
+/**
+ * The figure pattern; its fourth group is what follows the digits of `evidence.figure_units` (none when none are configured). CJK units
+ * may stand in a row (3千万); a Latin one stands alone, so 5mm is not two units.
+ */
+const figurePattern = (words: readonly string[]): RegExp => {
+  const cjk = words.filter((word) => ONLY_CJK.test(word));
+  const other = words.filter((word) => !ONLY_CJK.test(word));
+  const alternatives = [...(cjk.length > 0 ? [`(?:${anyOf(cjk)})+`] : []), ...(other.length > 0 ? [anyOf(other)] : [])];
+  const unit = alternatives.length > 0 ? `(${alternatives.join("|")})?` : "()";
   return new RegExp(
     String.raw`(?<=^|[^\p{L}\p{N}]|[${CJK_CLASS}])(\d{1,3}(?:[.,\u00a0\u202f ]\d{3})+|\d+)(?:[.,](\d+))?\s*(k)?${unit}(?=$|[^\p{L}\p{N}]|[${CJK_CLASS}])(\s*(?:%|percent|per cent|prozent|pct)(?!(?![${CJK_CLASS}])\p{L}))?`,
     "giu",
   );
 };
+/**
+ * A text as figures are read from it: NFKC, and an amount with thousands separators set apart from a currency code written against it
+ * (EUR50,000, 50,000EUR). Other digits against letters stay part of a word (S3, K8s).
+ */
+const figureText = (text: string): string =>
+  text
+    .normalize("NFKC")
+    .replace(/(?<![\p{L}\p{N}])(\p{Lu}{2,})(\d{1,3}(?:[.,]\d{3})+)/gu, "$1 $2")
+    .replace(/(\d{1,3}(?:[.,]\d{3})+)([A-Za-z]{2,})(?![\p{L}\p{N}])/gu, "$1 $2");
 const CJK_CHAR = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 
 const WORD = /[\p{L}\p{N}](?:[\p{L}\p{N}+#]|['’.\-&](?=[\p{L}\p{N}]))*/gu;
@@ -117,22 +146,25 @@ export function containsWords(haystack: string, needle: string): boolean {
  * `40 percent` and `40 Prozent` all give `40%`; `€85k`, `85,000 €` and `85.000 €` give `85000`. A separator followed by
  * exactly three digits is a thousands separator, otherwise a decimal mark. A percentage also matches its bare number.
  * Full-width digits and marks (５００％) are read as ASCII. A magnitude unit right after a figure scales it (5万 is 50,000,
- * 3千 is 3000) and 倍 makes it a multiple that matches only a multiple (40倍 is not 40%). Figures written as words
+ * 3千万 is 30,000,000) and 倍 makes it a multiple that matches only a multiple (40倍 is not 40%). Figures written as words
  * ("forty", "四十") are not recognised. Digits inside a word (S3, K8s) are names, not figures.
  */
 export function figures(text: string, units: FigureUnits = defaultFigureUnits()): { keys: Set<string>; shown: string[] } {
   const keys = new Set<string>();
   const shown: string[] = [];
-  for (const match of text.normalize("NFKC").matchAll(figurePattern(units))) {
+  const folded = foldedUnits(units);
+  const unitWord = folded.words.length > 0 ? new RegExp(anyOf(folded.words), "gu") : null;
+  for (const match of figureText(text).matchAll(figurePattern(folded.words))) {
     const [whole, intPart = "", decimals, thousand, unit, percentMark] = match;
     const digits = intPart.replace(/[.,\u00a0\u202f ]/g, "");
     let value = Number(decimals === undefined ? digits : `${digits}.${decimals}`);
     if (!Number.isFinite(value)) continue;
     if (thousand) value *= 1000;
-    if (unit !== undefined && unit !== "") value *= units.scale[unit] ?? 1;
+    const unitWords = unit === undefined || unit === "" || unitWord === null ? [] : (foldUnit(unit).match(unitWord) ?? []);
+    for (const word of unitWords) value *= folded.scale.get(word) ?? 1;
     const key = `${Number(value.toFixed(6))}`;
     // "3倍" is a multiple, not an amount: it matches only a multiple
-    if (unit !== undefined && units.multiple.includes(unit)) {
+    if (unitWords.some((word) => folded.multiple.has(word))) {
       keys.add(`${key}x`);
       shown.push(whole.trim());
       continue;
@@ -149,7 +181,7 @@ export function figures(text: string, units: FigureUnits = defaultFigureUnits())
 function missingFigures(sentence: string, evidence: string, units: FigureUnits): string[] {
   const have = figures(evidence, units).keys;
   const out: string[] = [];
-  for (const match of sentence.normalize("NFKC").matchAll(figurePattern(units))) {
+  for (const match of figureText(sentence).matchAll(figurePattern(foldedUnits(units).words))) {
     const { keys } = figures(match[0], units);
     const percentKey = [...keys].find((key) => key.endsWith("%"));
     const wanted = percentKey ?? [...keys][0];
