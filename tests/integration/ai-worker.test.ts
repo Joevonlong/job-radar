@@ -712,7 +712,7 @@ describe("the ai-worker handles run_ai", () => {
     const stored = await getCycle(db(), cycle.cycleId!);
     const steps = (stored?.summaryJson as { steps: Array<{ name: string; status: string; result?: Record<string, unknown> }> }).steps;
     const byName = (name: string) => steps.find((s) => s.name === name);
-    expect(byName("ai")).toMatchObject({ status: "ok", result: { subtasks: [{ name: "traps", status: "ok" }, { name: "score", status: "ok" }, { name: "signals", status: "ok" }, { name: "translate", status: "ok" }, { name: "breakdown", status: "ok", result: { skipped: "disabled" } }] } });
+    expect(byName("ai")).toMatchObject({ status: "ok", result: { subtasks: [{ name: "traps", status: "ok" }, { name: "score", status: "ok" }, { name: "signals", status: "ok" }, { name: "translate", status: "ok" }, { name: "breakdown", status: "ok", result: { skipped: "disabled" } }, { name: "research", status: "ok", result: { skipped: "disabled" } }] } });
     expect(byName("notify")?.result).not.toHaveProperty("delegated");
     expect(byName("notify")).toMatchObject({ status: "ok", result: { jobs: { pushed: 3 } } });
     expect(stored?.status).toBe("succeeded");

@@ -12,6 +12,9 @@ import { listRows } from "./list-rows";
  * stand-in's answer has one field with an http source, which the check must drop.
  */
 
+// `withResearchFile` changes one shared file: a test restoring it must not undo the change of one running next to it
+test.describe.configure({ mode: "serial" });
+
 async function openJob(page: Page, name: RegExp) {
   await page.goto("/jobs");
   await page.waitForLoadState("networkidle");
