@@ -188,6 +188,9 @@ test.describe("the company list", () => {
     await expect(details.getByTestId("company-research-source").first()).toHaveAttribute("target", "_blank");
     await expect(details.getByTestId("company-domain")).toBeVisible();
     await expect(details.getByTestId("company-overview-refresh")).toBeEnabled();
+    // a company without a result gets a button in its actions, not a row
+    await expect(page.locator('[data-testid="company-website-action"]:visible').first()).toBeVisible();
+    await expect(page.locator('[data-testid="company-research-row"]')).toHaveCount(await page.locator('[data-testid="company-research-row"]:has([data-testid="company-research-summary"])').count());
     const check = database();
     try {
       const [{ n }] = await check<[{ n: number }]>`select count(*)::int as n from control_requests where kind = 'company_research'`;
