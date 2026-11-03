@@ -9,8 +9,18 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 - **Gmail replies (optional, off by default).** Reads one Gmail label read-only with local rules and suggests status changes on `/pipeline`, each confirmed by you and undoable. No AI reads the mails and no mail content leaves the machine. See `docs/gmail-replies.md`. Adds the table `email_replies`.
 
+### Changed
+
+- **StepStone now only requests URLs its `robots.txt` permits.** The channel used to send `?sort=2&ag=…&radius=…&page=…`, which
+  StepStone's current `robots.txt` disallows; it now sends a single `?q=<keyword>` parameter. Trade-off: one request per keyword
+  and place (about 25 results in StepStone's own order, no paging, no newest-first sort), and the look-back window is applied
+  afterwards, so StepStone finds fewer postings than before. See [Sources](docs/sources.md#scraping).
+
 ### Upgrade notes
 
+- **`sources.stepstone.radius_km` and `max_pages` are removed** (`sources.yaml` config version 8; the config update deletes
+  them, and `pnpm config:check` passes on the result). **Rollback:** an older version requires both keys, so add
+  `radius_km: 30` and `max_pages: 2` under `sources.stepstone` in `data/config/sources.yaml` before downgrading. XING keeps its own.
 - **Berlin Startup Jobs now starts by itself on existing German installs.** The new Berlin Startup Jobs channel is on by
   default for installs whose market is Germany, so the next cycle after upgrading starts reading it. To turn it off, set
   `sources.berlinstartupjobs.enabled: false` in `data/config/sources.yaml`.

@@ -392,27 +392,26 @@ describe("dry run, abort and storage failures", () => {
   });
 });
 
-describe("a real paginated channel", () => {
-  /** StepStone from the recorded pages; page 2 of every search answers 503. */
+describe("a real multi-request channel", () => {
+  /** StepStone from the recorded pages; the search for the second keyword answers 503. */
   const fetch: FetchLike = async (requestUrl) => {
     const target = new URL(requestUrl);
     if (target.pathname.startsWith("/jobs/")) {
-      if (Number(target.searchParams.get("page") ?? "1") > 1) return htmlResponse(503, "busy");
+      if (target.pathname.startsWith("/jobs/ki-engineer")) return htmlResponse(503, "busy");
       return htmlResponse(200, fixtureHtml("stepstone", "search-berlin.html"));
     }
     return htmlResponse(404, "gone");
   };
 
-  it("keeps page 1 of a search whose page 2 fails, and records the run as interrupted", async () => {
+  it("keeps the first keyword of a query whose second search fails, and records the run as interrupted", async () => {
     const registry = new ChannelRegistry();
     registry.register(createStepstoneChannel({ now: () => new Date("2026-10-07T12:00:00Z") }));
     const sources = channelsWith((raw) => {
       raw.circuit_breaker = { failures: FAILURES_TO_OPEN, cooldown_hours: COOLDOWN_HOURS };
       const stepstone = (raw.sources as Record<string, Record<string, unknown>>).stepstone!;
       stepstone.enabled = true;
-      stepstone.max_pages = 2;
     });
-    const search = { ...shippedSearch(), keyword_groups: { engineering: ["AI Engineer"] }, locations: ["Berlin"], remote_scope: "none" as const };
+    const search = { ...shippedSearch(), keyword_groups: { engineering: ["AI Engineer", "KI Engineer"] }, locations: ["Berlin"], remote_scope: "none" as const };
     const result = await runCycle("manual", {
       registry,
       config: { ...config(), channels: sources, search },

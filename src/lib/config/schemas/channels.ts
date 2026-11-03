@@ -199,9 +199,18 @@ const jobBoardShape = {
   title_prefilter: atsTitlePrefilter,
 };
 
-/** `sources.stepstone`: www.stepstone.de search result pages + posting pages. */
-export const stepstoneSettingsSchema = z.strictObject(jobBoardShape);
+/**
+ * `sources.stepstone`: www.stepstone.de search result pages + posting pages. Its robots.txt only permits a search URL with a single `q=`
+ * parameter, so there is no radius and no paging: `radius_km` and `max_pages` (config 7) are removed from it.
+ */
+export const stepstoneSettingsSchema = z.strictObject(withoutKeys(jobBoardShape, ["radius_km", "max_pages"]));
 export type StepstoneSettings = z.infer<typeof stepstoneSettingsSchema>;
+
+function withoutKeys<T extends object, K extends keyof T>(shape: T, keys: readonly K[]): Omit<T, K> {
+  const copy: Partial<T> = { ...shape };
+  for (const key of keys) delete copy[key];
+  return copy as Omit<T, K>;
+}
 
 /** `sources.xing`: www.xing.com/jobs search pages + posting pages. */
 export const xingSettingsSchema = z.strictObject({
