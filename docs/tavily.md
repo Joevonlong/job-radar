@@ -1,6 +1,6 @@
 # Tavily search (ATS board discovery)
 
-The `tavily` channel uses the Tavily Search API to find "company careers pages that are not yet in `ats_boards` of `sources.yaml`" (Greenhouse / Lever / Ashby / Personio / SmartRecruiters). It does not collect jobs; it only writes newly found boards into the candidate table, and under "Discovered boards" on `/sources` you add or ignore them with one click. It replaces Brave Search with exactly the same role; the `brave` channel is still there, off by default.
+The `tavily` channel uses the Tavily Search API to find "company careers pages that are not yet in `ats_boards` of `sources.yaml`" (Greenhouse / Lever / Ashby / Personio / SmartRecruiters). It does not collect jobs; it only writes newly found boards into the candidate table, and under "Discovered boards" on `/sources` you add or ignore them with one click. It replaces Brave Search with exactly the same role; the `brave` channel is still there, off by default. [Handpicked Berlin](sources.md#handpicked-berlin) and [Berlin Design Network](sources.md#berlin-design-network), when you switch them on, also write candidates (the company boards behind their links); each candidate row on the source registry carries a badge saying where it was found (Tavily, Brave, Handpicked Berlin or Berlin Design Network; older rows have none).
 
 ## Account and key
 1. Sign up at <https://app.tavily.com> (no card needed). The free tier gives 1000 credits per month; after that you can switch to pay-as-you-go (about $0.008 / credit at the time of writing; check the website).

@@ -19,6 +19,10 @@ import { withActionFeedback } from "@/lib/actions/client";
 const addBoardCandidateAction = withActionFeedback(rawAddBoardCandidateAction)(() => ({ status: "error", error: "write_failed" }));
 const dismissBoardCandidateAction = withActionFeedback(rawDismissBoardCandidateAction)(() => ({ status: "error", error: "write_failed" }));
 
+/** Discovery sources with a badge on the candidate row (message keys under `sources.discovery.foundBy`); other ids show none. */
+const FOUND_BY_BADGES = ["handpicked", "berlin_design_network", "tavily", "brave"] as const;
+const knownFoundBy = (id: string): id is (typeof FOUND_BY_BADGES)[number] => (FOUND_BY_BADGES as readonly string[]).includes(id);
+
 type Feedback = { tone: "ok" | "error"; text: string } | null;
 
 /** Boards that discovery found and `ats_boards` does not list yet: add one (writes sources.yaml) or dismiss it (shown on /sources/registry). `candidates` is null when the list cannot be read. */
@@ -104,6 +108,11 @@ export function CandidatesCard({ candidates, timeZone, readOnlyHint = null, page
                           {t("region")}
                         </Badge>
                       ) : null}
+                      {candidate.foundBy.filter(knownFoundBy).map((source) => (
+                        <Badge key={source} variant="outline" className="font-normal" data-testid="candidate-found-by" data-source={source} title={t("foundByTitle")}>
+                          {t(`foundBy.${source}`)}
+                        </Badge>
+                      ))}
                       <a href={candidate.boardUrl} target="_blank" rel="noopener noreferrer" className="text-ink inline-flex items-center gap-1 text-data underline-offset-4 hover:underline">
                         {t("open")}
                         <ExternalLink aria-hidden className="size-3" />

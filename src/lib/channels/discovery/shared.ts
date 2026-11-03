@@ -78,6 +78,11 @@ export function boardUrlOf(ats: DiscoverableAts, token: string, region: "eu" | n
   }
 }
 
+/** Keys (`boardKey`) of the boards `ats_boards` lists, enabled or not: the boards discovery never offers again. */
+export function knownBoardKeys(companies: CompaniesConfig): Set<string> {
+  return new Set(companies.companies.map((c) => boardKey(c.ats, c.token)));
+}
+
 /** The new boards among `hits`: official URLs only, not in `known`, once per board. */
 export function boardsFromHits(hits: readonly SearchHit[], known: ReadonlySet<string>): DiscoveredBoard[] {
   const found = new Map<string, DiscoveredBoard>();
@@ -156,7 +161,7 @@ export function createDiscoveryChannel<S extends DiscoverySettings>(provider: Di
       }
 
       const inputs = deps.inputs();
-      const known = new Set(inputs.companies.companies.map((c) => boardKey(c.ats, c.token)));
+      const known = knownBoardKeys(inputs.companies);
       const all = provider.buildQueries(inputs.search, settings);
       let previous = new Map<string, Date>();
       let turnsReadable = store !== null;
@@ -220,7 +225,7 @@ export function createDiscoveryChannel<S extends DiscoverySettings>(provider: Di
       const boards = [...found.values()];
       let added = 0;
       if (store) {
-        added = await store.upsert(boards.map((b) => ({ ats: b.ats, token: b.token, region: b.region, boardUrl: b.boardUrl, title: b.title })));
+        added = await store.upsert(boards.map((b) => ({ ats: b.ats, token: b.token, region: b.region, boardUrl: b.boardUrl, title: b.title, foundBy: provider.id })));
         turnsSaved = await saveTurns();
         // a run that stopped early is not a finished run: the next cycle tries again
         if (!fatal) await store.markRun();

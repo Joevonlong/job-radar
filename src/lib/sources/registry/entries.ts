@@ -15,11 +15,11 @@ export type AtsKind = (typeof ATS_KINDS)[number];
 
 /** Channels per group in display order (the LinkedIn group follows `linkedin.cascade` instead). Code classification, not a tunable value. */
 const GROUP_MEMBERS: Record<Exclude<RegistryGroup, "linkedin">, readonly ConfiguredChannelId[]> = {
-  job_boards: ["arbeitsagentur", "indeed", "stepstone", "xing", "arbeitnow"],
+  job_boards: ["arbeitsagentur", "indeed", "stepstone", "xing", "arbeitnow", "handpicked", "berlinstartupjobs"],
   search_apis: ["jsearch", "jobspy-google"],
   email: ["gmail-alerts"],
   ats: ["greenhouse", "lever", "ashby", "personio", "smartrecruiters"],
-  discovery: ["tavily", "brave"],
+  discovery: ["tavily", "brave", "berlin_design_network"],
 };
 
 /** Channel id -> group. Every id of `CHANNEL_CONFIG_TABLE` must be here (a unit test keeps it so). */
@@ -35,6 +35,8 @@ export const CHANNEL_GROUP: Record<ConfiguredChannelId, RegistryGroup> = {
   stepstone: "job_boards",
   xing: "job_boards",
   arbeitnow: "job_boards",
+  handpicked: "job_boards",
+  berlinstartupjobs: "job_boards",
   jsearch: "search_apis",
   "jobspy-google": "search_apis",
   "gmail-alerts": "email",
@@ -44,6 +46,7 @@ export const CHANNEL_GROUP: Record<ConfiguredChannelId, RegistryGroup> = {
   personio: "ats",
   smartrecruiters: "ats",
   tavily: "discovery",
+  berlin_design_network: "discovery",
   brave: "discovery",
 };
 

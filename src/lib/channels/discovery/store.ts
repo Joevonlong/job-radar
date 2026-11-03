@@ -40,10 +40,11 @@ export function createDbDiscoveryStore(db: Db, provider: string): DiscoveryStore
   };
 }
 
-export function createMemoryDiscoveryStore(): DiscoveryStore & { candidates: Map<string, BoardCandidateInput>; runs: number; last: Date | null; turns: Map<string, Date>; turnReads: number; turnWrites: number } {
+export function createMemoryDiscoveryStore(): DiscoveryStore & { candidates: Map<string, BoardCandidateInput>; foundBy: Map<string, string[]>; runs: number; last: Date | null; turns: Map<string, Date>; turnReads: number; turnWrites: number } {
   const candidates = new Map<string, BoardCandidateInput>();
   const store = {
     candidates,
+    foundBy: new Map<string, string[]>(),
     runs: 0,
     last: null as Date | null,
     turns: new Map<string, Date>(),
@@ -55,6 +56,8 @@ export function createMemoryDiscoveryStore(): DiscoveryStore & { candidates: Map
         const key = `${item.ats}:${item.token}`;
         if (!candidates.has(key)) fresh += 1;
         candidates.set(key, item);
+        // like the database: a board keeps every source that saw it
+        store.foundBy.set(key, [...new Set([...(store.foundBy.get(key) ?? []), item.foundBy])].sort());
       }
       return fresh;
     },

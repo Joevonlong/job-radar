@@ -18,6 +18,7 @@ function row(extra: Partial<BoardCandidateRow>): BoardCandidateRow {
     boardUrl: "https://jobs.ashbyhq.com/acme-labs",
     title: "AI Engineer - Acme Labs",
     status: "new",
+    foundBy: ["tavily"],
     seenCount: 2,
     firstSeenAt: new Date("2026-10-01T10:00:00Z"),
     lastSeenAt: new Date("2026-10-06T10:00:00Z"),

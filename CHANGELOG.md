@@ -7,6 +7,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Berlin Startup Jobs now starts by itself on existing German installs.** The new Berlin Startup Jobs channel is on by
+  default for installs whose market is Germany, so the next cycle after upgrading starts reading it. To turn it off, set
+  `sources.berlinstartupjobs.enabled: false` in `data/config/sources.yaml`.
 - **Optional title check for duplicate merging.** `dedupe.title_guard` in `pipeline.yaml` can compare titles before a job
   is merged on its description. It is off by default, so matching does not change, and no migration runs. The first cycle
   after upgrading re-evaluates the filter once, with no AI cost. **Rollback:** an older version refuses
@@ -232,6 +235,24 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   database a `profile_story_drafts` table (migration `0049_story_extract_drafts`), and the web image the `unpdf` dependency.
   A PDF is read in a worker thread stopped at `import.pdf_timeout_seconds` / `import.pdf_max_memory_mb`. Provider errors on this task and on `write`
   are logged and stored as their kind only. The evidence check now reads Latin magnitudes and multiples ($2M, 2.5M, 3 Mio, 10x).
+- **Handpicked Berlin channel (off by default).** Reads the public job index of handpickedberlin.com (Berlin, Munich, Hamburg
+  and German remote, with the employer's own links), keeps postings in your places that pass the title prefilter, and offers the
+  company boards behind them as candidates under Discovered boards (each candidate now shows where it was found). The site
+  publishes no terms, so the channel is not switched on for you: set `sources.handpicked.enabled: true`
+  (see [Sources](docs/sources.md#handpicked-berlin)). `pnpm config:migrate` adds the block (switched off) to `sources.yaml` (version 5)
+  and `handpicked: 2` to `apply_priority` in a copied `pipeline.yaml` (version 4). Migration `0049_board_candidate_found_by` adds
+  one column with a default; **rollback:** drop `found_by` from `ats_board_candidates` and delete the `handpicked` block and key again.
+- **Berlin Startup Jobs channel.** Reads the public listings of berlinstartupjobs.com, about 140 Berlin startup postings, many from
+  small companies that take applications by e-mail only and are on no ATS. It reads the whole board each run (about four requests),
+  keeps titles that pass the title prefilter, skips posts past their own end date, and links each job to its page on the site (no
+  e-mail address is put into a job field). On for the Germany pack; `pnpm config:migrate` adds the block to `sources.yaml`
+  (version 7) and `berlinstartupjobs: 3` to `apply_priority` in a copied `pipeline.yaml` (version 5); **rollback:** delete the
+  block and the key and set the versions back to 6 and 4, or set `sources.berlinstartupjobs.enabled: false`.
+- **Berlin Design Network discovery (off by default).** Reads the job list of berlin-design-network.org once a day and offers the
+  company boards behind its apply links (Greenhouse, Lever, Ashby, Personio, SmartRecruiters) as candidates under Discovered
+  boards; it stores no postings and never reads the companies' contact details. Set `sources.berlin_design_network.enabled: true`
+  (see [Sources](docs/sources.md#berlin-design-network)). `pnpm config:migrate` adds the block (switched off) to `sources.yaml`
+  (version 6); **rollback:** delete the block and set the version back to 5.
 - **Application writer: improve your own draft and a coach review.** Paste text you wrote in any language and get a new
   version in the answer's language, either fitted to the job or with only the language and wording changed (that option
   sends none of your ticked material). A version can also be reviewed: the AI rates it from 0 to 100 (marked as its

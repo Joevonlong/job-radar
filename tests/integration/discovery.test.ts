@@ -63,6 +63,7 @@ const candidate = (token: string, extra: Partial<Parameters<typeof upsertBoardCa
   region: null,
   boardUrl: `https://jobs.ashbyhq.com/${token}`,
   title: `Jobs at ${token}`,
+  foundBy: "tavily",
   ...extra,
 });
 
@@ -88,6 +89,20 @@ describe("board candidate repo", () => {
     const dismissed = await listBoardCandidates(db, "dismissed");
     expect(dismissed).toHaveLength(1);
     expect(dismissed[0]).toMatchObject({ token: "a", seenCount: 2, title: "Jobs at a" }); // a null title never erases a known one
+  });
+
+  it("found_by starts empty on a plain insert, and holds the union of the sources that saw a board", async () => {
+    const db = getDb();
+    await db.execute(sql`insert into ats_board_candidates (ats, token, board_url) values ('ashby', 'plain', 'u')`);
+    const [plain] = await db.select().from(schema.atsBoardCandidates).where(sql`token = 'plain'`);
+    expect(plain?.foundBy).toEqual([]);
+
+    await upsertBoardCandidates(db, [candidate("shared", { foundBy: "tavily" })]);
+    await setBoardCandidateStatus(db, { ats: "ashby", token: "shared" }, "dismissed");
+    await upsertBoardCandidates(db, [candidate("shared", { foundBy: "handpicked" })]);
+    await upsertBoardCandidates(db, [candidate("shared", { foundBy: "tavily" })]);
+    const [shared] = await db.select().from(schema.atsBoardCandidates).where(sql`token = 'shared'`);
+    expect(shared).toMatchObject({ foundBy: ["handpicked", "tavily"], seenCount: 3, status: "dismissed" });
   });
 
   it("an empty batch is a no-op; an unknown board cannot get a status", async () => {

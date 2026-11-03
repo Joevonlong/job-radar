@@ -273,7 +273,7 @@ LinkedIn 会话搜索、guest、JSearch 等使用时间窗的通道会补窗，�
 不使用搜索时间窗的通道也保留基础窗口，因为扩大窗口取不到更多岗位，只会让其成功运行失去“可能已关闭”的证据资格：
 
 - 公司 ATS 招聘页：Greenhouse、Lever、Ashby、Personio、SmartRecruiters。
-- 招聘页发现：Tavily、Brave。
+- 招聘页发现：Tavily、Brave、Berlin Design Network。
 - Gmail 职位提醒邮件。
 - LinkedIn“为你推荐”。
 
@@ -319,7 +319,7 @@ pnpm cycle:run --backfill 36h
 与正常运行一样，已处理的查询会移到轮换队尾；补抓不保证处理每个查询。窗口变宽的运行不能作为标记岗位可能已下线的依据。
 补抓窗口不超过基础窗口，且自动补窗没有扩大窗口时，该运行按正常运行处理。
 
-只有关键词通道使用补抓窗口。不按关键词查询、而是读取自己的职位板或收件箱的通道（ATS 职位板、Arbeitnow 信息流、邮件提醒、Brave / Tavily 发现来源、LinkedIn 登录态推荐）
+只有关键词通道使用补抓窗口。不按关键词查询、而是读取自己的职位板或收件箱的通道（ATS 职位板、Arbeitnow 信息流、Berlin Startup Jobs 板、Handpicked Berlin 索引、邮件提醒、Brave / Tavily / Berlin Design Network 发现来源、LinkedIn 登录态推荐）
 在同一次补抓运行中照常采集：窗口不放宽，它们的运行也不标记为窗口已放宽。
 
 ## 6. 常见异常怎么处理
@@ -357,6 +357,83 @@ Arbeitnow（`arbeitnow`）是免费公开的招聘板接口：不要 key，不�
 - **设置**：`sources.arbeitnow` 下的 `base_url`、`user_agent`、`max_pages`、`max_results`、`throttle` 和 `title_prefilter`
   （设置页上也有）。用 `enabled: false` 或 `/sources/registry` 上的开关关掉它。
 
+## Berlin Startup Jobs
+
+Berlin Startup Jobs（`berlinstartupjobs`）读 [berlinstartupjobs.com](https://berlinstartupjobs.com) 背后公开的 WordPress REST 接口：
+大约 140 条柏林创业公司的岗位，英德混合。不要 key，不用登录。它的价值不在数量，而在覆盖面：很多公司规模小、只收邮件申请、不在任何 ATS 上，
+公司招聘页通道看不到它们。它是德国包的本地通道，随附的 `sources.yaml` 里默认开启（`markets: [DE]`）；已有的安装由配置更新
+（`pnpm config:migrate`）补上同样的块，标题预过滤词从它的 `greenhouse` 块复制。
+
+- **每轮读什么。** 整个板，像公司招聘页那样，而不是只看最新的窗口：每页 100 条依次读（整板两页），再用一次请求取留下岗位的公司名，
+  另一次请求取三个地点（Berlin、Remote、Remote Possible），一轮大约四个请求，间隔 1 到 2 秒。只存通过 `title_prefilter` 的标题
+  （命中搜索关键词或 `include_terms`，或属于关注的公司，按站点的公司名匹配；`exclude_terms` 去掉学生岗和实习），新的优先，最多 `max_results` 条。
+  请求只要通道需要的字段；站点给每个帖子另存的订单和提交数据从不请求，也从不存。
+- **哪些不收。** 站点在自己的到期日（`_unpublish_on`，标准套餐 90 天）之后仍把帖子挂着：`skip_expired: true`（默认）时这些不采集，
+  `max_age_days`（90）去掉上架更早的帖子，也兜住没有到期日的帖子。重新上架会把上架日期往后推，所以老岗位可能看起来是新的；它的 id 不变，
+  不会存两次。不收不等于关闭：已入库的不会变，帖子不在板上也不当作已关闭。
+- **一条岗位有什么。** 岗位名（去掉标题末尾的“// 公司”）、公司（站点的公司名；帖子没有时取标题末尾）、地点（站点只有 Berlin 和 Remote）、
+  工作方式（只有 “Remote” 算远程；“Remote Possible” 不是混合办公，两者都没有的不当作现场）和完整描述，陷阱扫描会读其中的隐藏文字
+  （[ai-traps.zh.md](ai-traps.zh.md)）。描述文本里的邮箱和电话会被去掉，入库的原文保留。
+- **怎么申请。** 站点的接口没有申请链接。岗位链接指向它在 berlinstartupjobs.com 上的页面，页面上的 “Apply now” 按钮是邮箱或雇主自己的页面。
+  很多岗位只收邮件申请，请打开那个页面申请。任何岗位字段里都不会放 `mailto:` 链接或邮箱地址。
+- **条款。** 站点没有访客使用条款（雇主条款只是告知雇主：岗位公开，搜索引擎和其他第三方工具可以读取并在别处展示，这是对雇主的通知，不是对你的授权），
+  `robots.txt` 允许这个接口。岗位版权归雇主所有：只用于你自己的求职，不要镜像或再发布采集到的数据，商业使用或对外展示岗位前请自行判断。
+  `/sources` 卡片写明来源并带链接。401、第一页的 404、410 或 403 算被封，打开该通道的熔断，其他通道照常运行。
+- **限制。** 量小（大约 140 条，其中约三分之一是技术岗，扣掉过期的更少）。站点只有柏林：`search.yaml: locations` 里是别的城市时，地点过滤会丢掉全部岗位。
+  公司名是站点的，多数不带 “GmbH”，品牌名也可能和标题里的不同，所以跨来源合并有时会漏掉重复。
+- **设置**：`sources.berlinstartupjobs` 下的 `base_url`、`user_agent`、`per_page`、`max_pages`、`skip_expired`、`max_age_days`、`max_results`、
+  `throttle` 和 `title_prefilter`（设置页上也有）。用 `enabled: false` 或 `/sources/registry` 上的开关关掉它。
+
+## Handpicked Berlin
+
+Handpicked Berlin（`handpicked`）读 [handpickedberlin.com](https://handpickedberlin.com/jobs) 背后的公开岗位索引：一个静态 JSON 文件，
+包含柏林、慕尼黑、汉堡和德国远程大约最近 30 天的岗位，一次几千条，每条都带雇主自己的链接（Personio、join.com、Ashby、
+Greenhouse、Workday 等，很多是小型创业公司）。不要 key，不用登录。它面向德国包，但**默认关闭，也不在德国包的默认渠道里**：
+该站没有公开条款（只有版权页和隐私页；它的 `robots.txt` 允许本通道读取的路径）。要用它，在 `sources.yaml` 里设置
+`sources.handpicked.enabled: true`（或在 `/sources/registry` 打开）；已有的安装由配置更新（`pnpm config:migrate`）补上这个块，
+默认关闭。
+
+- **每轮读什么。** 一次请求取索引，再对每个要留下的新岗位取一次描述（最多 `max_details_per_run` 个，默认 30，请求之间隔
+  1 到 3 秒；已经入库的岗位不再取，超出的留到下一轮）。留下的岗位要同时满足：在你的地点之一（`search.yaml: locations`，按城市别名
+  比对，所以“München”也能匹配站点的 `munich`；或者你的远程范围不是 `none` 时，面向你所在国家的远程岗位），不超过
+  `max_age_days` 天（14；索引只有日期没有时间），标题通过 `title_prefilter`（命中搜索关键词或 `include_terms`，或属于关注的公司；
+  `exclude_terms` 去掉学生岗和实习），并且在 `skip_known_boards: true` 时，不属于你已经列在 `ats_boards` 里的公司 board（不管开关）：
+  那些由 ATS 通道直接读一手数据。索引只覆盖柏林、慕尼黑、汉堡和德国远程；`locations` 里是别的城市时，通道照常运行，只是找不到岗位。
+- **一条岗位有什么。** 标题、公司、一个或多个地点、工作方式（站点的 "onsite" 不当作事实）、可选的薪资区间文字，以及完整描述
+  （HTML，按文本读取；文本里的邮箱和电话会被去掉，入库的原文保留；陷阱扫描会读其中的隐藏文字，见
+  [ai-traps.zh.md](ai-traps.zh.md)）。岗位链接指向雇主自己的岗位页，因为该站没有岗位页。同一岗位若也来自雇主的 ATS 或别的来源，会合并成一个；
+  申请链接优先用 ATS，其次是本通道和 LinkedIn。
+- **公司发现。** 这份索引是我们能拿到的最好的德国小型雇主名单（Personio、Ashby、Greenhouse、Lever）。通道每天一次
+  （`discover_boards.interval_hours`），把你地点里、标题匹配的岗位的雇主链接（`require_title_match: true`；设为 `false` 则你地点里有岗位的
+  每家公司都成为候选，上百个）转成 `/sources/registry` 的“发现的 board”候选，带“Handpicked Berlin”徽标。加入后，该公司的全部岗位
+  由 ATS 通道读取；也可以忽略。你已经列出的 board 不会再被推荐。join.com、Workday 等主机这里没有通道，所以只能入库岗位，不产生候选。
+  `discover_boards.enabled: false` 关掉这一部分；它出错不会影响岗位入库。
+- **条款。** 该站没有条款页：没有禁止读取索引，也没有授权。请低频使用（每轮一次索引请求加少量详情），不要镜像或再发布数据，
+  站主提出异议时关掉本通道。`/sources` 卡片写明来源并带链接。索引的 403、404 或 410 算被封，打开该通道的熔断，其他通道照常运行。
+- **限制。** 只有日期（今天早上和昨天的岗位看起来一样），没有语言、级别、合同字段；站点若改了 `id`，旧岗位会被当成新岗位（通常的跨源合并会
+  接住）。岗位不在索引里不当作已关闭。
+- **设置**：`sources.handpicked` 下的 `base_url`、`user_agent`、`max_age_days`、`max_details_per_run`、`skip_known_boards`、
+  `discover_boards`、`max_results`、`throttle` 和 `title_prefilter`（设置页上也有）。
+
+## Berlin Design Network
+
+Berlin Design Network（`berlin_design_network`）发现公司 board，不采集岗位。它读 [berlin-design-network.org](https://berlin-design-network.org/jobs)
+的岗位列表（大约 90 条柏林设计和创意行业雇主的岗位，只有标题、公司名和雇主的申请链接，没有描述，也没有岗位页），把链接背后的公司 board
+作为候选放进 `/sources/registry` 的“发现的 board”，带“Berlin Design Network”徽标。加入后，该公司的全部岗位由 ATS 通道读取，带完整描述。
+不要 key，不用登录。它**默认关闭**：这些雇主是设计和创意公司，除非你找这类岗位，否则只是噪音。要用它，在 `sources.yaml` 里设置
+`sources.berlin_design_network.enabled: true`（或在 `/sources/registry` 打开）；已有的安装由配置更新（`pnpm config:migrate`）补上这个块，默认关闭。
+
+- **每轮做什么。** 一次请求取页面，最多每 `interval_hours`（24）一次；间隔内的运行什么都不做。页面把列表作为数据内嵌（`__NEXT_DATA__`）；
+  通道只读每条的申请链接和公司名。只有指向官方 Greenhouse、Lever、Ashby、Personio（`*.jobs.personio.de`）或 SmartRecruiters board 的链接才算
+  （大约七分之一；LinkedIn、StepStone、join.com 和公司官网的链接一律忽略，也不会去请求）。已经在 `ats_boards` 里、或已经加入或忽略的 board 不再推荐。
+  不入库任何岗位，通道自己也没有岗位可显示。
+- **联系方式。** 页面还列出公司的联系邮箱和电话。通道不读、不存、不记日志；只保留链接和公司名。
+- **条款。** 该站没有条款页，`robots.txt` 允许这个路径。通道每天发一次请求，带说明性的 `User-Agent`，只在本站内跟随重定向，403 算被封
+  （熔断打开，其他通道照常运行）。页面结构变了，这一轮以解析错误失败，什么都不存。站主提出异议时关掉本通道。
+- **限制。** 列表小、偏设计，岗位一个月过期，所以 board 集合变化很慢。`*.jobs.personio.com` 等这里没有 ATS 通道的主机不产生候选。
+  公司名只是候选行的提示；加入前请自己确认 board。
+- **设置**：`sources.berlin_design_network` 下的 `base_url`、`user_agent` 和 `interval_hours`（设置页上也有）。
+
 ## 抓取
 
 并非每个通道都用官方 API。有些读取公开网页或非官方接口，有些以你自己登录的账号操作。多数招聘网站的服务条款禁止自动访问，
@@ -366,7 +443,7 @@ Arbeitnow（`arbeitnow`）是免费公开的招聘板接口：不要 key，不�
 |---|---|---|---|
 | 抓取 | LinkedIn 游客搜索（`linkedin-guest`）、Indeed（`indeed`）、StepStone（`stepstone`）、XING（`xing`）、经 sidecar 的 Google Jobs（`jobspy-google`） | 关 | 网站条款可能禁止；你的 IP 可能被限流或封禁 |
 | 账号自动化 | LinkedIn 登录会话（`linkedin-session`、`linkedin-session:recommended`） | 关 | 使用你自己的账号；账号可能被限制或封禁 |
-| 官方 API 和公开的公司数据源 | Arbeitsagentur、[Arbeitnow](#arbeitnow)、Greenhouse、Lever、Ashby、Personio、SmartRecruiters（开）；JSearch、Gmail 提醒、Tavily、Brave（需要你的 key 或账号） | 开，或填 key 之前关 | 遵守各提供方自己的条款和配额 |
+| 官方 API 和公开的公司数据源 | Arbeitsagentur、[Arbeitnow](#arbeitnow)、[Berlin Startup Jobs](#berlin-startup-jobs)、Greenhouse、Lever、Ashby、Personio、SmartRecruiters（开）；[Handpicked Berlin](#handpicked-berlin)（关：该站没有条款）；[Berlin Design Network](#berlin-design-network)（关：只做发现）；JSearch、Gmail 提醒、Tavily、Brave（需要你的 key 或账号） | 开，或填 key、手动打开之前关 | 遵守各提供方自己的条款和配额 |
 | 付费抓取服务 | Bright Data、Apify、[Monid](monid.zh.md) | 开，但没有你的 token 就什么也不做 | 由服务替你抓取；**这并不能消除服务条款风险**，风险仍在你身上 |
 
 怎么打开：

@@ -1,0 +1,20 @@
+[
+  {
+    "id": 21,
+    "name": "Berlin, Germany",
+    "slug": "berlin-germany",
+    "link": "https://bsj.example/location/berlin-germany/"
+  },
+  {
+    "id": 22,
+    "name": "Remote Possible",
+    "slug": "remote-possible",
+    "link": "https://bsj.example/location/remote-possible/"
+  },
+  {
+    "id": 23,
+    "name": "Remote",
+    "slug": "remote",
+    "link": "https://bsj.example/location/remote/"
+  }
+]
