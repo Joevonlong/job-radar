@@ -94,7 +94,7 @@ const ghostCheckSchema = z
     /** Open for a long time: days since the trusted posted date (else since first seen, at most `first_seen_max_points`). */
     long_open: z
       .strictObject({
-        enabled: z.boolean().default(false),
+        enabled: z.boolean().default(true),
         /** The highest tier whose `days` are reached gives its points. */
         tiers: z
           .array(z.strictObject({ days: ghostDays, points: ghostPoints }))
@@ -107,17 +107,17 @@ const ghostCheckSchema = z
       })
       .default({ ...GHOST_CHECK_DEFAULTS.long_open, tiers: GHOST_CHECK_DEFAULTS.long_open.tiers.map((tier) => ({ ...tier })) }),
     /** The source labels the posting "reposted" (the market packs' `ghost.repost_label_patterns`). */
-    repost_label: z.strictObject({ enabled: z.boolean().default(false), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.repost_label.points) }).default(GHOST_CHECK_DEFAULTS.repost_label),
+    repost_label: z.strictObject({ enabled: z.boolean().default(true), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.repost_label.points) }).default(GHOST_CHECK_DEFAULTS.repost_label),
     /** The same channel listed it again under a new id at least `min_gap_days` later, at the same place. */
     reposted: z
-      .strictObject({ enabled: z.boolean().default(false), min_gap_days: ghostDays.default(GHOST_CHECK_DEFAULTS.reposted.min_gap_days), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.reposted.points) })
+      .strictObject({ enabled: z.boolean().default(true), min_gap_days: ghostDays.default(GHOST_CHECK_DEFAULTS.reposted.min_gap_days), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.reposted.points) })
       .default(GHOST_CHECK_DEFAULTS.reposted),
     /** The JD says it is a talent pool / always open (the market packs' `ghost.evergreen_patterns`). */
-    evergreen_wording: z.strictObject({ enabled: z.boolean().default(false), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.evergreen_wording.points) }).default(GHOST_CHECK_DEFAULTS.evergreen_wording),
+    evergreen_wording: z.strictObject({ enabled: z.boolean().default(true), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.evergreen_wording.points) }).default(GHOST_CHECK_DEFAULTS.evergreen_wording),
     /** A JD from a full-text source with fewer than `min_words` words, or without a duties section. */
     thin_description: z
       .strictObject({
-        enabled: z.boolean().default(false),
+        enabled: z.boolean().default(true),
         min_words: z.number().int().min(0).max(5000).default(GHOST_CHECK_DEFAULTS.thin_description.min_words),
         points: ghostPoints.default(GHOST_CHECK_DEFAULTS.thin_description.points),
         /**

@@ -130,16 +130,16 @@ export async function resetRuleDerivedFacts(db: Executor): Promise<number> {
   return rows.length;
 }
 
-/**
- * Same-source match: the job that already holds a posting with this external id from any channel of
- * the same family (e.g. the same LinkedIn job delivered by two LinkedIn channels).
- */
 /** The external ids that name the same posting. A partial upgrade may already hold both guest spellings: match legacy ids too without discarding either raw payload. */
 export function sameSourceExternalIds(family: string, externalId: string): string[] {
   const canonicalId = family === "linkedin" ? externalId.replace(/^li-/, "") : externalId;
   return family === "linkedin" ? [canonicalId, `li-${canonicalId}`] : [canonicalId];
 }
 
+/**
+ * Same-source match: the job that already holds a posting with this external id from any channel of
+ * the same family (e.g. the same LinkedIn job delivered by two LinkedIn channels).
+ */
 export async function findJobByFamilyExternalId(
   db: Executor,
   input: { family: string; externalId: string; excludeRawPostingId: number },
