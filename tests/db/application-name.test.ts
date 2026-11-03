@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { applicationName, instanceApplicationName } from "@/lib/db/instance-lock";
 
-const PRINTABLE_ASCII = Array.from({ length: 0x7e - 0x21 + 1 }, (_, index) => String.fromCharCode(0x21 + index)).join("");
+const PRINTABLE_ASCII = Array.from({ length: 0x7e - 0x20 + 1 }, (_, index) => String.fromCharCode(0x20 + index)).join("");
 
 describe("applicationName: the host in a Postgres application_name", () => {
   it("is `job-radar <name> pid=<pid> host=<host>` for a plain host", () => {
@@ -19,13 +19,13 @@ describe("applicationName: the host in a Postgres application_name", () => {
   });
 
   it.each([
-    ["accented letters", "mäcbook-é", "m_cbook-_"],
-    ["Chinese", "电脑-1", "__-1"],
-    ["a space and a tab", "my host\tx", "my_host_x"],
-    ["a control character and DEL", "a\u0000b\u007fc", "a_b_c"],
-    ["a character outside the BMP (one underscore, not two)", "h😀h", "h_h"],
-    ["a non-breaking space", "a b", "a_b"],
-  ])("replaces every character that is not printable ASCII with `_`: %s", (_name, host, expected) => {
+    ["accented letters", "mäcbook-é", "m%c3%a4cbook-%c3%a9"],
+    ["Chinese", "电脑-1", "%e7%94%b5%e8%84%91-1"],
+    ["a tab", "my\tx", "my%09x"],
+    ["a control character and DEL", "a\u0000b\u007fc", "a%00b%7fc"],
+    ["a character outside the BMP (one character, all its bytes)", "h😀h", "h%f0%9f%98%80h"],
+    ["a non-breaking space", "a\u00a0b", "a%c2%a0b"],
+  ])("writes every character that is not printable ASCII as its UTF-8 bytes: %s", (_name, host, expected) => {
     expect(applicationName("x", 1, host)).toBe(`job-radar x pid=1 host=${expected}`);
   });
 

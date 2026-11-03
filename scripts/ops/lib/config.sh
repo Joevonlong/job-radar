@@ -37,7 +37,7 @@ CFG_DEFAULT_COMPOSE_PROJECT="job-radar"
 CFG_DEFAULT_BACKUP_MAX_AGE_HOURS="30"
 
 # The layered config files, as the app lists them (tests/ops/restore-backfill.test.ts compares this with the registry).
-CFG_LAYERED_FILES="current-scores.yaml schedule.yaml search.yaml job-search.yaml sources.yaml ai.yaml breakdown.yaml models.yaml notify.yaml interests.yaml pipeline.yaml pipeline-board.yaml resume.yaml insights.yaml ui.yaml language.yaml setup.yaml traps.yaml salary.yaml signal-presets.yaml delivery-audit.yaml mcp.yaml activity-log.yaml job-archive.yaml writer.yaml"
+CFG_LAYERED_FILES="current-scores.yaml schedule.yaml search.yaml job-search.yaml sources.yaml ai.yaml breakdown.yaml models.yaml notify.yaml interests.yaml pipeline.yaml pipeline-board.yaml research.yaml resume.yaml insights.yaml ui.yaml language.yaml setup.yaml traps.yaml salary.yaml signal-presets.yaml delivery-audit.yaml mcp.yaml activity-log.yaml job-archive.yaml writer.yaml"
 
 # stage_has_layered_config <dir>: does the directory hold at least one of them? File names only: no node and no database.
 stage_has_layered_config() {

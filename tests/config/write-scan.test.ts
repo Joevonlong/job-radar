@@ -75,6 +75,7 @@ const NOT_LOCKED = new Map<string, string>([
   ["src/lib/channels/linkedin/session/auth-file.ts#writeAuthFile", ".auth"],
   ["src/lib/ai/providers/codex-cli.ts#createCodexCliTransport", "a temp file of the provider call"],
   ["src/lib/ai/providers/process.ts#makeScratchDir", "the provider process's scratch directory"],
+  ["scripts/simhash-analyze.ts#exportSnapshot", "the snapshot file the operator names"],
   ["scripts/i18n-catalog.ts#main", "the generated message catalogs in the repository"],
   ["scripts/market-regress.ts#main", "the regression report in the repository"],
   ["scripts/demo-finish.ts#makeGif", "the rendered pictures in the repository"],
