@@ -62,11 +62,25 @@ const HIGH: readonly FixturePosting[] = [
   posting("twice", { title: "Twice Engineer", company: "Twice AG", city: "Essen", description: `${OTHER} Twice.` }),
 ];
 
+/** One registry per channel, so that a channel's postings are collected, and get their raw ids, in this order. */
+function channelRegistries(): ChannelRegistry[] {
+  const channels = [
+    { id: "fx-low", family: "linkedin", postings: [...LOW] },
+    { id: "fx-low-twin", family: "linkedin", postings: LOW.filter((p) => p.id === "twice") },
+    { id: "fx-high", family: "ats", postings: [...HIGH] },
+  ];
+  return channels.map((channel) => {
+    const registry = new ChannelRegistry();
+    registerFixtureChannel(registry, { ...channel, usesQueries: false });
+    return registry;
+  });
+}
+
 function registryWith(): ChannelRegistry {
   const registry = new ChannelRegistry();
-  registerFixtureChannel(registry, { id: "fx-low", family: "linkedin", usesQueries: false, postings: [...LOW] });
-  registerFixtureChannel(registry, { id: "fx-low-twin", family: "linkedin", usesQueries: false, postings: LOW.filter((p) => p.id === "twice") });
-  registerFixtureChannel(registry, { id: "fx-high", family: "ats", usesQueries: false, postings: [...HIGH] });
+  for (const [id, family, postings] of [["fx-low", "linkedin", LOW], ["fx-low-twin", "linkedin", LOW.filter((p) => p.id === "twice")], ["fx-high", "ats", HIGH]] as const) {
+    registerFixtureChannel(registry, { id, family, usesQueries: false, postings: [...postings] });
+  }
   return registry;
 }
 
@@ -110,7 +124,7 @@ describe("the offline replay", () => {
   ])("groups postings exactly as the pipeline does, with %s", async (_name, enabled) => {
     const config = pipelineWith((raw) => ((raw.dedupe as Record<string, unknown>).title_guard = { enabled, same_title_max_distance: 6 }));
     const registry = registryWith();
-    await collect(registry);
+    for (const single of channelRegistries()) await collect(single);
     const raws = await getDb().select().from(schema.rawPostings).orderBy(schema.rawPostings.id);
     expect(raws.length).toBe(LOW.length + 1 + HIGH.length);
     const result = await runPipeline(getDb(), { relist: { minGapDays: 9 }, config, registry, logger: quietLogger });
