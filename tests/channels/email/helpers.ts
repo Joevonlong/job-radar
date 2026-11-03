@@ -64,6 +64,7 @@ export interface FakeMessage extends EmailSpec {
   uid: number;
   threadId?: string;
   uidValidity?: string;
+  size?: number;
 }
 
 export interface FakeMailbox {
@@ -91,7 +92,7 @@ export function fakeMailbox(messages: readonly FakeMessage[], options: { failFet
         calls.push(`listSince ${since.toISOString()}`);
         const headers: MailHeader[] = messages
           .filter((m) => m.date.getTime() >= since.getTime())
-          .map((m) => ({ uid: m.uid, messageId: m.messageId, from: m.from, subject: m.subject, receivedAt: m.date, ...(m.threadId ? { threadId: m.threadId } : {}), ...(m.uidValidity ? { uidValidity: m.uidValidity } : {}) }));
+          .map((m) => ({ uid: m.uid, messageId: m.messageId, from: m.from, subject: m.subject, receivedAt: m.date, ...(m.threadId ? { threadId: m.threadId } : {}), ...(m.size === undefined ? {} : { size: m.size }), ...(m.uidValidity ? { uidValidity: m.uidValidity } : {}) }));
         return headers.sort((a, b) => b.receivedAt.getTime() - a.receivedAt.getTime());
       },
       async fetchSource(uid) {

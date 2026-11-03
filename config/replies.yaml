@@ -15,6 +15,8 @@ lookback_days: 30
 max_messages_per_cycle: 50
 # How much of the visible text the rules read (the start of a mail is what counts; quoted history is ignored)
 body_scan_chars: 4000
+# A larger message has attachments and is not downloaded: only its headers are judged, and the log says so
+max_message_bytes: 5000000
 
 # Exactly one category with a strong hit that is not excluded decides. No hit, or several: "unclassified", and you pick one in
 # one click. Patterns are case-insensitive regular expressions, grouped by language; add a language by adding a group.
@@ -31,12 +33,12 @@ categories:
   rejection:
     en:
       subject: ["\\b(?:your application|application update).{0,40}\\b(?:unsuccessful|not successful|declined)\\b"]
-      body: ["\\bunfortunately\\b", "\\bregret to inform\\b", "\\bnot (?:be )?(?:moving|move) forward\\b", "\\b(?:decided|chosen) to (?:move forward|proceed|pursue|continue) with other\\b", "\\bnot (?:been )?(?:selected|successful)\\b", "\\bposition has been filled\\b"]
-      exclude: ["\\breschedul", "\\bunfortunately[^.!?]{0,60}\\b(?:the|your) (?:link|attachment|file|upload|interviewer)\\b", "\\bunfortunately[^.!?]{0,40}\\bneed to (?:move|change)\\b"]
+      body: ["\\bunfortunately\\b", "\\bregret to inform\\b", "\\bnot (?:to |be )?(?:moving|move) forward\\b", "\\bdecided not to (?:proceed|pursue|continue)\\b", "\\b(?:decided|chosen) to (?:move forward|proceed|pursue|continue) with other\\b", "\\bnot (?:been )?(?:selected|successful)\\b", "\\bposition has been filled\\b"]
+      exclude: ["\\breschedul", "\\bunfortunately[^.!?]{0,60}\\b(?:the|your) (?:link|attachment|file|upload|interviewer)\\b", "\\bunfortunately[^.!?]{0,40}\\bneed to (?:move|change)\\b", "\\bunfortunately[^.!?]{0,60}\\b(?:cannot|can't|can not|unable to|not able to)\\b[^.!?]{0,30}\\b(?:reply|respond|answer|get back)\\b", "\\bunfortunately[^.!?]{0,80}\\b(?:may|might|can|could|will) take\\b", "\\b(?:candidates|applicants|those)\\s+(?:who|that)\\s+(?:are|were|have)\\s+not\\b", "\\bif (?:you are |you're |you have |you've )?not (?:been )?(?:selected|successful)\\b"]
     de:
       subject: ["\\bAbsage\\b"]
       body: ["\\bleider\\b", "\\bbedauerlicherweise\\b", "\\bnicht (?:weiter )?berücksichtig", "\\bfür einen anderen (?:Kandidaten|Bewerber)", "\\bandere[nr]? (?:Kandidat|Bewerber)"]
-      exclude: ["\\bTermin\\b", "\\bverschieben\\b", "\\bleider[^.!?]{0,40}\\b(?:Anhang|Datei|Link|Unterlagen fehlen)\\b"]
+      exclude: ["\\bTermin\\b", "\\bverschieben\\b", "\\bleider[^.!?]{0,40}\\b(?:Anhang|Datei|Link|Unterlagen fehlen)\\b", "\\bleider[^.!?]{0,60}\\b(?:dauern|dauert|Bearbeitung)\\b", "\\bleider[^.!?]{0,60}\\b(?:nicht jede[mnr]?|nicht allen|keine individuelle)\\b"]
   offer:
     en:
       subject: ["\\b(?:job|employment) offer\\b", "\\boffer letter\\b", "\\boffer of employment\\b"]
@@ -60,11 +62,11 @@ categories:
       subject: ["\\bthank(?:s| you) for (?:your )?(?:application|applying)\\b", "\\bapplication (?:received|confirmation)\\b", "\\bwe(?:'ve| have)? received your application\\b"]
       body: ["\\bwe(?:'ve| have)? (?:successfully )?received your application\\b", "\\bthank(?:s| you) for (?:your )?(?:application|applying)\\b", "\\byour application has been (?:received|submitted)\\b"]
       # a rejection or an invitation often opens with "thank you for your application"
-      exclude: ["\\bunfortunately\\b", "\\bregret\\b", "\\b(?:like|pleased|happy) to (?:invite|schedule|offer)\\b", "\\binviting you\\b", "\\bnot (?:be )?(?:moving|move) forward\\b", "\\bwith other candidates\\b", "\\bnot (?:been )?(?:selected|successful)\\b"]
+      exclude: ["\\bunfortunately\\b(?![^.!?]{0,80}\\b(?:cannot|can't|can not|unable to|not able to|may take|might take|can take|could take|will take)\\b)", "\\bregret\\b", "\\b(?:like|pleased|happy) to (?:invite|schedule|offer)\\b", "\\binviting you\\b", "\\bnot (?:to |be )?(?:moving|move) forward\\b", "\\bdecided not to\\b", "\\bwith other candidates\\b", "(?<!\\b(?:who|that) (?:are|were|have) )(?<!\\bif (?:you are |you're |you have |you've )?)\\bnot (?:been )?(?:selected|successful)\\b"]
     de:
       subject: ["\\bEingangsbestätigung\\b", "\\bDanke für (?:Ihre|deine) Bewerbung\\b", "\\bIhre Bewerbung ist eingegangen\\b"]
       body: ["\\b(?:Ihre|deine) Bewerbung ist (?:bei uns )?(?:gut )?eingegangen\\b", "\\bbedanken uns für (?:Ihre|deine) Bewerbung\\b", "\\bvielen Dank für (?:Ihre|deine) Bewerbung\\b"]
-      exclude: ["\\bleider\\b", "\\bbedauerlicherweise\\b", "\\bladen (?:wir )?(?:Sie|dich) (?:gerne |herzlich )", "\\bAbsage\\b"]
+      exclude: ["\\bleider\\b(?![^.!?]{0,60}\\b(?:dauern|dauert|Bearbeitung|nicht jede[mnr]?|nicht allen|keine individuelle)\\b)", "\\bbedauerlicherweise\\b", "\\bladen (?:wir )?(?:Sie|dich) (?:gerne |herzlich )", "\\bAbsage\\b"]
   other:
     en:
       subject: ["\\bout of office\\b", "\\bautomatic reply\\b", "\\bnewsletter\\b", "\\bjobs? (?:you may like|for you)\\b", "\\bnew jobs?\\b"]
@@ -79,12 +81,18 @@ match:
   # Statuses a reply can match. "interested" is only ever matched by an acknowledgement ("you applied but did not mark it").
   candidate_statuses: [interested, preparing, applied, interviewing, offer]
   # What each evidence adds. A company domain is weak on purpose: job_sources links are mostly job boards and ATS pages.
-  weights: { thread: 2, ats: 4, company: 4, domain: 1, title: 2 }
+  weights: { thread: 2, ats: 4, company: 4, company_body: 1, domain: 1, title: 2 }
   # A match needs this score and this lead over the second candidate; otherwise you pick (nothing is created for you)
   min_score: 3
   min_margin: 1
   max_candidates: 5
   min_company_chars: 3
+  # The company is looked for in the sender's name, the subject and this much of the body. A mention in the body alone never decides.
+  company_scan_chars: 800
+  # Company names that are everyday words: they only count in the sender's name. Lower case, words joined with "-".
+  common_word_names: [forward, next, join, lever, link, team, talent, career, careers, hello, thanks, update, offer, interview, application, position, role, work, people, today, open, step, best, hire, jobs]
+  # Tracking systems' own names: "Powered by Personio" on their mail says nothing about a company called that
+  ats_vendor_names: [greenhouse, lever, ashby, workday, workable, smartrecruiters, recruitee, personio, join, teamtailor, bamboohr, icims, successfactors, jobvite]
   min_title_word_chars: 4
   # Applicant-tracking systems that send for many companies: the company must be confirmed by name or token
   ats_sender_domains: [greenhouse-mail.io, greenhouse.io, hire.lever.co, lever.co, ashbyhq.com, myworkday.com, workablemail.com, workable.com, smartrecruiters.com, recruitee.com, personio.com, personio.de, join.com, teamtailor-mail.com, teamtailor.com, bamboohr.com, icims.com, successfactors.com, jobvite.com]

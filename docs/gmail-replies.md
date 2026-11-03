@@ -8,7 +8,7 @@ It is off by default (`replies.yaml: enabled: false`). While it is off the mailb
 
 - Reads only the label in `replies.yaml: label` (default `JobReplies`), never the whole inbox. It opens the label read-only with `EXAMINE` and reads bodies with `BODY.PEEK`: nothing is marked read, moved, labelled or deleted, and it sends no mail.
 - Decides with local rules (regular expressions in `replies.yaml`). **No AI reads these mails, and no mail content leaves your machine.** The Telegram reminder only gets a number and a link to the board.
-- Stores per mail: the sender's domain (not the address), the date, the subject, one short quote, the category, the match and your decision. Not the body, not attachments.
+- Stores per mail: the sender's domain (not the address), the date, the subject, one short quote, the category, the match and your decision. Not the body, not attachments. A message over `max_message_bytes` is not downloaded: only its headers are judged. Mail from your own `GMAIL_USER` is skipped.
 - A decided reply loses its subject and quote after `storage.decided_retention_days` (default 90); a reply still waiting keeps them. Logs hold counts and categories only.
 - Only visible text counts: white text, zero-size text and other hidden parts of an HTML mail are dropped before the rules and the quote. If a mail holds something that looks like an instruction to an AI, the row says so.
 - The same app password as [gmail-alerts.md](gmail-alerts.md). Be aware that an app password opens the whole mailbox to whoever holds it: Google offers no narrower one, so keep it in `.env`, and revoke it when you stop using this.

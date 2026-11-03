@@ -35,10 +35,18 @@ const FALLBACK_INSTRUCTIONS: TrapsConfig["instructions"] = [
 const BLOCK_TAGS = new Set(["address", "article", "aside", "blockquote", "br", "center", "dd", "div", "dl", "dt", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "li", "main", "nav", "ol", "p", "pre", "section", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul"]);
 /** Unicode tag characters: invisible ASCII that `stripInvisible` leaves for the trap scan to decode. */
 const TAG_CHARS = /[\u{E0000}-\u{E007F}]/gu;
+/** Control characters (Postgres text refuses NUL), the direction marks and soft hyphen `stripInvisible` leaves. Line ends and tabs stay for the callers to fold. */
+const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u00AD\u061C\u200E\u200F]/gu;
+
+const withoutInvisible = (text: string): string => stripInvisible(text).replace(TAG_CHARS, "").replace(CONTROL_CHARS, "");
+
+/** A header value (subject, display name, address, ids) as one clean line. */
+export function cleanHeader(text: string): string {
+  return withoutInvisible(text).replace(/[\s\u00A0]+/gu, " ").trim();
+}
 
 function cleanLines(text: string): string {
-  return stripInvisible(text)
-    .replace(TAG_CHARS, "")
+  return withoutInvisible(text)
     .split(/\r?\n/)
     .map((line) => line.replace(/[\s ]+/gu, " ").trim())
     .filter((line) => line !== "")

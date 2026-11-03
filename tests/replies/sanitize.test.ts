@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { hasSuspiciousInstruction, htmlToVisibleText, messageHasInstruction, plainToVisibleText, visibleBody, withoutQuotedHistory } from "@/lib/replies/sanitize";
+import { cleanHeader, hasSuspiciousInstruction, htmlToVisibleText, messageHasInstruction, plainToVisibleText, visibleBody, withoutQuotedHistory } from "@/lib/replies/sanitize";
 
 describe("htmlToVisibleText", () => {
   it("drops what a reader cannot see", () => {
@@ -15,6 +15,20 @@ describe("htmlToVisibleText", () => {
 
   it("removes zero-width characters", () => {
     expect(plainToVisibleText("he​llo")).toBe("hello");
+  });
+});
+
+describe("characters a mail can smuggle", () => {
+  it("control, direction and zero-width characters go, in the body and in headers", () => {
+    const dirty = "Ac\u0000me\u0007 \u202Eteam\u202C \u200Bhere\u200E\u00AD\u{E0041}";
+    expect(plainToVisibleText(dirty)).toBe("Acme team here");
+    expect(cleanHeader(dirty)).toBe("Acme team here");
+    expect(htmlToVisibleText(`<p>${dirty}</p>`)).toBe("Acme team here");
+  });
+
+  it("a header stays one line, a body keeps its lines", () => {
+    expect(cleanHeader("one\r\n  two\t three")).toBe("one two three");
+    expect(plainToVisibleText("one\ntwo")).toBe("one\ntwo");
   });
 });
 

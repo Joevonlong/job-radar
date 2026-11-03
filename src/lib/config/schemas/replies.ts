@@ -55,6 +55,8 @@ export const repliesSchema = z.strictObject({
   max_messages_per_cycle: positiveInt,
   /** How much of the visible body the patterns and the company-name check read. */
   body_scan_chars: positiveInt,
+  /** A larger message is not downloaded (it has attachments): only its headers decide, and the log says so. */
+  max_message_bytes: positiveInt,
   categories: z.strictObject({
     interview_invite: categoryPatterns,
     rejection: categoryPatterns,
@@ -70,6 +72,8 @@ export const repliesSchema = z.strictObject({
       thread: z.number().nonnegative(),
       ats: z.number().nonnegative(),
       company: z.number().nonnegative(),
+      /** The company only near the start of the body: never decides on its own. */
+      company_body: z.number().nonnegative(),
       domain: z.number().nonnegative(),
       title: z.number().nonnegative(),
     }),
@@ -81,6 +85,12 @@ export const repliesSchema = z.strictObject({
     max_candidates: positiveInt,
     /** Company names and tokens shorter than this are not looked for in the text (too many accidental hits). */
     min_company_chars: positiveInt,
+    /** How much of the body is searched for the company; a footer further down is no evidence. */
+    company_scan_chars: positiveInt,
+    /** Company names that are everyday words (name keys): they only count in the sender's name. */
+    common_word_names: z.array(nonEmptyString),
+    /** Names of tracking systems (name keys): on mail from such a system they are no evidence for a company of that name. */
+    ats_vendor_names: z.array(nonEmptyString),
     /** Title words shorter than this do not count in the title overlap. */
     min_title_word_chars: positiveInt,
     /** Applicant-tracking systems that send on behalf of many companies: never taken as the company's own domain. */

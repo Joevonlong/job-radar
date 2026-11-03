@@ -23,6 +23,7 @@ const suggestionSchema = z.discriminatedUnion("kind", [
     action: z.enum(["interview", "send_materials"]),
     due: z.string().nullable(),
     previous: z.object({ nextAction: z.string().nullable(), nextActionAt: z.string().nullable() }).optional(),
+    applied: z.object({ nextAction: z.string().nullable(), nextActionAt: z.string().nullable() }).optional(),
   }),
   z.object({ kind: z.literal("mismatch"), from: STATUS }),
   z.object({ kind: z.literal("none") }),
@@ -333,8 +334,13 @@ export async function confirmReply(db: Executor, id: number, input: { describe: 
     if (suggestion.kind === "next_action") {
       const [application] = await tx.select().from(applications).where(eq(applications.id, row.applicationId)).for("update").limit(1);
       if (!application || application.status !== suggestion.from) return void_();
-      const done: ReplySuggestion = { ...suggestion, previous: { nextAction: application.nextAction, nextActionAt: application.nextActionAt?.toISOString() ?? null } };
       await setApplicationNextAction(tx, row.jobId, { nextAction: input.describe.nextAction(suggestion.action), nextActionAt: suggestion.due ? nextActionDateToTimestamp(suggestion.due) : null });
+      const [written] = await tx.select({ nextAction: applications.nextAction, nextActionAt: applications.nextActionAt }).from(applications).where(eq(applications.id, row.applicationId)).limit(1);
+      const done: ReplySuggestion = {
+        ...suggestion,
+        previous: { nextAction: application.nextAction, nextActionAt: application.nextActionAt?.toISOString() ?? null },
+        applied: { nextAction: written?.nextAction ?? null, nextActionAt: written?.nextActionAt?.toISOString() ?? null },
+      };
       await tx.update(emailReplies).set({ state: "applied", decidedAt: input.now, suggestion: done }).where(eq(emailReplies.id, id));
       return { outcome: "done", jobId: row.jobId, suggestion: done };
     }
@@ -342,23 +348,31 @@ export async function confirmReply(db: Executor, id: number, input: { describe: 
   });
 }
 
-async function takeBack(tx: Executor, row: EmailReplyRow): Promise<void> {
-  if (row.jobId === null) return;
+/** Undo what a confirmation did, unless the application moved on since: then nothing is written and the answer is false (the later change wins). */
+async function takeBack(tx: Executor, row: EmailReplyRow): Promise<boolean> {
+  if (row.jobId === null) return true;
   const suggestion = suggestionOf(row.suggestion);
+  const [application] = await tx.select().from(applications).where(eq(applications.jobId, row.jobId)).for("update").limit(1);
   if (suggestion.kind === "status") {
+    if (application?.status !== suggestion.to) return false;
     await revertApplicationStatus(tx, row.jobId, { movedTo: suggestion.to, restoreTo: suggestion.from });
   } else if (suggestion.kind === "next_action") {
-    const before = suggestion.previous;
+    const { previous: before, applied } = suggestion;
+    if (!application || (applied && (application.nextAction !== applied.nextAction || (application.nextActionAt?.toISOString() ?? null) !== applied.nextActionAt))) return false;
     await setApplicationNextAction(tx, row.jobId, { nextAction: before?.nextAction ?? null, nextActionAt: before?.nextActionAt ? new Date(before.nextActionAt) : null });
   }
+  return true;
 }
 
-/** Take a confirmed reply back: a status move leaves no trace when nothing happened since (see `revertApplicationStatus`), a next step gets its old value. */
+/** Take a confirmed reply back: a status move leaves no trace (see `revertApplicationStatus`), a next step gets its old value. When the application moved on since, nothing changes on it. */
 export async function undoReply(db: Executor, id: number, input: { transitions: RepliesConfig["transitions"]; now: Date }): Promise<ReplyDecision> {
   return db.transaction(async (tx) => {
     const row = await lockReply(tx, id);
     if (!row || row.state !== "applied") return { outcome: "stale" };
-    await takeBack(tx, row);
+    if (!(await takeBack(tx, row))) {
+      await tx.update(emailReplies).set({ state: "superseded", decidedAt: input.now }).where(eq(emailReplies.id, id));
+      return { outcome: "superseded" };
+    }
     await tx.update(emailReplies).set({ state: "reverted", decidedAt: input.now, eventId: null }).where(eq(emailReplies.id, id));
     if (row.applicationId !== null) await refreshPendingOf(tx, row.applicationId, id, input.transitions, input.now);
     return { outcome: "done", jobId: row.jobId, suggestion: suggestionOf(row.suggestion) };
@@ -391,6 +405,8 @@ export async function reassignReply(db: Executor, id: number, input: { jobId: nu
       .update(emailReplies)
       .set({ match: "matched", applicationId: target.id, jobId: input.jobId, suggestion, state: waits ? "pending" : "info", decidedAt: waits ? null : input.now, eventId: null })
       .where(eq(emailReplies.id, id));
+    // what else waits on the old application was worked out for the status it had before
+    if (row.applicationId !== null && row.applicationId !== target.id) await refreshPendingOf(tx, row.applicationId, id, input.transitions, input.now);
     return { outcome: "done", jobId: input.jobId, suggestion };
   });
 }

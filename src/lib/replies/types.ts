@@ -28,6 +28,8 @@ export type ReplySuggestion =
       /** `YYYY-MM-DD`; null when the date is left for the user to fill in. */
       due: string | null;
       previous?: { nextAction: string | null; nextActionAt: string | null };
+      /** What the confirmation wrote: an undo only restores `previous` while this is still there. */
+      applied?: { nextAction: string | null; nextActionAt: string | null };
     }
   | { kind: "mismatch"; from: ApplicationStatus }
   | { kind: "none" };
@@ -37,7 +39,7 @@ export interface ReplyCandidateScore {
   applicationId: number;
   jobId: number;
   score: number;
-  /** Which evidence added to the score (`thread`, `ats`, `company`, `domain`, `title`). */
+  /** Which evidence added to the score (`thread`, `ats`, `company`, `company_body`, `domain`, `title`). */
   hits: string[];
 }
 

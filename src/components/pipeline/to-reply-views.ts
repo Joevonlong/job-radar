@@ -1,8 +1,8 @@
 import { getFormatter } from "next-intl/server";
 
-import { loadConfig } from "@/lib/config";
 import { getDb } from "@/lib/db";
 import { listPendingReplies, listRecentlyConfirmedReplies, listReplyLinkOptions, type ReplyListRow } from "@/lib/db/repos/replies";
+import { readRepliesSettings } from "@/lib/replies/settings";
 import type { ReplyCategory, ReplyMatch, ReplySuggestion } from "@/lib/replies/types";
 
 const DAY_MS = 86_400_000;
@@ -37,10 +37,11 @@ export interface RepliesPanelData {
   links: ReplyLinkView[];
 }
 
-/** The panel's data; null when there is nothing to show (always so while the feature is off and has never read a mail). */
+/** The panel's data; null when there is nothing to show (always so while the feature is off and has never read a mail, or while replies.yaml cannot be read). */
 export async function loadRepliesPanel(options: { now: Date; timezone: string }): Promise<RepliesPanelData | null> {
   const db = getDb();
-  const config = loadConfig("replies");
+  const config = readRepliesSettings();
+  if (!config) return null;
   const [pending, recent] = await Promise.all([listPendingReplies(db), listRecentlyConfirmedReplies(db, new Date(options.now.getTime() - config.panel.undo_days * DAY_MS))]);
   if (pending.length === 0 && recent.length === 0) return null;
   const [links, format] = await Promise.all([listReplyLinkOptions(db, config.match.candidate_statuses), getFormatter()]);

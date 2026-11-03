@@ -35,12 +35,29 @@ export function domainOfAddress(address: string): string {
 /** `Acme GmbH` as `-acme-gmbh-`: a whole-word search in a text keyed the same way, so `acme` does not hit `acmeville`. */
 const framed = (key: string): string => `-${key}-`;
 
-function hasName(haystack: string, names: readonly string[], legalSuffixes: readonly string[], minChars: number): boolean {
-  return names.some((name) => {
-    const key = normalizeCompanyKey(name, legalSuffixes);
-    return key.length >= minChars && haystack.includes(framed(key));
-  });
+/** Where a company shows up in a mail: `strong` in the sender's name or the subject, `body` near the start of the text. */
+type NameHit = "strong" | "body" | null;
+
+interface MailKeys {
+  senderName: string;
+  strong: string;
+  head: string;
+  isAts: boolean;
 }
+
+/**
+ * One key against one mail. A name that is an everyday word ("Forward": "not to move forward") only counts in the sender's name, and a
+ * tracking system's own name on mail it sent ("Powered by Personio") proves nothing about which company is meant.
+ */
+function hitOf(key: string, keys: MailKeys, config: RepliesConfig["match"]): NameHit {
+  if (key.length < config.min_company_chars) return null;
+  const word = framed(key);
+  if (config.common_word_names.includes(key)) return keys.senderName.includes(word) ? "strong" : null;
+  const hit: NameHit = keys.strong.includes(word) ? "strong" : keys.head.includes(word) ? "body" : null;
+  return hit !== null && keys.isAts && config.ats_vendor_names.includes(key) ? "body" : hit;
+}
+
+const bestHit = (hits: readonly NameHit[]): NameHit => (hits.includes("strong") ? "strong" : hits.includes("body") ? "body" : null);
 
 function titleOverlap(title: string, text: string, minWordChars: number): number {
   const words = (value: string): string[] => value.toLocaleLowerCase("en").split(/[^\p{L}\p{N}]+/u).filter((word) => word.length >= minWordChars);
@@ -54,7 +71,8 @@ function titleOverlap(title: string, text: string, minWordChars: number): number
  * Which application a reply belongs to. Hard rules first: a mail older than the application is not about it, and `interested` (not applied
  * as far as we know) can only get an acknowledgement. A confirmed thread decides at once when the sender's domain is the same and the
  * subject is not one many companies share (Gmail threads different companies' mails from one no-reply sender with one subject). Then the
- * evidence adds up. Title words only tell candidates apart: they never make one on their own.
+ * evidence adds up. Title words only tell candidates apart: they never make one on their own. The company is looked for in the sender's
+ * name, the subject and the start of the body only; a mention in the body alone never decides, the user picks.
  */
 export function matchReply(evidence: ReplyEvidence, candidates: readonly MatchCandidate[], threads: readonly ConfirmedThread[], config: RepliesConfig["match"], legalSuffixes: readonly string[]): MatchResult {
   const eligible = candidates.filter((c) => c.since.getTime() <= evidence.receivedAt.getTime() && (c.status !== "interested" || evidence.category === "acknowledgement"));
@@ -69,11 +87,17 @@ export function matchReply(evidence: ReplyEvidence, candidates: readonly MatchCa
     }
   }
 
-  const text = `${evidence.senderName}\n${evidence.subject}\n${evidence.body}`;
-  const haystack = framed(normalizeCompanyKey(text, []));
+  const head = evidence.body.slice(0, config.company_scan_chars);
+  const text = `${evidence.senderName}\n${evidence.subject}\n${head}`;
   const senderKey = framed(normalizeCompanyKey(evidence.senderAddress, []));
   const isAts = config.ats_sender_domains.some((domain) => onDomain(evidence.senderDomain, domain));
   const isGeneric = isAts || config.generic_domains.some((domain) => onDomain(evidence.senderDomain, domain));
+  const keys: MailKeys = {
+    senderName: framed(normalizeCompanyKey(evidence.senderName, [])),
+    strong: framed(normalizeCompanyKey(`${evidence.senderName}\n${evidence.subject}`, [])),
+    head: framed(normalizeCompanyKey(head, [])),
+    isAts,
+  };
 
   const scored: ReplyCandidateScore[] = [];
   for (const candidate of eligible) {
@@ -83,12 +107,15 @@ export function matchReply(evidence: ReplyEvidence, candidates: readonly MatchCa
       hits.push(hit);
       score += weight;
     };
-    const named = hasName(haystack, [candidate.companyName, ...candidate.aliases], legalSuffixes, config.min_company_chars);
+    const named = bestHit([candidate.companyName, ...candidate.aliases].map((name) => hitOf(normalizeCompanyKey(name, legalSuffixes), keys, config)));
     const tokenKey = candidate.atsToken === null ? "" : normalizeCompanyKey(candidate.atsToken, []);
-    const token = tokenKey.length >= config.min_company_chars && (haystack.includes(framed(tokenKey)) || senderKey.includes(framed(tokenKey)));
+    const tokenIsVendor = config.ats_vendor_names.includes(tokenKey) || config.common_word_names.includes(tokenKey);
+    const inAddress = tokenKey.length >= config.min_company_chars && !tokenIsVendor && senderKey.includes(framed(tokenKey));
+    const token = inAddress ? "strong" : hitOf(tokenKey, keys, config);
     if (thread.some((t) => t.applicationId === candidate.applicationId)) add("thread", config.weights.thread);
-    if (isAts && (named || token)) add("ats", config.weights.ats);
-    if (named) add("company", config.weights.company);
+    if (isAts && (named === "strong" || token === "strong")) add("ats", config.weights.ats);
+    if (named === "strong") add("company", config.weights.company);
+    else if (named === "body" || (isAts && token === "body")) add("company_body", config.weights.company_body);
     if (!isGeneric && evidence.senderDomain !== "" && candidate.hosts.some((host) => onDomain(evidence.senderDomain, host) || onDomain(host, evidence.senderDomain))) add("domain", config.weights.domain);
     if (hits.length === 0) continue;
     const overlap = titleOverlap(candidate.title, text, config.min_title_word_chars);
@@ -99,7 +126,8 @@ export function matchReply(evidence: ReplyEvidence, candidates: readonly MatchCa
   const kept = scored.slice(0, config.max_candidates);
   const [top, second] = kept;
   if (!top) return { match: "unmatched", applicationId: null, jobId: null, score: null, candidates: [] };
-  if (top.score >= config.min_score && (!second || top.score - second.score >= config.min_margin)) {
+  const decisive = top.hits.some((hit) => hit !== "company_body" && hit !== "title");
+  if (decisive && top.score >= config.min_score && (!second || top.score - second.score >= config.min_margin)) {
     return { match: "matched", applicationId: top.applicationId, jobId: top.jobId, score: top.score, candidates: kept };
   }
   return { match: "ambiguous", applicationId: null, jobId: null, score: top.score, candidates: kept };

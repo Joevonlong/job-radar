@@ -24,6 +24,8 @@ export interface MailHeader {
   inReplyTo?: string;
   /** UIDVALIDITY of the mailbox: a UID is only meaningful together with it. */
   uidValidity?: string;
+  /** RFC822.SIZE in bytes, when the caller asked the server and it answered. */
+  size?: number;
 }
 
 export interface MailSession {
@@ -126,7 +128,7 @@ export const openImapSession: MailSessionFactory = async (options) => {
         const mailbox = client.mailbox;
         const uidValidity = mailbox && mailbox.uidValidity !== undefined ? String(mailbox.uidValidity) : undefined;
         const headers: MailHeader[] = [];
-        for await (const message of client.fetch(uids, { uid: true, envelope: true, internalDate: true, threadId: true }, { uid: true })) {
+        for await (const message of client.fetch(uids, { uid: true, envelope: true, internalDate: true, threadId: true, size: true }, { uid: true })) {
           const envelope = message.envelope;
           const date = message.internalDate ?? envelope?.date;
           const receivedAt = date instanceof Date ? date : date ? new Date(date) : new Date(0);
@@ -140,6 +142,7 @@ export const openImapSession: MailSessionFactory = async (options) => {
             ...(message.threadId ? { threadId: String(message.threadId) } : {}),
             ...(envelope?.inReplyTo ? { inReplyTo: envelope.inReplyTo.trim() } : {}),
             ...(uidValidity === undefined ? {} : { uidValidity }),
+            ...(typeof message.size === "number" ? { size: message.size } : {}),
           });
         }
         return headers.sort((a, b) => b.receivedAt.getTime() - a.receivedAt.getTime() || b.uid - a.uid);

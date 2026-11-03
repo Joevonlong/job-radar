@@ -31,4 +31,14 @@ export const REPLY_CASES: readonly ReplyCase[] = [
   { name: "we offer flexible is no offer", subject: "About the team", body: "We offer flexible working hours at our office.", expected: "unclassified" },
   { name: "reschedule is no rejection", subject: "Your interview", body: "Unfortunately we need to reschedule your interview to Tuesday.", expected: "unclassified" },
   { name: "de: no date is no rejection", subject: "Ihr Gespräch", body: "Leider können wir den Termin am Montag nicht anbieten.", expected: "unclassified" },
+  // a receipt that talks about its own limits is not a rejection: a wrong rejection proposes a terminal state
+  { name: "receipt: cannot reply to each applicant", subject: "Thank you for your application", body: "Unfortunately we cannot reply to each applicant.", expected: "acknowledgement" },
+  { name: "receipt: those not selected will be notified", subject: "Thank you for your application", body: "Candidates who are not selected will be notified.", expected: "acknowledgement" },
+  { name: "receipt: if not selected", subject: "Application received", body: "If you are not selected we will let you know.", expected: "acknowledgement" },
+  { name: "receipt: de, processing may take a while", subject: "Eingangsbestätigung", body: "Leider kann die Bearbeitung etwas dauern.", expected: "acknowledgement" },
+  { name: "receipt: volume may take weeks", subject: "Application received", body: "Unfortunately, due to volume this may take 4 weeks.", expected: "acknowledgement" },
+  { name: "no receipt subject, cannot reply: still no rejection", subject: "Your application", body: "Unfortunately we cannot reply to each applicant.", expected: "unclassified" },
+  { name: "en rejection: decided not to move forward", subject: "Your application", body: "We have decided not to move forward with your application.", expected: "rejection" },
+  { name: "en rejection: decided not to proceed", subject: "Your application", body: "After review we decided not to proceed.", expected: "rejection" },
+  { name: "a real rejection opening with thanks stays one", subject: "Thank you for your application", body: "We have decided not to move forward with your application.", expected: "rejection" },
 ];
