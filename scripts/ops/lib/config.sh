@@ -75,7 +75,7 @@ cfg_overlay_format_version() {
     search.yaml) printf '3' ;;
     setup.yaml) printf '2' ;;
     signal-presets.yaml) printf '2' ;;
-    sources.yaml) printf '8' ;;
+    sources.yaml) printf '10' ;;
     traps.yaml) printf '2' ;;
     ui.yaml) printf '3' ;;
     writer.yaml) printf '2' ;;
