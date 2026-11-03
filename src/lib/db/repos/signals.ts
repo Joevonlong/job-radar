@@ -337,11 +337,18 @@ export interface BonusRow {
 }
 
 /**
- * Every `scores` row of a job that has signals (with their values; `signalBonus` decides which count), plus every row
- * that still carries a bonus although its job has no signals any more: the rows whose bonus may need to change.
+ * The `scores` rows whose bonus may need to change: of the rows below, those of a job that has signals (with their
+ * values; `signalBonus` decides which count) or that still carry a bonus although the job has no signals any more.
  * The rows themselves are made by the hard filter step, one per (job, snapshot).
+ *
+ * Not every row of every snapshot: only the rows anything reads. These are the rows of the current preferences
+ * snapshot (`snapshotId`; scoring and the German re-check work on them), each job's newest row (what the lists, the
+ * detail page and the push read) and each job's newest row that has a match score (what the same places show while
+ * the newest row waits for a score). Rows of older snapshots that are none of these are history nobody displays;
+ * they keep the bonus they had and are reconciled again the moment their snapshot becomes the current one.
  */
-export async function listBonusRows(db: Executor): Promise<BonusRow[]> {
+export async function listBonusRows(db: Executor, snapshotId: number | null = null): Promise<BonusRow[]> {
+  const inSnapshot = snapshotId === null ? sql`` : sql`select id from scores where profile_snapshot_id = ${snapshotId} union`;
   const rows = await db.execute<{
     job_id: string;
     signals: Array<{ tier: string; value: unknown }> | null;
@@ -350,14 +357,24 @@ export async function listBonusRows(db: Executor): Promise<BonusRow[]> {
     signal_bonus: string;
     rank_value: string | null;
   }>(sql`
+    with in_scope as (
+      ${inSnapshot}
+      select n.id from jobs j
+        cross join lateral (select id from scores where job_id = j.id order by created_at desc, id desc limit 1) n
+      union
+      select n.id from jobs j
+        cross join lateral (select id from scores where job_id = j.id and score is not null order by created_at desc, id desc limit 1) n
+    )
     select s.job_id, t.signals, s.id as score_id, s.score, s.signal_bonus, s.rank_value
-    from scores s
+    from in_scope
+    join scores s on s.id = in_scope.id
     join jobs j on j.id = s.job_id
-    left join (
-      select job_id, jsonb_agg(jsonb_build_object('tier', tier, 'value', value_json)) as signals
-      from signals group by job_id
-    ) t on t.job_id = s.job_id
-    where (t.job_id is not null or s.signal_bonus <> 0) and ${notDormantSql(await dormancyReady(db), 'j')}
+    left join lateral (
+      select jsonb_agg(jsonb_build_object('tier', tier, 'value', value_json)) as signals
+      from signals where job_id = s.job_id
+    ) t on true
+    where (t.signals is not null or s.signal_bonus <> 0) and ${notDormantSql(await dormancyReady(db), 'j')}
+    order by s.id
   `);
   return Array.from(rows, (r) => ({
     jobId: Number(r.job_id),

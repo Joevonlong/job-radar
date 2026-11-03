@@ -1,5 +1,5 @@
 import { withRebuiltCurrentScores } from "../helpers/current-scores";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
 import { createProvider } from "@/lib/ai/provider";
@@ -214,13 +214,16 @@ describe("score bonus", () => {
 
   it("writes a change of many rows in batches: every row gets its bonus and rank value, the untouched ones keep theirs", async () => {
     const interests = shippedInterests();
-    const job = await newJob("Many rows", "Equity for everyone, competitive salary package.", { scoreRow: false });
     const other = await newJob("No signals", "Build things.", { scoreRow: false });
-    // more rows than one statement takes (rows without a snapshot are not bound by the unique index), with and without a match score
-    const many = Array.from({ length: 1234 }, (_, i) => ({ jobId: job, filterResult: "passed" as const, score: i % 3 === 0 ? null : i % 101, rankValue: i % 3 === 0 ? 33.5 : null }));
+    const [company] = await getDb().insert(schema.companies).values({ name: "Many", nameNorm: "many" }).returning({ id: schema.companies.id });
+    // more jobs than one statement takes, with and without a match score (every job has one row: its newest)
+    const jobIds = (
+      await getDb().insert(schema.jobs).values(Array.from({ length: 1234 }, (_, i) => ({ companyId: company!.id, title: `Many ${i}`, titleNorm: `many ${i}`, description: "Equity for everyone.", status: "active" as const }))).returning({ id: schema.jobs.id })
+    ).map((j) => j.id).sort((x, y) => x - y);
+    const many = jobIds.map((jobId, i) => ({ jobId, filterResult: "passed" as const, score: i % 3 === 0 ? null : i % 101, rankValue: i % 3 === 0 ? 33.5 : null }));
     await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values(many));
     await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: other, filterResult: "passed", score: 40, rankValue: 40 }));
-    await runRuleScan(getDb(), scanOptions(interests));
+    await getDb().insert(schema.signals).values(jobIds.map((jobId) => ({ jobId, tier: "T2" as const, kind: "equity", quote: "Equity", extractor: "rule" as const })));
 
     // a statement-level trigger counts the UPDATE statements on scores: one per 500 rows, not one per row
     await getDb().execute(sql`create table bonus_statement_count (n int not null)`);
@@ -237,8 +240,8 @@ describe("score bonus", () => {
       await getDb().execute(sql`drop table bonus_statement_count`);
     }
     expect(statements).toBe(Math.ceil(1234 / 500));
-    const rows = await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, job)).orderBy(schema.scores.id);
-    expect(rows.map((r) => [r.signalBonus, r.rankValue])).toEqual(many.map((m) => [11, m.score === null ? 33.5 : m.score + 11])); // T2 8 + T3 3
+    const rows = await getDb().select().from(schema.scores).where(inArray(schema.scores.jobId, jobIds)).orderBy(schema.scores.jobId);
+    expect(rows.map((r) => [r.signalBonus, r.rankValue])).toEqual(many.map((m) => [8, m.score === null ? 33.5 : m.score + 8])); // T2 8
     expect((await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, other)))[0]).toMatchObject({ signalBonus: 0, rankValue: 40 });
     expect(await reconcileBonuses(getDb(), interests)).toEqual({ checked: 1234, updated: 0 });
   });
@@ -266,25 +269,54 @@ describe("score rows of the hard filter and the scorer", () => {
     expect(await reconcileBonuses(getDb(), interests)).toMatchObject({ updated: 1 });
   });
 
-  it("updates every snapshot row of a job, with the rank formula, and respects the (job, snapshot) unique index", async () => {
+  it("reconciles the current snapshot's rows and each job's newest and newest scored row; older rows stay untouched", async () => {
     const interests = shippedInterests();
-    const job = await newJob("TwoSnapshots", "Equity for everyone, competitive salary package.", { scoreRow: false });
-    const [a, b] = await getDb()
+    const text = "Equity for everyone, competitive salary package."; // T2 8 + T3 3 = 11
+    const day = (n: number) => new Date(Date.UTC(2026, 9, n));
+    const [s1, s2, s3] = await getDb()
       .insert(schema.profileSnapshots)
-      .values([
-        { kind: "preferences", contentYaml: "a: 1", hash: "hash-a" },
-        { kind: "preferences", contentYaml: "b: 1", hash: "hash-b" },
-      ])
+      .values([1, 2, 3].map((n) => ({ kind: "preferences" as const, contentYaml: `v: ${n}`, hash: `hash-${n}`, savedAt: day(n) })))
       .returning({ id: schema.profileSnapshots.id });
+    const one = await newJob("OneJob", text, { scoreRow: false });
+    const two = await newJob("TwoJob", text, { scoreRow: false });
+    const three = await newJob("ThreeJob", text, { scoreRow: false });
+    // every row starts with a stale bonus of 3 (rank = score + 3) so that "untouched" and "reconciled" are told apart
+    const row = (jobId: number, snapshot: { id: number }, created: number, score: number | null) => ({
+      jobId, profileSnapshotId: snapshot.id, filterResult: "passed" as const, score, rankValue: score === null ? null : score + 3, signalBonus: 3, createdAt: day(created), stale: true,
+    });
     await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values([
-      { jobId: job, profileSnapshotId: a!.id, filterResult: "passed", score: 50, rankValue: 50, stale: true },
-      { jobId: job, profileSnapshotId: b!.id, filterResult: "passed", score: 70, rankValue: 70 },
+      row(one, s1!, 1, 50), row(one, s2!, 2, 60), row(one, s3!, 3, null), // oldest, newest scored, newest + current
+      row(two, s1!, 1, 40), row(two, s2!, 2, 45), // newest = newest scored = s2; the current snapshot has no row yet
+      row(three, s3!, 1, 70), row(three, s2!, 2, 55), row(three, s1!, 3, 30), // current is the oldest; s2 is neither; s1 is the newest
     ]));
     await runRuleScan(getDb(), scanOptions(interests));
-    expect(await reconcileBonuses(getDb(), interests)).toMatchObject({ checked: 2, updated: 2 });
-    const rows = await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, job)).orderBy(schema.scores.id);
-    expect(rows.map((r) => [r.signalBonus, r.rankValue])).toEqual([[11, 61], [11, 81]]);
-    expect(await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, job))).toHaveLength(2); // no extra row
+    const all = async () => (await getDb().select().from(schema.scores).orderBy(schema.scores.id)).map((r) => [r.jobId, r.profileSnapshotId, r.signalBonus, r.rankValue]);
+    const J = { one, two, three };
+    const expected = (inScope: boolean[]) => [
+      [J.one, s1!.id, inScope[0] ? 11 : 3, inScope[0] ? 61 : 53],
+      [J.one, s2!.id, 11, 71],
+      [J.one, s3!.id, 11, null],
+      [J.two, s1!.id, inScope[1] ? 11 : 3, inScope[1] ? 51 : 43],
+      [J.two, s2!.id, 11, 56],
+      [J.three, s3!.id, 11, 81],
+      [J.three, s2!.id, inScope[2] ? 11 : 3, inScope[2] ? 66 : 58],
+      [J.three, s1!.id, 11, 41],
+    ];
+
+    // current snapshot s3: the s1 rows of "one" and "two" and the s2 row of "three" are out of scope
+    expect(await reconcileBonuses(getDb(), interests)).toEqual({ checked: 5, updated: 5 });
+    expect(await all()).toEqual(expected([false, false, false]));
+    // reconciling again changes nothing, and still leaves the old rows alone
+    expect(await reconcileBonuses(getDb(), interests)).toEqual({ checked: 5, updated: 0 });
+    expect(await all()).toEqual(expected([false, false, false]));
+
+    // rolling the preferences back to an older version makes its rows current: they are reconciled with the next pass
+    // (the s3 row of "three" leaves the scope, but it already holds the right value)
+    await getDb().update(schema.profileSnapshots).set({ savedAt: day(10) }).where(eq(schema.profileSnapshots.id, s1!.id));
+    expect(await reconcileBonuses(getDb(), interests)).toEqual({ checked: 6, updated: 2 });
+    expect(await all()).toEqual(expected([true, true, false]));
+    expect(await reconcileBonuses(getDb(), interests)).toEqual({ checked: 6, updated: 0 });
+    expect(await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, one))).toHaveLength(3); // no extra row
   });
 });
 
