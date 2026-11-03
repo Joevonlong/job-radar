@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
 import { createConnection } from "@/lib/db/client";
@@ -264,6 +265,21 @@ describe("worker-heartbeat.ts --receipt", () => {
 });
 
 describe("the application_name of the instance lock (an interface: the evidence compares it exactly)", () => {
+  it("the name Postgres stores is exactly the computed one for a host name that is not ASCII, whatever its length", async () => {
+    for (const host of ["müller-macbook.local", "工作站", "工作站".repeat(30), `${"h".repeat(40)}é${"h".repeat(40)}`]) {
+      const name = instanceApplicationName("ai-worker", 4242, host);
+      expect(name).toMatch(/^[\x20-\x7e]{1,63}$/);
+      const sql = postgres(iso.url, { max: 1, onnotice: () => {}, connection: { application_name: name } });
+      try {
+        const rows = await sql<{ application_name: string }[]>`select application_name from pg_stat_activity where pid = pg_backend_pid()`;
+        expect(rows[0]?.application_name, host).toBe(name);
+      } finally {
+        await sql.end();
+      }
+    }
+    expect(instanceApplicationName("ai-worker", 4242, "müller")).not.toBe(instanceApplicationName("ai-worker", 4242, "muller"));
+  });
+
   it("is `job-radar <name> pid=<pid> host=<host>`, cut to 63 characters", () => {
     expect(instanceApplicationName("ai-worker", 4242, "mac.local")).toBe("job-radar ai-worker pid=4242 host=mac.local");
     const long = instanceApplicationName("ai-worker", 4242, "h".repeat(80));
