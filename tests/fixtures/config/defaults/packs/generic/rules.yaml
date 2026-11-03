@@ -155,6 +155,31 @@ ghost:
       pattern: '(?<![\p{L}\p{N}])(?:join|joining|for|into)\s+our\s+(?:[\p{L}-]+\s+){0,2}?talent\s+(?:pool|community|network)(?![\p{L}\p{N}])'
       requires_context:
         - '(?<![\p{L}\p{N}])(?:appl(?:y|ying|ied|ications?|icants?)|candidates?|cvs?|resumes?|roles?|positions?|openings?|vacanc(?:y|ies)|hiring|recruit\p{L}*|contacted|(?:job|career|future|new|open|upcoming)\s+opportunit(?:y|ies))(?![\p{L}\p{N}])'
+  # The words of the job's title that say the posting is a talent pool or an open application, not one opening ("Talent Pool -
+  # Senior Engineer", "Open Application", "Evergreen - AI Engineer"). Each pattern is tested against the whole title (no sentences,
+  # no negation), so they are narrow: a shape ("Open Application" only as the whole title or one part of it), not a loose word.
+  # A title that matches title_exclude is a recruiting role and never counts.
+  title_patterns:
+    # "Talent Pool - Senior Engineer", "KI-Talentpool", "Talent Community"
+    - id: talent_pool_title
+      pattern: '(?<![\p{L}\p{N}])talent[\s-]?(?:pool|community|network)(?![\p{L}\p{N}])'
+    # "Open Application", "AI Engineer - General Application", "Spontaneous Application (m/f/d)": the phrase is the title or one part of it
+    # (after a separator), and ends it, or is followed by a separator, "(" or "for" - not "Open Application Security Engineer"
+    - id: open_application_title
+      pattern: '(?:(?<=^\s{0,3})|(?<=[-–—:|/(\[]\s{0,3}))(?:open|speculative|unsolicited|spontaneous|general)\s{1,3}applications?(?=\s{0,3}(?:$|[-–—:|/(,)\]]|for(?![\p{L}\p{N}])))|(?<![\p{L}\p{N}])(?:candidature\s{1,3}spontan[eé]e|candidatura\s{1,3}(?:espont[aá]nea|spontanea)|open\s{1,3}sollicitatie)(?![\p{L}\p{N}])'
+    # "Evergreen - AI Engineer", "Evergreen: Sales", "Evergreen Role" - not "Evergreen Energy Analyst"
+    - id: evergreen_title
+      pattern: '(?<![\p{L}\p{N}])evergreen(?:\s{0,3}[-–—:|]|\s{1,3}(?:role|position|requisition|req|opening|job|posting|vacancy)(?![\p{L}\p{N}]))'
+    # "Future Opportunities", "Upcoming Openings"
+    - id: future_openings_title
+      pattern: '(?<![\p{L}\p{N}])(?:future|upcoming)\s{1,3}(?:openings|opportunities|vacancies|positions|roles)(?![\p{L}\p{N}])'
+  title_exclude:
+    # the job is recruiting or running the pool: "Talent Pool Manager (m/w/d)", "Talent Community Lead"
+    - '(?<![\p{L}\p{N}])talent[\s-]?(?:pool|community|network)\s{0,3}(?:manager|lead|specialist|coordinator|engineer|partner|owner|director|analyst|associate|consultant|administrator|programs?)(?![\p{L}\p{N}])'
+    # "Head of Talent Community", "Manager, Talent Pool", "Lead Talent Network"
+    - '(?<![\p{L}\p{N}])(?:head\s{1,3}of|director\s{1,3}of|vp\s{1,3}of|manager\s{1,3}of|(?:manager|lead|specialist|coordinator|director|head)\s{0,3},?)\s{0,3}(?:the\s{1,3})?(?:global\s{1,3})?talent[\s-]?(?:pool|community|network)(?![\p{L}\p{N}])'
+    # "Recruiter - Talent Community", "Sourcer", "Talent Acquisition Partner"
+    - '(?<![\p{L}\p{N}])(?:recruit\p{L}*|sourcers?|sourcing|talent\s{1,3}acquisition|people\s{1,3}partner)(?![\p{L}\p{N}])'
   # A heading that opens the duties of the role. Tested only against heading-shaped lines (short; a "#" heading, ending in ":" or
   # without end punctuation) and "Label:" prefixes, read without "*" / "_" emphasis, list or "#" markers and the emoji or arrows
   # around it, with "&amp;" as "&" and curly apostrophes as straight ones; a final "…", " -" or "—" counts as ":". Right above a

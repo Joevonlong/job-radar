@@ -319,6 +319,10 @@ const ghostQuestionTagSchema = z
 export interface GhostPack {
   repost_label_patterns: GhostPatternEntry[];
   evergreen_patterns: GhostEvergreenPatternEntry[];
+  /** Like `evergreen_patterns`, but read in the job's title only (a title that calls itself a talent pool or open application). */
+  title_patterns: GhostPatternEntry[];
+  /** A title matching one of these is never a `title_patterns` hit (a recruiting role: "Talent Pool Manager"). */
+  title_exclude: string[];
   responsibility_patterns: GhostPatternEntry[];
   negation_cues: string[];
   /** Words that open a question ("what", "welche…"): a heading line ending in "?" is read as a heading only after one of them. */
@@ -342,6 +346,8 @@ export function emptyGhostPack(): GhostPack {
   return {
     repost_label_patterns: [],
     evergreen_patterns: [],
+    title_patterns: [],
+    title_exclude: [],
     responsibility_patterns: [],
     negation_cues: [],
     question_words: [],
@@ -367,6 +373,13 @@ export const ghostPackSchema = z
     repost_label_patterns: z.array(ghostPatternSchema).default([]),
     /** The JD says it is a talent pool or an always-open posting, not one opening ("talent pool", "Initiativbewerbung"). */
     evergreen_patterns: z.array(ghostEvergreenPatternSchema).default([]),
+    /**
+     * The job's title says it is a talent pool or an open application ("Talent Pool - Senior Engineer", "Open Application"). Each
+     * pattern is tested against the whole title; no negation, no sentences. Narrow patterns: a title is short, so a broad one misfires.
+     */
+    title_patterns: z.array(ghostPatternSchema).default([]),
+    /** A title that matches one of these has no `title_patterns` hit (a recruiting role: "Talent Pool Manager", "Recruiter - Talent Community"). */
+    title_exclude: optionalList,
     /** A heading that opens the duties of the role ("Responsibilities", "Deine Aufgaben"): tested against heading-shaped lines only. */
     responsibility_patterns: z.array(ghostPatternSchema).default([]),
     /**

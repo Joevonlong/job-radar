@@ -12,6 +12,7 @@ export interface GhostMessage {
     | "reason.repost_label"
     | "reason.reposted"
     | "reason.evergreen_wording"
+    | "reason.evergreen_title"
     | "reason.thin_short_none"
     | "reason.thin_short"
     | "reason.thin_none"
@@ -20,6 +21,7 @@ export interface GhostMessage {
     | "short.repost_label"
     | "short.reposted"
     | "short.evergreen_wording"
+    | "short.evergreen_title"
     | "short.thin_description";
   values: Record<string, string | number>;
 }
@@ -41,7 +43,7 @@ export function ghostReasonMessage(reason: GhostReason, channelName: (channelId:
       return { key: "reason.reposted", values: { channel: channelName(reason.channelId), dates: [...new Set(dates)].join(", ") } };
     }
     case "evergreen_wording":
-      return { key: "reason.evergreen_wording", values: {} };
+      return reason.field === "title" ? { key: "reason.evergreen_title", values: { quote: reason.quote } } : { key: "reason.evergreen_wording", values: {} };
     case "thin_description": {
       const short = reason.words < reason.minWords;
       // `none`: the duties were not looked for, so only the length is named (a long JD is never a reason then)
@@ -59,6 +61,7 @@ export const GHOST_TOOLTIP_REASONS = 3;
 export function ghostShortMessage(reason: GhostReason): GhostMessage {
   if (reason.code === "long_open") return { key: "short.long_open", values: { days: reason.days } };
   if (reason.code === "thin_description") return { key: "short.thin_description", values: {} };
+  if (reason.code === "evergreen_wording" && reason.field === "title") return { key: "short.evergreen_title", values: {} };
   return { key: `short.${reason.code}`, values: {} };
 }
 
@@ -72,7 +75,7 @@ export interface GhostCheckView {
   score: number;
   tone: GhostCheckTone;
   reasons: GhostReason[];
-  /** The evergreen quote, for the JD mark and "View in the original". */
+  /** The evergreen quote of the JD, for the JD mark and "View in the original"; null when the title said it (a title is not in the JD). */
   quote: string | null;
   /** "Not a ghost job" shows (a watch / likely result not dismissed). */
   canDismiss: boolean;
@@ -82,8 +85,9 @@ export interface GhostCheckView {
 
 export function buildGhostCheckView(detail: GhostOfJob | null): GhostCheckView {
   if (detail === null) return { state: "not_checked", level: null, score: 0, tone: "dim", reasons: [], quote: null, canDismiss: false, canUndo: false };
-  const quote = detail.reasons.find((r) => r.code === "evergreen_wording");
-  const base = { level: detail.level, score: detail.score, reasons: detail.reasons, quote: quote?.code === "evergreen_wording" ? quote.quote : null };
+  const evergreen = detail.reasons.find((r) => r.code === "evergreen_wording");
+  const quote = evergreen?.code === "evergreen_wording" && evergreen.field !== "title" ? evergreen.quote : null;
+  const base = { level: detail.level, score: detail.score, reasons: detail.reasons, quote };
   if (detail.level === "none") return { ...base, state: "clear", tone: "good", canDismiss: false, canUndo: false };
   if (detail.dismissed) return { ...base, state: "dismissed", tone: "dim", canDismiss: false, canUndo: true };
   return { ...base, state: detail.level, tone: detail.level === "likely" ? "warn" : "dim", canDismiss: true, canUndo: false };

@@ -76,6 +76,8 @@ pnpm run doctor --only config.market
 |---|---|
 | `repost_label_patterns` | 来源自己的"重新发布"标签（"Reposted 2 weeks ago"、"Wiedereingestellt"）；`{id, pattern}` |
 | `evergreen_patterns` | JD 写明是人才库或常年招聘（"for our talent pool"、"always hiring"、"Initiativbewerbung (m/w/d)"）；`{id, pattern, check_negation, negation_after, requires_context, only_before_duties}`。`check_negation: false` 表示说法本身就是否定（"no specific opening"、"keine konkrete Stelle"）；`negation_after` 覆盖这一条所在包的设置；`requires_context`（正则列表）表示命中所在的句子还要匹配其中一条才算（"join our AI talent pool" 要和 "apply"、"future opportunities" 在一起）；`only_before_duties: true` 表示命中只在第一个职责标题之上才算（开放申请的标题行 "Initiativbewerbung"，而不是真实招聘帖结尾的同样一行）。两条可以用同一个 id |
+| `title_patterns` | 岗位标题写明是人才库或开放投递（"Talent Pool - Senior Engineer"、"Open Application"、"Initiativbewerbung"）；`{id, pattern}`，每条对整条标题匹配（不判断否定，不切句子），所以要写得窄。分数用 `pipeline.yaml job_checks.ghost.evergreen_wording.title_points`；先读标题再读 JD，一个岗位只有一条这样的原因 |
+| `title_exclude` | 标题匹配其中一条时没有 `title_patterns` 命中：招聘岗位本身（"Talent Pool Manager"、"Recruiter - Talent Community"） |
 | `responsibility_patterns` | 职责段落的标题（"Responsibilities"、"What you'll do"、"Deine Aufgaben"），只对像标题的行测试；`{id, pattern}`。读这一行时去掉强调符号、列表 / 标题标记和前后的 emoji 或箭头，"&amp;" 当作 "&"，`’` 当作 `'`；行尾的 "…"、" -"、"—" 当作 ":"，下面紧跟列表（中间最多隔一行以 ":" 结尾或像标题的引导语）时行尾的 "..." 也当作 ":" |
 | `question_words` | 疑问词（"what"、"which"、"welche…"；整词匹配）：以 "?" 结尾的标题行只有在第一个词是其中之一、且下面紧跟列表时才算标题（"What will I be doing?" / "- …"），所以 "Ready to take on new responsibilities?" 仍是句子 |
 | `negation_cues` | 让人才库说法不算的词：在说法里面、说法前 `pipeline.yaml job_checks.ghost.negation_words_before` 个词内、说法后同一分句 `negation_words_after` 个词内，或在所在列表的标题里 |
@@ -89,7 +91,7 @@ pnpm run doctor --only config.market
 | `abbreviations` | 句点不表示句子结束的缩写 |
 | `prefilter` | 快速初筛：没有命中的 JD 或行不再找人才库说法 |
 
-和签证一样，**`evergreen_patterns` 能匹配到的每个说法都必须包含一个 `prefilter` 命中**，否则永远看不到；`pnpm config:check` 会对正则文本里没有 prefilter 匹配的说法给出警告，写错的正则会指出路径（`ghost.evergreen_patterns[2]`）。改了说法之后，接下来几轮会把所有岗位重新检查一遍；可以先用 `pnpm ghost:check` 预览。
+和签证一样，**`evergreen_patterns` 能匹配到的每个说法都必须包含一个 `prefilter` 命中**，否则永远看不到；`pnpm config:check` 会对正则文本里没有 prefilter 匹配的说法给出警告，写错的正则会指出路径（`ghost.evergreen_patterns[2]`，`ghost.title_patterns`、`ghost.title_exclude` 同样）。你在配置目录里放的整包副本要手动加上标题的两个键，否则不读标题。改了说法之后，接下来几轮会把所有岗位重新检查一遍；可以先用 `pnpm ghost:check` 预览。
 
 每条 `evergreen_patterns` 说法都要在词的边界开始和结束（`(?<![\p{L}\p{N}])` … `(?![\p{L}\p{N}])`，出厂的说法都是这样）。否定判断从片段的索引里读每个命中周围的词，耗时与片段长度成线性，用撇号连起来的长串词也一样；不带边界的说法可能在一个长词（一长串字母）里命中很多次，每次都可能把这个词剩下的部分再读一遍，耗时随词长的平方增长。
 

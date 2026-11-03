@@ -37,6 +37,10 @@ export interface CompiledGhostRules {
   settings: GhostCheckConfig;
   repostLabels: CompiledGhostPattern[];
   evergreen: CompiledGhostPattern[];
+  /** The packs' `title_patterns` (flags `iu`): tested against a job's title; `exec` keeps no state. */
+  titlePatterns: Array<{ id: string; re: RegExp }>;
+  /** The packs' `title_exclude` (flags `iu`): a title that matches one has no title hit. */
+  titleExclude: RegExp[];
   /** Tested against one heading's text (flags `iu`). */
   responsibilities: Array<{ id: string; re: RegExp }>;
   /** Anchored (`^(?:cue)$`): tested against one word. */
@@ -112,6 +116,8 @@ export function compileGhostRules(config: GhostRulesInput): CompiledGhostRules {
       requiresContext: (entry.requires_context ?? []).map((source, at) => compile(source, `ghost.evergreen_patterns[${index}].requires_context[${at}]`, "iu")),
       onlyBeforeDuties: entry.only_before_duties === true,
     })),
+    titlePatterns: pack.title_patterns.map((entry, index) => ({ id: entry.id, re: compile(entry.pattern, `ghost.title_patterns[${index}]`, "iu") })),
+    titleExclude: pack.title_exclude.map((source, index) => compile(source, `ghost.title_exclude[${index}]`, "iu")),
     responsibilities: pack.responsibility_patterns.map((entry, index) => ({ id: entry.id, re: compile(entry.pattern, `ghost.responsibility_patterns[${index}]`, "iu") })),
     negationCues: anchoredWords(pack.negation_cues, "ghost.negation_cues"),
     questionWords: anchoredWords(pack.question_words, "ghost.question_words"),

@@ -5440,6 +5440,7 @@
       "repost_label": "{channel} labels it “{label}”",
       "reposted": "Relisted on {channel} under a new id ({dates})",
       "evergreen_wording": "Says it is a talent pool or always open",
+      "evergreen_title": "The title says so: “{quote}”",
       "thin_short_none": "The JD has only {words} words and no duties section",
       "thin_short": "The JD has only {words} words",
       "thin_none": "No duties section in the JD",
@@ -5450,6 +5451,7 @@
       "repost_label": "labelled reposted",
       "reposted": "relisted under a new id",
       "evergreen_wording": "says talent pool / always open",
+      "evergreen_title": "title says talent pool / open application",
       "thin_description": "thin JD"
     },
     "filter": {
