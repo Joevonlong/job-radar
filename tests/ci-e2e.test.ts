@@ -143,8 +143,13 @@ describe("independent slow CI jobs", () => {
     expect(job.if).toBe("needs.changes.outputs.transition == 'true'");
     expect(job["timeout-minutes"]).toBe(120);
     expect(job.env?.SCENARIO).toBe("${{ matrix.scenario }}");
-    expect(job.steps[0]?.with?.["fetch-depth"]).toBe(0);
+    const checkout = job.steps.find((step) => step.uses?.startsWith("actions/checkout@"))!;
+    expect(checkout.with?.["fetch-depth"]).toBe(0);
     const launch = job.steps.find((step) => step.name === "Start transition scenarios")!;
+    const free = job.steps.findIndex((step) => step.name === "Free disk space");
+    expect(free).toBeGreaterThanOrEqual(0);
+    expect(free).toBeLessThan(job.steps.indexOf(launch));
+    expect(job.steps[free]!.run).toContain("df -h /");
     expect(launch.run).toContain('for shard in "$SCENARIO"; do');
     expect(launch.run).toContain('bash tests/transition/run.sh --scenarios "$shard" "$state/$shard/artifacts"');
     for (const scenario of ["A", "B"]) {
