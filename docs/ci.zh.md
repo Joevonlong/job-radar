@@ -471,7 +471,7 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 #### Free disk space
 
-transition 作业的第一步。有的 runner 根盘只有 72 GB（正常 145 GB），而场景要构建约十次镜像。删除未使用的预装工具链 `/usr/local/lib/android`、`/usr/share/dotnet`、`/opt/ghc`、`/usr/local/.ghcup` 和 `/opt/hostedtoolcache/CodeQL`（后续步骤都用不到，Node 来自 `actions/setup-node`），前后各打印一次 `df -h /`。用纯 shell，失败只给警告。此外在 `CI=true` 且设有 `GITHUB_ACTIONS` 时，`tests/transition/run.sh` 在每一跳之间执行 `docker builder prune -af` 和 `docker image prune -f`（构建缓存和悬空镜像，带 tag 的镜像保留）并打印磁盘用量。它自己调用真正的 docker：docker 守卫仍对被测脚本拒绝 prune，非 CI 环境不会清理任何东西。
+transition 作业的第一步。有的 runner 根盘只有 72 GB（正常 145 GB），而场景要构建约十次镜像。删除未使用的预装工具链 `/usr/local/lib/android`、`/usr/share/dotnet`、`/opt/ghc`、`/usr/local/.ghcup` 和 `/opt/hostedtoolcache/CodeQL`（后续步骤都用不到，Node 来自 `actions/setup-node`），前后各打印一次 `df -h /`。用纯 shell，失败只给警告。此外每一跳 deploy 之后，`tests/transition/run.sh` 打印 `/` 的使用率；在 `CI=true` 且设有 `GITHUB_ACTIONS`、并且使用率达到或超过 `DISK_PRUNE_THRESHOLD`（80%，定义在脚本开头）时，执行 `docker builder prune -af` 和 `docker image prune -f`（构建缓存和悬空镜像，带 tag 的镜像保留）。低于阈值不清理，构建缓存继续加速构建。它自己调用真正的 docker：docker 守卫仍对被测脚本拒绝 prune，非 CI 环境不会清理任何东西。
 
 #### Check out the repository
 

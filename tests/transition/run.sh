@@ -76,6 +76,10 @@ V3=b3f69b09a72f1457a40bdd31393dc541623d8e4e
 FONT_RETRY_MAX=2
 FONT_RETRY_BACKOFF=30
 
+# In CI, after a hop the build cache and dangling images are dropped only when / is at least this full (percent): pruning
+# the cache costs build time, which the run's deadline counts.
+DISK_PRUNE_THRESHOLD=80
+
 SCENARIOS="A,B"
 ARTIFACTS=""
 while [[ $# -gt 0 ]]; do
@@ -297,14 +301,21 @@ LAST_LOG=""
 log_has() { grep -qF -- "$1" "$LAST_LOG" || die "step $STEP: the output lacks: $1"; }
 log_lacks() { ! grep -qF -- "$1" "$LAST_LOG" || die "step $STEP: the output has: $1"; }
 
-# In CI only (a throw-away runner): drop the build cache and dangling images a finished hop leaves, so the disk does not
-# grow with every hop. Tagged images stay (a running container, a rollback or scenario E may need them). The scripts under
+# In CI only (a throw-away runner), when the disk is getting full: drop the build cache and dangling images a finished hop
+# leaves, so the disk does not grow with every hop. Tagged images stay (a running container, a rollback or scenario E may need them). The scripts under
 # test cannot do this: the docker guard refuses prune. Elsewhere the Docker daemon is the owner's, so nothing is pruned.
 reclaim_disk() {
   [[ "${CI_RECLAIM_DISK}" == 1 ]] || return 0
-  "$REAL_DOCKER" builder prune -af >/dev/null 2>&1 || true
-  "$REAL_DOCKER" image prune -f >/dev/null 2>&1 || true
-  df -h / 2>/dev/null | tail -n 1 | sed 's/^/disk after the hop: /' || true
+  local use
+  use="$(df -P / 2>/dev/null | awk 'NR==2 { gsub(/%/, "", $5); print $5 }')" || use=""
+  if [[ "$use" =~ ^[0-9]+$ ]] && (( use >= DISK_PRUNE_THRESHOLD )); then
+    echo "disk after the hop: / at ${use}% (threshold ${DISK_PRUNE_THRESHOLD}%): pruning build cache and dangling images"
+    "$REAL_DOCKER" builder prune -af >/dev/null 2>&1 || true
+    "$REAL_DOCKER" image prune -f >/dev/null 2>&1 || true
+    df -h / 2>/dev/null | tail -n 1 | sed 's/^/disk after the prune: /' || true
+  else
+    echo "disk after the hop: / at ${use:-unknown}% (threshold ${DISK_PRUNE_THRESHOLD}%): nothing pruned"
+  fi
 }
 deploy() { RETRY_FONT_FETCH=1 logged "deploy-$1" "0 2" in_project bash scripts/ops/deploy.sh --skip-pull --no-backup --no-prune --no-drain --settle "${2:-5}" --wait-timeout 600; reclaim_disk; }
 checkout() { git -C "$DIR" checkout -q --detach "$1"; }
