@@ -177,7 +177,8 @@ const tavilyChannel = z.strictObject({
 
 /**
  * Settings the two job-board channels share: both read public search pages over plain HTTP
- * (embedded JSON, no browser), so they are throttled by `throttle` and capped per query by `max_pages`.
+ * (embedded JSON, no browser), so they are throttled by `throttle`. XING caps the pages read per keyword with `max_pages` and sets a search radius;
+ * StepStone's robots.txt allows neither (one request per keyword and place), so its schema drops both.
  */
 const jobBoardShape = {
   ...baseShape,
@@ -199,9 +200,18 @@ const jobBoardShape = {
   title_prefilter: atsTitlePrefilter,
 };
 
-/** `sources.stepstone`: www.stepstone.de search result pages + posting pages. */
-export const stepstoneSettingsSchema = z.strictObject(jobBoardShape);
+/**
+ * `sources.stepstone`: www.stepstone.de search result pages + posting pages. Its robots.txt only permits a search URL with a single `q=`
+ * parameter, so there is no radius and no paging: `radius_km` and `max_pages` (sources.yaml version 7) are removed from it.
+ */
+export const stepstoneSettingsSchema = z.strictObject(withoutKeys(jobBoardShape, ["radius_km", "max_pages"]));
 export type StepstoneSettings = z.infer<typeof stepstoneSettingsSchema>;
+
+function withoutKeys<T extends object, K extends keyof T>(shape: T, keys: readonly K[]): Omit<T, K> {
+  const copy: Partial<T> = { ...shape };
+  for (const key of keys) delete copy[key];
+  return copy as Omit<T, K>;
+}
 
 /** `sources.xing`: www.xing.com/jobs search pages + posting pages. */
 export const xingSettingsSchema = z.strictObject({

@@ -11,6 +11,18 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **StepStone now only requests URLs its `robots.txt` permits.** The channel used to send `?sort=2&ag=…&radius=…&page=…`, which
+  StepStone's current `robots.txt` disallows; it now sends a single `?q=<keyword>` parameter. Trade-off: one request per keyword
+  and place (about 25 results in StepStone's own order, no paging, no newest-first sort), and the look-back window is applied
+  afterwards, so StepStone finds fewer postings than before. See [Sources](docs/sources.md#scraping).
+
+### Upgrade notes
+
+- **`sources.stepstone.radius_km` and `max_pages` are removed** (`sources.yaml` config version 9; the config update deletes
+  them, and `pnpm config:check` passes on the result). **Rollback:** the update also raises `config_version` of `sources.yaml`, and an older version refuses a file with a
+  newer version. Restore the file from `data/config/.backup/<timestamp>/` (the copy from before the update), or add
+  `radius_km: 30` and `max_pages: 2` under `sources.stepstone` **and** set `config_version: 8` (the value before this update;
+  `config_version: 7` if you also roll back the Apify change). XING keeps its own.
 - **Apify LinkedIn searches now request the query's exact window** (`f_TPR=r<seconds>`, for example `r36000` for 10 hours) instead of the actor's 24-hour, week or month filter, so fewer billed records fall outside the window. Results are still not newest first, because the actor ignores `sortBy=DD`, so catch-up stays off for this channel.
 
 ### Upgrade notes

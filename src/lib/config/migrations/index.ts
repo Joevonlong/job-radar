@@ -24,6 +24,7 @@ import { sources005 } from "./sources/005-handpicked";
 import { sources006 } from "./sources/006-berlin-design-network";
 import { sources007 } from "./sources/007-berlinstartupjobs";
 import { sources008 } from "./sources/008-apify-exact-window";
+import { sources009 } from "./sources/009-stepstone-robots";
 import type { ConfigMigration } from "./types";
 import { ui002 } from "./ui/002-visibility-blocks";
 
@@ -35,7 +36,7 @@ export const CONFIG_MIGRATIONS: Readonly<Partial<Record<ConfigName, readonly Con
   ui: [ui002],
   preferences: [preferences002],
   search: [search002],
-  channels: [sources002, sources003, sources004, sources005, sources006, sources007, sources008],
+  channels: [sources002, sources003, sources004, sources005, sources006, sources007, sources008, sources009],
   pipeline: [pipeline002, pipeline003, pipeline004, pipeline005],
   ai: [ai002, ai003],
   insights: [insights002],
