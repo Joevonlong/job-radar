@@ -2,7 +2,7 @@
 # 带 "正则" 的列表按大小写不敏感、Unicode 模式匹配；写错的正则会在 pnpm config:check 里报错。
 
 # 每次从数据库取多少条 pending 的 raw 来解析；步骤会一直取到没有 pending 为止
-config_version: 3
+config_version: 4
 batch_size: 200
 
 dedupe:
@@ -43,6 +43,7 @@ lifecycle:
 apply_priority:
   ats: 1
   linkedin: 2
+  handpicked: 2
   stepstone: 3
   xing: 3
   indeed: 3

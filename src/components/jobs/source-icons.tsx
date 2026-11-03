@@ -16,6 +16,7 @@ const FAMILY_MARK: Record<string, string> = {
   indeed: "Id",
   arbeitsagentur: "BA",
   arbeitnow: "AN",
+  handpicked: "HP",
   google: "G",
   email: "@",
   manual: "M",

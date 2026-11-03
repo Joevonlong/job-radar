@@ -1,6 +1,6 @@
 # Tavily 搜索（ATS board 发现）
 
-通道 `tavily` 用 Tavily Search API 找"还不在 `sources.yaml 的 ats_boards` 里的公司招聘页"（Greenhouse / Lever / Ashby / Personio / SmartRecruiters）。它不采集岗位，只把新找到的 board 写进候选表，在 `/sources` 的"发现的 board"里由你一键加入或忽略。它取代了 Brave Search，职责完全相同；`brave` 通道还在，默认关闭。
+通道 `tavily` 用 Tavily Search API 找"还不在 `sources.yaml 的 ats_boards` 里的公司招聘页"（Greenhouse / Lever / Ashby / Personio / SmartRecruiters）。它不采集岗位，只把新找到的 board 写进候选表，在 `/sources` 的"发现的 board"里由你一键加入或忽略。它取代了 Brave Search，职责完全相同；`brave` 通道还在，默认关闭。[Handpicked Berlin](sources.zh.md#handpicked-berlin) 在你打开后也会写候选（它的岗位背后的公司 board）；来源清单里每个候选行都带一个徽标，说明它是谁发现的（Tavily、Brave 或 Handpicked Berlin；旧的行没有徽标）。
 
 ## 账号与 key
 1. 在 <https://app.tavily.com> 注册（不用绑卡）。免费档每月 1000 个额度；用完后可以改按量付费（写文时约 $0.008 / 额度，以官网为准）。

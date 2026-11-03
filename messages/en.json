@@ -1111,6 +1111,7 @@
       "indeed": "Indeed",
       "arbeitsagentur": "Employment agency",
       "arbeitnow": "Arbeitnow",
+      "handpicked": "Handpicked Berlin",
       "google": "Google",
       "email": "Email alerts",
       "manual": "Added by hand"
@@ -2357,6 +2358,26 @@
       "arbeitnow_max_pages": {
         "label": "Most pages per run",
         "hint": "One request per page, newest pages first (a page is not sorted inside). Paging stops earlier once even the newest posting of a page is older than the look-back window."
+      },
+      "handpicked_max_age_days": {
+        "label": "Newest days to keep",
+        "hint": "The index only has dates, so postings older than this many days are not stored."
+      },
+      "handpicked_max_details": {
+        "label": "Most descriptions per run",
+        "hint": "One request per new posting, spaced out. Postings beyond the cap wait for the next run."
+      },
+      "handpicked_skip_known": {
+        "label": "Leave boards in ats_boards to the ATS channel",
+        "hint": "Postings of a company board you already track (switched on or off) are not stored from this index."
+      },
+      "handpicked_discover": {
+        "label": "Offer ATS boards as candidates",
+        "hint": "Company boards behind matching postings appear under Discovered boards on the source registry."
+      },
+      "handpicked_discover_title": {
+        "label": "Candidates need a matching title",
+        "hint": "Off: every company with a posting in your places becomes a candidate (hundreds)."
       },
       "remote_option_id": {
         "label": "\"Fully remote\" filter value",
@@ -3826,7 +3847,8 @@
       "notConfiguredHintOff": "Switched off and not configured yet. To use it, add its key first, then switch it on in Settings.",
       "notConfiguredHintJsearch": "Set JSEARCH_API_KEY (your RapidAPI key) in .env; until then this channel sends no request.",
       "attribution": {
-        "arbeitnow": "Data from <link>Arbeitnow (arbeitnow.com)</link>, a free public API offered as is."
+        "arbeitnow": "Data from <link>Arbeitnow (arbeitnow.com)</link>, a free public API offered as is.",
+        "handpicked": "Data from <link>Handpicked Berlin (handpickedberlin.com)</link>, read from its public job index. The site publishes no terms: keep the request rate low and do not mirror the data."
       },
       "circuit": {
         "closed": "Circuit: closed",
@@ -3921,7 +3943,7 @@
     },
     "discovery": {
       "title": "Discovered boards",
-      "description": "Career boards that web search (Tavily or Brave) found and that are not in ats_boards of sources.yaml yet. Adding one starts collecting it from the next cycle.",
+      "description": "Career boards that web search (Tavily or Brave) or the links on Handpicked Berlin turned up and that are not in ats_boards of sources.yaml yet. Adding one starts collecting it from the next cycle.",
       "count": "{total} in total",
       "countFiltered": "{shown} match the filters, {total} in total",
       "statusNotApplied": "the status filter does not apply here",
@@ -3933,6 +3955,12 @@
       "add": "Add",
       "dismiss": "Dismiss",
       "open": "Open board",
+      "foundByTitle": "Where this board was found",
+      "foundBy": {
+        "handpicked": "Handpicked Berlin",
+        "tavily": "Tavily",
+        "brave": "Brave"
+      },
       "region": "EU host",
       "added": "{name} added to the source registry (sources.yaml).",
       "alreadyListed": "{name} is already in the source registry.",

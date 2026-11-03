@@ -363,7 +363,7 @@ A widened run is not evidence for marking jobs possibly closed. A backfill windo
 like a normal run when no automatic catch-up widens it.
 
 Only keyword channels take the backfill window. Channels that read their own boards or inboxes instead of keyword
-queries (the ATS boards, the Arbeitnow feed, email alerts, the Brave / Tavily discovery sources, LinkedIn's session
+queries (the ATS boards, the Arbeitnow feed, the Handpicked Berlin index, email alerts, the Brave / Tavily discovery sources, LinkedIn's session
 recommendations) run as usual within the same backfill run: their window is not widened and their runs are not marked
 as widened.
 
@@ -407,6 +407,46 @@ on in the shipped `sources.yaml` (`markets: [DE]`); an existing installation get
 - **Settings**: `base_url`, `user_agent`, `max_pages`, `max_results`, `throttle` and `title_prefilter` under
   `sources.arbeitnow` (also on the settings page). Switch it off with `enabled: false` or the switch on `/sources/registry`.
 
+## Handpicked Berlin
+
+Handpicked Berlin (`handpicked`) reads the public job index behind [handpickedberlin.com](https://handpickedberlin.com/jobs): a
+static JSON file with roughly the last 30 days of postings in Berlin, Munich and Hamburg and German remote, several thousand at a
+time, each with the employer's own link (Personio, join.com, Ashby, Greenhouse, Workday and others, many of them small startups).
+No key, no login. It is for the Germany pack but **off by default and not in the pack's default channels**: the site publishes
+no terms (only an imprint and a privacy page; its `robots.txt` allows the paths the channel reads). To use it, set
+`sources.handpicked.enabled: true` in `sources.yaml` (or switch it on at `/sources/registry`); an existing installation gets the
+block, switched off, from the config update (`pnpm config:migrate`).
+
+- **What a run reads.** One request for the index, then the description of each new posting it keeps (at most
+  `max_details_per_run`, 30 by default, 1 to 3 seconds apart; postings it already stored are not fetched again, and the rest
+  waits for the next run). It keeps a posting if it is in one of your places (`search.yaml: locations`, with the spellings of the
+  city aliases, so "München" also matches the site's `munich`; or remote in your country when your remote scope is not `none`),
+  is at most `max_age_days` old (14; the index has dates, not times), its title passes `title_prefilter` (a search keyword or an
+  `include_terms` entry, or a watched company; `exclude_terms` drops student and intern jobs) and, with `skip_known_boards: true`,
+  it is not on a company board you already list in `ats_boards` (enabled or not): the ATS channel reads those first-hand. The
+  index only covers Berlin, Munich, Hamburg and German remote; with other cities in `locations` the channel runs and finds nothing.
+- **What a posting has.** Title, company, one or more places, a work mode (the site's "onsite" is not taken as a fact), an
+  optional salary range as text, and the full description (HTML, read as text; e-mail addresses and phone numbers are removed
+  from the text, the stored original keeps them; the trap scan reads it for hidden text, [ai-traps.md](ai-traps.md)). The job's
+  link goes to the employer's own posting, because the site has no posting pages. The same job from the employer's ATS board or
+  from another source is merged into one job; the apply link prefers the ATS, then this channel and LinkedIn.
+- **Company discovery.** The index is the best list of small German employers on Personio, Ashby, Greenhouse and Lever that we
+  have. Once a day (`discover_boards.interval_hours`) the channel turns the employer links of postings in your places whose
+  title matches (`require_title_match: true`; set it to `false` and every company with a posting in your places becomes a
+  candidate, hundreds of them) into candidates under "Discovered boards" on `/sources/registry`, with the badge "Handpicked
+  Berlin". Add one to start reading all of that company's jobs through the ATS channel, or dismiss it. Boards you already list are
+  never offered. join.com, Workday and other hosts have no channel here, so they give postings but no candidates.
+  `discover_boards.enabled: false` turns this part off; a failure in it never costs postings.
+- **Terms.** The site has no terms page: nothing forbids reading its index and nothing grants it. Use it at a low rate (one
+  index request per run and a few details), don't mirror or republish the data, and switch the channel off if the owner asks.
+  The `/sources` card names the site and links to it. A 403, 404 or 410 on the index counts as blocked and opens the channel's
+  circuit breaker; the other channels keep running.
+- **Limits.** Only the dates are known (a posting from this morning and one from yesterday look alike), there is no language,
+  seniority or contract field, and an `id` the site changes would make old postings look new (the usual cross-source merge
+  catches them). A posting missing from the index is not treated as closed.
+- **Settings**: `base_url`, `user_agent`, `max_age_days`, `max_details_per_run`, `skip_known_boards`, `discover_boards`,
+  `max_results`, `throttle` and `title_prefilter` under `sources.handpicked` (also on the settings page).
+
 ## Scraping
 
 Not every channel uses an official API. Some read public web pages or unofficial endpoints, and some act as your own
@@ -417,7 +457,7 @@ for a new installation** and need your explicit consent to switch on.
 |---|---|---|---|
 | Scraping | LinkedIn guest search (`linkedin-guest`), Indeed (`indeed`), StepStone (`stepstone`), XING (`xing`), Google Jobs via the sidecar (`jobspy-google`) | off | the site's terms may forbid it; your IP address can be rate limited or blocked |
 | Account automation | LinkedIn logged-in session (`linkedin-session`, `linkedin-session:recommended`) | off | uses your own account; the account can be restricted or banned |
-| Official APIs and public company feeds | Arbeitsagentur, [Arbeitnow](#arbeitnow), Greenhouse, Lever, Ashby, Personio, SmartRecruiters (on); JSearch, Gmail alerts, Tavily, Brave (need your key or account) | on, or off until you add a key | follow the provider's own terms and quotas |
+| Official APIs and public company feeds | Arbeitsagentur, [Arbeitnow](#arbeitnow), Greenhouse, Lever, Ashby, Personio, SmartRecruiters (on); [Handpicked Berlin](#handpicked-berlin) (off: the site has no terms); JSearch, Gmail alerts, Tavily, Brave (need your key or account) | on, or off until you add a key or switch it on | follow the provider's own terms and quotas |
 | Paid scraping services | Bright Data, Apify, [Monid](monid.md) | on, but nothing happens without your token | a service scrapes for you; **this does not remove the terms-of-service risk**, which stays with you |
 
 How to switch one on:

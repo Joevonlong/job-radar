@@ -7,7 +7,7 @@ import { resolveJobspySettings } from "@/lib/channels/jobspy/client";
 import { buildDiscoveryInputs } from "@/lib/channels/linkedin/brightdata/contract";
 import { locationFor } from "@/lib/channels/linkedin/apify/contract";
 
-import { shippedChannels } from "../channels/helpers";
+import { channelsWith, shippedChannels } from "../channels/helpers";
 import { berlinQuery } from "../channels/linkedin/brightdata/helpers";
 import { fixtureMarket } from "../pipeline/helpers";
 
@@ -28,6 +28,9 @@ describe("markets of a channel", () => {
     expect(settings).toMatchObject({ enabled: true, otherMarket: false, markets: ["DE"] });
     expect(settingsFromConfig("greenhouse", config).otherMarket).toBe(false);
     expect(settingsFromConfig("arbeitnow", config)).toMatchObject({ enabled: true, otherMarket: false, markets: ["DE"] });
+    // Handpicked Berlin is bound to the German market too, but ships switched off
+    expect(settingsFromConfig("handpicked", config)).toMatchObject({ enabled: false, otherMarket: false, markets: ["DE"] });
+    expect(settingsFromConfig("handpicked", channelsWith((raw) => { (raw.sources as Record<string, { enabled: boolean }>).handpicked!.enabled = true; }))).toMatchObject({ enabled: true, otherMarket: false });
   });
 });
 
@@ -73,6 +76,7 @@ describe("under another market", () => {
       const config = shippedChannels();
       expect(settingsFromConfig("arbeitsagentur", config)).toMatchObject({ enabled: false, otherMarket: true });
       expect(settingsFromConfig("arbeitnow", config)).toMatchObject({ enabled: false, otherMarket: true });
+      expect(settingsFromConfig("handpicked", config)).toMatchObject({ enabled: false, otherMarket: true });
       expect(registry.enabled(config).map((c) => c.id)).toEqual(["greenhouse"]);
     } finally {
       tmp.cleanup();

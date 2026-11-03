@@ -191,6 +191,7 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
     "sources.stepstone.markets",
     "sources.xing.markets",
     "sources.arbeitnow.markets",
+    "sources.handpicked.markets",
   ],
   // Where the AI runs and the host worker's timings are edited in the YAML (operations parameters, machine paths).
   // The pre-score weights and tables (`scoring.priority`) are a form in the "scoring" block.
@@ -453,6 +454,17 @@ const channelsSections: SectionDef[] = [
     text("sources.arbeitnow.user_agent", "user_agent", { mono: true }),
     int("sources.arbeitnow.max_pages", "arbeitnow_max_pages"),
     ...atsPrefilter("sources.arbeitnow"),
+  ]),
+  channelSection("handpicked", "sources.handpicked", [
+    text("sources.handpicked.base_url", "base_url", { mono: true }),
+    text("sources.handpicked.user_agent", "user_agent", { mono: true }),
+    int("sources.handpicked.max_age_days", "handpicked_max_age_days"),
+    int("sources.handpicked.max_details_per_run", "handpicked_max_details"),
+    bool("sources.handpicked.skip_known_boards", "handpicked_skip_known"),
+    bool("sources.handpicked.discover_boards.enabled", "handpicked_discover"),
+    int("sources.handpicked.discover_boards.interval_hours", "discovery_interval"),
+    bool("sources.handpicked.discover_boards.require_title_match", "handpicked_discover_title"),
+    ...atsPrefilter("sources.handpicked"),
   ]),
   channelSection("jsearch", "sources.jsearch", [
     text("sources.jsearch.api_base_url", "api_base_url", { mono: true }),

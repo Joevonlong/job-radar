@@ -15,11 +15,14 @@ export interface BoardCandidateInput extends BoardCandidateKey {
   region: string | null;
   boardUrl: string;
   title: string | null;
+  /** The discovery source that saw the board (a channel id); a board seen by several keeps all of them. */
+  foundBy: string;
 }
 
 /**
  * Record boards a discovery run saw. A board seen before keeps its status (a dismissed or added
- * board does not come back as new) and only gets its last-seen time, counter and title refreshed.
+ * board does not come back as new) and only gets its last-seen time, counter and title refreshed; `found_by` becomes the union of
+ * the sources that saw it.
  * Returns how many boards were seen for the first time.
  */
 export async function upsertBoardCandidates(db: Db, items: readonly BoardCandidateInput[], at?: Date): Promise<number> {
@@ -27,13 +30,15 @@ export async function upsertBoardCandidates(db: Db, items: readonly BoardCandida
   const seenAt = at ?? sql`now()`;
   const rows = await db
     .insert(atsBoardCandidates)
-    .values(items.map((i) => ({ ...i, firstSeenAt: seenAt, lastSeenAt: seenAt })))
+    .values(items.map(({ foundBy, ...i }) => ({ ...i, foundBy: [foundBy], firstSeenAt: seenAt, lastSeenAt: seenAt })))
     .onConflictDoUpdate({
       target: [atsBoardCandidates.ats, atsBoardCandidates.token],
       set: {
         lastSeenAt: seenAt,
         seenCount: sql`${atsBoardCandidates.seenCount} + 1`,
         title: sql`coalesce(excluded.title, ${atsBoardCandidates.title})`,
+        // union of the sources, in a stable order
+        foundBy: sql`array(select distinct u from unnest(${atsBoardCandidates.foundBy} || excluded.found_by) as u order by u)`,
       },
     })
     .returning({ seenCount: atsBoardCandidates.seenCount });

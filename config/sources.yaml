@@ -18,7 +18,7 @@
 # Monthly cap used before starting paid collection runs (USD), shared by all paid channels.
 # Limits use configured prices; settled vendor charges are always recorded and may exceed the cap for one run.
 # (AI spend has its own cap: monthly_api_budget_usd in ai.yaml.)
-config_version: 4
+config_version: 5
 paid_total_monthly_budget_usd: 15
 
 # Circuit breaker: after failures consecutive failures a channel is marked unavailable (paused) and retried after cooldown_hours hours
@@ -284,6 +284,33 @@ sources:
     # Each page holds roughly 3-5 hours of postings (the first two pages are bigger and span days); 8 pages cover the largest window_hours (24).
     # Paging stops earlier at a page whose newest posting is older than the look-back window
     max_pages: 8
+    title_prefilter:
+      enabled: true
+      # Same as greenhouse: stored only if the title matches a search.yaml keyword or include_terms, or the company is in watched_companies; an exclude_terms match drops it
+      include_terms: []
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  # Handpicked Berlin: the public job index behind handpickedberlin.com/jobs (a static JSON file, no key, no login): the last ~30 days of postings
+  # in Berlin, Munich, Hamburg and German remote, each with the employer's own link. The site publishes no terms (only an imprint and a privacy page);
+  # robots.txt allows the paths used. Keep the request rate low, don't mirror or republish the data, and switch the channel off if the site asks.
+  # Off by default for that reason: set enabled: true to use it. Each run reads the index once, keeps postings in your places (search.yaml locations,
+  # with the spellings of filter.city_aliases) that pass title_prefilter, and fetches the description of the new ones (max_details_per_run).
+  # discover_boards also offers the company boards behind matching postings (Greenhouse, Lever, Ashby, Personio) as candidates on /sources/registry.
+  handpicked:
+    enabled: false
+    # Runs only in these markets (home country ISO codes); the index covers German cities and German remote only
+    markets: [DE]
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 1000, max_delay_ms: 3000 }
+    max_results: 100 # max postings stored per run (after selecting, newest first)
+    base_url: https://handpickedberlin.com # the channel appends /jobs/search-index.json and /jobs/d/<id>.json
+    user_agent: "JobRadar/2 (self-hosted job tracker)"
+    max_age_days: 14 # the index only has dates: postings older than this are not stored
+    max_details_per_run: 30 # description requests per run (one per new posting); the rest waits for the next run
+    skip_known_boards: true # leave postings of boards in ats_boards (enabled or not) to the ATS channels
+    discover_boards:
+      enabled: true
+      interval_hours: 24 # write candidates at most this often
+      require_title_match: true # only postings whose title passes title_prefilter count (false: every posting in your places, hundreds of companies)
     title_prefilter:
       enabled: true
       # Same as greenhouse: stored only if the title matches a search.yaml keyword or include_terms, or the company is in watched_companies; an exclude_terms match drops it

@@ -232,6 +232,13 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   database a `profile_story_drafts` table (migration `0049_story_extract_drafts`), and the web image the `unpdf` dependency.
   A PDF is read in a worker thread stopped at `import.pdf_timeout_seconds` / `import.pdf_max_memory_mb`. Provider errors on this task and on `write`
   are logged and stored as their kind only. The evidence check now reads Latin magnitudes and multiples ($2M, 2.5M, 3 Mio, 10x).
+- **Handpicked Berlin channel (off by default).** Reads the public job index of handpickedberlin.com (Berlin, Munich, Hamburg
+  and German remote, with the employer's own links), keeps postings in your places that pass the title prefilter, and offers the
+  company boards behind them as candidates under Discovered boards (each candidate now shows where it was found). The site
+  publishes no terms, so the channel is not switched on for you: set `sources.handpicked.enabled: true`
+  (see [Sources](docs/sources.md#handpicked-berlin)). `pnpm config:migrate` adds the block (switched off) to `sources.yaml` (version 5)
+  and `handpicked: 2` to `apply_priority` in a copied `pipeline.yaml` (version 4). Migration `0049_board_candidate_found_by` adds
+  one column with a default; **rollback:** drop `found_by` from `ats_board_candidates` and delete the `handpicked` block and key again.
 - **Application writer: improve your own draft and a coach review.** Paste text you wrote in any language and get a new
   version in the answer's language, either fitted to the job or with only the language and wording changed (that option
   sends none of your ticked material). A version can also be reviewed: the AI rates it from 0 to 100 (marked as its

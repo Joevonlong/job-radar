@@ -64,6 +64,16 @@ describe("channel card attribution", () => {
     expect(line).toHaveTextContent(locale === "en" ? /free public API/ : /免费公开接口/);
   });
 
+  it.each(["en", "zh"] as const)("the Handpicked Berlin card credits the site and says it publishes no terms (%s)", async (locale) => {
+    await renderCard("handpicked", locale);
+    const line = screen.getByTestId("channel-attribution");
+    const link = line.querySelector("a");
+    expect(link).toHaveAttribute("href", "https://handpickedberlin.com");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(link).toHaveTextContent(/Handpicked Berlin/);
+    expect(line).toHaveTextContent(locale === "en" ? /publishes no terms/ : /没有公开条款/);
+  });
+
   it("other channels have no attribution line", async () => {
     await renderCard("greenhouse", "en");
     expect(screen.queryByTestId("channel-attribution")).toBeNull();

@@ -21,6 +21,8 @@ export interface CandidateView {
   boardUrl: string;
   /** Title of the search result that led to the board. */
   title: string | null;
+  /** The discovery sources that saw the board (channel ids); empty for rows from before the column existed. */
+  foundBy: string[];
   seenCount: number;
   lastSeenAt: Date;
 }
@@ -51,6 +53,7 @@ export function toCandidateViews(rows: readonly BoardCandidateRow[], companies: 
       name: candidateName(row.token),
       boardUrl: row.boardUrl,
       title: row.title,
+      foundBy: row.foundBy,
       seenCount: row.seenCount,
       lastSeenAt: row.lastSeenAt,
     });

@@ -149,7 +149,7 @@ database. The full list of what is stored, each AI provider's data policy and a 
 
 | Kind | Sources | Needs | In a new install |
 |---|---|---|---|
-| Job boards, official | Arbeitsagentur (German Federal Employment Agency), Arbeitnow (free public board API) | nothing | on (Germany pack) |
+| Job boards, official | Arbeitsagentur (German Federal Employment Agency), Arbeitnow (free public board API), Handpicked Berlin (public index of Berlin, Munich, Hamburg and German remote jobs; no terms published, so off until you switch it on) | nothing | on (Germany pack), Handpicked Berlin off |
 | Job boards, scraped | LinkedIn guest search, Indeed, StepStone, XING | nothing | off: the wizard shows the risk and asks first |
 | Company career pages | Greenhouse, Lever, Ashby, Personio, SmartRecruiters | nothing; you add the companies | on |
 | Search APIs | Google Jobs via JSearch | a RapidAPI key (free plan available) | off; switch it on once the key is in `.env` |

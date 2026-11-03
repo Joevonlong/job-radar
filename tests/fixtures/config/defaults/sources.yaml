@@ -16,7 +16,7 @@
 
 # 所有付费采集通道每月合计花费的上限（美元）；各通道实际花费之和不得超过它，由预算控制执行。
 # （AI 费用另有上限，见 ai.yaml 的 monthly_api_budget_usd。）
-config_version: 4
+config_version: 5
 paid_total_monthly_budget_usd: 15
 
 # 熔断：连续失败 failures 次后，通道标为不可用，冷却 cooldown_hours 小时后再试
@@ -271,6 +271,31 @@ sources:
     base_url: https://www.arbeitnow.com
     user_agent: JobRadar/2 (self-hosted job tracker)
     max_pages: 8
+    title_prefilter:
+      enabled: true
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  # Handpicked Berlin: the public job index behind handpickedberlin.com/jobs (a static JSON file, no key, no login), added by the config update:
+  # the last ~30 days of postings in Berlin, Munich, Hamburg and German remote, each with the employer's own link. The site publishes no terms
+  # (only an imprint and a privacy page). Keep the request rate low, don't mirror or republish the data, and switch the channel off if the site asks.
+  # Off by default for that reason: set enabled: true to use it. Each run reads the index once and keeps postings in your places (search.yaml locations)
+  # that pass title_prefilter (copied from your greenhouse prefilter). discover_boards also offers the company boards behind matching postings as
+  # candidates on /sources/registry.
+  handpicked:
+    enabled: false
+    markets: [DE]
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 1000, max_delay_ms: 3000 }
+    max_results: 100
+    base_url: https://handpickedberlin.com
+    user_agent: JobRadar/2 (self-hosted job tracker)
+    max_age_days: 14
+    max_details_per_run: 30
+    skip_known_boards: true
+    discover_boards:
+      enabled: true
+      interval_hours: 24
+      require_title_match: true
     title_prefilter:
       enabled: true
       include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]

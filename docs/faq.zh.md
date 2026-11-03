@@ -130,7 +130,7 @@ Job Radar 本身免费、开源（AGPL-3.0），跑在你自己的机器上。�
 
 | 类型 | 来源 | 需要 | 新安装时 |
 |---|---|---|---|
-| 招聘网站（官方） | Arbeitsagentur（德国联邦劳工局）、Arbeitnow（免费公开的招聘板接口） | 什么都不用 | 开（德国包） |
+| 招聘网站（官方） | Arbeitsagentur（德国联邦劳工局）、Arbeitnow（免费公开的招聘板接口）、Handpicked Berlin（柏林、慕尼黑、汉堡和德国远程岗位的公开索引；站点没有公开条款，所以你手动打开前是关的） | 什么都不用 | 开（德国包），Handpicked Berlin 关 |
 | 招聘网站（抓取） | LinkedIn 游客搜索、Indeed、StepStone、XING | 什么都不用 | 关：向导先提示风险、问过你 |
 | 公司招聘页 | Greenhouse、Lever、Ashby、Personio、SmartRecruiters | 什么都不用；公司由你添加 | 开 |
 | 搜索 API | 通过 JSearch 的 Google Jobs | RapidAPI 的 key（有免费档） | 关；key 填进 `.env` 后再打开 |

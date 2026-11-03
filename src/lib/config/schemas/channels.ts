@@ -229,6 +229,37 @@ export const arbeitnowSettingsSchema = z.strictObject({
 export type ArbeitnowSettings = z.infer<typeof arbeitnowSettingsSchema>;
 
 /**
+ * `sources.handpicked`: the public job index of Handpicked Berlin (a static JSON file of the last ~30 days of postings in
+ * Berlin, Munich, Hamburg and German remote). One request per run reads the whole index; the channel picks postings by place, age and
+ * title (like an ATS board), fetches the description of the picked ones, and turns the ATS links of the places and titles it
+ * is interested in into board candidates.
+ */
+export const handpickedSettingsSchema = z.strictObject({
+  ...baseShape,
+  /** Site root; the channel appends `/jobs/search-index.json` and `/jobs/d/{id}.json`. */
+  base_url: httpBaseUrl,
+  /** Sent as the `User-Agent` of every request. */
+  user_agent: nonEmptyString,
+  /** Postings older than this many days (the index only has dates) are not stored. */
+  max_age_days: positiveInt,
+  /** Most description requests per run; picked postings beyond it wait for the next run. */
+  max_details_per_run: nonNegativeInt,
+  /** Postings of a board listed in `ats_boards` (enabled or not) are left to the ATS channel. */
+  skip_known_boards: z.boolean(),
+  /** Company discovery from the index: ATS links of matching postings become candidates on /sources/registry. */
+  discover_boards: z.strictObject({
+    enabled: z.boolean(),
+    /** Candidates are written at most once per this many hours. */
+    interval_hours: positiveInt,
+    /** Only postings whose title passes the title prefilter count (false: every posting in a wanted place). */
+    require_title_match: z.boolean(),
+  }),
+  /** The index lists every posting: only titles that match a search.yaml keyword or an include term (or a watched company) are used. */
+  title_prefilter: atsTitlePrefilter,
+});
+export type HandpickedSettings = z.infer<typeof handpickedSettingsSchema>;
+
+/**
  * `sources.jsearch`: JSearch (Google for Jobs) on RapidAPI. The API key comes from `JSEARCH_API_KEY`.
  * The RapidAPI plan counts requests: `monthly_request_limit` mirrors the plan's included requests and is
  * what the channel's usage is booked against (records = requests).
@@ -567,6 +598,7 @@ export const channelsSchema = z
       stepstone: stepstoneSettingsSchema,
       xing: xingSettingsSchema,
       arbeitnow: arbeitnowSettingsSchema,
+      handpicked: handpickedSettingsSchema,
       jsearch: jsearchChannel,
       greenhouse: greenhouseChannel,
       lever: leverChannel,

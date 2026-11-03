@@ -18,6 +18,7 @@ export const CHANNEL_FAMILIES = [
   "xing",
   "arbeitsagentur",
   "arbeitnow",
+  "handpicked",
   "google",
   "ats",
   "email",

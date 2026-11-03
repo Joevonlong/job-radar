@@ -1,0 +1,288 @@
+[
+  {
+    "id": "a000000001",
+    "title": "AI Engineer (m/w/d)",
+    "company": "Sponsor Example GmbH",
+    "companyDomain": "sponsor.example",
+    "location": "Berlin",
+    "cities": [
+      "berlin"
+    ],
+    "remoteType": "onsite",
+    "category": "tech-dev",
+    "isInternship": false,
+    "postedAt": "2026-10-02",
+    "url": "https://sponsor.example/careers",
+    "logoPath": null,
+    "tier": "sponsored",
+    "featuredUntil": "2026-11-30"
+  },
+  {
+    "id": "b000000002",
+    "title": "Machine Learning Engineer (m/w/d)",
+    "company": "Acme Robotics",
+    "companyDomain": "acme-robotics.jobs.personio.de",
+    "location": "Berlin",
+    "cities": [
+      "berlin"
+    ],
+    "remoteType": "onsite",
+    "category": "tech-dev",
+    "isInternship": false,
+    "postedAt": "2026-10-23",
+    "url": "https://acme-robotics.jobs.personio.de/job/1001",
+    "logoPath": null,
+    "tier": "standard"
+  },
+  {
+    "id": "b000000003",
+    "title": "AI Engineer",
+    "company": "Beta Labs",
+    "companyDomain": "jobs.ashbyhq.com",
+    "location": "Berlin",
+    "cities": [
+      "berlin"
+    ],
+    "remoteType": "hybrid",
+    "category": "tech-dev",
+    "isInternship": false,
+    "postedAt": "2026-10-22",
+    "url": "https://jobs.ashbyhq.com/beta-labs/11111111-1111-4111-8111-111111111111",
+    "logoPath": null,
+    "tier": "standard",
+    "salaryRange": "€70,000–85,000"
+  },
+  {
+    "id": "b000000004",
+    "title": "Senior AI Engineer (w/m/d)",
+    "company": "Gamma Systems",
+    "companyDomain": "job-boards.greenhouse.io",
+    "location": "Berlin · Munich",
+    "cities": [
+      "berlin",
+      "munich"
+    ],
+    "remoteType": "onsite",
+    "category": "tech-dev",
+    "isInternship": false,
+    "postedAt": "2026-10-21",
+    "url": "https://job-boards.greenhouse.io/gammasystems/jobs/4001",
+    "logoPath": null,
+    "tier": "standard"
+  },
+  {
+    "id": "b000000005",
+    "title": "Data Scientist (m/w/d)",
+    "company": "Delta Analytics",
+    "companyDomain": "delta-analytics.jobs.personio.de",
+    "location": "Munich",
+    "cities": [
+      "munich"
+    ],
+    "remoteType": "onsite",
+    "category": "tech-dev",
+    "isInternship": false,
+    "postedAt": "2026-10-20",
+    "url": "https://delta-analytics.jobs.personio.de/job/2002",
+    "logoPath": null,
+    "tier": "standard"
+  },
+  {
+    "id": "b000000006",
+    "title": "AI Engineer",
+    "company": "Epsilon Nord",
+    "companyDomain": "epsilon-nord.jobs.personio.de",
+    "location": "Hamburg",
+    "cities": [
+      "hamburg"
+    ],
+    "remoteType": "onsite",
+    "category": "tech-dev",
+    "isInternship": false,
+    "postedAt": "2026-10-23",
+    "url": "https://epsilon-nord.jobs.personio.de/job/3003",
+    "logoPath": null,
+    "tier": "standard"
+  },
+  {
+    "id": "b000000007",
+    "title": "MLOps Engineer",
+    "company": "Zeta Remote",
+    "companyDomain": "jobs.lever.co",
+    "location": "Germany (Remote)",
+    "cities": [],
+    "remoteCountryCodes": [
+      "DE"
+    ],
+    "remoteType": "remote",
+    "category": "tech-dev",
+    "isInternship": false,
+    "postedAt": "2026-10-19",
+    "url": "https://jobs.lever.co/zeta-remote/22222222-2222-4222-8222-222222222222",
+    "logoPath": null,
+    "tier": "standard"
+  },
+  {
+    "id": "b000000008",
+    "title": "Office Manager (m/w/d)",
+    "company": "Eta Office",
+    "companyDomain": "eta-office.jobs.personio.de",
+    "location": "Berlin",
+    "cities": [
+      "berlin"
+    ],
+    "remoteType": "onsite",
+    "category": "ops",
+    "isInternship": false,
+    "postedAt": "2026-10-22",
+    "url": "https://eta-office.jobs.personio.de/job/7007",
+    "logoPath": null,
+    "tier": "standard"
+  },
+  {
+    "id": "b000000009",
+    "title": "Werkstudent AI Engineer (m/w/d)",
+    "company": "Theta Studios",
+    "companyDomain": "theta-studios.jobs.personio.de",
+    "location": "Berlin",
+    "cities": [
+      "berlin"
+    ],
+    "remoteType": "onsite",
+    "category": "tech-dev",
+    "isInternship": true,
+    "postedAt": "2026-10-22",
+    "url": "https://theta-studios.jobs.personio.de/job/8008",
+    "logoPath": null,
+    "tier": "standard"
+  },
+  {
+    "id": "b00000000a",
+    "title": "AI Engineer",
+    "company": "Known Co",
+    "companyDomain": "job-boards.greenhouse.io",
+    "location": "Berlin",
+    "cities": [
+      "berlin"
+    ],
+    "remoteType": "onsite",
+    "category": "tech-dev",
+    "isInternship": false,
+    "postedAt": "2026-10-21",
+    "url": "https://job-boards.greenhouse.io/knownco/jobs/5005",
+    "logoPath": null,
+    "tier": "standard"
+  },
+  {
+    "id": "b00000000b",
+    "title": "Machine Learning Engineer",
+    "company": "Iota Join",
+    "companyDomain": "join.com",
+    "location": "Berlin",
+    "cities": [
+      "berlin"
+    ],
+    "remoteType": "onsite",
+    "category": "tech-dev",
+    "isInternship": false,
+    "postedAt": "2026-10-21",
+    "url": "https://join.com/companies/iota/1234-ml-engineer",
+    "logoPath": null,
+    "tier": "standard"
+  },
+  {
+    "id": "b00000000c",
+    "title": "AI Engineer",
+    "company": "Kappa Corp",
+    "companyDomain": "kappa.wd3.myworkdayjobs.com",
+    "location": "Berlin",
+    "cities": [
+      "berlin"
+    ],
+    "remoteType": "onsite",
+    "category": "tech-dev",
+    "isInternship": false,
+    "postedAt": "2026-10-20",
+    "url": "https://kappa.wd3.myworkdayjobs.com/en-US/careers/job/Berlin/AI-Engineer_R1",
+    "logoPath": null,
+    "tier": "standard"
+  },
+  {
+    "id": "b00000000d",
+    "title": "AI Engineer",
+    "company": "Lambda Old",
+    "companyDomain": "lambda-old.jobs.personio.de",
+    "location": "Berlin",
+    "cities": [
+      "berlin"
+    ],
+    "remoteType": "onsite",
+    "category": "tech-dev",
+    "isInternship": false,
+    "postedAt": "2026-09-25",
+    "url": "https://lambda-old.jobs.personio.de/job/6006",
+    "logoPath": null,
+    "tier": "standard"
+  },
+  {
+    "id": "b00000000e",
+    "title": "AI Engineer",
+    "company": "Mu Date",
+    "companyDomain": "mu-date.jobs.personio.de",
+    "location": "Berlin",
+    "cities": [
+      "berlin"
+    ],
+    "remoteType": "onsite",
+    "category": "tech-dev",
+    "isInternship": false,
+    "postedAt": "yesterday",
+    "url": "https://mu-date.jobs.personio.de/job/9009",
+    "logoPath": null,
+    "tier": "standard"
+  },
+  {
+    "id": "b00000000f",
+    "title": "AI Engineer",
+    "company": "Nu Nourl",
+    "cities": [
+      "berlin"
+    ],
+    "postedAt": "2026-10-22"
+  },
+  {
+    "id": "b000000010",
+    "title": "AI Engineer",
+    "company": "Xi France",
+    "companyDomain": "xi-france.jobs.personio.de",
+    "location": "France (Remote)",
+    "cities": [],
+    "remoteCountryCodes": [
+      "FR"
+    ],
+    "remoteType": "remote",
+    "category": "tech-dev",
+    "isInternship": false,
+    "postedAt": "2026-10-22",
+    "url": "https://xi-france.jobs.personio.de/job/1010",
+    "logoPath": null,
+    "tier": "standard"
+  },
+  {
+    "id": "b000000011",
+    "title": "AI Engineer",
+    "company": "Omicron Board",
+    "companyDomain": "omicron.myjobboard.de",
+    "location": "Berlin",
+    "cities": [
+      "berlin"
+    ],
+    "remoteType": "onsite",
+    "category": "tech-dev",
+    "isInternship": false,
+    "postedAt": "2026-10-22",
+    "url": "https://omicron.myjobboard.de/jobs/42",
+    "logoPath": null,
+    "tier": "standard"
+  }
+]

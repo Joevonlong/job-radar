@@ -86,8 +86,8 @@ describe.runIf(legacyText("pipeline") !== null)("pipeline.yaml: legacy -> migrat
   /** Entries the packs gained after the move; v1 never had them. */
   const ADDED_SINCE: Record<string, readonly string[]> = { "company.legal_suffixes": ["pbc"] };
 
-  it("migrates in two steps (the market move, then the new channel family) and a second run changes nothing", () => {
-    expect(migrated.steps).toBe(2);
+  it("migrates in three steps (the market move, then the new channel families) and a second run changes nothing", () => {
+    expect(migrated.steps).toBe(3);
     const again = migrateText("pipeline", migrated.text);
     expect(again.steps).toBe(0);
     expect(again.text).toBe(migrated.text);
@@ -129,8 +129,10 @@ describe.runIf(legacyText("pipeline") !== null)("pipeline.yaml: legacy -> migrat
     expect(titleGuard).toEqual(titleGuardSchema.parse({}));
     expect(dedupe).toEqual(original.dedupe);
     // the Arbeitnow channel added its family to apply_priority (as an aggregator); every other priority is as before
-    const { arbeitnow: arbeitnowPriority, ...priorities } = effective.apply_priority;
+    // and so did the Handpicked Berlin channel (with LinkedIn)
+    const { arbeitnow: arbeitnowPriority, handpicked: handpickedPriority, ...priorities } = effective.apply_priority;
     expect(arbeitnowPriority).toBe(4);
+    expect(handpickedPriority).toBe(2);
     expect(priorities).toEqual(original.apply_priority);
     // Watched rechecks and unseen fallback checks have schema defaults when older files have none.
     const { dormant_after_days: dormantAfter, watch_recheck: _watchRecheck, unseen_link_check_after_days: unseenAfter, unseen_link_check_interval_days: unseenInterval, ...lifecycle } = effective.lifecycle;
@@ -200,7 +202,7 @@ describe("sources.yaml", () => {
   it.runIf(legacyText("channels") !== null)("renames the remote-location keys, keeps every value", () => {
     const original = legacyValue("channels");
     const migrated = migrateText("channels", legacyText("channels") ?? "");
-    expect(migrated.steps).toBe(3);
+    expect(migrated.steps).toBe(4);
     const back = renameBack(parse(migrated.text) as Json, ["linkedin.brightdata.remote_locations", "linkedin.apify.remote_locations", "linkedin.session.site.remote_locations", "jobspy.remote_location"], [
       ["home_country", "eu_hire_in_de"],
       ["region", "eu_any"],
@@ -215,6 +217,9 @@ describe("sources.yaml", () => {
     // the second step added the Arbeitnow channel, bound to the German market too
     expect(sources.arbeitnow).toMatchObject({ enabled: true, markets: ["DE"] });
     delete sources.arbeitnow;
+    // the fourth step added the Handpicked Berlin channel, switched off and bound to the German market
+    expect(sources.handpicked).toMatchObject({ enabled: false, markets: ["DE"] });
+    delete sources.handpicked;
     // The next step adds Monid and may insert it in the previous default cascade; project those additions out too.
     const linkedin = back.linkedin as Json;
     expect(linkedin.monid).toMatchObject({ enabled: true, monthly_budget_usd: Math.min(5, Number(back.paid_total_monthly_budget_usd)) });
