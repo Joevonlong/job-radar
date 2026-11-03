@@ -44,7 +44,7 @@ export interface GhostCheckListOptions {
 const textArray = (values: readonly string[]): SQL => (values.length === 0 ? sql`array[]::text[]` : sql`array[${sql.join(values.map((v) => sql`${v}`), sql`, `)}]::text[]`);
 
 /**
- * md5 of everything a result is made from: the JD, the job's status and first sighting, the rules, whether the company is trusted,
+ * md5 of everything a result is made from: the title, the JD, the job's status and first sighting, the rules, whether the company is trusted,
  * every source (channel, id, payload where it is read, first sighting, place, priority), the AI breakdown and the hidden pieces of
  * the JD. Expects the aliases `j` (jobs), `c` (companies) and, with trap spans, `ts` (trap_scans).
  */
@@ -59,7 +59,7 @@ function ghostInputHashSql(options: GhostCheckListOptions): SQL {
     where s.job_id = j.id), '')`;
   const breakdown = sql`coalesce((select concat_ws('|', b.source_hash, b.prompt_version, md5(b.content::text)) from job_breakdowns b where b.job_id = j.id), '')`;
   const trusted = sql`(coalesce(c.name_norm, '') = any(${textArray(options.trustedKeys)}))::text`;
-  return sql`md5(concat_ws(':', coalesce(j.description_md5, md5(coalesce(j.description, ''))), j.status::text, extract(epoch from j.first_seen_at)::text, ${options.rulesHash}::text, ${trusted}, ${sources}, ${breakdown}, ${spans}))`;
+  return sql`md5(concat_ws(':', md5(j.title), coalesce(j.description_md5, md5(coalesce(j.description, ''))), j.status::text, extract(epoch from j.first_seen_at)::text, ${options.rulesHash}::text, ${trusted}, ${sources}, ${breakdown}, ${spans}))`;
 }
 
 /**
@@ -101,6 +101,7 @@ export interface GhostInputRow {
   jobId: number;
   status: "active" | "possibly_closed" | "closed";
   firstSeenAt: Date;
+  title: string;
   description: string | null;
   companyNameNorm: string | null;
   sources: GhostSourceRow[];
@@ -115,7 +116,7 @@ export async function loadGhostInputs(db: Executor, jobIds: readonly number[], o
   const withPayload = options.payloadChannels.length > 0 ? inArray(jobSources.channelId, [...payloadChannels]) : sql`false`;
   const [jobRows, sourceRows, breakdownRows] = await Promise.all([
     db
-      .select({ jobId: jobs.id, status: jobs.status, firstSeenAt: jobs.firstSeenAt, description: jobs.description, companyNameNorm: companies.nameNorm })
+      .select({ jobId: jobs.id, status: jobs.status, firstSeenAt: jobs.firstSeenAt, title: jobs.title, description: jobs.description, companyNameNorm: companies.nameNorm })
       .from(jobs)
       .leftJoin(companies, eq(companies.id, jobs.companyId))
       .where(inArray(jobs.id, ids)),
@@ -149,6 +150,7 @@ export async function loadGhostInputs(db: Executor, jobIds: readonly number[], o
     jobId: row.jobId,
     status: row.status,
     firstSeenAt: row.firstSeenAt,
+    title: row.title,
     description: row.description,
     companyNameNorm: row.companyNameNorm,
     sources: sources.get(row.jobId) ?? [],

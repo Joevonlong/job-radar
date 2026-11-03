@@ -11,7 +11,8 @@ import type { GhostRulesInput } from "./rules";
 // 5: a statement with an invitation tagged on is no question (question_tag); exclude_clause takes out hits only to the end of
 // its clause; only_before_duties hits count only above the first duties heading
 // 6: a `reposted` reason keeps the latest ten relistings, not the first ten
-export const GHOST_RULES_VERSION = 6;
+// 7: the job's title is read too (`title_patterns`) and its evidence says `field: "title"`
+export const GHOST_RULES_VERSION = 7;
 
 /**
  * Hash of the packs' ghost section, the check's version and every limit that shapes a result (not `per_cycle_limit`): a change

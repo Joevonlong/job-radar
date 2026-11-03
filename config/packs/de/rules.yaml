@@ -166,6 +166,20 @@ ghost:
     # "Wir sammeln Bewerbungen für zukünftige Stellen"
     - id: future_openings
       pattern: '(?<![\p{L}\p{N}])(?:für|auf)\s+(?:zukünftige|künftige|kommende|spätere)\s+(?:stellen|positionen|vakanzen|ausschreibungen|bedarfe|einsätze)(?![\p{L}\p{N}])'
+  # Der Titel der Stelle sagt, dass sie ein Talentpool oder eine Initiativbewerbung ist ("Initiativbewerbung (m/w/d)", "Bewerberpool
+  # Entwicklung"). Wie im generischen Paket: schmale Muster auf den ganzen Titel; title_exclude nimmt Recruiting-Rollen aus.
+  title_patterns:
+    # "Initiativbewerbung", "Initiativbewerbung (m/w/d)", "Initiativbewerbung – Softwareentwickler", "Spontanbewerbung", "Blindbewerbung"
+    - id: open_application_title
+      pattern: '(?<![\p{L}\p{N}])(?:initiativ|spontan|blind)[\s-]?bewerbung(?:en)?(?![\p{L}\p{N}])'
+    # "Bewerberpool Entwicklung", "Kandidatenpool", "Talentepool"
+    - id: talent_pool_title
+      pattern: '(?<![\p{L}\p{N}])(?:talente?|bewerber|kandidaten)[\s-]?pool(?![\p{L}\p{N}])'
+  title_exclude:
+    # "Talentpool Manager (m/w/d)", "Talentpool-Koordinator", "Leitung Bewerberpool", "Recruiter"
+    - '(?<![\p{L}\p{N}])(?:talente?|bewerber|kandidaten)[\s-]?pool[\s-]{0,3}(?:manager|leiter|leitung|koordinator|spezialist|partner|berater|referent|betreuer|management)\p{L}*(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:leiter|leitung|manager|head\s{1,3}of|koordinator)\p{L}*\s{0,3}(?:für\s{1,3}|des\s{1,3})?(?:talente?|bewerber|kandidaten)[\s-]?pool(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:recruit\p{L}*|sourcer|sourcing|personalberater|talent\s{1,3}acquisition)(?![\p{L}\p{N}])'
   responsibility_patterns:
     - id: responsibilities
       pattern: '(?<![\p{L}\p{N}])(?:(?:deine|ihre|eure|unsere|die|meine|deine\s+wichtigsten|ihre\s+wichtigsten)\s+)?(?:aufgaben\p{L}*|tätigkeit\p{L}*|verantwortung(?:en|sbereich)?|zuständigkeit\p{L}*|stellenbeschreibung|jobbeschreibung)(?![\p{L}\p{N}])'

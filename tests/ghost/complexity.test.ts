@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { negatedInClause, negationIndex, type NegationReach } from "@/lib/ghost/negation";
 import type { CompiledGhostRules } from "@/lib/ghost/rules";
-import { evergreenWording } from "@/lib/ghost/signals";
+import { evergreenTitle, evergreenWording } from "@/lib/ghost/signals";
 import type { GhostPack } from "@/lib/market/schema";
 
 import { leastCpuTime } from "../helpers/cpu-time";
@@ -166,4 +166,36 @@ describe("list heading complexity", () => {
     // the items under a long duties heading do not count
     { name: "a long duties heading above items", at: ([length, items]) => ghost(list(`${filler(length)} your responsibilities:`, "We are always hiring", items), unchecked), expected: () => null, size: [200_000, 2000], bound: 300, growth: [[8000, 500], [32_000, 2000]] },
   ])("$name", (shape) => expectLinear(shape));
+});
+
+describe("ghost title complexity", () => {
+  const rules = fixtureRules();
+
+  it("a very long title with repeated open / talent and long runs of spaces is read in linear time", () => {
+    expectLinear<number>({
+      name: "long title",
+      at: (n) => {
+        const title = `${"open talent pool ".repeat(n)}${" ".repeat(n)}open${" ".repeat(n)}applications x`;
+        return () => evergreenTitle(title, rules)?.patternId ?? null;
+      },
+      expected: () => "talent_pool_title",
+      size: 20_000,
+      bound: 150,
+      growth: [5000, 20_000],
+    });
+  });
+
+  it("a long title without any hit", () => {
+    expectLinear<number>({
+      name: "long title, no hit",
+      at: (n) => {
+        const title = `${"open applic ".repeat(n)}${"talent ".repeat(n)}${"general ".repeat(n)}`;
+        return () => evergreenTitle(title, rules);
+      },
+      expected: () => null,
+      size: 20_000,
+      bound: 150,
+      growth: [5000, 20_000],
+    });
+  });
 });

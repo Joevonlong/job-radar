@@ -51,13 +51,17 @@ export const repostedReasonSchema = z.strictObject({
   events: z.array(repostEventSchema).min(1).max(REPOST_EVENTS_KEPT),
 });
 
-/** The JD says it is a talent pool or always open: a verbatim quote of `jobs.description` at `offset` (C7). */
+/**
+ * The JD (or, with `field: "title"`, the job's title) says it is a talent pool or always open: a verbatim quote of
+ * `jobs.description` (`jobs.title`) at `offset` (C7). No `field` = the JD (rows stored before titles were read).
+ */
 export const evergreenReasonSchema = z.strictObject({
   code: z.literal("evergreen_wording"),
   points,
   patternId: z.string().min(1).max(64),
   quote: z.string().min(1),
   offset: z.number().int().nonnegative(),
+  field: z.literal("title").optional(),
 });
 
 /** A short JD or one without a duties section, from a source that keeps the full text. */
@@ -113,6 +117,8 @@ export interface GhostInput {
   trustedCompany: boolean;
   /** The earliest posted date of a source whose channel declares `trustedPostedAt`; null when none has one. */
   trustedPostedAt: { at: Date; channelId: string } | null;
+  /** The job's title (`jobs.title`). */
+  title: string | null;
   description: string | null;
   /** The source the description comes from (the best-priority one), when its channel keeps the full text; null = not judged. */
   descriptionSource: { channelId: string } | null;

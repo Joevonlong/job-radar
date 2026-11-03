@@ -450,6 +450,7 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 | | `job_checks.ghost.repost_label.points` | 1 | 来源标注"重新发布"（0–10） |
 | | `job_checks.ghost.reposted.min_gap_days` / `.points` | 30 / 2 | 同一来源在同一地点以新编号重挂，至少相隔这么多天（1–3650 / 0–10） |
 | | `job_checks.ghost.evergreen_wording.points` | 2 | JD 写明是人才库 / 常年招聘（0–10） |
+| | `job_checks.ghost.evergreen_wording.title_points` | 3 | 岗位标题写明（0–10；0 = 不读标题） |
 | | `job_checks.ghost.thin_description.min_words` / `.points` | 120 / 1 | 全文 JD 比这短，或没有职责段落（0–5000 / 0–10） |
 | | `job_checks.ghost.thin_description.infer_from_headings` | `true` | 没有当前 JD 拆解时，由职责标题判断长 JD 有没有职责段落。`false`：不看标题，只有短 JD 才算（有当前拆解时仍以拆解为准，职责列表为空也算） |
 | | `job_checks.ghost.<信号>.enabled` | `true` | 每个信号都可以单独关掉 |
