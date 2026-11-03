@@ -95,6 +95,9 @@ for s in ${SCENARIOS//,/ }; do
   esac
 done
 
+# CI runners are throw-away: only there may the harness prune the build cache between hops (read before the env is cleaned)
+CI_RECLAIM_DISK=0
+[[ "${CI:-}" == true && -n "${GITHUB_ACTIONS:-}" ]] && CI_RECLAIM_DISK=1
 # Before anything runs: no compose, docker or database setting of the caller's shell reaches docker or the scripts
 # under test (each project gets its own values in its .env; see clean-env.sh).
 # shellcheck source=tests/transition/clean-env.sh
@@ -294,7 +297,16 @@ LAST_LOG=""
 log_has() { grep -qF -- "$1" "$LAST_LOG" || die "step $STEP: the output lacks: $1"; }
 log_lacks() { ! grep -qF -- "$1" "$LAST_LOG" || die "step $STEP: the output has: $1"; }
 
-deploy() { RETRY_FONT_FETCH=1 logged "deploy-$1" "0 2" in_project bash scripts/ops/deploy.sh --skip-pull --no-backup --no-prune --no-drain --settle "${2:-5}" --wait-timeout 600; }
+# In CI only (a throw-away runner): drop the build cache and dangling images a finished hop leaves, so the disk does not
+# grow with every hop. Tagged images stay (a running container, a rollback or scenario E may need them). The scripts under
+# test cannot do this: the docker guard refuses prune. Elsewhere the Docker daemon is the owner's, so nothing is pruned.
+reclaim_disk() {
+  [[ "${CI_RECLAIM_DISK}" == 1 ]] || return 0
+  "$REAL_DOCKER" builder prune -af >/dev/null 2>&1 || true
+  "$REAL_DOCKER" image prune -f >/dev/null 2>&1 || true
+  df -h / 2>/dev/null | tail -n 1 | sed 's/^/disk after the hop: /' || true
+}
+deploy() { RETRY_FONT_FETCH=1 logged "deploy-$1" "0 2" in_project bash scripts/ops/deploy.sh --skip-pull --no-backup --no-prune --no-drain --settle "${2:-5}" --wait-timeout 600; reclaim_disk; }
 checkout() { git -C "$DIR" checkout -q --detach "$1"; }
 stop_web_runner() { logged stop-web-runner 0 in_project docker compose -p "$P" stop web runner; }
 release_of() { echo "$DIR/data/releases/ai-worker/$1"; }
