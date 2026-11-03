@@ -82,6 +82,9 @@ interface GateBlock {
   guard?: AiQuotaGuardMark;
 }
 
+/** A provider's error can echo its input. For these tasks that input is your résumé or draft: logs and the health table get the error's kind only. */
+const TASKS_WITH_PRIVATE_INPUT: ReadonlySet<AiTask> = new Set<AiTask>(["write", "story_extract"]);
+
 const clock = (at: Date, timeZone: string): string => new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit" }).format(at);
 
 export interface AiRouter {
@@ -411,17 +414,18 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
           if (error.kind === "aborted") throw error;
           // Only the subscription CLIs get a cross-process cooldown: their limits last for hours and are shared with the user.
           const coolingUntil = error.kind === "rate_limited" && provider.kind === "cli" ? cooldownUntil(error.message, now(), config.cooldown) : null;
-          await safely("failure", (store) => store.noteFailure(id, now(), { kind: error.kind, message: error.message, coolingUntil }));
+          const message = TASKS_WITH_PRIVATE_INPUT.has(task) ? error.kind : error.message;
+          await safely("failure", (store) => store.noteFailure(id, now(), { kind: error.kind, message, coolingUntil }));
           if (coolingUntil) logger?.warn("ai provider cooling down", { provider: id, until: coolingUntil.toISOString() });
-          if (error.kind === "auth" || error.kind === "not_configured") disabled.set(id, error.message);
+          if (error.kind === "auth" || error.kind === "not_configured") disabled.set(id, message);
           noteAttempt({
             provider: id,
             outcome: "failed",
             kind: error.kind,
-            message: error.message,
+            message,
             ...(coolingUntil && quota && isQuotaGuarded(id) ? { guard: { reason: "error", resumeAt: coolingUntil.toISOString() } satisfies AiQuotaGuardMark } : {}),
           });
-          logger?.warn("ai provider failed, trying the next one", { provider: id, task, kind: error.kind, error: error.message });
+          logger?.warn("ai provider failed, trying the next one", { provider: id, task, kind: error.kind, error: message });
         }
       }
       throw new AiUnavailableError(task, attempts);

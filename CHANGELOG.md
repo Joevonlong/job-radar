@@ -225,6 +225,8 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   The file is never stored and the text is cleared from the request when it ends: see [Privacy](docs/privacy.md#story-extraction).
   `writer.yaml` gains `import` (defaults added when missing, `config_version` unchanged), `ai.yaml` a `story_extract` task, the
   database a `profile_story_drafts` table (migration `0049_story_extract_drafts`), and the web image the `unpdf` dependency.
+  A PDF is read in a worker thread stopped at `import.pdf_timeout_seconds` / `import.pdf_max_memory_mb`. Provider errors on this task and on `write`
+  are logged and stored as their kind only. The evidence check now reads Latin magnitudes and multiples ($2M, 2.5M, 3 Mio, 10x).
 - **Application writer: improve your own draft and a coach review.** Paste text you wrote in any language and get a new
   version in the answer's language, either fitted to the job or with only the language and wording changed (that option
   sends none of your ticked material). A version can also be reviewed: the AI rates it from 0 to 100 (marked as its

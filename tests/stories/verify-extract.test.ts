@@ -10,6 +10,14 @@ const limits = { titleMaxChars: 30, textMaxChars: 100, listMaxItems: 2 };
 const field = (value: string, quote: string) => ({ value, quote });
 
 describe("the check of one extracted field", () => {
+  it("flags a Latin magnitude or multiple the quote does not have", () => {
+    const source = "Saved the team a lot of money every year.";
+    for (const value of ["Saved $2M a year", "Saved $5B", "Saved 2.5M", "10x cheaper"]) {
+      expect(verifyExtractField(source, field(value, "Saved the team a lot of money"), config).flag).toBe("figure_missing");
+    }
+    expect(verifyExtractField("Saved 2,000,000 dollars.", field("Saved $2M", "Saved 2,000,000 dollars"), config).flag).toBeNull();
+  });
+
   it("passes a value whose quote is in the source, and stores the source's own text", () => {
     expect(verifyExtractField(SOURCE, field("Errors fell by 40%", "Errors fell by 40% in the first quarter."), config)).toEqual({
       value: "Errors fell by 40%",

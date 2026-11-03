@@ -79,6 +79,9 @@ import:
   formats: [pdf, md, txt]
   # Most drafts one extraction may return
   max_drafts: 12
+  # Longest a PDF may take to read, and most memory it may use (MB); a crafted file can burn a lot of both with few bytes
+  pdf_timeout_seconds: 15
+  pdf_max_memory_mb: 256
   # Days a draft waits for review; older ones are deleted, reviewed or not
   draft_ttl_days: 14
 
@@ -112,11 +115,14 @@ evidence:
     en: [i, "i'm", "i've", "i'd", my, me, myself]
     de: [ich, mein, meine, meinen, meinem, meiner, mich, mir]
     zh: { words: [我, 我的], exclude: [我们, 我们的] }
-  # Words right after a digit that change the figure. scale: multiplies it (5万 = 50,000, so it matches "50,000" but not "5");
+  # Words right after a digit that change the figure, in any case. scale: multiplies it (5万 = 50,000, $2M = 2,000,000, so it matches "50,000" but not "5");
   # multiple: makes it a multiple (40倍), which matches only a multiple, not 40 or 40%
   figure_units:
-    scale: { 万: 10000, 萬: 10000, 亿: 100000000, 億: 100000000, 千: 1000 }
-    multiple: [倍]
+    scale:
+      { 万: 10000, 萬: 10000, 亿: 100000000, 億: 100000000, 千: 1000, thousand: 1000, tausend: 1000,
+        m: 1000000, mn: 1000000, mio: 1000000, million: 1000000, millionen: 1000000,
+        b: 1000000000, bn: 1000000000, mrd: 1000000000, billion: 1000000000, milliarden: 1000000000 }
+    multiple: [倍, x]
   # Words treated as names: one not found in the sentence's valid quotes (for a sentence about the job or company, also the
   # JD and the company background) is marked "check"
   names:

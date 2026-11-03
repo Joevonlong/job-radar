@@ -172,6 +172,8 @@ ai-worker；请求完成、失败或过期后，素材从请求里清除，只�
 | `import.min_chars` | `20` | 文字比这更少时视为没有可提取的内容 |
 | `import.formats` | `[pdf, md, txt]` | 简历可用的文件类型 |
 | `import.max_drafts` | `12` | 一次提取最多返回几条草稿 |
+| `import.pdf_timeout_seconds` | `15` | 读取一个 PDF 的最长时间，超时即停止并请你粘贴文字 |
+| `import.pdf_max_memory_mb` | `256` | 读取一个 PDF 最多占用的内存（MB） |
 | `import.draft_ttl_days` | `14` | 草稿等待审核的天数，过期删除，无论是否审核过 |
 | `questions.max_per_job` | `12` | 每个职位最多几题 |
 | `questions.text_max_chars` | `1000` | 问题原文最长字符数 |
@@ -192,7 +194,7 @@ ai-worker；请求完成、失败或过期后，素材从请求里清除，只�
 | `evidence.quote_max_chars` | `160` | AI 给出的引用最长字符数 |
 | `evidence.min_quote_chars` | `4` | 算作依据的引用最短字符数；恰好是已知名称的除外 |
 | `evidence.first_person` | en / de / zh 词表 | 让句子算作“关于你”的词 |
-| `evidence.figure_units` | `scale`：万 萬 亿 億 千；`multiple`：倍 | 紧跟在数字后、会改变数字含义的词：`scale` 乘以倍数（5万 即 50,000），`multiple` 表示“倍数”，只和倍数匹配。大小写和兼容写法不算差别（`M` 就是 `m`，`㎏` 就是 `kg`）；中日韩单位可以连写（3千万） |
+| `evidence.figure_units` | `scale`：万 萬 亿 億 千、thousand、m、mio、million、b、bn、mrd、billion 等；`multiple`：倍、x | 紧跟在数字后、会改变数字含义的词：`scale` 乘以倍数（5万 即 50,000），`multiple` 表示“倍数”，只和倍数匹配。大小写和兼容写法不算差别（`M` 就是 `m`，`㎏` 就是 `kg`）；中日韩单位可以连写（3千万） |
 | `evidence.names` | 引号、混合词、大写词（德语：两个以上连续才算） | 核对时当作名称的词 |
 
 用哪个 AI 写由 `ai.yaml` 的 `write` 任务决定（顺序、模型，以及 API 服务商单独的 `max_output_tokens` /

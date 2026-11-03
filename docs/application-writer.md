@@ -235,6 +235,8 @@ The removal only reaches the request row:
 | `import.min_chars` | `20` | A source with less text has nothing to extract |
 | `import.formats` | `[pdf, md, txt]` | File types a résumé may have |
 | `import.max_drafts` | `12` | Most drafts one extraction may return |
+| `import.pdf_timeout_seconds` | `15` | Longest a PDF may take to read; it is then stopped and you are asked to paste the text |
+| `import.pdf_max_memory_mb` | `256` | Most memory reading one PDF may use, in MB |
 | `import.draft_ttl_days` | `14` | Days a draft waits for review; older ones are deleted, reviewed or not |
 | `questions.max_per_job` | `12` | Most questions per job |
 | `questions.text_max_chars` | `1000` | Longest question text |
@@ -255,7 +257,7 @@ The removal only reaches the request row:
 | `evidence.quote_max_chars` | `160` | Longest quote the AI may give |
 | `evidence.min_quote_chars` | `4` | Shortest quote that counts as evidence, unless it is exactly a known name |
 | `evidence.first_person` | en / de / zh words | Words that make a sentence one about you |
-| `evidence.figure_units` | `scale`: 万 萬 亿 億 千; `multiple`: 倍 | Words right after a digit that change the figure: `scale` multiplies it (5万 is 50,000), `multiple` makes it a multiple that matches only a multiple. Case and compatibility forms do not count (`M` is `m`, `㎏` is `kg`); Chinese, Japanese or Korean units may stand in a row (3千万) |
+| `evidence.figure_units` | `scale`: 万 萬 亿 億 千, thousand, m, mio, million, b, bn, mrd, billion and similar; `multiple`: 倍, x | Words right after a digit that change the figure: `scale` multiplies it (5万 is 50,000), `multiple` makes it a multiple that matches only a multiple. Case and compatibility forms do not count (`M` is `m`, `㎏` is `kg`); Chinese, Japanese or Korean units may stand in a row (3千万) |
 | `evidence.names` | quoted, mixed tokens, capitalised words (German: only two or more in a row) | What the check treats as a name |
 
 Which AI writes is the `write` task in `ai.yaml` (order, model, and for the API providers `max_output_tokens` /

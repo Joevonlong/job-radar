@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 /** What a multipart form adds around the file: its boundary and field names. */
 const FORM_OVERHEAD_BYTES = 16 * 1024;
 
-const STATUS = { invalid: 400, too_large: 413, bad_type: 415, unreadable: 422, no_text: 422, disabled: 409, busy: 409, config_error: 500, unavailable: 503 } as const;
+const STATUS = { invalid: 400, too_large: 413, bad_type: 415, unreadable: 422, too_complex: 422, no_text: 422, disabled: 409, busy: 409, config_error: 500, unavailable: 503 } as const;
 type RouteError = keyof typeof STATUS;
 
 function reply(body: StoryExtractResponse, status = 200): NextResponse {
@@ -98,8 +98,15 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (file.size > limits.max_file_bytes) return refuse("too_large");
     const format = formatOfName(file.name);
     if (format === null || !limits.formats.includes(format)) return refuse("bad_type");
-    const extracted = await textOfUpload(new Uint8Array(await file.arrayBuffer()), format, { maxChars: limits.max_chars, minChars: limits.min_chars });
-    if (!extracted.ok) return refuse(extracted.error);
+    const extracted = await textOfUpload(new Uint8Array(await file.arrayBuffer()), format, {
+      maxChars: limits.max_chars,
+      minChars: limits.min_chars,
+      pdfTimeoutMs: limits.pdf_timeout_seconds * 1000,
+      pdfMaxMemoryMb: limits.pdf_max_memory_mb,
+      signal: request.signal,
+    });
+    // the client is gone: nobody reads this answer
+    if (!extracted.ok) return refuse(extracted.error === "aborted" ? "invalid" : extracted.error);
     text = extracted.text;
   }
 

@@ -877,6 +877,7 @@
         "too_large": "This file is larger than {maxMb} MB, so it was not read.",
         "bad_type": "This file type cannot be read. Use {formats}.",
         "unreadable": "This PDF cannot be read: it is damaged or protected by a password.",
+        "too_complex": "Reading this PDF took too long or used too much memory, so it was stopped. Paste the text instead.",
         "no_text": "No text to extract from. A scanned PDF has no text layer: paste the text instead, or fill in your profile first.",
         "disabled": "The application writer is off, so nothing was sent.",
         "busy": "Another extraction is still running. Wait for it to end.",

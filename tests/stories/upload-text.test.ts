@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 
 import { buildStoryExtractPrompt } from "@/lib/ai/prompts/story-extract";
@@ -6,7 +7,7 @@ import { foldCjkRadicals, formatOfName, textOfUpload } from "@/lib/stories/uploa
 
 import { minimalPdf } from "../fixtures/pdf";
 
-const limits = { maxChars: 1000, minChars: 20 };
+const limits = { maxChars: 1000, minChars: 20, pdfTimeoutMs: 30_000, pdfMaxMemoryMb: 256 };
 const encode = (text: string) => new TextEncoder().encode(text);
 
 describe("the text of an uploaded file", () => {
@@ -42,6 +43,36 @@ describe("the text of an uploaded file", () => {
     expect(formatOfName("cv.pdf.exe")).toBeNull();
     expect(formatOfName("cv.docx")).toBeNull();
     expect(formatOfName("pdf")).toBe("pdf");
+  });
+});
+
+describe("the limits on reading a PDF", () => {
+  const pdf = minimalPdf(["Led the migration of the billing service to Postgres."]);
+
+  it("reads a normal PDF in its worker thread", async () => {
+    expect(await textOfUpload(pdf, "pdf", limits)).toMatchObject({ ok: true, text: expect.stringContaining("billing service") });
+  });
+
+  it("stops at the time limit", async () => {
+    expect(await textOfUpload(pdf, "pdf", { ...limits, pdfTimeoutMs: 1 })).toEqual({ ok: false, error: "too_complex" });
+  });
+
+  it("stops a content stream that keeps the parser busy, without blocking the caller", async () => {
+    const heavy = minimalPdf(Array.from({ length: 40_000 }, (_, line) => `Line ${line}`));
+    let ticks = 0;
+    const ticking = setInterval(() => (ticks += 1), 5);
+    const result = await textOfUpload(heavy, "pdf", { ...limits, pdfTimeoutMs: 50 });
+    clearInterval(ticking);
+    expect(result).toEqual({ ok: false, error: "too_complex" });
+    expect(ticks).toBeGreaterThan(0);
+  });
+
+  it("stops when the client goes away", async () => {
+    const gone = new AbortController();
+    const reading = textOfUpload(pdf, "pdf", { ...limits, signal: gone.signal });
+    gone.abort();
+    expect(await reading).toEqual({ ok: false, error: "aborted" });
+    expect(await textOfUpload(pdf, "pdf", { ...limits, signal: gone.signal })).toEqual({ ok: false, error: "aborted" });
   });
 });
 

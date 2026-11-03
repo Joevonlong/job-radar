@@ -75,6 +75,7 @@ What can remain after that:
   pre-migration, pre-deploy and manual backups stay longer, until you remove them.
 - **Drafts and adopted stories:** a draft holds snippets of the text (each field and its quote) until you adopt or discard it, or
   until `import.draft_ttl_days`. An adopted story is yours to keep in `data/profile/stories.yaml` and holds what you adopted.
+- **Error messages:** when a provider fails on this task or on `write`, logs and the provider health table record only the kind of error, not its message, which could echo your text.
 - **The AI provider:** what it keeps is under [Where the AI providers keep it](#where-the-ai-providers-keep-it).
 
 ### Where the AI providers keep it

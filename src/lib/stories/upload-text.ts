@@ -2,11 +2,11 @@
  * The text of an uploaded résumé, in memory only: nothing here writes a file, not even to the temp directory, and the file's
  * name is not kept. Server only.
  */
-import { getDocumentProxy } from "unpdf";
+import { Worker } from "node:worker_threads";
 
 import { STORY_IMPORT_FORMATS, type StoryImportFormat } from "@/lib/config/schemas/writer";
 
-export type UploadTextError = "bad_type" | "unreadable" | "no_text";
+export type UploadTextError = "bad_type" | "unreadable" | "no_text" | "too_complex" | "aborted";
 export type UploadTextResult = { ok: true; text: string } | { ok: false; error: UploadTextError };
 
 /** The format a file name claims, or null. The content is checked as well: a name alone proves nothing. */
@@ -37,41 +37,64 @@ export function foldCjkRadicals(text: string): string {
   return text.replace(/[\u2E80-\u2FDF]/gu, (char) => char.normalize("NFKC"));
 }
 
-/** The PDF's text layer up to `maxChars` (pages past that are not read). A scanned page has none: no OCR. */
-async function pdfText(bytes: Uint8Array, maxChars: number): Promise<string> {
-  const pdf = await getDocumentProxy(bytes, { useSystemFonts: false, verbosity: 0 });
-  try {
-    const pages: string[] = [];
-    let length = 0;
-    for (let number = 1; number <= pdf.numPages && length <= maxChars; number += 1) {
-      const page = await pdf.getPage(number);
-      const content = await page.getTextContent();
-      const text = content.items
-        .map((item) => ("str" in item ? `${item.str}${item.hasEOL ? "\n" : ""}` : ""))
-        .join("")
-        .replace(/[ \t]+\n/gu, "\n");
-      page.cleanup();
-      pages.push(text);
-      length += text.length;
+export interface UploadTextLimits {
+  maxChars: number;
+  minChars: number;
+  /** `import.pdf_timeout_seconds`, in milliseconds. */
+  pdfTimeoutMs: number;
+  /** `import.pdf_max_memory_mb`. */
+  pdfMaxMemoryMb: number;
+  /** Aborted when the client goes away: reading stops. */
+  signal?: AbortSignal;
+}
+
+/**
+ * The PDF's text layer, read in a worker thread that is killed at the time limit, at the memory limit or when the client
+ * goes away. It gets a copy of the bytes (they move to the thread), no environment and the file's text nowhere but in the
+ * message back. No OCR: a scanned page has no text.
+ */
+function pdfText(bytes: Uint8Array, limits: UploadTextLimits): Promise<{ ok: true; text: string } | { ok: false; error: "unreadable" | "too_complex" | "aborted" }> {
+  return new Promise((resolve) => {
+    if (limits.signal?.aborted) {
+      resolve({ ok: false, error: "aborted" });
+      return;
     }
-    return foldCjkRadicals(pages.join("\n\n"));
-  } finally {
-    await pdf.loadingTask.destroy();
-  }
+    const copy = bytes.slice();
+    const worker = new Worker(new URL("./pdf-text.worker.mjs", import.meta.url), {
+      workerData: { bytes: copy, maxChars: limits.maxChars },
+      transferList: [copy.buffer as ArrayBuffer],
+      env: {},
+      execArgv: [],
+      resourceLimits: { maxOldGenerationSizeMb: limits.pdfMaxMemoryMb },
+    });
+    const finish = (result: { ok: true; text: string } | { ok: false; error: "unreadable" | "too_complex" | "aborted" }): void => {
+      clearTimeout(timer);
+      limits.signal?.removeEventListener("abort", onAbort);
+      void worker.terminate();
+      resolve(result);
+    };
+    const onAbort = (): void => finish({ ok: false, error: "aborted" });
+    const timer = setTimeout(() => finish({ ok: false, error: "too_complex" }), limits.pdfTimeoutMs);
+    limits.signal?.addEventListener("abort", onAbort, { once: true });
+    worker.once("message", (raw: unknown) => {
+      const message = raw as { ok: boolean; text?: unknown };
+      finish(message.ok && typeof message.text === "string" ? { ok: true, text: foldCjkRadicals(message.text) } : { ok: false, error: "unreadable" });
+    });
+    // the reason is not shown or logged: it may quote the file
+    worker.once("error", (error: NodeJS.ErrnoException) => finish({ ok: false, error: error.code === "ERR_WORKER_OUT_OF_MEMORY" ? "too_complex" : "unreadable" }));
+    worker.once("exit", () => finish({ ok: false, error: "unreadable" }));
+  });
 }
 
 /** Read the text of a file of `format`; `maxChars`: `import.max_chars` (the caller cuts it exactly). */
-export async function textOfUpload(bytes: Uint8Array, format: StoryImportFormat, limits: { maxChars: number; minChars: number }): Promise<UploadTextResult> {
+export async function textOfUpload(bytes: Uint8Array, format: StoryImportFormat, limits: UploadTextLimits): Promise<UploadTextResult> {
   let text: string;
   if (format === "pdf") {
     if (!startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) return { ok: false, error: "bad_type" };
-    try {
-      // pdf.js may take over the buffer it is given: it gets a copy
-      text = await pdfText(bytes.slice(), limits.maxChars);
-    } catch {
-      // corrupt, or protected by a password; the reason from pdf.js is not shown (it may quote the file)
-      return { ok: false, error: "unreadable" };
-    }
+    // corrupt or protected by a password: unreadable
+    const read = await pdfText(bytes, limits);
+    if (!read.ok) return read;
+    text = read.text;
   } else {
     const decoded = decodeText(bytes);
     if (decoded === null) return { ok: false, error: "bad_type" };
