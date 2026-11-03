@@ -19,6 +19,7 @@ export const CHANNEL_FAMILIES = [
   "arbeitsagentur",
   "arbeitnow",
   "handpicked",
+  "berlinstartupjobs",
   "google",
   "ats",
   "email",

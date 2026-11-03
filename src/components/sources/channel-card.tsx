@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Led, NumberRoll, Sparkline, UptimeStrip } from "@/components/viz";
 import { ARBEITNOW_SITE_URL } from "@/lib/channels/arbeitnow/site";
+import { BERLINSTARTUPJOBS_SITE_URL } from "@/lib/channels/berlinstartupjobs/site";
 import { HANDPICKED_SITE_URL } from "@/lib/channels/handpicked/site";
 import { RUNS_PER_CHANNEL } from "@/lib/settings/constants";
 import type { RecentRun } from "@/lib/db/queries/sources";
@@ -33,6 +34,7 @@ const RUN_VARIANT = {
 /** Channels whose data terms ask for a link back: id -> the attribution line under the status and the site it links to. */
 const ATTRIBUTIONS = {
   arbeitnow: { message: "card.attribution.arbeitnow", url: ARBEITNOW_SITE_URL },
+  berlinstartupjobs: { message: "card.attribution.berlinstartupjobs", url: BERLINSTARTUPJOBS_SITE_URL },
   handpicked: { message: "card.attribution.handpicked", url: HANDPICKED_SITE_URL },
 } as const;
 const hasAttribution = (id: string): id is keyof typeof ATTRIBUTIONS => Object.hasOwn(ATTRIBUTIONS, id);

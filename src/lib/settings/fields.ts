@@ -193,6 +193,7 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
     "sources.arbeitnow.markets",
     "sources.handpicked.markets",
     "sources.berlin_design_network.markets",
+    "sources.berlinstartupjobs.markets",
   ],
   // Where the AI runs and the host worker's timings are edited in the YAML (operations parameters, machine paths).
   // The pre-score weights and tables (`scoring.priority`) are a form in the "scoring" block.
@@ -455,6 +456,15 @@ const channelsSections: SectionDef[] = [
     text("sources.arbeitnow.user_agent", "user_agent", { mono: true }),
     int("sources.arbeitnow.max_pages", "arbeitnow_max_pages"),
     ...atsPrefilter("sources.arbeitnow"),
+  ]),
+  channelSection("berlinstartupjobs", "sources.berlinstartupjobs", [
+    text("sources.berlinstartupjobs.base_url", "base_url", { mono: true }),
+    text("sources.berlinstartupjobs.user_agent", "user_agent", { mono: true }),
+    int("sources.berlinstartupjobs.per_page", "berlinstartupjobs_per_page"),
+    int("sources.berlinstartupjobs.max_pages", "berlinstartupjobs_max_pages"),
+    bool("sources.berlinstartupjobs.skip_expired", "berlinstartupjobs_skip_expired"),
+    int("sources.berlinstartupjobs.max_age_days", "berlinstartupjobs_max_age_days"),
+    ...atsPrefilter("sources.berlinstartupjobs"),
   ]),
   channelSection("handpicked", "sources.handpicked", [
     text("sources.handpicked.base_url", "base_url", { mono: true }),

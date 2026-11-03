@@ -34,9 +34,9 @@ function view(overrides: Partial<Parameters<typeof buildRegistryView>[0]> = {}) 
 describe("buildRegistryView", () => {
   it("has a row for every channel and every board, and the counts add up", () => {
     const v = view();
-    expect(v.channels).toHaveLength(23);
+    expect(v.channels).toHaveLength(24);
     expect(v.boards).toHaveLength(config.ats_boards.length);
-    expect(v.total).toBe(23 + config.ats_boards.length);
+    expect(v.total).toBe(24 + config.ats_boards.length);
     expect(Object.values(v.counts).reduce((a, b) => a + b, 0)).toBe(v.total);
     expect(v.windowDays).toBe(7);
     expect(v.fromMirror).toBe(false);

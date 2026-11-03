@@ -239,6 +239,12 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   (see [Sources](docs/sources.md#handpicked-berlin)). `pnpm config:migrate` adds the block (switched off) to `sources.yaml` (version 5)
   and `handpicked: 2` to `apply_priority` in a copied `pipeline.yaml` (version 4). Migration `0049_board_candidate_found_by` adds
   one column with a default; **rollback:** drop `found_by` from `ats_board_candidates` and delete the `handpicked` block and key again.
+- **Berlin Startup Jobs channel.** Reads the public listings of berlinstartupjobs.com, about 140 Berlin startup postings, many from
+  small companies that take applications by e-mail only and are on no ATS. It reads the whole board each run (about four requests),
+  keeps titles that pass the title prefilter, skips posts past their own end date, and links each job to its page on the site (no
+  e-mail address is put into a job field). On for the Germany pack; `pnpm config:migrate` adds the block to `sources.yaml`
+  (version 7) and `berlinstartupjobs: 3` to `apply_priority` in a copied `pipeline.yaml` (version 5); **rollback:** delete the
+  block and the key and set the versions back to 6 and 4, or set `sources.berlinstartupjobs.enabled: false`.
 - **Berlin Design Network discovery (off by default).** Reads the job list of berlin-design-network.org once a day and offers the
   company boards behind its apply links (Greenhouse, Lever, Ashby, Personio, SmartRecruiters) as candidates under Discovered
   boards; it stores no postings and never reads the companies' contact details. Set `sources.berlin_design_network.enabled: true`

@@ -50,8 +50,8 @@ sources:
 describe("sources.yaml 4 -> 5", () => {
   it("brings a v4 file to what the shipped defaults hold, and it validates", () => {
     const { text, steps } = migrate("channels", older("sources.yaml", ["sources", "handpicked"], 4));
-    expect(steps).toBe(2); // 5 -> 6 (Berlin Design Network) follows
-    expect(text).toMatch(/^config_version: 6$/m);
+    expect(steps).toBe(3); // 5 -> 6 (Berlin Design Network) and 6 -> 7 (Berlin Startup Jobs) follow
+    expect(text).toMatch(/^config_version: 7$/m);
     const shipped = parse(fs.readFileSync(path.join(FIXTURE_DEFAULTS_DIR, "sources.yaml"), "utf8")) as Record<string, unknown>;
     expect(parse(text)).toEqual(shipped);
     const value = validateConfigValue("channels", parse(text), "sources.yaml");
@@ -69,7 +69,7 @@ describe("sources.yaml 4 -> 5", () => {
   it("adds the block after arbeitnow with an English comment, the prefilter terms copied from greenhouse", () => {
     const { text } = migrate("channels", SMALL_V4);
     const keys = Object.keys((parse(text) as { sources: Record<string, unknown> }).sources);
-    expect(keys).toEqual(["greenhouse", "arbeitnow", "handpicked", "lever", "berlin_design_network"]);
+    expect(keys).toEqual(["greenhouse", "arbeitnow", "berlinstartupjobs", "handpicked", "lever", "berlin_design_network"]);
     const block = (parse(text) as { sources: Record<string, Record<string, unknown>> }).sources.handpicked;
     expect(block?.title_prefilter).toEqual({ enabled: true, include_terms: ["Data"], exclude_terms: ["Junior"] });
     expect(block?.enabled).toBe(false);
@@ -89,7 +89,7 @@ describe("sources.yaml 4 -> 5", () => {
   it("uses the default prefilter terms when greenhouse has none, and goes last without a German board", () => {
     const { text } = migrate("channels", "config_version: 4\nsources:\n  lever:\n    enabled: true\n");
     const sources = (parse(text) as { sources: Record<string, Record<string, unknown>> }).sources;
-    expect(Object.keys(sources)).toEqual(["lever", "handpicked", "berlin_design_network"]);
+    expect(Object.keys(sources)).toEqual(["lever", "handpicked", "berlin_design_network", "berlinstartupjobs"]);
     expect(sources.handpicked?.title_prefilter).toMatchObject({ include_terms: [], exclude_terms: expect.arrayContaining(["Werkstudent", "Internship"]) });
   });
 
@@ -112,7 +112,7 @@ describe("sources.yaml 4 -> 5", () => {
 describe("pipeline.yaml 3 -> 4", () => {
   it("adds handpicked after linkedin in apply_priority, and the file validates", () => {
     const { text, steps } = migrate("pipeline", older("pipeline.yaml", ["apply_priority", "handpicked"], 3));
-    expect(steps).toBe(1);
+    expect(steps).toBe(2); // 4 -> 5 (Berlin Startup Jobs) follows
     const value = validateConfigValue("pipeline", parse(text), "pipeline.yaml");
     expect(value.apply_priority.handpicked).toBe(2);
     const keys = Object.keys((parse(text) as { apply_priority: Record<string, number> }).apply_priority);

@@ -18,7 +18,7 @@
 # Monthly cap used before starting paid collection runs (USD), shared by all paid channels.
 # Limits use configured prices; settled vendor charges are always recorded and may exceed the cap for one run.
 # (AI spend has its own cap: monthly_api_budget_usd in ai.yaml.)
-config_version: 6
+config_version: 7
 paid_total_monthly_budget_usd: 15
 
 # Circuit breaker: after failures consecutive failures a channel is marked unavailable (paused) and retried after cooldown_hours hours
@@ -284,6 +284,28 @@ sources:
     # Each page holds roughly 3-5 hours of postings (the first two pages are bigger and span days); 8 pages cover the largest window_hours (24).
     # Paging stops earlier at a page whose newest posting is older than the look-back window
     max_pages: 8
+    title_prefilter:
+      enabled: true
+      # Same as greenhouse: stored only if the title matches a search.yaml keyword or include_terms, or the company is in watched_companies; an exclude_terms match drops it
+      include_terms: []
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  # Berlin Startup Jobs: the public WordPress REST API behind berlinstartupjobs.com (no key, no login): about 140 postings of Berlin startups, many of
+  # them small companies that take applications by e-mail only and are on no ATS. The site has no visitor terms (the employer terms say third parties
+  # may read and reuse the listings), robots.txt allows /wp-json/, and a run sends about 4 requests. The jobs' copyright is the employers': don't
+  # mirror or republish the collected postings. The whole board is read each run; the "apply" link is the job's page on the site.
+  berlinstartupjobs:
+    enabled: true
+    # Runs only in these markets (home country ISO codes); the board lists Berlin jobs only
+    markets: [DE]
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 1000, max_delay_ms: 2000 }
+    max_results: 100 # max postings stored per run (after prefiltering, newest first)
+    base_url: https://berlinstartupjobs.com # the channel appends /wp-json/wp/v2/...
+    user_agent: "JobRadar/2 (self-hosted job tracker)"
+    per_page: 100 # posts per page (WordPress maximum)
+    max_pages: 5 # the board is two pages; paging stops at the last one
+    skip_expired: true # leave out posts whose own end date (_unpublish_on) has passed; the site does not take them down
+    max_age_days: 90 # leave out posts listed longer ago than this (re-listing moves the date forward)
     title_prefilter:
       enabled: true
       # Same as greenhouse: stored only if the title matches a search.yaml keyword or include_terms, or the company is in watched_companies; an exclude_terms match drops it

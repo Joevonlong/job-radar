@@ -38,8 +38,8 @@ describe("sources.yaml 5 -> 6", () => {
     doc.deleteIn(["sources", "berlin_design_network"]);
     doc.set("config_version", 5);
     const { text, steps } = migrate(doc.toString(SERIALIZE));
-    expect(steps).toBe(1);
-    expect(text).toMatch(/^config_version: 6$/m);
+    expect(steps).toBe(2); // 6 -> 7 (Berlin Startup Jobs) follows
+    expect(text).toMatch(/^config_version: 7$/m);
     const shipped = parse(fs.readFileSync(path.join(FIXTURE_DEFAULTS_DIR, "sources.yaml"), "utf8")) as Record<string, unknown>;
     expect(parse(text)).toEqual(shipped);
     expect(validateConfigValue("channels", parse(text), "sources.yaml").sources.berlin_design_network).toMatchObject({
@@ -54,7 +54,7 @@ describe("sources.yaml 5 -> 6", () => {
   it("adds the block after brave with an English comment and keeps every comment of the file", () => {
     const { text } = migrate(SMALL_V5);
     const parsed = parse(text) as { sources: Record<string, Record<string, unknown>> };
-    expect(Object.keys(parsed.sources)).toEqual(["tavily", "brave", "berlin_design_network", "lever"]);
+    expect(Object.keys(parsed.sources)).toEqual(["tavily", "brave", "berlin_design_network", "lever", "berlinstartupjobs"]);
     expect(parsed.sources.berlin_design_network?.enabled).toBe(false);
     const comment = text.slice(text.indexOf("off for now"), text.indexOf("  berlin_design_network:"));
     expect(comment).toContain("# Berlin Design Network: board discovery only");
@@ -65,9 +65,9 @@ describe("sources.yaml 5 -> 6", () => {
 
   it("goes after tavily without brave, and last without either", () => {
     const afterTavily = parse(migrate("config_version: 5\nsources:\n  tavily:\n    enabled: true\n  lever:\n    enabled: true\n").text) as { sources: Record<string, unknown> };
-    expect(Object.keys(afterTavily.sources)).toEqual(["tavily", "berlin_design_network", "lever"]);
+    expect(Object.keys(afterTavily.sources)).toEqual(["tavily", "berlin_design_network", "lever", "berlinstartupjobs"]);
     const last = parse(migrate("config_version: 5\nsources:\n  lever:\n    enabled: true\n").text) as { sources: Record<string, unknown> };
-    expect(Object.keys(last.sources)).toEqual(["lever", "berlin_design_network"]);
+    expect(Object.keys(last.sources)).toEqual(["lever", "berlin_design_network", "berlinstartupjobs"]);
   });
 
   it("is idempotent, leaves an existing block alone, and ignores a file without sources", () => {

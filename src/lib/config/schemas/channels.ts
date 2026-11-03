@@ -260,6 +260,30 @@ export const handpickedSettingsSchema = z.strictObject({
 export type HandpickedSettings = z.infer<typeof handpickedSettingsSchema>;
 
 /**
+ * `sources.berlinstartupjobs`: the public WordPress REST API of Berlin Startup Jobs (about 140 postings of Berlin startups, two
+ * pages). The channel reads the whole board each run, drops posts the site's own end date has passed or that are older than
+ * `max_age_days`, and keeps titles that pass the title prefilter (like an ATS board).
+ */
+export const berlinStartupJobsSettingsSchema = z.strictObject({
+  ...baseShape,
+  /** Site root; the channel appends the WordPress REST routes (`/wp-json/wp/v2/...`). */
+  base_url: httpBaseUrl,
+  /** Sent as the `User-Agent` of every request. */
+  user_agent: nonEmptyString,
+  /** Posts per page (WordPress allows at most 100). */
+  per_page: positiveInt.max(100),
+  /** Most pages read per run (one request each). */
+  max_pages: positiveInt,
+  /** Leave out posts whose `_unpublish_on` (the employer's package end) is before today (UTC); the site keeps them up. */
+  skip_expired: z.boolean(),
+  /** Leave out posts listed (or re-listed) longer ago than this many days. */
+  max_age_days: positiveInt,
+  /** The board returns every posting: only titles that match a search.yaml keyword or an include term (or a watched company) are stored. */
+  title_prefilter: atsTitlePrefilter,
+});
+export type BerlinStartupJobsSettings = z.infer<typeof berlinStartupJobsSettingsSchema>;
+
+/**
  * `sources.berlin_design_network`: board discovery from the job list of Berlin Design Network (one page, read at most once per
  * `interval_hours`). The list has links and company names only, so the channel stores no postings: the apply links that point at
  * an official ATS board become candidates on /sources/registry.
@@ -615,6 +639,7 @@ export const channelsSchema = z
       xing: xingSettingsSchema,
       arbeitnow: arbeitnowSettingsSchema,
       handpicked: handpickedSettingsSchema,
+      berlinstartupjobs: berlinStartupJobsSettingsSchema,
       berlin_design_network: berlinDesignNetworkSettingsSchema,
       jsearch: jsearchChannel,
       greenhouse: greenhouseChannel,

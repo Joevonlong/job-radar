@@ -74,6 +74,16 @@ describe("channel card attribution", () => {
     expect(line).toHaveTextContent(locale === "en" ? /publishes no terms/ : /没有公开条款/);
   });
 
+  it.each(["en", "zh"] as const)("the Berlin Startup Jobs card credits the site and leaves the copyright to the employers (%s)", async (locale) => {
+    await renderCard("berlinstartupjobs", locale);
+    const line = screen.getByTestId("channel-attribution");
+    const link = line.querySelector("a");
+    expect(link).toHaveAttribute("href", "https://berlinstartupjobs.com");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(link).toHaveTextContent(/Berlin Startup Jobs/);
+    expect(line).toHaveTextContent(locale === "en" ? /copyright stays with the employers/ : /版权归雇主所有/);
+  });
+
   it("other channels have no attribution line", async () => {
     await renderCard("greenhouse", "en");
     expect(screen.queryByTestId("channel-attribution")).toBeNull();

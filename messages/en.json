@@ -1112,6 +1112,7 @@
       "arbeitsagentur": "Employment agency",
       "arbeitnow": "Arbeitnow",
       "handpicked": "Handpicked Berlin",
+      "berlinstartupjobs": "Berlin Startup Jobs",
       "google": "Google",
       "email": "Email alerts",
       "manual": "Added by hand"
@@ -2358,6 +2359,22 @@
       "arbeitnow_max_pages": {
         "label": "Most pages per run",
         "hint": "One request per page, newest pages first (a page is not sorted inside). Paging stops earlier once even the newest posting of a page is older than the look-back window."
+      },
+      "berlinstartupjobs_per_page": {
+        "label": "Postings per page",
+        "hint": "WordPress allows at most 100. The whole board is two pages."
+      },
+      "berlinstartupjobs_max_pages": {
+        "label": "Most pages per run",
+        "hint": "One request per page. Paging stops at the last page the site reports."
+      },
+      "berlinstartupjobs_skip_expired": {
+        "label": "Skip postings past their end date",
+        "hint": "The site keeps a posting up after the employer's package ended; most of those are stale. They are not collected (nothing already stored is closed)."
+      },
+      "berlinstartupjobs_max_age_days": {
+        "label": "Newest days to keep",
+        "hint": "Postings listed longer ago are not stored. Re-listing moves the date forward."
       },
       "handpicked_max_age_days": {
         "label": "Newest days to keep",
@@ -3848,6 +3865,7 @@
       "notConfiguredHintJsearch": "Set JSEARCH_API_KEY (your RapidAPI key) in .env; until then this channel sends no request.",
       "attribution": {
         "arbeitnow": "Data from <link>Arbeitnow (arbeitnow.com)</link>, a free public API offered as is.",
+        "berlinstartupjobs": "Data from <link>Berlin Startup Jobs (berlinstartupjobs.com)</link>, read from its public job listings. Job copyright stays with the employers.",
         "handpicked": "Data from <link>Handpicked Berlin (handpickedberlin.com)</link>, read from its public job index. The site publishes no terms: keep the request rate low and do not mirror the data."
       },
       "circuit": {

@@ -28,6 +28,7 @@ export const CHANNEL_CONFIG_TABLE = {
   xing: { section: "sources", key: "xing", supportsCompanyQueries: true },
   arbeitnow: { section: "sources", key: "arbeitnow", usesQueries: false },
   handpicked: { section: "sources", key: "handpicked", usesQueries: false },
+  berlinstartupjobs: { section: "sources", key: "berlinstartupjobs", usesQueries: false },
   jsearch: { section: "sources", key: "jsearch", supportsCompanyQueries: true },
   greenhouse: { section: "sources", key: "greenhouse", usesQueries: false, statesPostedAt: true },
   lever: { section: "sources", key: "lever", usesQueries: false, statesPostedAt: true },

@@ -1,0 +1,50 @@
+[
+  {
+    "id": 11,
+    "name": "Example Robotics",
+    "slug": "example-robotics",
+    "link": "https://bsj.example/company/example-robotics/"
+  },
+  {
+    "id": 12,
+    "name": "Beispiel",
+    "slug": "beispiel",
+    "link": "https://bsj.example/company/beispiel/"
+  },
+  {
+    "id": 13,
+    "name": "Two Slashes",
+    "slug": "two-slashes",
+    "link": "https://bsj.example/company/two-slashes/"
+  },
+  {
+    "id": 14,
+    "name": "Contact Co",
+    "slug": "contact-co",
+    "link": "https://bsj.example/company/contact-co/"
+  },
+  {
+    "id": 15,
+    "name": "Remote Labs",
+    "slug": "remote-labs",
+    "link": "https://bsj.example/company/remote-labs/"
+  },
+  {
+    "id": 16,
+    "name": "Expired Co",
+    "slug": "expired-co",
+    "link": "https://bsj.example/company/expired-co/"
+  },
+  {
+    "id": 17,
+    "name": "Old Co",
+    "slug": "old-co",
+    "link": "https://bsj.example/company/old-co/"
+  },
+  {
+    "id": 18,
+    "name": "Mailto Studio",
+    "slug": "mailto-studio",
+    "link": "https://bsj.example/company/mailto-studio/"
+  }
+]
