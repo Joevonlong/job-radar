@@ -97,7 +97,7 @@ export {
   type ProfileName,
 } from "./registry";
 export * from "./schemas";
-export { watchConfig, type ConfigChangeEvent, type ConfigTarget, type WatchOptions } from "./watch";
+export { watchConfig, type ConfigChangeEvent, type ConfigTarget, type WatchDirectory, type WatchOptions } from "./watch";
 export { mutateConfig, writeConfig, writeConfigText, resetConfigToDefault, type TextBase, type TextWriteOptions, type TextWriteResult } from "./write";
 export { backupConfigText, editorBackupRoot } from "./editor-backup";
 export { maskConfigText, restoreMaskedText, type RestoreResult } from "./secrets-mask";
