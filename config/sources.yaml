@@ -18,7 +18,7 @@
 # Monthly cap used before starting paid collection runs (USD), shared by all paid channels.
 # Limits use configured prices; settled vendor charges are always recorded and may exceed the cap for one run.
 # (AI spend has its own cap: monthly_api_budget_usd in ai.yaml.)
-config_version: 4
+config_version: 7
 paid_total_monthly_budget_usd: 15
 
 # Circuit breaker: after failures consecutive failures a channel is marked unavailable (paused) and retried after cooldown_hours hours
@@ -289,6 +289,55 @@ sources:
       # Same as greenhouse: stored only if the title matches a search.yaml keyword or include_terms, or the company is in watched_companies; an exclude_terms match drops it
       include_terms: []
       exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  # Berlin Startup Jobs: the public WordPress REST API behind berlinstartupjobs.com (no key, no login): about 140 postings of Berlin startups, many of
+  # them small companies that take applications by e-mail only and are on no ATS. The site has no visitor terms (the employer terms say third parties
+  # may read and reuse the listings), robots.txt allows /wp-json/, and a run sends about 4 requests. The jobs' copyright is the employers': don't
+  # mirror or republish the collected postings. The whole board is read each run; the "apply" link is the job's page on the site.
+  berlinstartupjobs:
+    enabled: true
+    # Runs only in these markets (home country ISO codes); the board lists Berlin jobs only
+    markets: [DE]
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 1000, max_delay_ms: 2000 }
+    max_results: 100 # max postings stored per run (after prefiltering, newest first)
+    base_url: https://berlinstartupjobs.com # the channel appends /wp-json/wp/v2/...
+    user_agent: "JobRadar/2 (self-hosted job tracker)"
+    per_page: 100 # posts per page (WordPress maximum)
+    max_pages: 5 # the board is two pages; paging stops at the last one
+    skip_expired: true # leave out posts whose own end date (_unpublish_on) has passed; the site does not take them down
+    max_age_days: 90 # leave out posts listed longer ago than this (re-listing moves the date forward)
+    title_prefilter:
+      enabled: true
+      # Same as greenhouse: stored only if the title matches a search.yaml keyword or include_terms, or the company is in watched_companies; an exclude_terms match drops it
+      include_terms: []
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  # Handpicked Berlin: the public job index behind handpickedberlin.com/jobs (a static JSON file, no key, no login): the last ~30 days of postings
+  # in Berlin, Munich, Hamburg and German remote, each with the employer's own link. The site publishes no terms (only an imprint and a privacy page);
+  # robots.txt allows the paths used. Keep the request rate low, don't mirror or republish the data, and switch the channel off if the site asks.
+  # Off by default for that reason: set enabled: true to use it. Each run reads the index once, keeps postings in your places (search.yaml locations,
+  # with the spellings of filter.city_aliases) that pass title_prefilter, and fetches the description of the new ones (max_details_per_run).
+  # discover_boards also offers the company boards behind matching postings (Greenhouse, Lever, Ashby, Personio) as candidates on /sources/registry.
+  handpicked:
+    enabled: false
+    # Runs only in these markets (home country ISO codes); the index covers German cities and German remote only
+    markets: [DE]
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 1000, max_delay_ms: 3000 }
+    max_results: 100 # max postings stored per run (after selecting, newest first)
+    base_url: https://handpickedberlin.com # the channel appends /jobs/search-index.json and /jobs/d/<id>.json
+    user_agent: "JobRadar/2 (self-hosted job tracker)"
+    max_age_days: 14 # the index only has dates: postings older than this are not stored
+    max_details_per_run: 30 # description requests per run (one per new posting); the rest waits for the next run
+    skip_known_boards: true # leave postings of boards in ats_boards (enabled or not) to the ATS channels
+    discover_boards:
+      enabled: true
+      interval_hours: 24 # write candidates at most this often
+      require_title_match: true # only postings whose title passes title_prefilter count (false: every posting in your places, hundreds of companies)
+    title_prefilter:
+      enabled: true
+      # Same as greenhouse: stored only if the title matches a search.yaml keyword or include_terms, or the company is in watched_companies; an exclude_terms match drops it
+      include_terms: []
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
   jsearch:
     enabled: false # JSearch (Google for Jobs, RapidAPI). Needs JSEARCH_API_KEY in .env (see docs/jsearch.md); without a key the channel shows "not configured" and sends no requests
     company_queries: true # sends watched company names; see docs/privacy.md
@@ -398,6 +447,20 @@ sources:
     safesearch: strict
     interval_hours: 20 # don't search again within this many hours of the last discovery (once a day)
     max_queries_per_run: 40 # max searches per pass; when 5 ATS × groups × cities is more, each pass searches the ones that waited longest first
+  # Berlin Design Network: board discovery only, no postings. Reads the job list of berlin-design-network.org/jobs (one page, no key, no login)
+  # and offers the company boards its apply links point at (Greenhouse, Lever, Ashby, Personio) as candidates on /sources/registry. The list holds
+  # titles, company names and links only, so there is nothing to store. The site has no terms page and robots.txt allows the path; one request a day.
+  # Off by default: it lists design and creative employers in Berlin, which is noise unless you look for such roles. Set enabled: true to use it.
+  berlin_design_network:
+    enabled: false
+    # Runs only in these markets (home country ISO codes)
+    markets: [DE]
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 1000, max_delay_ms: 3000 }
+    max_results: 100 # not used: the channel stores no postings
+    base_url: https://berlin-design-network.org # the channel reads /jobs
+    user_agent: "JobRadar/2 (self-hosted job tracker)"
+    interval_hours: 24 # read the page at most this often
   jobspy_google:
     enabled: false # jobspy's Google Jobs scraping is unreliable, off by default
     company_queries: true # sends watched company names; see docs/privacy.md

@@ -1,0 +1,42 @@
+[
+  {
+    "title": {
+      "rendered": "No id"
+    },
+    "date_gmt": "2026-10-13T09:00:00"
+  },
+  {
+    "id": 1010,
+    "date": "2026-10-13T09:00:00",
+    "date_gmt": "2026-10-13T09:00:00",
+    "modified_gmt": "2026-10-13T09:00:00",
+    "slug": "job-1010",
+    "status": "publish",
+    "link": "https://bsj.example/job/job-1010/",
+    "title": {
+      "rendered": "Support Engineer // Fine Co"
+    },
+    "content": {
+      "rendered": "<p>Fine.</p>",
+      "protected": false
+    },
+    "categories": [
+      3
+    ],
+    "tags": [],
+    "job_company": [
+      11
+    ],
+    "job_location": [
+      21
+    ],
+    "job_plan": [
+      5
+    ],
+    "_unpublish_on": "2027-01-11",
+    "_is_featured": false
+  },
+  {
+    "id": "x"
+  }
+]

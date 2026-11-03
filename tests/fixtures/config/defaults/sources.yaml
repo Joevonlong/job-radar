@@ -16,7 +16,7 @@
 
 # 所有付费采集通道每月合计花费的上限（美元）；各通道实际花费之和不得超过它，由预算控制执行。
 # （AI 费用另有上限，见 ai.yaml 的 monthly_api_budget_usd。）
-config_version: 4
+config_version: 7
 paid_total_monthly_budget_usd: 15
 
 # 熔断：连续失败 failures 次后，通道标为不可用，冷却 cooldown_hours 小时后再试
@@ -275,6 +275,52 @@ sources:
       enabled: true
       include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
       exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  # Berlin Startup Jobs: the public WordPress REST API behind berlinstartupjobs.com (no key, no login), added by the config update: about 140
+  # postings of Berlin startups, many of them small companies that take applications by e-mail only and are on no ATS. The site has no visitor
+  # terms (the employer terms say third parties may read and reuse the listings), robots.txt allows /wp-json/, and a run sends about 4 requests.
+  # The jobs' copyright is the employers': don't mirror or republish the collected postings. The whole board is read each run and titles must pass
+  # title_prefilter (copied from your greenhouse prefilter). enabled: false switches it off.
+  berlinstartupjobs:
+    enabled: true
+    markets: [DE]
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 1000, max_delay_ms: 2000 }
+    max_results: 100
+    base_url: https://berlinstartupjobs.com
+    user_agent: JobRadar/2 (self-hosted job tracker)
+    per_page: 100
+    max_pages: 5
+    skip_expired: true
+    max_age_days: 90
+    title_prefilter:
+      enabled: true
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  # Handpicked Berlin: the public job index behind handpickedberlin.com/jobs (a static JSON file, no key, no login), added by the config update:
+  # the last ~30 days of postings in Berlin, Munich, Hamburg and German remote, each with the employer's own link. The site publishes no terms
+  # (only an imprint and a privacy page). Keep the request rate low, don't mirror or republish the data, and switch the channel off if the site asks.
+  # Off by default for that reason: set enabled: true to use it. Each run reads the index once and keeps postings in your places (search.yaml locations)
+  # that pass title_prefilter (copied from your greenhouse prefilter). discover_boards also offers the company boards behind matching postings as
+  # candidates on /sources/registry.
+  handpicked:
+    enabled: false
+    markets: [DE]
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 1000, max_delay_ms: 3000 }
+    max_results: 100
+    base_url: https://handpickedberlin.com
+    user_agent: JobRadar/2 (self-hosted job tracker)
+    max_age_days: 14
+    max_details_per_run: 30
+    skip_known_boards: true
+    discover_boards:
+      enabled: true
+      interval_hours: 24
+      require_title_match: true
+    title_prefilter:
+      enabled: true
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
   jsearch:
     enabled: false # JSearch（Google for Jobs，RapidAPI）。需要 .env 的 JSEARCH_API_KEY（见 docs/jsearch.md）；没有 key 时通道显示"未配置"，不发任何请求
     monthly_budget_usd: 0 # 只计超出 monthly_request_limit 之后的花费（overage_cost_per_request_usd × 请求数）
@@ -382,6 +428,20 @@ sources:
     safesearch: strict
     interval_hours: 20 # 距上次发现不足这么多小时不再搜索（每天一次）
     max_queries_per_run: 40 # 每次最多搜索多少次（5 种 ATS × 关键词组 × 城市，免费套餐每月 2000 次）
+  # Berlin Design Network: board discovery only, no postings, added by the config update. Reads the job list of berlin-design-network.org/jobs
+  # (one page, no key, no login) and offers the company boards its apply links point at (Greenhouse, Lever, Ashby, Personio) as candidates on
+  # /sources/registry. The list holds titles, company names and links only, so there is nothing to store. The site has no terms page and robots.txt
+  # allows the path; one request a day. Off by default: it lists design and creative employers in Berlin, which is noise unless you look for such
+  # roles. Set enabled: true to use it.
+  berlin_design_network:
+    enabled: false
+    markets: [DE]
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 1000, max_delay_ms: 3000 }
+    max_results: 100
+    base_url: https://berlin-design-network.org
+    user_agent: JobRadar/2 (self-hosted job tracker)
+    interval_hours: 24
   jobspy_google:
     enabled: false # jobspy 的 Google Jobs 抓取不稳定，默认关闭
     monthly_budget_usd: 0

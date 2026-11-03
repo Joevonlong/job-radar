@@ -1,5 +1,5 @@
 {
-  "id": "bb84dfee-3911-4a1d-8145-9523f5d46dee",
+  "id": "a95d0408-7c7e-4508-82cc-15df4abe729a",
   "prevId": "31a5e8e8-3756-4d69-940b-b533e153a5e3",
   "version": "7",
   "dialect": "postgresql",
@@ -884,94 +884,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.application_fit_notes": {
-      "name": "application_fit_notes",
-      "schema": "",
-      "columns": {
-        "job_id": {
-          "name": "job_id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "company_research_id": {
-          "name": "company_research_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "materials_hash": {
-          "name": "materials_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "story_ids": {
-          "name": "story_ids",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "items": {
-          "name": "items",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "model": {
-          "name": "model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "prompt_version": {
-          "name": "prompt_version",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "control_request_id": {
-          "name": "control_request_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "application_fit_notes_job_id_jobs_id_fk": {
-          "name": "application_fit_notes_job_id_jobs_id_fk",
-          "tableFrom": "application_fit_notes",
-          "tableTo": "jobs",
-          "columnsFrom": [
-            "job_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.application_questions": {
       "name": "application_questions",
       "schema": "",
@@ -1290,6 +1202,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "found_by": {
+          "name": "found_by",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
         },
         "status": {
           "name": "status",
@@ -5948,7 +5867,6 @@
         "test_telegram",
         "salary_lookup",
         "writer_job",
-        "writer_fit",
         "models_sync",
         "company_research",
         "story_extract"

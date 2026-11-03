@@ -1,6 +1,9 @@
 import { registerJobspyChannels } from "./jobspy";
 import { arbeitsagenturChannel } from "./arbeitsagentur";
 import { arbeitnowChannel } from "./arbeitnow";
+import { berlinDesignNetworkChannel } from "./berlin-design-network";
+import { berlinStartupJobsChannel } from "./berlinstartupjobs";
+import { handpickedChannel } from "./handpicked";
 import { stepstoneChannel } from "./stepstone";
 import { xingChannel } from "./xing";
 import { registerAtsChannels } from "./ats";
@@ -25,7 +28,10 @@ export function registerBuiltinChannels(registry: ChannelRegistry): void {
   registerJobspyChannels(registry); // linkedin-guest, indeed, jobspy-google
   registry.register(arbeitsagenturChannel);
   registry.register(arbeitnowChannel); // the free Arbeitnow board API (a sweep of its newest pages, title-prefiltered)
+  registry.register(berlinStartupJobsChannel); // the Berlin Startup Jobs board (WordPress REST; the whole board each run, title-prefiltered)
+  registry.register(handpickedChannel); // the Handpicked Berlin job index (places, age and title picked; its ATS links become board candidates)
   registerAtsChannels(registry); // greenhouse, lever
+  registry.register(berlinDesignNetworkChannel); // board discovery from the Berlin Design Network job list (no postings)
   registry.register(createTavilyChannel()); // discovery of new ATS boards through Tavily (no postings; the default search backend)
   registry.register(createBraveChannel()); // the same through Brave Search (off by default)
   registerEmailChannels(registry); // gmail-alerts

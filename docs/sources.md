@@ -307,7 +307,7 @@ Channels that ignore the search window also keep the base: widening fetches noth
 successful runs from counting as possibly-closed evidence:
 
 - Company ATS boards: Greenhouse, Lever, Ashby, Personio and SmartRecruiters.
-- Board discovery: Tavily and Brave.
+- Board discovery: Tavily, Brave and Berlin Design Network.
 - Gmail job alerts.
 - LinkedIn recommendations.
 
@@ -363,7 +363,7 @@ A widened run is not evidence for marking jobs possibly closed. A backfill windo
 like a normal run when no automatic catch-up widens it.
 
 Only keyword channels take the backfill window. Channels that read their own boards or inboxes instead of keyword
-queries (the ATS boards, the Arbeitnow feed, email alerts, the Brave / Tavily discovery sources, LinkedIn's session
+queries (the ATS boards, the Arbeitnow feed, the Berlin Startup Jobs board, the Handpicked Berlin index, email alerts, the Brave / Tavily / Berlin Design Network discovery sources, LinkedIn's session
 recommendations) run as usual within the same backfill run: their window is not widened and their runs are not marked
 as widened.
 
@@ -407,6 +407,114 @@ on in the shipped `sources.yaml` (`markets: [DE]`); an existing installation get
 - **Settings**: `base_url`, `user_agent`, `max_pages`, `max_results`, `throttle` and `title_prefilter` under
   `sources.arbeitnow` (also on the settings page). Switch it off with `enabled: false` or the switch on `/sources/registry`.
 
+## Berlin Startup Jobs
+
+Berlin Startup Jobs (`berlinstartupjobs`) reads the public WordPress REST API behind [berlinstartupjobs.com](https://berlinstartupjobs.com):
+about 140 postings of Berlin startups, English and German. No key, no login. Its value is not volume but coverage: many of the
+companies are small, take applications by e-mail only and are on no ATS, so the company career-board channels never see them. It is
+one of the Germany pack's local channels and is on in the shipped `sources.yaml` (`markets: [DE]`); an existing installation gets
+the same block from the config update (`pnpm config:migrate`), with the title prefilter terms copied from its `greenhouse` block.
+
+- **What a run reads.** The whole board, like a company career board, not a window over the newest: the pages of 100 posts (the
+  board is two pages) one after the other, then the company names of the posts that stay in one request and the three places
+  (Berlin, Remote, Remote Possible) in another, about four requests 1 to 2 seconds apart. It stores only titles that pass
+  `title_prefilter` (a search keyword or an `include_terms` entry, or a watched company, matched by the site's company name;
+  `exclude_terms` drops student and intern jobs), newest first, at most `max_results`. The request asks only for the fields the
+  channel needs; the order and submission data the site also holds for each post are never requested and never stored.
+- **What it leaves out.** The site keeps a post up after its own end date (`_unpublish_on`, 90 days for a standard package): with
+  `skip_expired: true` (default) those are not collected, and `max_age_days` (90) drops posts listed longer ago, which also covers
+  posts without an end date. Re-listing moves the listing date forward, so an old job can look new; its id stays the same, so it is
+  not stored twice. Leaving a post out is not closing it: nothing already stored changes, and a post missing from the board is not
+  treated as closed.
+- **What a posting has.** The role (the title without its trailing "// Company"), the company (the site's company name; the end
+  of the title when the post has none), the place (the site only has Berlin and "Remote"), the work mode (only the term "Remote"
+  counts as remote; "Remote Possible" is not hybrid, and a job without either is not assumed to be on site) and the full
+  description, which the trap scan reads for hidden text ([ai-traps.md](ai-traps.md)). E-mail addresses and phone numbers are
+  removed from the description text; the stored original keeps them.
+- **Applying.** The site's API has no apply link. The job's link goes to its page on berlinstartupjobs.com, whose "Apply now" button
+  is an e-mail address or the employer's own page. For the many jobs that accept applications by e-mail only, open that page to apply.
+  No `mailto:` link or address is put into a job field.
+- **Terms.** The site has no visitor terms (the employer terms say the listings are public and search engines and other
+  third-party tools may read them and show them elsewhere; that is a notice to employers, not a grant to you), and `robots.txt`
+  allows the API. The jobs' copyright is the employers': read the listings for your own search, don't mirror or republish the
+  collected data, and judge for yourself before you use an instance commercially or show the jobs to others. The `/sources` card
+  names the site and links to it. A 401, 404 (on the first page) or 410, or a 403, counts as blocked and opens the channel's
+  circuit breaker; the other channels keep running.
+- **Limits.** Small (roughly 140 postings, about a third of them technical, fewer after the end-date rule). The site only lists
+  Berlin: with other cities in `search.yaml: locations` the location filter drops everything. Company names are the site's, mostly
+  without "GmbH", and a brand name can differ from the one in the title, so the cross-source merge sometimes misses a duplicate.
+- **Settings**: `base_url`, `user_agent`, `per_page`, `max_pages`, `skip_expired`, `max_age_days`, `max_results`, `throttle` and
+  `title_prefilter` under `sources.berlinstartupjobs` (also on the settings page). Switch it off with `enabled: false` or the
+  switch on `/sources/registry`.
+
+## Handpicked Berlin
+
+Handpicked Berlin (`handpicked`) reads the public job index behind [handpickedberlin.com](https://handpickedberlin.com/jobs): a
+static JSON file with roughly the last 30 days of postings in Berlin, Munich and Hamburg and German remote, several thousand at a
+time, each with the employer's own link (Personio, join.com, Ashby, Greenhouse, Workday and others, many of them small startups).
+No key, no login. It is for the Germany pack but **off by default and not in the pack's default channels**: the site publishes
+no terms (only an imprint and a privacy page; its `robots.txt` allows the paths the channel reads). To use it, set
+`sources.handpicked.enabled: true` in `sources.yaml` (or switch it on at `/sources/registry`); an existing installation gets the
+block, switched off, from the config update (`pnpm config:migrate`).
+
+- **What a run reads.** One request for the index, then the description of each new posting it keeps (at most
+  `max_details_per_run`, 30 by default, 1 to 3 seconds apart; postings it already stored are not fetched again, and the rest
+  waits for the next run). It keeps a posting if it is in one of your places (`search.yaml: locations`, with the spellings of the
+  city aliases, so "München" also matches the site's `munich`; or remote in your country when your remote scope is not `none`),
+  is at most `max_age_days` old (14; the index has dates, not times), its title passes `title_prefilter` (a search keyword or an
+  `include_terms` entry, or a watched company; `exclude_terms` drops student and intern jobs) and, with `skip_known_boards: true`,
+  it is not on a company board you already list in `ats_boards` (enabled or not): the ATS channel reads those first-hand. The
+  index only covers Berlin, Munich, Hamburg and German remote; with other cities in `locations` the channel runs and finds nothing.
+- **What a posting has.** Title, company, one or more places, a work mode (the site's "onsite" is not taken as a fact), an
+  optional salary range as text, and the full description (HTML, read as text; e-mail addresses and phone numbers are removed
+  from the text, the stored original keeps them; the trap scan reads it for hidden text, [ai-traps.md](ai-traps.md)). The job's
+  link goes to the employer's own posting, because the site has no posting pages. The same job from the employer's ATS board or
+  from another source is merged into one job; the apply link prefers the ATS, then this channel and LinkedIn.
+- **Company discovery.** The index is the best list of small German employers on Personio, Ashby, Greenhouse and Lever that we
+  have. Once a day (`discover_boards.interval_hours`) the channel turns the employer links of postings in your places whose
+  title matches (`require_title_match: true`; set it to `false` and every company with a posting in your places becomes a
+  candidate, hundreds of them) into candidates under "Discovered boards" on `/sources/registry`, with the badge "Handpicked
+  Berlin". Add one to start reading all of that company's jobs through the ATS channel, or dismiss it. Boards you already list are
+  never offered. join.com, Workday and other hosts have no channel here, so they give postings but no candidates.
+  `discover_boards.enabled: false` turns this part off; a failure in it never costs postings.
+- **Terms.** The site has no terms page: nothing forbids reading its index and nothing grants it. Use it at a low rate (one
+  index request per run and a few details), don't mirror or republish the data, and switch the channel off if the owner asks.
+  The `/sources` card names the site and links to it. A 403, 404 or 410 on the index counts as blocked and opens the channel's
+  circuit breaker; the other channels keep running.
+- **Limits.** Only the dates are known (a posting from this morning and one from yesterday look alike), there is no language,
+  seniority or contract field, and an `id` the site changes would make old postings look new (the usual cross-source merge
+  catches them). A posting missing from the index is not treated as closed.
+- **Settings**: `base_url`, `user_agent`, `max_age_days`, `max_details_per_run`, `skip_known_boards`, `discover_boards`,
+  `max_results`, `throttle` and `title_prefilter` under `sources.handpicked` (also on the settings page).
+
+## Berlin Design Network
+
+Berlin Design Network (`berlin_design_network`) finds company boards, not jobs. It reads the job list of
+[berlin-design-network.org](https://berlin-design-network.org/jobs) (about 90 postings of design and creative employers in
+Berlin, with a title, a company name and the employer's apply link, but no description and no posting page) and offers the
+company boards behind its links as candidates under "Discovered boards" on `/sources/registry`, with the badge "Berlin Design
+Network". Add one and the ATS channel reads all of that company's jobs, with their full descriptions. No key, no login. It is
+**off by default**: the employers are design and creative companies, which is noise unless you look for such roles. Set
+`sources.berlin_design_network.enabled: true` in `sources.yaml` (or switch it on at `/sources/registry`); an existing
+installation gets the block, switched off, from the config update (`pnpm config:migrate`).
+
+- **What a run does.** One request for the page, at most once every `interval_hours` (24; a run within the interval does
+  nothing). The page embeds its list as data (`__NEXT_DATA__`); the channel reads the apply link and the company name of each
+  entry and nothing else. Only links to an official Greenhouse, Lever, Ashby, Personio (`*.jobs.personio.de`) or SmartRecruiters
+  board count (roughly one in seven; LinkedIn, StepStone, join.com and company sites are ignored and never requested). A board
+  already in `ats_boards`, or already added or dismissed, is not offered again. No posting is stored and the channel has no
+  postings of its own to show.
+- **Contact details.** The page also lists the companies' contact e-mail addresses and phone numbers. The channel does not read,
+  store or log them; only the link and the company name are kept.
+- **Terms.** The site has no terms page and its `robots.txt` allows the path. The channel sends one request a day with a
+  descriptive `User-Agent`, follows redirects only within the site, and reads a 403 as blocked (the circuit opens; the other
+  channels keep running). If the page changes shape the run fails with a parse error and stores nothing. Switch the channel off
+  if the owner asks.
+- **Limits.** The list is small and design-heavy, and each posting expires after a month, so the set of boards changes slowly.
+  `*.jobs.personio.com` and other hosts without an ATS channel here give no candidate. The company name is only a hint for the
+  candidate row; check the board before you add it.
+- **Settings**: `base_url`, `user_agent` and `interval_hours` under `sources.berlin_design_network` (also on the settings page).
+
 ## Scraping
 
 Not every channel uses an official API. Some read public web pages or unofficial endpoints, and some act as your own
@@ -417,7 +525,7 @@ for a new installation** and need your explicit consent to switch on.
 |---|---|---|---|
 | Scraping | LinkedIn guest search (`linkedin-guest`), Indeed (`indeed`), StepStone (`stepstone`), XING (`xing`), Google Jobs via the sidecar (`jobspy-google`) | off | the site's terms may forbid it; your IP address can be rate limited or blocked |
 | Account automation | LinkedIn logged-in session (`linkedin-session`, `linkedin-session:recommended`) | off | uses your own account; the account can be restricted or banned |
-| Official APIs and public company feeds | Arbeitsagentur, [Arbeitnow](#arbeitnow), Greenhouse, Lever, Ashby, Personio, SmartRecruiters (on); JSearch, Gmail alerts, Tavily, Brave (need your key or account) | on, or off until you add a key | follow the provider's own terms and quotas |
+| Official APIs and public company feeds | Arbeitsagentur, [Arbeitnow](#arbeitnow), [Berlin Startup Jobs](#berlin-startup-jobs), Greenhouse, Lever, Ashby, Personio, SmartRecruiters (on); [Handpicked Berlin](#handpicked-berlin) (off: the site has no terms); [Berlin Design Network](#berlin-design-network) (off: discovery only); JSearch, Gmail alerts, Tavily, Brave (need your key or account) | on, or off until you add a key or switch it on | follow the provider's own terms and quotas |
 | Paid scraping services | Bright Data, Apify, [Monid](monid.md) | on, but nothing happens without your token | a service scrapes for you; **this does not remove the terms-of-service risk**, which stays with you |
 
 How to switch one on:

@@ -299,6 +299,8 @@ export const atsBoardCandidates = pgTable(
     boardUrl: text("board_url").notNull(),
     /** Title of the (latest) search result; a hint for the company name. */
     title: text("title"),
+    /** Ids of the discovery sources that saw the board (`tavily`, `brave`, `handpicked`, ...); older rows have none. */
+    foundBy: text("found_by").array().notNull().default(sql`'{}'::text[]`),
     /** `new` = waiting for the user, `added` = put into sources.yaml, `dismissed` = not interested. */
     status: text("status").notNull().default("new"),
     seenCount: integer("seen_count").notNull().default(1),

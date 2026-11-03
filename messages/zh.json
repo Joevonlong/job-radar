@@ -1111,6 +1111,8 @@
       "indeed": "Indeed",
       "arbeitsagentur": "劳工局",
       "arbeitnow": "Arbeitnow",
+      "handpicked": "Handpicked Berlin",
+      "berlinstartupjobs": "Berlin Startup Jobs",
       "google": "Google",
       "email": "邮件提醒",
       "manual": "手动添加"
@@ -2357,6 +2359,42 @@
       "arbeitnow_max_pages": {
         "label": "每轮最多翻页数",
         "hint": "每页一次请求，从最新的页读起（页内不按时间排序）。某页连最新的一条都早于回看窗口时提前停止。"
+      },
+      "berlinstartupjobs_per_page": {
+        "label": "每页岗位数",
+        "hint": "WordPress 最多 100。整个板只有两页。"
+      },
+      "berlinstartupjobs_max_pages": {
+        "label": "每轮最多翻页数",
+        "hint": "每页一次请求。读到站点报告的最后一页就停。"
+      },
+      "berlinstartupjobs_skip_expired": {
+        "label": "跳过已过结束日期的岗位",
+        "hint": "雇主的套餐到期后，站点仍把岗位挂着，其中大多已过时。这类岗位不采集（已入库的不会被标记关闭）。"
+      },
+      "berlinstartupjobs_max_age_days": {
+        "label": "保留最近几天的岗位",
+        "hint": "更早上架的岗位不入库。重新上架会把日期往后推。"
+      },
+      "handpicked_max_age_days": {
+        "label": "保留最近几天的岗位",
+        "hint": "索引只有日期，早于这个天数的岗位不入库。"
+      },
+      "handpicked_max_details": {
+        "label": "每轮最多取多少条描述",
+        "hint": "每个新岗位一次请求，之间有间隔。超出上限的岗位留到下一轮。"
+      },
+      "handpicked_skip_known": {
+        "label": "ats_boards 里已有的 board 交给 ATS 通道",
+        "hint": "你已经跟踪的公司 board（不管开关）的岗位不从这份索引入库。"
+      },
+      "handpicked_discover": {
+        "label": "把 ATS board 作为候选",
+        "hint": "匹配岗位背后的公司 board 会出现在来源清单的“发现的 board”里。"
+      },
+      "handpicked_discover_title": {
+        "label": "候选要求标题匹配",
+        "hint": "关闭后，你所在地点有岗位的每家公司都会成为候选（上百个）。"
       },
       "remote_option_id": {
         "label": "“完全远程”筛选值",
@@ -3827,7 +3865,9 @@
       "missingEnv": "已启用但缺 {names}：这个通道暂时什么也不做。把它写进 .env，或在设置里关掉这个通道。",
       "notConfiguredHintJsearch": "在 .env 里设置 JSEARCH_API_KEY（RapidAPI 的 key）；设置之前这个通道不发任何请求。",
       "attribution": {
-        "arbeitnow": "数据来自 <link>Arbeitnow（arbeitnow.com）</link>，免费公开接口，按现状提供。"
+        "arbeitnow": "数据来自 <link>Arbeitnow（arbeitnow.com）</link>，免费公开接口，按现状提供。",
+        "berlinstartupjobs": "数据来自 <link>Berlin Startup Jobs（berlinstartupjobs.com）</link>的公开岗位列表。岗位版权归雇主所有。",
+        "handpicked": "数据来自 <link>Handpicked Berlin（handpickedberlin.com）</link>的公开岗位索引。该站没有公开条款：请保持低频请求，不要镜像数据。"
       },
       "circuit": {
         "closed": "熔断：正常",
@@ -3922,7 +3962,7 @@
     },
     "discovery": {
       "title": "发现的 board",
-      "description": "搜索（Tavily 或 Brave）找到、但还不在 sources.yaml 的 ats_boards 里的公司招聘页。加入后从下一轮开始采集。",
+      "description": "搜索（Tavily 或 Brave）、Handpicked Berlin 或 Berlin Design Network 上的链接找到、但还不在 sources.yaml 的 ats_boards 里的公司招聘页。加入后从下一轮开始采集。",
       "empty": "没有新的 board。设置了 TAVILY_API_KEY 后，大约每天搜索一次。",
       "count": "共 {total} 个",
       "countFiltered": "符合筛选的 {shown} 个，共 {total} 个",
@@ -3934,6 +3974,13 @@
       "add": "加入",
       "dismiss": "忽略",
       "open": "打开 board",
+      "foundByTitle": "这个 board 的发现来源",
+      "foundBy": {
+        "handpicked": "Handpicked Berlin",
+        "berlin_design_network": "Berlin Design Network",
+        "tavily": "Tavily",
+        "brave": "Brave"
+      },
       "region": "EU 域名",
       "added": "已把 {name} 加入来源清单（sources.yaml）。",
       "alreadyListed": "{name} 已经在来源清单里。",

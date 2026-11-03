@@ -1,0 +1,65 @@
+[
+  {
+    "id": 1008,
+    "date": "2026-10-15T09:00:00",
+    "date_gmt": "2026-10-15T09:00:00",
+    "modified_gmt": "2026-10-15T09:00:00",
+    "slug": "job-1008",
+    "status": "publish",
+    "link": "https://bsj.example/job/job-1008/",
+    "title": {
+      "rendered": "Platform Engineer"
+    },
+    "content": {
+      "rendered": "<p>Company term missing.</p>",
+      "protected": false
+    },
+    "categories": [
+      3
+    ],
+    "tags": [],
+    "job_company": [
+      999
+    ],
+    "job_location": [
+      21
+    ],
+    "job_plan": [
+      5
+    ],
+    "_unpublish_on": "2027-01-13",
+    "_is_featured": false
+  },
+  {
+    "id": 1009,
+    "date": "2026-10-14T09:00:00",
+    "date_gmt": "2026-10-14T09:00:00",
+    "modified_gmt": "2026-10-14T09:00:00",
+    "slug": "job-1009",
+    "status": "publish",
+    "link": "https://bsj.example/job/job-1009/",
+    "title": {
+      "rendered": "Backend Engineer (m/f/d) // Mailto Studio"
+    },
+    "content": {
+      "rendered": "<p>Apply: <a href=\"mailto:apply@example.com\">apply@example.com</a> or +49 151 0000000.</p>",
+      "protected": false
+    },
+    "categories": [
+      3
+    ],
+    "tags": [],
+    "job_company": [
+      18
+    ],
+    "job_location": [
+      21,
+      23
+    ],
+    "job_plan": [
+      5
+    ],
+    "_unpublish_on": "2027-01-12",
+    "_is_featured": false
+  }
+]
