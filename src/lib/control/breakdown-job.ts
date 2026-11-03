@@ -1,7 +1,7 @@
 import { AiProviderError } from "@/lib/ai";
 import type { AiRouter } from "@/lib/ai/router";
 import { runBreakdown } from "@/lib/breakdown/service";
-import { ConfigError, loadConfig, type BreakdownConfig } from "@/lib/config";
+import { ConfigError, loadConfig, reloadConfig, type BreakdownConfig, type ResearchConfig } from "@/lib/config";
 import { classifyTranslationFailure, resumeOf } from "@/lib/translation/errors";
 import { createRequestRouter } from "@/lib/translation/router";
 
@@ -12,6 +12,8 @@ export interface BreakdownJobHandlerOptions {
   createRouter?: (context: ControlHandlerContext) => AiRouter;
   /** Default: `loadConfig("breakdown")` (the worker hot-reloads it). */
   loadSettings?: () => BreakdownConfig;
+  /** Default: `research.yaml`, read afresh; an automatic request stops once research is turned off. */
+  loadResearch?: () => ResearchConfig;
 }
 
 /**
@@ -21,12 +23,14 @@ export interface BreakdownJobHandlerOptions {
  */
 export function createBreakdownJobHandler(options: BreakdownJobHandlerOptions = {}): ControlHandler {
   const loadSettings = options.loadSettings ?? ((): BreakdownConfig => loadConfig("breakdown"));
+  const loadResearch = options.loadResearch ?? ((): ResearchConfig => reloadConfig("research"));
   return async (request, context) => {
     const payload = breakdownJobPayloadSchema.safeParse(request.payload);
     if (!payload.success) return { status: "failed", result: { error: "invalid_payload" } };
-    const { jobId, force } = payload.data;
+    const { jobId, force, origin } = payload.data;
     let settings: BreakdownConfig;
     try {
+      if (origin === "auto" && !loadResearch().enabled) return { status: "failed", result: { jobId, error: "research_disabled" } };
       settings = loadSettings();
     } catch (error) {
       if (error instanceof ConfigError) return { status: "failed", result: { jobId, error: "config_error" } };

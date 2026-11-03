@@ -95,7 +95,8 @@ if (disposableDirectory) {
   // The shipped application writer is off; the e2e copy turns it on (the e2e runner stands in for its AI)
   await mutateConfig("writer", (current) => ({ ...current, enabled: true }));
   // The shipped company background is off; the e2e copy turns it on (the e2e runner stands in for its AI)
-  await mutateConfig("research", (current) => ({ ...current, enabled: true }));
+  // A star in another spec must not start research there; the research spec turns this on for itself
+  await mutateConfig("research", (current) => ({ ...current, enabled: true, auto: { ...current.auto, trigger: "manual" } }));
   // The shipped salary lookup is off; the e2e copy turns it on (the e2e runner answers the requests, no AI is called).
   // The seeded jobs are few: groups of two already compare, so the job page shows a benchmark
   await mutateConfig("salary", (current) => ({ ...current, lookup: { ...current.lookup, enabled: true }, benchmark: { ...current.benchmark, min_sample: 2 } }));

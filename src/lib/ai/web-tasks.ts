@@ -42,7 +42,7 @@ const DOMAIN = /^(?=.{3,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](
 /** Second-level labels that countries use as registries (`co.uk`, `com.au`, `ac.jp`): `<label>.<two-letter TLD>` is one. */
 const REGISTRY_LABELS = new Set(["co", "com", "net", "org", "gov", "edu", "ac", "or", "ne", "go", "gob", "gouv", "ltd", "plc", "mil", "nic", "info", "biz"]);
 /** Shared hosting suffixes under which anyone gets a subdomain. */
-const SHARED_SUFFIXES = new Set(["github.io", "gitlab.io", "pages.dev", "workers.dev", "vercel.app", "netlify.app", "herokuapp.com", "web.app", "firebaseapp.com", "appspot.com", "blogspot.com", "azurewebsites.net", "cloudfront.net", "amazonaws.com", "glitch.me", "fly.dev", "onrender.com", "wordpress.com", "substack.com", "medium.com"]);
+const SHARED_SUFFIXES = new Set(["notion.site", "github.io", "gitlab.io", "pages.dev", "workers.dev", "vercel.app", "netlify.app", "herokuapp.com", "web.app", "firebaseapp.com", "appspot.com", "blogspot.com", "azurewebsites.net", "cloudfront.net", "amazonaws.com", "glitch.me", "fly.dev", "onrender.com", "wordpress.com", "substack.com", "medium.com"]);
 
 /**
  * A name that is (or looks like) a public suffix rather than one site: a single label, a country registry such as `co.uk`
@@ -67,9 +67,11 @@ export function safeDomains(values: readonly string[]): string[] {
 /**
  * Host names that never mean a public site: local and reserved suffixes (`fritz.box`, `printer.local`, `host.internal`), the
  * special-use names of RFC 6761 and its successors (`.onion`, `.alt`), and the names ICANN will not delegate or that are
- * used privately (`.mail`, `.priv`, `.private`).
+ * used privately (`.mail`, `.priv`, `.private`). Also the public wildcard DNS services (`nip.io`, `lvh.me`): any name under them
+ * resolves to whatever address it spells, so `10.0.0.1.nip.io` is a private address. Here rather than in `research.yaml`,
+ * because a user's file replaces that list and this must hold whatever the file says.
  */
-export const BLOCKED_HOST = /(^|\.)(localhost|local|internal|lan|home|corp|box|intranet|localdomain|arpa|example|invalid|test|onion|alt|mail|priv|private)$/i;
+export const BLOCKED_HOST = /(^|\.)(localhost|local|internal|lan|home|corp|box|intranet|localdomain|arpa|example|invalid|test|onion|alt|mail|priv|private|nip\.io|sslip\.io|xip\.io|lvh\.me|localtest\.me|traefik\.me)$/i;
 
 /**
  * URL parsers read a host whose last label is a number (`1.1`, `foo.0x7f`, `192.168.1.1`) as an IPv4 address, so such a

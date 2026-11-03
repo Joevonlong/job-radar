@@ -26,6 +26,7 @@ export * from "./runs";
 export * from "./salary-benchmarks";
 export * from "./salary-lookups";
 export * from "./company-research";
+export * from "./research-auto-runs";
 export * from "./profile-snapshots";
 export * from "./scores";
 export * from "./seen";

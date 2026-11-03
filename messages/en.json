@@ -1979,7 +1979,7 @@
       "resume": "Paths and commands behind \"Tailor resume\" on the detail page (resume-kit hand-off). The paths point at your own files; the master resume is never read.",
       "language": "The interface language of new browsers, the language the AI writes in, what job ads are translated into, and the language of Telegram and the command line.",
       "salary": "The salary panel on the job page puts a job's stated salary next to the other postings of its kind in your database, the company's other postings and, if you run it, an AI estimate. The optional lookup asks an AI provider to search salary sites for the company and role. Role families and the search links are edited in salary.yaml.",
-      "research": "The company background panel on the job page: what a company does, its size, funding, reviews and recent news, found by an AI provider with web search, each field with its source and marked as unverified. Off by default. When on, the company name (and a website domain you confirmed) is sent to the providers of the task \"Company background\" on the \"AI\" tab. The Claude CLI's search is not limited to the sites in research.yaml, only the pages it opens are. Which sites it may open and which hosts are never taken as a company's website are edited in research.yaml.",
+      "research": "The research bar and the company background panel on the job page: what a company does, its size, funding, reviews and recent news, found by an AI provider with web search, each field with its source and marked as unverified. Off by default. When on, the company name (and a website domain you confirmed) is sent to the providers of the task \"Company background\" on the \"AI\" tab, and research can start by itself when you save or apply to a job (see below); that also sends the title, city, country and seniority for a salary lookup, and the timing shows what you save and apply to. The Claude CLI's search is not limited to the sites in research.yaml, only the pages it opens are. Which sites it may open and which hosts are never taken as a company's website are edited in research.yaml.",
       "writer": "The workbench behind \"Write answers\" on the job page: AI drafts of application answers and cover letters from material you choose, each sentence checked against it. Off by default. Which AI it uses is set under task overrides on the \"AI\" tab (task \"Application writer\"). The library and question limits, variants, tones and the evidence check are edited in writer.yaml."
     },
     "actions": {
@@ -2104,6 +2104,8 @@
       "salary_lookup": "Salary lookup (AI web search)",
       "research_general": "Switch",
       "research_company": "Company background (AI web search)",
+      "research_auto": "Automatic research",
+      "research_auto_high_score": "Automatic research: high-score new jobs",
       "salary_benchmark": "Salary benchmark",
       "ai_limits_quota": "Usage cap (subscription CLIs)",
       "ai_scoring_evidence": "Reason sources",
@@ -2141,6 +2143,16 @@
         "worldwide": "Worldwide",
         "home_country": "Remote from the market's country (incl. its wider region or worldwide remote)",
         "region": "Selected regions"
+      },
+      "researchTrigger": {
+        "manual": "Manual only (nothing starts by itself)",
+        "favorite": "When you save a job",
+        "favorite_or_applying": "When you save a job, or its status becomes interested, preparing or applied"
+      },
+      "researchItem": {
+        "company": "Company background",
+        "breakdown": "JD breakdown",
+        "salary": "Salary lookup"
       },
       "breakdownMode": {
         "manual": "Manual (only when you press the button on the job page)",
@@ -3208,17 +3220,49 @@
         "label": "Enable salary lookup",
         "hint": "Shows the \"Look up salary\" button on the job page. Nothing is looked up unless you press it."
       },
+      "research_auto_trigger": {
+        "label": "When research starts by itself",
+        "hint": "Applies to jobs from then on. Removing a star later does not stop a request already queued."
+      },
+      "research_auto_items": {
+        "label": "What runs automatically",
+        "hint": "The salary lookup also needs \"Enable salary lookup\", the breakdown needs job breakdown switched on."
+      },
+      "research_auto_max_per_day": {
+        "label": "Automatic runs per 24 hours",
+        "hint": "For saved and applied jobs, counted per job and apart from the manual limits. A run that finds everything cached does not count."
+      },
+      "research_auto_high_enabled": {
+        "label": "Also research high-score new jobs",
+        "hint": "Off by default. Each cycle, new jobs at or above the rank value below are researched before you look at them, so more is sent to the AI providers."
+      },
+      "research_auto_min_rank": {
+        "label": "Minimum rank value",
+        "hint": "0 to 100."
+      },
+      "research_auto_per_cycle": {
+        "label": "Jobs per cycle",
+        "hint": "At most this many are queued in one cycle."
+      },
+      "research_auto_high_max_per_day": {
+        "label": "High-score runs per 24 hours",
+        "hint": "Counted apart from the saved and applied jobs."
+      },
+      "research_auto_max_age": {
+        "label": "Only jobs first seen within (days)",
+        "hint": "Older jobs are left alone."
+      },
       "research_enabled": {
-        "label": "Enable company background",
-        "hint": "Shows the \"Look up company\" button on the job page. Nothing is looked up unless you press it. A lookup sends the company name, and a website domain you confirmed, to an AI provider with web search; never the title, the location, the JD or your profile."
+        "label": "Enable research",
+        "hint": "Shows the research bar and the \"Look up company\" button on the job page. A lookup sends the company name, and a website domain you confirmed, to an AI provider with web search; never the title, the location, the JD or your profile. With automatic research below, this starts when you save or apply, unasked: the salary lookup then also sends the title, city, country and seniority, and the timing of the requests reflects what you save and apply to."
       },
       "research_ttl_days": {
         "label": "Keep a result for (days)",
         "hint": "Within this time every job of the same company shows the stored result instead of searching again."
       },
       "research_max_per_day": {
-        "label": "Lookups per 24 hours",
-        "hint": "Every request counts, also failed ones. A cached answer does not."
+        "label": "Lookups by hand per 24 hours",
+        "hint": "Every request you start counts, also failed ones. A cached answer does not, nor does automatic research, which has its own limit below."
       },
       "research_max_searches": {
         "label": "Web searches per lookup",
@@ -4828,6 +4872,7 @@
     "error": {
       "invalid": "Invalid request",
       "disabled": "Job breakdown is turned off.",
+      "research_disabled": "Research was turned off before this automatic request ran.",
       "config_error": "breakdown.yaml cannot be read.",
       "not_found": "Job not found",
       "no_description": "This job has no JD text, so it cannot be broken down.",
@@ -6971,6 +7016,7 @@
       "disabled": "The salary lookup is turned off.",
       "config_error": "salary.yaml or ai.yaml cannot be read.",
       "not_found": "Job not found",
+      "research_disabled": "Research was turned off before this automatic lookup ran.",
       "no_web_provider": "None of the AI providers set for this lookup can search the web.",
       "quota": "The daily limit of salary lookups is reached. Try again later or raise it in the settings.",
       "aborted": "The AI worker was stopped during the lookup. Try again.",
@@ -6996,6 +7042,71 @@
     }
   },
   "research": {
+    "overview": {
+      "details": "Details",
+      "hide": "Hide",
+      "website": "Website",
+      "websiteLabel": "Website of {company}",
+      "toggleLabel": "Company background of {company}",
+      "unverified": "AI web search, unverified",
+      "refresh": "Look up again",
+      "queued": "Looking up, this can take a few minutes",
+      "done": "Company background updated",
+      "expired": "This result is out of date."
+    },
+    "bar": {
+      "label": "Research",
+      "item": {
+        "company": "Company",
+        "breakdown": "JD breakdown",
+        "salary": "Salary"
+      },
+      "state": {
+        "done": "{n, plural, =0 {today} one {# day ago} other {# days ago}}",
+        "expired": "out of date",
+        "running": "in progress",
+        "queuedAuto": "queued automatically",
+        "deferred": "paused by the usage cap, back around {time}",
+        "deferredUnknown": "paused by the usage cap",
+        "off": "off",
+        "unavailable": "not available for this job",
+        "missing": "not run yet"
+      },
+      "settings": "Settings",
+      "runItem": "Run {item}",
+      "refreshItem": "Run {item} again",
+      "runAll": "Research all",
+      "error": {
+        "quota": "daily limit reached",
+        "disabled": "turned off",
+        "no_web_provider": "no provider can search the web",
+        "not_found": "job not found",
+        "no_description": "no JD text",
+        "config_error": "settings cannot be read",
+        "not_ready": "the database is not ready",
+        "invalid": "invalid request",
+        "failed": "failed, try again"
+      }
+    },
+    "domain": {
+      "inferred": "Confirming the website improves accuracy: {domain}?",
+      "inferredHint": "Taken from this company's job links. It is not sent to the AI or opened until you confirm it.",
+      "confirmed": "Website you confirmed: {domain}",
+      "none": "No website known for this company. Adding it improves accuracy.",
+      "confirm": "Confirm",
+      "change": "Change",
+      "add": "Add website",
+      "label": "Company website",
+      "placeholder": "example.com",
+      "save": "Save",
+      "cancel": "Cancel",
+      "saved": "Website saved",
+      "invalid": "The request was not valid.",
+      "invalid_domain": "That is not a company's public website (job boards, addresses and local names are refused).",
+      "changed": "This website changed in the meantime. Reload the page.",
+      "config_error": "research.yaml cannot be read.",
+      "failed": "The website could not be saved."
+    },
     "field": {
       "summary": "What it does",
       "industry": "Industry",
@@ -7338,6 +7449,7 @@
       "ai__traps": "Check traps",
       "ai__translate": "Translate",
       "ai__breakdown": "Break down job",
+      "ai__research": "Research high-score jobs",
       "request__run_cycle": "Run a cycle",
       "request__rescore_stale": "Re-score stale jobs",
       "request__run_suggest": "Suggest interests",
@@ -7358,6 +7470,7 @@
       "system__reconcile": "Reconcile activity log",
       "system__telegram_callback": "Telegram button action",
       "system__reminder": "Daily reminder",
+      "system__research_auto": "Automatic research",
       "request__writer_job": "Write application answer",
       "request__models_sync": "Refresh model list",
       "request__story_extract": "Extract stories",
@@ -7377,7 +7490,8 @@
       "pruned": "Activity records pruned",
       "backfill": "Manual backfill",
       "reminder_counts": "Reminder counts",
-      "current_scores_repaired": "Score projection repaired"
+      "current_scores_repaired": "Score projection repaired",
+      "research_auto": "Automatic research"
     },
     "reason": {
       "not_recorded": "Result not recorded",
@@ -7401,6 +7515,8 @@
       "quota_guard": "Quota protection",
       "no_provider_available": "No provider available",
       "no_request": "No request",
+      "research_cap_reached": "Daily limit of automatic research reached",
+      "research_recent": "Already researched in the last 24 hours",
       "other": "Other error",
       "rate_limited": "Rate limited",
       "blocked": "Access blocked",
@@ -7411,6 +7527,7 @@
       "invalid_payload": "Invalid request input",
       "no_handler": "No handler available",
       "handler_error": "Request handler failed",
+      "research_disabled": "Research was turned off",
       "cycle_failed": "Cycle failed",
       "cycle_not_found": "Cycle no longer exists",
       "config_error": "Configuration error",
@@ -7489,6 +7606,8 @@
       "quota_guard": "Quota protection",
       "no_provider_available": "No provider available",
       "no_request": "No request",
+      "research_cap_reached": "Daily limit of automatic research reached",
+      "research_recent": "Already researched in the last 24 hours",
       "other": "Other error",
       "rate_limited": "Rate limited",
       "blocked": "Access blocked",
@@ -7499,6 +7618,7 @@
       "invalid_payload": "Invalid request input",
       "no_handler": "No handler available",
       "handler_error": "Request handler failed",
+      "research_disabled": "Research was turned off",
       "cycle_failed": "Cycle failed",
       "cycle_not_found": "Cycle no longer exists",
       "config_error": "Configuration error",

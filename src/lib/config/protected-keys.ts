@@ -74,6 +74,15 @@ export const PROTECTED_KEYS: Readonly<Partial<Record<ConfigName, readonly string
     "jd_export_dir",
     "jd_export_host_dir",
   ],
+  salary: [
+    // the hosts whose pages an AI CLI may open on this machine during a salary lookup
+    "lookup.allowed_fetch_domains",
+  ],
+  research: [
+    // the same for a company lookup, and the list that decides which hosts can never be taken as a company's website
+    "company.allowed_domains",
+    "company.non_company_hosts",
+  ],
 };
 
 /** The protected patterns of one config file (empty when it has none). */

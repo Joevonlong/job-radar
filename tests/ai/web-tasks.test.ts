@@ -59,6 +59,15 @@ describe("web access policy", () => {
     expect(publicWebsiteDomains(["LinkedIn.com", "linkedin.com", "fritz.box", "192.168.1.1"])).toEqual(["linkedin.com"]);
   });
 
+  it("refuses wildcard DNS names and shared hosts with an empty host list, so a user's research.yaml cannot lift it", () => {
+    for (const host of ["nip.io", "10.0.0.1.nip.io", "app.sslip.io", "a.xip.io", "lvh.me", "x.localtest.me", "x.traefik.me", "notion.site"]) {
+      expect(isCompanyWebsiteCandidate(host, []), host).toBe(false);
+    }
+    expect(publicWebsiteDomains(["127.0.0.1.nip.io", "notion.site", "linkedin.com"])).toEqual(["linkedin.com"]);
+    expect(isCompanyWebsiteCandidate("nipple.io", [])).toBe(true);
+    expect(isCompanyWebsiteCandidate("acme.notion.site", [])).toBe(true);
+  });
+
   it("does not take a platform for a company's own website", () => {
     const platforms = ["linkedin.com", "greenhouse.io", "boards.greenhouse.io", "indeed.com"];
     expect(isCompanyWebsiteCandidate("example-company.de", platforms)).toBe(true);

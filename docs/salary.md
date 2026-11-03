@@ -80,7 +80,9 @@ automated clients, so the URL formats were checked by hand; if a site changes it
 ## Salary lookup (AI with web search)
 
 Turn it on with `lookup.enabled: true` (Settings → Salary → "Enable salary lookup"). The panel then shows a
-"Look up salary" button. Nothing is looked up unless you click it.
+"Look up salary" button. Nothing is looked up unless you click it, press it on the [research bar](research.md#the-research-bar), or turn on
+[automatic research](research.md#automatic-research), which sends the same fields without a click. An automatic lookup does not use
+`lookup.max_per_day`; it has its own limit in `research.yaml`, and stops if research is switched off while it waits.
 
 What happens on a click:
 

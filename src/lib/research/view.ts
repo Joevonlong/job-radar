@@ -5,6 +5,7 @@ import { companyResearchProviders, companyResearchUnrestricted, readInitialCompa
 import type { Db } from "@/lib/db/client";
 import { companyResearchTableReady, confirmedWebsiteDomain, countCompanyResearchRequests, getCompanyResearchForJob, getJobForCompanyResearch } from "@/lib/db/repos/company-research";
 
+import { inferCompanyDomain, shownWebsite, type CompanyWebsite } from "./domain";
 import type { CompanyResearchView } from "./fields";
 
 export type CompanyResearchAvailability = "enabled" | "disabled" | "no_web_provider" | "config_error" | "not_ready";
@@ -21,6 +22,9 @@ export interface CompanyResearchContext {
   usedToday: number;
   maxPerDay: number;
   ttlDays: number;
+  /** The company's website as far as it is known; an inferred one waits for the user's confirmation and is never sent anywhere. */
+  companyId: number | null;
+  website: CompanyWebsite | null;
 }
 
 /**
@@ -36,6 +40,7 @@ export async function getCompanyResearchContext(db: Db, input: { jobId: number; 
   const providers = ai ? companyResearchProviders(ai) : [];
   const availability: CompanyResearchAvailability = !research || !ai ? "config_error" : !research.enabled ? "disabled" : !ready ? "not_ready" : providers.length === 0 ? "no_web_provider" : "enabled";
   if (availability === "disabled" && latest === null) return null;
+  const website = job && research ? (availability === "enabled" && job.websiteDomain === null ? await inferCompanyDomain(db, job.companyId, research) : shownWebsite(job, research)) : null;
   return {
     availability,
     providers,
@@ -46,5 +51,7 @@ export async function getCompanyResearchContext(db: Db, input: { jobId: number; 
     usedToday: availability === "enabled" ? await countCompanyResearchRequests(db, now) : 0,
     maxPerDay: research?.company.max_per_day ?? 0,
     ttlDays: research?.company.ttl_days ?? 0,
+    companyId: job?.companyId ?? null,
+    website,
   };
 }

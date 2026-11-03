@@ -34,6 +34,24 @@ describe("the code-side check of a company background", () => {
     expect(result).toEqual({ fields: { summary: { text: "Builds warehouse robots.", sourceUrl: SOURCE } }, dropped: 0 });
   });
 
+  it.each([
+    ["See [their site](https://evil.example.com/x) for more.", "See their site for more."],
+    ["Founded in Berlin, https://evil.example.com/page more text.", "Founded in Berlin, more text."],
+    ["Read www.evil-site.com today.", "Read today."],
+    ["Logo ![mark](https://evil.example.com/p.png) here.", "Logo mark here."],
+  ])("keeps no link inside the text: %j", (text, stored) => {
+    expect(verify({ summary: { text, source_url: SOURCE } })).toEqual({ fields: { summary: { text: stored, sourceUrl: SOURCE } }, dropped: 0 });
+  });
+
+  it("does not store a field that was nothing but a link", () => {
+    expect(verify({ summary: { text: "https://evil.example.com/page", source_url: SOURCE } })).toEqual({ fields: {}, dropped: 0 });
+  });
+
+  it("takes links out of each line of a list field", () => {
+    const result = verify({ recentNews: { text: "Opened [an office](https://a.example.com/x)\nhttps://b.example.com/y\nRaised money", source_url: SOURCE, date: "2026-10-01" } });
+    expect(result.fields.recentNews?.text).toBe("Opened an office\nRaised money");
+  });
+
   it("does not count a field the model left empty", () => {
     expect(verify({ summary: null, industry: { text: "  ", source_url: SOURCE } })).toEqual({ fields: {}, dropped: 0 });
   });

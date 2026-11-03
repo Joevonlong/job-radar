@@ -50,12 +50,21 @@ function hasInstruction(text: string, traps: TrapsConfig): boolean {
 
 const clip = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
+/**
+ * A field holds prose; its one link is the checked source. A link written into the text would be an address the check never
+ * read: a Markdown link keeps its label, a bare address goes.
+ */
+const withoutLinks = (text: string): string =>
+  text
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\b(?:https?:\/\/|www\.)[^\s<>()]+/gi, " ");
+
 /** The stored text: plain, on one line, except that the items of a list field stay on lines of their own. */
 function cleanText(text: string, field: CompanyResearchField): string {
-  if (field !== "recentNews") return singleLine(text);
+  if (field !== "recentNews") return singleLine(withoutLinks(text));
   return text
     .split(/\r?\n/)
-    .map(singleLine)
+    .map((line) => singleLine(withoutLinks(line)))
     .filter((line) => line !== "")
     .join("\n");
 }

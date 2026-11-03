@@ -25,6 +25,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
   would leave it without the shipped models. Run `pnpm models:export --full` before downgrading: it writes the complete
   catalog to your file (the old one is backed up in `data/config/.backup/editor/`). The `models_sync` enum value stays in the
   database; older code ignores it. See [Before downgrading](docs/ai-providers.md#before-downgrading).
+- **Research bar and automatic research.** Migration `research_auto_runs` adds a table and runs on its own. `research.yaml` gets an
+  `auto` block: the shipped file starts research when you star a job, but a `research.yaml` you already have stays manual until you
+  add the block, and research stays off unless you turned it on. **Rollback:** older code refuses the new `auto` block and the
+  `origin` marker on queued requests: set `enabled: false`, let the queue drain, and remove the block before you switch. See
+  [Before rolling back](docs/research.md#before-rolling-back).
 - **Company background.** A new database table, three new columns on `companies` and a new `research.yaml`, off by default;
   no action is needed. **Rollback:** the migration is additive and older code ignores it and the new file. Older code refuses
   `ai.yaml` if a form save wrote `tasks.company_research` (or `reasoning_effort_by_task.company_research`) into it: delete those
@@ -295,6 +300,11 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   [--update-prices] [--dry-run]`; `pnpm models:export --full` writes the complete catalog (for a downgrade). See
   [AI providers](docs/ai-providers.md#checklist-for-a-new-model-release). The refresh has limits in `ai.yaml` `model_list`
   (`timeout_seconds`, `max_response_bytes`, `max_name_chars`; defaults added when missing, `config_version` unchanged).
+- **Research bar on the job page, and research that starts by itself.** With research on, a line under the job's title shows where
+  its company lookup, JD breakdown and salary lookup stand, with a button each; `/companies` shows a stored company background and
+  lets you confirm the website. Starring a job can start them by itself, in the batch
+  lane and under its own daily limit, and can be set to include status changes or high-score new jobs; this sends the title, city,
+  country and seniority for the salary lookup, and the timing shows what you save. See [Automatic research](docs/research.md#automatic-research).
 - **Company background on the job page.** Off by default (`research.yaml`, Settings → Research). One click asks an AI provider with
   web search what the company does, its size, funding, reviews and recent news; each field shows its source and is marked as
   unverified. Only the company name, and a website domain you confirmed, are sent. Each field is checked in code before it is

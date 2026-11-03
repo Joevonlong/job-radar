@@ -35,6 +35,10 @@ describe("the protected key list", () => {
     for (const key of ["provider", "endpoint", "api_base_url"]) expect(isProtectedPath("channels", `linkedin.monid.${key}`)).toBe(true);
     expect(isProtectedPath("channels", "linkedin.monid.input_template")).toBe(false);
     expect(isProtectedPath("channels", "jobspy.proxies")).toBe(true);
+    expect(isProtectedPath("salary", "lookup.allowed_fetch_domains")).toBe(true);
+    expect(isProtectedPath("research", "company.allowed_domains")).toBe(true);
+    expect(isProtectedPath("research", "company.non_company_hosts")).toBe(true);
+    expect(isProtectedPath("research", "company.max_per_day")).toBe(false);
     for (const key of ["resume_kit_path", "master_resume_path", "pdf_dir", "jd_export_dir", "jd_export_host_dir"]) expect(isProtectedPath("resume", key), key).toBe(true);
   });
 

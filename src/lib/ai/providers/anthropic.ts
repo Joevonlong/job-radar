@@ -140,7 +140,7 @@ async function callWithWebSearch(client: Anthropic, request: AiTransportRequest,
   const searches = Math.max(0, Math.min(request.web?.maxSearches ?? 0, budget?.remaining ?? 0));
   const domains = safeDomains(request.web?.allowedDomains ?? []);
   // without a domain list the search would be unrestricted: refuse instead (the next provider of the plan may still run)
-  if (domains.length === 0) throw new AiProviderError("anthropic", "not_configured", "web search needs at least one allowed domain (salary.yaml: lookup.allowed_fetch_domains)");
+  if (domains.length === 0) throw new AiProviderError("anthropic", "not_configured", "web search needs at least one allowed domain (lookup.allowed_fetch_domains in salary.yaml, company.allowed_domains in research.yaml)");
   const toolsFor = (maxUses: number): ToolUnion[] =>
     maxUses > 0 ? [respondTool(request), { type: "web_search_20250305", name: "web_search", max_uses: maxUses, allowed_domains: domains }] : [respondTool(request)];
   const messages: MessageParam[] = [{ role: "user", content: request.user }];

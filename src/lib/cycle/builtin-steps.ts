@@ -6,6 +6,7 @@ import { registerPipelineSteps } from "@/lib/pipeline";
 import { registerScoringSubtask } from "@/lib/scoring";
 import { registerSignalsAiSubtask, registerSignalsSteps } from "@/lib/signals";
 import { registerBreakdownSubtask } from "@/lib/breakdown/subtask";
+import { registerResearchSubtask } from "@/lib/research/subtask";
 import { registerTrapsAiSubtask } from "@/lib/traps/ai-check";
 import { registerTranslationSubtask } from "@/lib/translation/subtask";
 
@@ -47,4 +48,5 @@ export function registerBuiltinAiSubtasks(): void {
   registerTranslationSubtask();
   // After the translation; does nothing unless breakdown.yaml is enabled with mode: auto
   registerBreakdownSubtask();
+  registerResearchSubtask();
 }

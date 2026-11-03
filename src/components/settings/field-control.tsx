@@ -223,7 +223,7 @@ export function FieldControl({ def, id, value, error, onChange, t, draft, catalo
             {unsupported ? <option value={asText}>{t("controls.effortUnsupported", { effort: asText })}</option> : null}
             {offered.map((option) => (
               <option key={option} value={option} {...(def.localeOptions && isLocale(option) ? { lang: intlTag(option) } : {})}>
-                {def.localeOptions && isLocale(option) ? LOCALE_META[option].name : def.optionGroup === "remoteScope" ? t(`options.remoteScope.${option as "none" | "home_country" | "worldwide"}`) : def.optionGroup === "breakdownMode" ? t(`options.breakdownMode.${option as "manual" | "auto"}`) : def.optionGroup === "aiUsageRange" ? t(`options.aiUsageRange.${option as "today" | "7d" | "30d" | "month"}`) : notes[option] ? `${option} (${notes[option]})` : option}
+                {def.localeOptions && isLocale(option) ? LOCALE_META[option].name : def.optionGroup === "remoteScope" ? t(`options.remoteScope.${option as "none" | "home_country" | "worldwide"}`) : def.optionGroup === "breakdownMode" ? t(`options.breakdownMode.${option as "manual" | "auto"}`) : def.optionGroup === "aiUsageRange" ? t(`options.aiUsageRange.${option as "today" | "7d" | "30d" | "month"}`) : def.optionGroup === "researchTrigger" ? t(`options.researchTrigger.${option as "manual" | "favorite" | "favorite_or_applying"}`) : notes[option] ? `${option} (${notes[option]})` : option}
               </option>
             ))}
           </Select>
@@ -272,6 +272,7 @@ export function FieldControl({ def, id, value, error, onChange, t, draft, catalo
             values={asList.filter((v): v is string => typeof v === "string")}
             options={def.options ?? []}
             {...(def.aiProviders ? { labels: nodeLabels(t, def.options ?? []) } : {})}
+            {...(def.optionGroup === "researchItem" ? { labels: Object.fromEntries((def.options ?? []).map((option) => [option, t(`options.researchItem.${option as "company" | "breakdown" | "salary"}`)])) } : {})}
             notes={def.aiProviders ? providerNotes(t, providerStates, def.options ?? []) : {}}
             details={def.aiProviders && catalog ? orderDetails(t, draft, def.options ?? []) : {}}
             invalid={invalid}

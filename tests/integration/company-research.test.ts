@@ -12,8 +12,10 @@ import { closeDb, getDb, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { getOrCreateCompany, mergeCompanyInto } from "@/lib/db/repos/companies";
 import { controlLaneOf, getControlRequest } from "@/lib/db/repos/control-requests";
-import { countCompanyResearchRequests, findLatestCompanyResearch, getCompanyResearchForJob, insertCompanyResearchOfJob, reserveCompanyResearchRequest } from "@/lib/db/repos/company-research";
+import { confirmInferredCompanyDomain, countCompanyResearchRequests, findLatestCompanyResearch, getCompanyResearchForJob, insertCompanyResearchOfJob, reserveCompanyResearchRequest, saveUserCompanyDomain } from "@/lib/db/repos/company-research";
 import { insertJob } from "@/lib/db/repos/jobs";
+import { reserveSalaryLookupRequest } from "@/lib/db/repos/salary-lookups";
+import { getCompanyResearchOverview } from "@/lib/research/company-overview";
 import { getCompanyResearchContext } from "@/lib/research/view";
 
 import { pinnedAi, scriptedProvider } from "../ai/helpers";
@@ -283,6 +285,24 @@ describe("the request rules", () => {
     expect(await countCompanyResearchRequests(db(), NOW)).toBe(1);
   });
 
+  it("a manual press at the daily limit gets the limit and leaves a waiting automatic request where it is", async () => {
+    const { jobId, companyId } = await addJob("Acme");
+    const auto = await reserveCompanyResearchRequest(db(), { jobId, companyId, force: false, origin: "auto", maxPerDay: 1, now: NOW });
+    if (auto.state !== "queued") throw new Error("not queued");
+    const other = await addJob("Bolt");
+    await reserveCompanyResearchRequest(db(), { jobId: other.jobId, companyId: other.companyId, force: false, maxPerDay: 1, now: NOW });
+    expect(await reserveCompanyResearchRequest(db(), { jobId, companyId, force: false, maxPerDay: 1, now: NOW })).toEqual({ state: "quota", used: 1 });
+    const kept = await getControlRequest(db(), auto.requestId);
+    expect(controlLaneOf("company_research", kept?.payload)).toBe("batch");
+
+    const lookupKey = "acme|engineer";
+    const salaryAuto = await reserveSalaryLookupRequest(db(), { lookupKey, jobId, force: false, origin: "auto", maxPerDay: 1, now: NOW });
+    if (salaryAuto.state !== "queued") throw new Error("not queued");
+    await reserveSalaryLookupRequest(db(), { lookupKey: "bolt|engineer", jobId: other.jobId, force: false, maxPerDay: 1, now: NOW });
+    expect(await reserveSalaryLookupRequest(db(), { lookupKey, jobId, force: false, maxPerDay: 1, now: NOW })).toEqual({ state: "quota", used: 1 });
+    expect(controlLaneOf("salary_lookup", (await getControlRequest(db(), salaryAuto.requestId))?.payload)).toBe("batch");
+  });
+
   it("does not reveal another company's request by its id", async () => {
     const mine = await addJob("Acme");
     const other = await addJob("Bolt");
@@ -480,5 +500,92 @@ describe("merging companies", () => {
 
   it("takes the other's domain when the kept company has none", async () => {
     expect(await pair({}, { domain: "other-inferred.com", source: "inferred" })).toMatchObject({ websiteDomain: "other-inferred.com", websiteDomainSource: "inferred" });
+  });
+});
+
+describe("the website domain", () => {
+  async function addPosting(jobId: number, url: string, applyUrl: string | null = null): Promise<void> {
+    await db().insert(schema.channels).values({ id: "test-channel", family: "test", kind: "api" }).onConflictDoNothing();
+    const [raw] = await db().insert(schema.rawPostings).values({ channelId: "test-channel", externalId: `${jobId}-${url}`, payloadJson: {} }).returning({ id: schema.rawPostings.id });
+    await db().insert(schema.jobSources).values({ jobId, rawPostingId: raw?.id ?? 0, channelId: "test-channel", url, applyUrl });
+  }
+  const context = (jobId: number, settings: ResearchConfig = config()) => getCompanyResearchContext(db(), { jobId, research: settings, ai: router([]).ai, now: NOW });
+
+  it("is inferred from the company's postings, stored as inferred, and kept out of the prompt and the fetch list", async () => {
+    const { jobId, companyId } = await addJob("Acme Robotics");
+    await addPosting(jobId, "https://www.linkedin.com/jobs/1", "https://careers.acme-robotics.de/apply/1");
+    const seen = await context(jobId);
+    expect(seen?.website).toEqual({ domain: "acme-robotics.de", source: "inferred" });
+    const [row] = await db().select().from(schema.companies).where(eq(schema.companies.id, companyId));
+    expect(row?.websiteDomainSource).toBe("inferred");
+    expect(row?.websiteDomainConfirmedAt).toBeNull();
+
+    const r = router([answer()]);
+    registerControlHandler("company_research", handler(r));
+    await queue(jobId, r.ai);
+    await work();
+    const call = r.transport.calls[0];
+    expect(`${call?.system}\n${call?.user}`).not.toContain("acme-robotics.de");
+    expect(call?.web?.allowedDomains).toEqual(["linkedin.com"]);
+    const stored = await findLatestCompanyResearch(db(), { companyId, promptVersion: COMPANY_RESEARCH_PROMPT_VERSION, now: NOW });
+    expect(stored?.domainUsed).toBeNull();
+  });
+
+  it("goes out only once confirmed; the cached result then no longer counts", async () => {
+    const { jobId, companyId } = await addJob("Acme Robotics", { domain: "acme-robotics.de", source: "inferred" });
+    const r = router([answer(), answer()]);
+    registerControlHandler("company_research", handler(r));
+    await queue(jobId, r.ai);
+    await work();
+    expect(await confirmInferredCompanyDomain(db(), { companyId, domain: "other.de", now: NOW })).toBe(false);
+    expect(await confirmInferredCompanyDomain(db(), { companyId, domain: "acme-robotics.de", now: NOW })).toBe(true);
+    expect((await context(jobId))?.domainChanged).toBe(true);
+    await queue(jobId, r.ai);
+    await work();
+    expect(r.transport.calls[1]?.user).toContain("<website>acme-robotics.de</website>");
+    expect(r.transport.calls[1]?.web?.allowedDomains).toContain("acme-robotics.de");
+  });
+
+  it("does not replace a domain the user gave, and does not suggest a job board", async () => {
+    const { jobId, companyId } = await addJob("Acme Robotics");
+    await addPosting(jobId, "https://www.linkedin.com/jobs/1");
+    expect((await context(jobId))?.website).toBeNull();
+    await saveUserCompanyDomain(db(), { companyId, domain: "acme-robotics.com", now: NOW });
+    await addPosting(jobId, "https://careers.other-name.de/2");
+    expect((await context(jobId))?.website).toEqual({ domain: "acme-robotics.com", source: "user" });
+  });
+});
+
+describe("the company list", () => {
+  it("reads each company's newest result, website and newest job, and asks for nothing", async () => {
+    const researched = await addJob("Acme Robotics", { domain: "acme-robotics.com", source: "inferred" });
+    const bare = await addJob("Bare Company");
+    const r = router([answer()]);
+    registerControlHandler("company_research", handler(r));
+    await queue(researched.jobId, r.ai);
+    await work();
+    const before = (await db().select().from(schema.controlRequests)).length;
+
+    const overview = await getCompanyResearchOverview(db(), { companyIds: [researched.companyId, bare.companyId], research: config(), ai: r.ai, now: NOW });
+    expect(overview?.canRefresh).toBe(true);
+    const item = overview?.items[researched.companyId];
+    expect(item).toMatchObject({ jobId: researched.jobId, website: { domain: "acme-robotics.com", source: "inferred" } });
+    expect(item?.latest?.fields.summary?.text).toBe("Builds warehouse robots.");
+    expect(overview?.items[bare.companyId]).toMatchObject({ latest: null, jobId: bare.jobId });
+    expect((await db().select().from(schema.controlRequests)).length).toBe(before);
+  });
+
+  it("with research off shows stored results only, read only, and nothing when none is stored", async () => {
+    const researched = await addJob("Acme Robotics");
+    const bare = await addJob("Bare Company");
+    const r = router([answer()]);
+    registerControlHandler("company_research", handler(r));
+    await queue(researched.jobId, r.ai);
+    await work();
+    const off = config((raw) => { raw.enabled = false; });
+    const overview = await getCompanyResearchOverview(db(), { companyIds: [researched.companyId, bare.companyId], research: off, ai: r.ai, now: NOW });
+    expect(overview).toMatchObject({ canRefresh: false, canEditDomain: false });
+    expect(Object.keys(overview?.items ?? {})).toEqual([String(researched.companyId)]);
+    expect(await getCompanyResearchOverview(db(), { companyIds: [bare.companyId], research: off, ai: r.ai, now: NOW })).toBeNull();
   });
 });

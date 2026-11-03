@@ -1979,7 +1979,7 @@
       "resume": "详情页“定制简历”用到的路径和命令（resume-kit 联动）。路径指向你自己的文件，主简历不会被读取。",
       "language": "新浏览器默认的界面语言、AI 写作用的语言、JD 翻译成什么语言，以及 Telegram 和命令行的语言。",
       "salary": "岗位页的“薪资”面板把岗位写明的薪资和库里同类岗位、这家公司的其他岗位放在一把尺子上比较，查过的话再加上 AI 的估计。可选的“查薪资”让 AI provider 去薪资网站搜这家公司和这个岗位。岗位族和外部搜索链接在 salary.yaml 里改。",
-      "research": "岗位详情页的公司背景面板：这家公司做什么、规模、融资、评价和近期动态，由能上网的 AI provider 搜索得到，每个字段带来源，并标为未核对。默认关闭。打开后，公司名（以及你确认过的官网域名）会发给“AI”页任务“公司背景”的 provider。Claude CLI 的搜索不受 research.yaml 里的站点限制，受限的只是它打开的网页。可以打开哪些站点、哪些主机绝不当作公司官网，在 research.yaml 里改。",
+      "research": "岗位详情页的调研条和公司背景面板：这家公司做什么、规模、融资、评价和近期动态，由能上网的 AI provider 搜索得到，每个字段带来源，并标为未核对。默认关闭。打开后，公司名（以及你确认过的官网域名）会发给“AI”页任务“公司背景”的 provider；收藏或投递岗位时，调研可以自动开始（见下面），查薪资还会发送标题、城市、国家和资历，请求的时间也反映出你收藏和投递了什么。Claude CLI 的搜索不受 research.yaml 里的站点限制，受限的只是它打开的网页。可以打开哪些站点、哪些主机绝不当作公司官网，在 research.yaml 里改。",
       "writer": "详情页“写申请回答”背后的工作台：用你选的素材让 AI 起草申请问题的回答和动机信，每句话都对照素材核对。默认关闭。用哪个 AI 在“AI”标签页的任务覆盖里设置（任务“申请写作”）。素材库和问题的上限、版本风格、语气和依据核对在 writer.yaml 里改。"
     },
     "actions": {
@@ -2104,6 +2104,8 @@
       "salary_lookup": "查薪资（AI 网页搜索）",
       "research_general": "开关",
       "research_company": "公司背景（AI 网页搜索）",
+      "research_auto": "自动调研",
+      "research_auto_high_score": "自动调研：高分新岗位",
       "salary_benchmark": "薪资基准",
       "ai_limits_quota": "用量上限（订阅 CLI）",
       "ai_scoring_evidence": "理由来源",
@@ -2141,6 +2143,16 @@
         "worldwide": "全球",
         "home_country": "能从市场所在国家远程（含所在区域或全球的远程岗）",
         "region": "指定区域内"
+      },
+      "researchTrigger": {
+        "manual": "只手动（不会自己开始）",
+        "favorite": "收藏岗位时",
+        "favorite_or_applying": "收藏岗位时，或状态变成感兴趣、准备中、已投递时"
+      },
+      "researchItem": {
+        "company": "公司背景",
+        "breakdown": "JD 拆解",
+        "salary": "查薪资"
       },
       "breakdownMode": {
         "manual": "手动（只在详情页点按钮时拆解）",
@@ -3208,17 +3220,49 @@
         "label": "开启查薪资",
         "hint": "岗位页显示“查薪资”按钮。不点就不会查。"
       },
+      "research_auto_trigger": {
+        "label": "什么时候自动开始",
+        "hint": "只影响之后的操作。之后取消收藏不会撤回已排队的请求。"
+      },
+      "research_auto_items": {
+        "label": "自动运行哪些",
+        "hint": "查薪资还要开启“开启查薪资”，JD 拆解还要开启岗位拆解。"
+      },
+      "research_auto_max_per_day": {
+        "label": "每 24 小时自动运行次数",
+        "hint": "针对收藏和投递的岗位，按岗位计数，和手动上限分开。全部命中缓存的不算。"
+      },
+      "research_auto_high_enabled": {
+        "label": "同时调研高分新岗位",
+        "hint": "默认关闭。每轮之后，达到下面分数的新岗位会在你看之前先调研，发给 AI provider 的内容也更多。"
+      },
+      "research_auto_min_rank": {
+        "label": "最低分数",
+        "hint": "0 到 100。"
+      },
+      "research_auto_per_cycle": {
+        "label": "每轮岗位数",
+        "hint": "一轮最多排队这么多。"
+      },
+      "research_auto_high_max_per_day": {
+        "label": "每 24 小时高分岗位运行次数",
+        "hint": "和收藏、投递的岗位分开计数。"
+      },
+      "research_auto_max_age": {
+        "label": "只看几天内首次出现的岗位",
+        "hint": "更早的岗位不动。"
+      },
       "research_enabled": {
-        "label": "启用公司背景",
-        "hint": "在岗位详情页显示“查公司背景”按钮。不按就不会查。查询时把公司名和你确认过的官网域名发给能上网的 AI provider；绝不发岗位标题、地点、JD 或你的画像。"
+        "label": "启用调研",
+        "hint": "在岗位详情页显示调研条和“查公司背景”按钮。查询时把公司名和你确认过的官网域名发给能上网的 AI provider；绝不发岗位标题、地点、JD 或你的画像。打开下面的自动调研后，收藏或投递时会不经询问自动开始：查薪资还会发送标题、城市、国家和资历，请求的时间也反映出你收藏和投递了什么。"
       },
       "research_ttl_days": {
         "label": "结果保留（天）",
         "hint": "在此期间，同一公司的所有岗位都显示已存结果，不重新搜索。"
       },
       "research_max_per_day": {
-        "label": "每 24 小时查询次数",
-        "hint": "每次请求都算，失败的也算；命中缓存的不算。"
+        "label": "每 24 小时手动查询次数",
+        "hint": "你发起的每次请求都算，失败的也算；命中缓存的不算，自动调研也不算（它有下面单独的上限）。"
       },
       "research_max_searches": {
         "label": "每次查询的网页搜索次数",
@@ -4827,6 +4871,7 @@
     "footnote": "AI 拆解，仅供参考。每一项都附 JD 原文，点“原文”核对；JD 没写的不会推测。",
     "error": {
       "invalid": "请求无效",
+      "research_disabled": "这个自动请求运行前调研被关闭了。",
       "disabled": "岗位拆解已关闭。",
       "config_error": "breakdown.yaml 无法读取。",
       "not_found": "找不到这个岗位",
@@ -6971,6 +7016,7 @@
       "disabled": "查薪资已关闭。",
       "config_error": "salary.yaml 或 ai.yaml 无法读取。",
       "not_found": "找不到这个岗位",
+      "research_disabled": "这个自动查询运行前调研被关闭了。",
       "no_web_provider": "这个查询设置的 AI provider 都不能搜索网页。",
       "quota": "今天的查薪资次数已用完。稍后再试，或在设置里调高上限。",
       "aborted": "查询时 AI worker 被停止了，请重试。",
@@ -6996,6 +7042,71 @@
     }
   },
   "research": {
+    "overview": {
+      "details": "详情",
+      "hide": "收起",
+      "website": "官网",
+      "websiteLabel": "{company} 的官网",
+      "toggleLabel": "{company} 的公司背景",
+      "unverified": "AI 网页搜索，未核对",
+      "refresh": "重新查询",
+      "queued": "正在查询，可能要几分钟",
+      "done": "公司背景已更新",
+      "expired": "这个结果已过期。"
+    },
+    "bar": {
+      "label": "调研",
+      "item": {
+        "company": "公司背景",
+        "breakdown": "JD 拆解",
+        "salary": "薪资"
+      },
+      "state": {
+        "done": "{n, plural, =0 {今天} other {# 天前}}",
+        "expired": "已过期",
+        "running": "进行中",
+        "queuedAuto": "已自动排队",
+        "deferred": "用量上限暂停，约 {time} 恢复",
+        "deferredUnknown": "用量上限暂停",
+        "off": "未开启",
+        "unavailable": "这个岗位不可用",
+        "missing": "还没查"
+      },
+      "settings": "去设置",
+      "runItem": "运行：{item}",
+      "refreshItem": "重新运行：{item}",
+      "runAll": "全部调研",
+      "error": {
+        "quota": "已到每日上限",
+        "disabled": "已关闭",
+        "no_web_provider": "没有能上网的 provider",
+        "not_found": "岗位不存在",
+        "no_description": "没有 JD 正文",
+        "config_error": "配置读不出来",
+        "not_ready": "数据库还没准备好",
+        "invalid": "请求无效",
+        "failed": "失败了，请重试"
+      }
+    },
+    "domain": {
+      "inferred": "确认官网域名可提高准确度：{domain}？",
+      "inferredHint": "从这家公司的岗位链接推断。确认之前不会发给 AI，也不会被打开。",
+      "confirmed": "你确认的官网：{domain}",
+      "none": "还不知道这家公司的官网。填写后可提高准确度。",
+      "confirm": "确认",
+      "change": "修改",
+      "add": "填写官网",
+      "label": "公司官网",
+      "placeholder": "example.com",
+      "save": "保存",
+      "cancel": "取消",
+      "saved": "官网已保存",
+      "invalid": "请求无效。",
+      "invalid_domain": "这不是公司的公开官网（招聘平台、IP 地址和内网名称都不接受）。",
+      "changed": "这个官网刚被改过，请刷新页面。",
+      "config_error": "无法读取 research.yaml。",
+      "failed": "官网保存失败。"
+    },
     "field": {
       "summary": "公司简介",
       "industry": "行业",
@@ -7338,6 +7449,7 @@
       "ai__traps": "陷阱检测",
       "ai__translate": "翻译",
       "ai__breakdown": "岗位拆解",
+      "ai__research": "调研高分岗位",
       "request__run_cycle": "执行采集轮次",
       "request__rescore_stale": "重新评估过期岗位",
       "request__run_suggest": "推荐关注方向",
@@ -7358,6 +7470,7 @@
       "system__reconcile": "核对操作日志",
       "system__telegram_callback": "Telegram 按钮操作",
       "system__reminder": "每日提醒",
+      "system__research_auto": "自动调研",
       "request__writer_job": "写申请回答",
       "request__models_sync": "刷新模型列表",
       "request__story_extract": "提取素材",
@@ -7377,7 +7490,8 @@
       "pruned": "已修剪操作记录",
       "backfill": "手动补抓",
       "reminder_counts": "提醒数量",
-      "current_scores_repaired": "已修复分数投影"
+      "current_scores_repaired": "已修复分数投影",
+      "research_auto": "自动调研"
     },
     "reason": {
       "not_recorded": "结果未记录",
@@ -7401,6 +7515,8 @@
       "quota_guard": "额度保护中",
       "no_provider_available": "没有可用的服务提供方",
       "no_request": "没有待处理的请求",
+      "research_cap_reached": "已到自动调研的每日上限",
+      "research_recent": "24 小时内已调研过",
       "other": "其他错误",
       "rate_limited": "请求频率受限",
       "blocked": "访问被阻止",
@@ -7411,6 +7527,7 @@
       "invalid_payload": "请求参数无效",
       "no_handler": "没有可用的处理程序",
       "handler_error": "请求处理失败",
+      "research_disabled": "调研已关闭",
       "cycle_failed": "采集轮次失败",
       "cycle_not_found": "采集轮次已不存在",
       "config_error": "配置错误",
@@ -7489,6 +7606,8 @@
       "quota_guard": "额度保护中",
       "no_provider_available": "没有可用的服务提供方",
       "no_request": "没有待处理的请求",
+      "research_cap_reached": "已到自动调研的每日上限",
+      "research_recent": "24 小时内已调研过",
       "other": "其他错误",
       "rate_limited": "请求频率受限",
       "blocked": "访问被阻止",
@@ -7499,6 +7618,7 @@
       "invalid_payload": "请求参数无效",
       "no_handler": "没有可用的处理程序",
       "handler_error": "请求处理失败",
+      "research_disabled": "调研已关闭",
       "cycle_failed": "采集轮次失败",
       "cycle_not_found": "采集轮次已不存在",
       "config_error": "配置错误",
