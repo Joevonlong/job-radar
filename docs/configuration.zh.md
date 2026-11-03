@@ -501,6 +501,10 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 
 回退到不认识 `partial_cycle_wait` 的版本之前，先删掉 `data/config/schedule.yaml` 里的这一段：旧版本拒绝未知的键。
 
+## Cron 时间与夏令时
+
+只有一个固定时间的 cron（如 `0 7 * * 1-5`）在换钟日每天只运行一次：春季跳过的时段里，它在跳过之后的第一个有效时间运行；秋季重复的那一小时里只运行一次。间隔型 cron（含多个小时、分钟或秒，如 `*/30 * * * *`）在秋季回拨的重复小时里可能多运行，在春季跳过的时段里则跳过那些时间。
+
 ## 日志级别（`schedule.yaml` 的 `logging.level`、`JOB_RADAR_LOG_LEVEL`）
 
 网页、runner、ai-worker 和 `pnpm cycle:run` 默认按 `info` 记日志。`debug` 会多记诊断记录：AI 提供方的检查、路由跳过的提供方、HTTP 重试、别的聊天发来的 Telegram 消息。

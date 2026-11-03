@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { Cron } from "croner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createLogger } from "@/lib/channels/logger";
@@ -143,16 +144,196 @@ describe("missedCycle: DST change days in Europe/Berlin", () => {
     expect(latestSlotAtOrBefore("0 7 * * 1-5", TZ, new Date("2026-03-30T05:30:00Z"))).toEqual(new Date("2026-03-30T05:00:00Z"));
   });
 
-  it("pins croner's behaviour for a time that does not exist (02:30 on 2026-03-29): it fires at 03:30 CEST", () => {
+  it("pins croner's behaviour for a time that does not exist (02:30 on 2026-03-29): it fires at 03:00 CEST, the first valid time after the gap", () => {
+    // croner 10 ran it as late as the gap is long (03:30); croner 11 follows Vixie cron
     const slot = latestSlotAtOrBefore("30 2 * * *", TZ, new Date("2026-03-29T03:00:00Z"));
-    expect(slot).toEqual(new Date("2026-03-29T01:30:00Z"));
-    expect(latestSlotAtOrBefore("30 2 * * *", TZ, new Date("2026-03-29T01:00:00Z"))).toEqual(new Date("2026-03-28T01:30:00Z"));
+    expect(slot).toEqual(new Date("2026-03-29T01:00:00Z"));
+    expect(latestSlotAtOrBefore("30 2 * * *", TZ, new Date("2026-03-29T00:59:59Z"))).toEqual(new Date("2026-03-28T01:30:00Z"));
   });
 
   it("pins croner's behaviour for a time that happens twice (02:30 on 2026-10-25): it fires once, at the first 02:30", () => {
     expect(latestSlotAtOrBefore("30 2 * * *", TZ, new Date("2026-10-25T05:00:00Z"))).toEqual(new Date("2026-10-25T00:30:00Z"));
     // between the two 02:30s nothing new is due
     expect(latestSlotAtOrBefore("30 2 * * *", TZ, new Date("2026-10-25T01:45:00Z"))).toEqual(new Date("2026-10-25T00:30:00Z"));
+  });
+});
+
+/**
+ * The production schedule (weekday 07:00 and 17:00, weekend 09:00, Europe/Berlin) across the 2027 clock changes:
+ * spring forward Sunday 2027-03-28 (02:00 CET -> 03:00 CEST, 01:00 UTC), fall back Sunday 2027-10-31
+ * (03:00 CEST -> 02:00 CET, 01:00 UTC). The crons are pinned here, not read from the shipped file.
+ */
+describe("production schedule across the 2027 Europe/Berlin clock changes", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const prod = withCycles({
+    weekday_morning: { cron: "0 7 * * 1-5", enabled: true },
+    weekday_evening: { cron: "0 17 * * 1-5", enabled: true },
+    weekend: { cron: "0 9 * * 0,6", enabled: true },
+  });
+  const berlinSchedule: ScheduleConfig = { ...prod, timezone: TZ };
+  const logger = createLogger({ sink: () => {} });
+
+  /** All slots of all three cycles in [from, to), as "kind@ISO", in time order. */
+  function slots(from: Date, to: Date): string[] {
+    const found: Array<{ at: number; label: string }> = [];
+    for (const kind of ["weekday_morning", "weekday_evening", "weekend"] as const) {
+      const job = new Cron(berlinSchedule.cycles[kind].cron, { timezone: TZ, paused: true });
+      for (let next = job.nextRun(from); next !== null && next < to; next = job.nextRun(next)) found.push({ at: next.getTime(), label: `${kind}@${next.toISOString()}` });
+      job.stop();
+    }
+    return found.sort((a, b) => a.at - b.at).map((s) => s.label);
+  }
+
+  it("spring forward: every slot of the week exists exactly once, at its local wall-clock time", () => {
+    // Thursday 2027-03-25 00:00 CET to Wednesday 2027-03-31 00:00 CEST
+    expect(slots(new Date("2027-03-24T23:00:00Z"), new Date("2027-03-30T22:00:00Z"))).toEqual([
+      "weekday_morning@2027-03-25T06:00:00.000Z",
+      "weekday_evening@2027-03-25T16:00:00.000Z",
+      "weekday_morning@2027-03-26T06:00:00.000Z",
+      "weekday_evening@2027-03-26T16:00:00.000Z",
+      "weekend@2027-03-27T08:00:00.000Z", // Saturday 09:00 CET
+      "weekend@2027-03-28T07:00:00.000Z", // Sunday 09:00 CEST, the day of the change
+      "weekday_morning@2027-03-29T05:00:00.000Z", // Monday 07:00 CEST
+      "weekday_evening@2027-03-29T15:00:00.000Z",
+      "weekday_morning@2027-03-30T05:00:00.000Z",
+      "weekday_evening@2027-03-30T15:00:00.000Z",
+    ]);
+  });
+
+  it("fall back: every slot of the week exists exactly once, at its local wall-clock time", () => {
+    // Thursday 2027-10-28 00:00 CEST to Wednesday 2027-11-03 00:00 CET
+    expect(slots(new Date("2027-10-27T22:00:00Z"), new Date("2027-11-02T23:00:00Z"))).toEqual([
+      "weekday_morning@2027-10-28T05:00:00.000Z",
+      "weekday_evening@2027-10-28T15:00:00.000Z",
+      "weekday_morning@2027-10-29T05:00:00.000Z",
+      "weekday_evening@2027-10-29T15:00:00.000Z",
+      "weekend@2027-10-30T07:00:00.000Z", // Saturday 09:00 CEST
+      "weekend@2027-10-31T08:00:00.000Z", // Sunday 09:00 CET, the day of the change
+      "weekday_morning@2027-11-01T06:00:00.000Z", // Monday 07:00 CET
+      "weekday_evening@2027-11-01T16:00:00.000Z",
+      "weekday_morning@2027-11-02T06:00:00.000Z",
+      "weekday_evening@2027-11-02T16:00:00.000Z",
+    ]);
+  });
+
+  it("the daily backup at 03:30 runs once on both change days", () => {
+    const backup = new Cron("30 3 * * *", { timezone: TZ, paused: true });
+    // spring: 03:30 CEST exists (the gap is 02:00-03:00)
+    expect(backup.nextRun(new Date("2027-03-28T00:00:00Z"))).toEqual(new Date("2027-03-28T01:30:00Z"));
+    // fall: 03:30 exists once (CET); the repeated hour is 02:00-03:00
+    expect(backup.nextRun(new Date("2027-10-31T00:00:00Z"))).toEqual(new Date("2027-10-31T02:30:00Z"));
+    expect(backup.nextRun(new Date("2027-10-31T02:30:00Z"))).toEqual(new Date("2027-11-01T02:30:00Z"));
+    backup.stop();
+  });
+
+  it("the scheduler fires the weekend cycle once on the spring-forward Sunday, at 09:00 CEST", async () => {
+    vi.useFakeTimers({ now: new Date("2027-03-28T06:59:00Z") });
+    const fired: string[] = [];
+    const only = withCycles({ weekday_morning: { enabled: false }, weekday_evening: { enabled: false }, weekend: { cron: "0 9 * * 0,6", enabled: true } });
+    const scheduler = createScheduler({ schedule: { ...only, timezone: TZ }, onTrigger: (kind) => void fired.push(`${kind}@${new Date().toISOString()}`), logger });
+    expect(scheduler.describe()[0]?.nextRun).toEqual(new Date("2027-03-28T07:00:00Z"));
+    await vi.advanceTimersByTimeAsync(30 * 1000);
+    expect(fired).toEqual([]);
+    await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+    expect(fired).toHaveLength(1);
+    expect(fired[0]).toMatch(/^weekend@2027-03-28T07:00:/);
+    // the next slot is Saturday of the following week, not a repeat
+    expect(scheduler.describe()[0]?.nextRun).toEqual(new Date("2027-04-03T07:00:00Z"));
+    scheduler.stop();
+  });
+
+  it("the scheduler fires the weekend cycle once on the fall-back Sunday, at 09:00 CET", async () => {
+    vi.useFakeTimers({ now: new Date("2027-10-31T07:59:00Z") });
+    const fired: string[] = [];
+    const only = withCycles({ weekday_morning: { enabled: false }, weekday_evening: { enabled: false }, weekend: { cron: "0 9 * * 0,6", enabled: true } });
+    const scheduler = createScheduler({ schedule: { ...only, timezone: TZ }, onTrigger: (kind) => void fired.push(`${kind}@${new Date().toISOString()}`), logger });
+    expect(scheduler.describe()[0]?.nextRun).toEqual(new Date("2027-10-31T08:00:00Z"));
+    await vi.advanceTimersByTimeAsync(30 * 1000);
+    expect(fired).toEqual([]);
+    await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+    expect(fired).toHaveLength(1);
+    expect(fired[0]).toMatch(/^weekend@2027-10-31T08:00:/);
+    expect(scheduler.describe()[0]?.nextRun).toEqual(new Date("2027-11-06T08:00:00Z"));
+    scheduler.stop();
+  });
+
+  it("the scheduler does not skip or repeat a slot when the clock changes while it is armed (spring)", async () => {
+    // armed on Saturday evening, runs through the night of the change, then the Sunday slot fires
+    vi.useFakeTimers({ now: new Date("2027-03-27T20:00:00Z") });
+    const fired: string[] = [];
+    const only = withCycles({ weekday_morning: { enabled: false }, weekday_evening: { enabled: false }, weekend: { cron: "0 9 * * 0,6", enabled: true } });
+    const scheduler = createScheduler({ schedule: { ...only, timezone: TZ }, onTrigger: (kind) => void fired.push(`${kind}@${new Date().toISOString().slice(0, 16)}`), logger });
+    expect(scheduler.describe()[0]?.nextRun).toEqual(new Date("2027-03-28T07:00:00Z"));
+    await vi.advanceTimersByTimeAsync(11 * 3600 * 1000 + 5 * 60 * 1000); // to 07:05 UTC = 09:05 CEST
+    expect(fired).toEqual(["weekend@2027-03-28T07:00"]);
+    scheduler.stop();
+  });
+
+  it("fall back: armed on Saturday evening, the weekend cycle and the 03:30 backup each fire once", async () => {
+    vi.useFakeTimers({ now: new Date("2027-10-30T20:00:00Z") });
+    const fired: string[] = [];
+    const only = withCycles({ weekday_morning: { enabled: false }, weekday_evening: { enabled: false }, weekend: { cron: "0 9 * * 0,6", enabled: true } });
+    const scheduler = createScheduler({ schedule: { ...only, timezone: TZ }, onTrigger: (kind) => void fired.push(`${kind}@${new Date().toISOString().slice(0, 16)}`), logger });
+    const backup = new Cron("30 3 * * *", { timezone: TZ }, () => void fired.push(`backup@${new Date().toISOString().slice(0, 16)}`));
+    await vi.advanceTimersByTimeAsync(12 * 3600 * 1000 + 5 * 60 * 1000); // to 08:05 UTC = 09:05 CET
+    expect(fired).toEqual(["backup@2027-10-31T02:30", "weekend@2027-10-31T08:00"]);
+    backup.stop();
+    scheduler.stop();
+  });
+
+  it("croner 11 interval crons run again in the repeated fall-back hour (*/30 sees 02:00-02:59 twice)", () => {
+    const job = new Cron("*/30 * * * *", { timezone: TZ, paused: true });
+    const runs: string[] = [];
+    for (let next = job.nextRun(new Date("2027-10-30T23:45:00Z")); next !== null && next < new Date("2027-10-31T02:15:00Z"); next = job.nextRun(next)) runs.push(next.toISOString().slice(11, 16));
+    job.stop();
+    // 02:00 and 02:30 CEST (00:00, 00:30 UTC) and again 02:00, 02:30 CET (01:00, 01:30 UTC)
+    expect(runs).toEqual(["00:00", "00:30", "01:00", "01:30", "02:00"]);
+  });
+
+  describe("catch-up after a missed run", () => {
+    const at = (iso: string): Date => new Date(iso);
+
+    it("spring forward: a runner down since Saturday's cycle owes exactly the Sunday cycle", () => {
+      const lastRun = at("2027-03-27T08:05:00Z"); // Saturday 09:05 CET
+      expect(findMissedCycle(at("2027-03-28T06:59:59Z"), berlinSchedule, lastRun)).toBeNull(); // 08:59:59 CEST
+      expect(findMissedCycle(at("2027-03-28T07:00:00Z"), berlinSchedule, lastRun)).toEqual({ kind: "weekend", slot: at("2027-03-28T07:00:00Z") });
+      expect(findMissedCycle(at("2027-03-28T20:00:00Z"), berlinSchedule, lastRun)).toEqual({ kind: "weekend", slot: at("2027-03-28T07:00:00Z") });
+      // once it ran (even late) the Sunday slot is satisfied and Monday is not due before 07:00 CEST
+      expect(findMissedCycle(at("2027-03-29T04:59:59Z"), berlinSchedule, at("2027-03-28T10:00:00Z"))).toBeNull();
+      expect(findMissedCycle(at("2027-03-29T05:00:00Z"), berlinSchedule, at("2027-03-28T10:00:00Z"))?.kind).toBe("weekday_morning");
+    });
+
+    it("spring forward: a Friday-evening-only runner restarted around the gap hour is still owed the Saturday weekend run", () => {
+      const lastRun = at("2027-03-26T16:05:00Z"); // Friday 17:05 CET
+      // Saturday 09:00 CET is the latest slot and was missed
+      expect(missedCycle(at("2027-03-28T00:30:00Z"), berlinSchedule, lastRun)).toBe("weekend"); // Sunday 01:30 CET
+      // 03:30 CEST, right after the gap: still the Saturday slot, no phantom early Sunday slot
+      expect(findMissedCycle(at("2027-03-28T01:30:00Z"), berlinSchedule, lastRun)?.slot).toEqual(at("2027-03-27T08:00:00Z"));
+    });
+
+    it("fall back: a runner down since Saturday's cycle owes exactly the Sunday cycle at 09:00 CET", () => {
+      const lastRun = at("2027-10-30T07:05:00Z"); // Saturday 09:05 CEST
+      expect(findMissedCycle(at("2027-10-31T07:59:59Z"), berlinSchedule, lastRun)).toBeNull(); // 08:59:59 CET would be 07:59:59 UTC
+      expect(findMissedCycle(at("2027-10-31T08:00:00Z"), berlinSchedule, lastRun)).toEqual({ kind: "weekend", slot: at("2027-10-31T08:00:00Z") });
+      expect(findMissedCycle(at("2027-10-31T08:00:00Z"), berlinSchedule, at("2027-10-31T08:00:01Z"))).toBeNull();
+      // Monday 07:00 CET = 06:00 UTC
+      expect(findMissedCycle(at("2027-11-01T05:59:59Z"), berlinSchedule, at("2027-10-31T08:10:00Z"))).toBeNull();
+      expect(findMissedCycle(at("2027-11-01T06:00:00Z"), berlinSchedule, at("2027-10-31T08:10:00Z"))?.kind).toBe("weekday_morning");
+    });
+
+    it("fall back: in the repeated hour (02:30 twice) no extra cycle is owed", () => {
+      const lastRun = at("2027-10-30T07:05:00Z");
+      expect(missedCycle(at("2027-10-31T00:30:00Z"), berlinSchedule, lastRun)).toBeNull(); // first 02:30 (CEST)
+      expect(missedCycle(at("2027-10-31T01:30:00Z"), berlinSchedule, lastRun)).toBeNull(); // second 02:30 (CET)
+    });
+
+    it("Monday after a long outage over the change reports only the most recent slot", () => {
+      expect(findMissedCycle(at("2027-03-29T10:00:00Z"), berlinSchedule, at("2027-03-26T16:05:00Z"))).toEqual({ kind: "weekday_morning", slot: at("2027-03-29T05:00:00Z") });
+      expect(findMissedCycle(at("2027-11-01T17:00:00Z"), berlinSchedule, at("2027-10-29T15:05:00Z"))).toEqual({ kind: "weekday_evening", slot: at("2027-11-01T16:00:00Z") });
+    });
   });
 });
 
