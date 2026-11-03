@@ -22,6 +22,7 @@ const EXPECTED_TABLES = [
   "ai_usage",
   "application_answer_versions",
   "application_events",
+  "application_fit_notes",
   "application_questions",
   "applications",
   "ats_board_candidates",
