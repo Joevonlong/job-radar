@@ -9,8 +9,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 - **Gmail replies (optional, off by default).** Reads one Gmail label read-only with local rules and suggests status changes on `/pipeline`, each confirmed by you and undoable. No AI reads the mails and no mail content leaves the machine. See `docs/gmail-replies.md`. Adds the table `email_replies`.
 
+### Changed
+
+- **Apify LinkedIn searches now request the query's exact window** (`f_TPR=r<seconds>`, for example `r36000` for 10 hours) instead of the actor's 24-hour, week or month filter, so fewer billed records fall outside the window. Results are still not newest first, because the actor ignores `sortBy=DD`, so catch-up stays off for this channel.
+
 ### Upgrade notes
 
+- **`sources.yaml` moves to `config_version: 8`.** The migration rewrites `linkedin.apify.input_template` only when it is the old shipped template of the default actor; an edited template, one for another actor, or one next to an edited `date_posted` keeps working as before. In `remote_input`, a `{key, value}` list now merges by `key` with the template's list instead of replacing it. If your `sources.yaml` sets `linkedin.apify.date_posted` but no `input_template`, it now follows the new shipped template and your `date_posted` is no longer read; to keep it, copy the old template (with `datePosted: "{date_posted}"`) into your file. **Rollback:** an older version refuses a `config_version: 8` file, and any config write can produce one: `pnpm config:migrate --write`, but also saving settings. Check the version in `data/config/sources.yaml` before downgrading. If it is 8, restore a version 7 backup from `data/config/.backup/` if you have one (it loses later edits), or set the template back to `datePosted: "{date_posted}"` without `urlParam` and set `config_version: 7`.
 - **Cron times and daylight saving.** With the croner 11 update, interval crons (such as `*/30 * * * *`) may run extra in the repeated hour at fall back and skip the spring gap; fixed-time crons (07:00, 17:00, 09:00) still run once. A fixed time inside the spring gap now runs at the first valid time after it. See `docs/configuration.md`.
 - **Berlin Startup Jobs now starts by itself on existing German installs.** The new Berlin Startup Jobs channel is on by
   default for installs whose market is Germany, so the next cycle after upgrading starts reading it. To turn it off, set
