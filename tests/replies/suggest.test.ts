@@ -1,14 +1,10 @@
-import fs from "node:fs";
-import path from "node:path";
-
 import { describe, expect, it } from "vitest";
-import { parse } from "yaml";
 
-import { repliesSchema } from "@/lib/config/schemas/replies";
+import { loadConfig } from "@/lib/config";
 import { gmailFilterQuery } from "@/lib/replies/filter-query";
 import { needsDecision, suggestFor } from "@/lib/replies/suggest";
 
-const config = repliesSchema.parse(parse(fs.readFileSync(path.resolve(import.meta.dirname, "../fixtures/config/defaults/replies.yaml"), "utf8")));
+const config = loadConfig("replies");
 const AT = new Date("2026-10-01T12:00:00Z");
 
 describe("suggestFor", () => {

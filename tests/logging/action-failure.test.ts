@@ -74,11 +74,13 @@ describe("caught action failures are diagnosable without private details", () =>
     const loaded = loadAdvancedFile("notify");
     if (!loaded.ok) throw new Error("expected editable fixture");
     const draft = meConfigToDraft(reloadConfig("me"));
-    vi.spyOn(fs, "renameSync").mockImplementation(() => {
+    const failWrite = () => {
       const error = Object.assign(new Error("/private/config contains private form data postgres://private-user:private-password@private-host/private-db"), { code: "EACCES" });
       error.stack = "private stack with payload";
       throw error;
-    });
+    };
+    vi.spyOn(fs, "renameSync").mockImplementation(failWrite);
+    vi.spyOn(fs, "rmSync").mockImplementation(failWrite); // restoring the default removes the user file
     if (action === "saveAdvanced") {
       expect(await saveAdvanced({ file: "notify", text: `${loaded.data.text}\n# edit\n`, baseHash: loaded.data.hash, baseLayer: loaded.data.layer, confirmOverride: false })).toEqual({ status: "failed" });
     } else if (action === "resetAdvanced") {

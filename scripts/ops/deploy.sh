@@ -792,9 +792,11 @@ config_writes() {
   local plan_rc=0
   CONFIG_WRITE_DB_URL="$(ai_worker_db_url "$APP")"
   # A target from before the overlay format (a rollback by --ref) refuses the flag: this running script outlives the checkout.
-  local migrate=(pnpm config:migrate --write)
-  if git -C "$ROOT" show "$TARGET:scripts/ops/deploy.sh" 2>/dev/null | grep -x '# capability: config-overlay-convert' >/dev/null; then migrate+=(--convert-overlays); fi
-  config_write_run "${migrate[@]}" || { config_writes_pending "${migrate[*]} failed (see above)"; return 0; }
+  if git -C "$ROOT" show "$TARGET:scripts/ops/deploy.sh" 2>/dev/null | grep -x '# capability: config-overlay-convert' >/dev/null; then
+    config_write_run pnpm config:migrate --write --convert-overlays || { config_writes_pending "pnpm config:migrate --write --convert-overlays failed (see above)"; return 0; }
+  else
+    config_write_run pnpm config:migrate --write || { config_writes_pending "pnpm config:migrate --write failed (see above)"; return 0; }
+  fi
   config_write_run pnpm config:init || { config_writes_pending "pnpm config:init failed (see above)"; return 0; }
   config_write_run pnpm config:plan --deploy --check || plan_rc=$?
   case "$plan_rc" in

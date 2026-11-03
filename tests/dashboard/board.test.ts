@@ -1,7 +1,10 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { firstAppliedAt, showsAppliedDate, BOARD_COLUMNS, CLOCK_SCALE, clockBar, columnOfStatus, ENDED_STATUSES, freshClockOf, countInPipeline, isEndedStatus, isInPipeline, PIPELINE_STATUSES, nextActionDateToTimestamp, overdueOf, overdueThresholds, stageClockOf, timestampToNextActionDate } from "@/lib/dashboard/board";
-import { parseConfigText, readConfigText } from "@/lib/config";
+import { parseConfigText } from "@/lib/config";
 import { APPLICATION_STATUSES } from "@/lib/db/repos/applications";
 
 const DAY_MS = 86_400_000;
@@ -129,7 +132,7 @@ describe("next-step date", () => {
 
 describe("overdueThresholds", () => {
   it("reads the reminder days of notify.yaml, so editing the file changes what is overdue", () => {
-    const shipped = readConfigText("notify");
+    const shipped = fs.readFileSync(path.resolve(import.meta.dirname, "../fixtures/config/defaults/notify.yaml"), "utf8");
     const before = overdueThresholds(parseConfigText("notify", shipped));
     expect(before).toEqual({ interestedDays: 7, appliedDays: 14 });
     expect(overdueOf("interested", ago(9), now, before)).not.toBeNull();

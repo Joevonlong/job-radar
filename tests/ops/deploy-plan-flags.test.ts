@@ -18,8 +18,15 @@ import { runConfigScript } from "../config/run-script";
 const REPO = path.resolve(import.meta.dirname, "../..");
 const DEPLOY = fs.readFileSync(path.join(REPO, "scripts/ops/deploy.sh"), "utf8");
 
-/** The commands the write step runs (`config_write_run pnpm …`), in order, as argument lists after `pnpm`. */
-const writeStepCommands = (): string[][] => [...DEPLOY.matchAll(/^\s*config_write_run pnpm (config:[^|;&\n]*?)(?= \|\||;|$)/gm)].map((match) => (match[1] ?? "").trim().split(/\s+/));
+/**
+ * The commands the write step runs (`config_write_run pnpm …`), in order, as argument lists after `pnpm`. The plain
+ * `config:migrate --write` is only for a target from before the overlay format, which refuses the conversion flag
+ * (tests/ops/deploy-script.test.ts): not part of the plan for this version.
+ */
+const writeStepCommands = (): string[][] =>
+  [...DEPLOY.matchAll(/^\s*config_write_run pnpm (config:[^|;&\n]*?)(?= \|\||;|$)/gm)]
+    .map((match) => (match[1] ?? "").trim().split(/\s+/))
+    .filter((command) => command.join(" ") !== "config:migrate --write");
 /** Every `pnpm config:…` the script runs or prints, wherever it is. */
 const anyCommands = (script: string): string[][] => [...DEPLOY.matchAll(new RegExp(`pnpm (${script}[^|;&"\\n]*)`, "g"))].map((match) => (match[1] ?? "").trim().split(/\s+/));
 const flagsOf = (command: string[]) => command.slice(1).filter((word) => word.startsWith("--"));

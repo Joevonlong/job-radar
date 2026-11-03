@@ -63,12 +63,12 @@ function countFsCalls(fn: () => void): number {
   }
 }
 
-/** How many times schedule.yaml is read while `fn` runs. */
+/** How many times the user's schedule.yaml is read while `fn` runs (each load also reads the shipped file once). */
 function countScheduleReads(fn: () => void): number {
   const read = vi.spyOn(fs, "readFileSync");
   try {
     fn();
-    return read.mock.calls.filter(([file]) => String(file).endsWith("schedule.yaml")).length;
+    return read.mock.calls.filter(([file]) => String(file) === scheduleFile()).length;
   } finally {
     read.mockRestore();
   }
