@@ -1,6 +1,7 @@
 /** What the sentences of an answer are checked against, from the snapshot of its material: the same for every way an answer comes in. */
 import type { WriterEvidenceConfig } from "@/lib/config/schemas/writer";
 
+import { companyEvidenceText } from "./company-background";
 import { profileEvidenceText, storyEvidenceText, type WriterMaterials } from "./materials";
 import type { VerifyContext } from "./verify";
 
@@ -23,7 +24,7 @@ export function writerVerifyContext(input: {
     stories: new Map(materials.stories.map((story) => [story.id, storyEvidenceText(story)])),
     emphasis: materials.emphasis,
     draft: materials.draft ? (materials.draft.evidenceText ?? materials.draft.text) : null,
-    company: null,
+    company: materials.company === null ? null : companyEvidenceText(materials.company),
     entities: [...input.techStack, ...materials.stories.flatMap((story) => story.skills), ...(materials.profile?.skills.map(skillName) ?? []), input.company],
     companyName: input.company,
     language: materials.question.outputLanguage,

@@ -87,9 +87,10 @@ export function createWriterJobHandler(options: WriterJobHandlerOptions = {}): C
     const jdPoints = cleaned === null ? [] : materials.jdPoints.filter((point) => locateQuote(cleaned, point.quote) !== null);
     const sent: WriterMaterials = { ...materials, jdPoints };
     const excerpt = sent.useJdText && cleaned !== null ? truncateJd(cleaned, settings.jd_max_chars, settings.jd_head_share).text : null;
-    const { input } = buildWriteInput(sent, excerpt);
+    const { input, companyBackground } = buildWriteInput(sent, excerpt);
     const prompt = buildWritePrompt({
       input,
+      companyBackground,
       mode,
       outputLanguage: materials.question.outputLanguage,
       quoteMaxChars: settings.evidence.quote_max_chars,

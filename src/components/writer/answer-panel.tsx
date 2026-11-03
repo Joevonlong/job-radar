@@ -165,6 +165,7 @@ export function AnswerPanel({ view, question, base, onBaseDone, enabled, timeZon
     profile: question.selection.profile && view.profile.available ? true : null,
     stories: question.selection.storyIds.filter((id) => stories.has(id)),
     emphasis: question.selection.emphasis.trim() === "" ? null : question.selection.emphasis,
+    company: !question.companyUpdated && view.company !== null && question.selection.company !== null && question.selection.company.fields.some((field) => view.company?.fields.some((entry) => entry.field === field)) ? true : null,
   };
   const fields = writeInputFields(material);
   const fieldsWithText: WriteInputField[] = writeInputFields({ ...material, draft: true });

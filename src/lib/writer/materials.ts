@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { LENGTH_UNITS, QUESTION_KINDS } from "@/lib/config/schemas/writer";
 import { REQUIREMENT_LEVELS } from "@/lib/breakdown/constants";
+import { COMPANY_RESEARCH_FIELDS } from "@/lib/research/fields";
 
 import type { WriteInputField } from "./types";
 
@@ -57,6 +58,16 @@ export const draftSnapshotSchema = z.strictObject({
 });
 export type DraftSnapshot = z.infer<typeof draftSnapshotSchema>;
 
+/** The ticked fields of the company background, as they were when the request was queued (`company-background.ts`). */
+export const companySnapshotSchema = z.strictObject({
+  researchId: z.number().int().positive(),
+  expired: z.boolean(),
+  fields: z
+    .array(z.strictObject({ field: z.enum(COMPANY_RESEARCH_FIELDS), text: text(5000), /** https only; null otherwise. */ sourceUrl: text(2000).nullable() }))
+    .max(COMPANY_RESEARCH_FIELDS.length),
+});
+export type CompanySnapshot = z.infer<typeof companySnapshotSchema>;
+
 export const writerMaterialsSchema = z.strictObject({
   question: z.strictObject({
     text: text(10_000).min(1),
@@ -75,17 +86,19 @@ export const writerMaterialsSchema = z.strictObject({
   emphasis: text(5000).nullable(),
   /** Your own text to polish, or the version to review (absent when the material is drafted from). */
   draft: draftSnapshotSchema.nullable().default(null),
+  company: companySnapshotSchema.nullable().default(null),
 });
 export type WriterMaterials = z.infer<typeof writerMaterialsSchema>;
 
 /** What of `materials` goes to the AI, in disclosure order. The question, its settings and the job's title and company always do. */
-export function writeInputFields(materials: { jdPoints: readonly unknown[]; useJdText: boolean; profile: unknown; stories: readonly unknown[]; emphasis: string | null; draft?: unknown }): WriteInputField[] {
+export function writeInputFields(materials: { jdPoints: readonly unknown[]; useJdText: boolean; profile: unknown; stories: readonly unknown[]; emphasis: string | null; draft?: unknown; company?: unknown }): WriteInputField[] {
   const fields: WriteInputField[] = ["question", "settings", "job"];
   if (materials.jdPoints.length > 0) fields.push("jd_points");
   if (materials.useJdText) fields.push("jd_excerpt");
   if (materials.profile !== null) fields.push("profile");
   if (materials.stories.length > 0) fields.push("stories");
   if (materials.emphasis !== null && materials.emphasis.trim() !== "") fields.push("emphasis");
+  if (materials.company !== null && materials.company !== undefined) fields.push("company_background");
   if (materials.draft !== null && materials.draft !== undefined) fields.push("draft");
   return fields;
 }
@@ -104,6 +117,20 @@ export function profileEvidenceText(profile: ProfileSnapshot): string {
 export interface WriteInput {
   input: Record<string, unknown>;
   fields: WriteInputField[];
+  /** The company background, kept out of `input`: the prompt quotes it in a data block of its own. */
+  companyBackground: CompanyBackgroundEntry[] | null;
+}
+
+/** A field of the company background as the prompt quotes it. The source is its host only: a URL's path is text a page chose. */
+export interface CompanyBackgroundEntry {
+  field: string;
+  text: string;
+  source_host: string | null;
+  expired: boolean;
+}
+
+export function companyBackgroundEntries(company: CompanySnapshot): CompanyBackgroundEntry[] {
+  return company.fields.map((entry) => ({ field: entry.field, text: entry.text, source_host: entry.sourceUrl === null ? null : new URL(entry.sourceUrl).hostname, expired: company.expired }));
 }
 
 /**
@@ -135,8 +162,8 @@ export function buildWriteInput(materials: WriterMaterials, jdExcerpt: string | 
         ? { text: draft.text }
         : { sentences: draft.sentences.map((sentence, index) => ({ index, text: sentence })), ...(draft.suggestions.length > 0 ? { suggestions: draft.suggestions } : {}) };
   }
-  const fields = writeInputFields(materials).filter((field) => field in parts);
+  const fields = writeInputFields(materials).filter((field) => field in parts || field === "company_background");
   const input: Record<string, unknown> = {};
-  for (const field of fields) input[field] = parts[field];
-  return { input, fields };
+  for (const field of fields) if (field !== "company_background") input[field] = parts[field];
+  return { input, fields, companyBackground: materials.company === null ? null : companyBackgroundEntries(materials.company) };
 }

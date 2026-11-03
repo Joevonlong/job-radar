@@ -31,6 +31,7 @@ function materials(overrides: Partial<WriterMaterials> = {}): WriterMaterials {
     stories: [],
     emphasis: null,
     draft: null,
+    company: null,
     ...overrides,
   };
 }
@@ -55,7 +56,7 @@ describe("disclosure = prompt input", () => {
   });
 
   it("every disclosure field is a known one, in the documented order", () => {
-    const all = writeInputFields({ jdPoints: [1], useJdText: true, profile: {}, stories: [1], emphasis: "x", draft: {} });
+    const all = writeInputFields({ jdPoints: [1], useJdText: true, profile: {}, stories: [1], emphasis: "x", company: {}, draft: {} });
     expect(all).toEqual([...WRITE_INPUT_FIELDS]);
   });
 
@@ -155,7 +156,7 @@ describe("snapshot", () => {
   it("takes the chosen material only, and counts what is gone", () => {
     const snapshot = buildSnapshot({
       question: { text: "Why us?", kind: "letter", lengthUnit: "words", lengthValue: 300, outputLanguage: "en", tone: "warm" },
-      selection: { jdPoints: [{ quote: "Kotlin", offset: 40 }, { quote: "Gone", offset: 1 }], useJdText: false, storyIds: ["a", "missing"], profile: true, emphasis: "  " },
+      selection: { jdPoints: [{ quote: "Kotlin", offset: 40 }, { quote: "Gone", offset: 1 }], useJdText: false, storyIds: ["a", "missing"], profile: true, emphasis: "  ", company: null },
       job: { title: "Engineer", company: "Acme" },
       jdPoints: [point("Kotlin", 40), point("Kafka", 90)],
       me,
@@ -237,7 +238,7 @@ describe("the prompt of each mode", () => {
 
   it("has its own version per mode", () => {
     expect(new Set(Object.values(WRITE_PROMPT_VERSIONS)).size).toBe(4);
-    expect(WRITE_PROMPT_VERSIONS.polish).toBe("write-polish-v1");
+    expect(WRITE_PROMPT_VERSIONS.polish).toBe("write-polish-v2");
   });
 
   it("every mode treats the input as data and wraps it in the delimiter", () => {

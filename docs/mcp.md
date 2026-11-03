@@ -33,7 +33,9 @@ by itself.
 **Switching on `get_application_context` adds your own writing material to what leaves:** the job's breakdown points, its
 application questions and settings, the saved answer versions with their sentence statuses and evidence quotes, and for each
 question what you chose for it: your profile summary, skills and languages, the chosen stories, the emphasis note. Stories you did
-not choose, the rest of your profile files, coach reviews and saved snapshots stay out.
+not choose, the rest of your profile files, coach reviews and saved snapshots stay out. It also gives the company background (AI web search,
+unverified) and the fit note, with a notice that they are quoted data; the note keeps short quotes of the stories chosen when it was
+made, even if they are no longer chosen.
 
 ## Turning it on
 
@@ -85,7 +87,7 @@ Other MCP clients work the same way: a stdio server, command `pnpm`, arguments `
 | `search_jobs` | Ranked job cards, filtered like the jobs list: `query` (title, company name/aliases, city/location and country), `search_in` (`summary` by default; `all` adds the original JD and current translations), `country` (1–20 two-letter exact codes, case-insensitive, OR), `city`, `workplace`, `min_rank`, `min_annual_salary` (in the market's base currency), `since` / `until` (first seen, `YYYY-MM-DD`), `application_status`, `sort` (`relevance`, `rank`, `posted`, `first_seen`; default `relevance` with a query, `rank` without one), `limit`. Jobs the hard filter removed, closed jobs and dormant jobs not listed for weeks are left out. No JD text. |
 | `get_job` | One job (`job_id`) in detail: everything above plus seniority, language, the signals with their quotes, the number of AI traps found, your application, and the cleaned JD. |
 | `list_applications` | Your applications, best rank first; `status` filters; `stale_only: true` lists only the ones waiting longer than the daily reminder's thresholds (`notify.yaml: reminders.interested_days` / `applied_days`), the longest waiting first. |
-| `get_application_context` | **Off by default.** Everything to write one job's answers (`job_id`): job facts, the cleaned JD, breakdown points, the questions, the material chosen for each and the saved versions (newest first, at most `max_results` per question). |
+| `get_application_context` | **Off by default.** Everything to write one job's answers (`job_id`): job facts, the cleaned JD, breakdown points, the company background and fit note, the questions, the material chosen for each and the saved versions (newest first, at most `max_results` per question). |
 | `save_application_answer` | **Off by default.** Adds one answer version (`job_id`, `question_id`, `text`, optional `sentences`). |
 
 `get_job` still returns dormant jobs: `status` stays `possibly_closed`, and `closed_reason` is `dormant`.

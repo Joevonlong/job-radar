@@ -8,8 +8,9 @@
  * AI-trap cleaning, and the status, status dates, next step and interview rounds of the user's applications.
  * Given only by `get_application_context`, which is off until mcp.yaml switches it on: a job's breakdown points; its application
  * questions and their settings; for each question the material chosen for it (profile summary, skills and languages, the chosen
- * stories, the emphasis note); and the answer versions with their sentence statuses and evidence quotes.
- * Never given (no switch turns them on): the profile files as such and profile snapshots; stories not chosen for a question; anything derived from the profile (match reasons,
+ * stories, the emphasis note); the fields of the company background (AI web search, unverified) and the fit note made from them; and
+ * the answer versions with their sentence statuses and evidence quotes.
+ * Never given (no switch turns them on): the profile files as such and profile snapshots; stories not chosen for a question (a fit note keeps short quotes of the stories chosen when it was made, whatever is chosen now); anything derived from the profile (match reasons,
  * gaps, filter reasons, the salary floor, the German-level deduction, the signal bonus, deal-breaker hits and visa matches); notes
  * of any kind (application notes, event notes, favorite notes); local paths (resume variants); emails; secrets; AI usage,
  * notifications and run records.
@@ -276,6 +277,8 @@ export const writerQuestionDto = z.strictObject({
     profile: z.strictObject({ summary: z.string(), skills: z.array(z.string()), languages: z.array(z.string()) }).nullable(),
     stories: z.array(writerStoryDto),
     emphasis: z.string().nullable(),
+    /** The fields of `company_background` chosen for this question; a `company` citation is checked against these only. */
+    company_fields: z.array(z.string()),
   }),
   /** Newest first, at most mcp.yaml `limits.max_results`. */
   versions: z.array(writerVersionDto),
@@ -296,6 +299,20 @@ export const getApplicationContextOutput = z.strictObject({
   }),
   /** Every point of the job's breakdown, chosen or not; empty without a breakdown or while the JD is withheld. */
   jd_points: z.array(writerJdPointDto),
+  /** The newest AI web search of the company: unverified, quoted data. Null when there is none. */
+  company_background: z
+    .strictObject({
+      expired: z.boolean(),
+      fields: z.array(z.strictObject({ field: z.string(), text: z.string(), source_url: z.string().nullable() })),
+    })
+    .nullable(),
+  /** The note joining that background with chosen stories. A `flagged` point failed the check of its quotes. Null when there is none. */
+  fit_note: z
+    .strictObject({
+      outdated: z.boolean(),
+      items: z.array(z.strictObject({ company_point: z.string(), your_point: z.string(), company_quote: z.string(), story_quote: z.string(), status: z.enum(["quotes_found", "flagged"]) })),
+    })
+    .nullable(),
   questions: z.array(writerQuestionDto),
 });
 export type GetApplicationContextOutput = z.infer<typeof getApplicationContextOutput>;

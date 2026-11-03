@@ -18,7 +18,7 @@ AI 可以走订阅命令行（`claude`、`codex`）、按量计费的 API key，
 |---|---|---|
 | runner | Docker 容器 | collect → pipeline → filter → signals（规则）→ maintenance；`ai` 和 `notify` 步骤不执行，只写一个 `run_ai` 请求（`ai.yaml: execution: host`，默认） |
 | web | Docker 容器 | 网页的"翻译"按钮写 `translate_job` 请求并轮询状态；"重新打分"写 `rescore_stale` 请求；本身不调用任何 AI |
-| ai-worker | 宿主机（macOS 上是 launchd 服务，Linux 上是 systemd 用户单元；其他系统用任意进程管理器） | 处理 `run_ai`（score → signals → translate → breakdown（仅 `breakdown.yaml` 为 auto），然后 notify）、`translate_job`、`breakdown_job`（详情页"拆解这个岗位"）、`writer_job`（申请写作工作台的“生成”，[application-writer.zh.md](application-writer.zh.md)）、`story_extract`（`/me` 上提取素材）、`rescore_stale`；写自己的心跳（`runner_heartbeats.process = 'ai-worker'`） |
+| ai-worker | 宿主机（macOS 上是 launchd 服务，Linux 上是 systemd 用户单元；其他系统用任意进程管理器） | 处理 `run_ai`（score → signals → translate → breakdown（仅 `breakdown.yaml` 为 auto），然后 notify）、`translate_job`、`breakdown_job`（详情页"拆解这个岗位"）、`writer_job`（申请写作工作台的“生成”，[application-writer.zh.md](application-writer.zh.md)）、`writer_fit`（工作台上公司背景的要点，不联网）、`story_extract`（`/me` 上提取素材）、`rescore_stale`；写自己的心跳（`runner_heartbeats.process = 'ai-worker'`） |
 
 请求都在表 `control_requests` 里；runner 和 ai-worker 各自只领自己那几种（`src/lib/control/kinds.ts`），所以谁重启都不会把对方正在做的事标成失败。`run_ai` 要等它指向的那一轮结束后才会被领走（那一轮最后才写 cycle 摘要）。worker 做完把真实的 `ai` 和 `notify` 两段写回那一轮的摘要，替换容器里留下的 `delegated` 占位。
 

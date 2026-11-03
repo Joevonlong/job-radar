@@ -3,8 +3,14 @@ import { z } from "zod";
 import { parseStoredBreakdown } from "@/lib/breakdown/content";
 import { getJobDetail } from "@/lib/db/queries/job-detail";
 import { listAnswerVersions, listApplicationQuestions } from "@/lib/db/repos/application-writer";
+import { getFitNote } from "@/lib/db/repos/application-fit-notes";
 import { getJobBreakdown } from "@/lib/db/repos/breakdowns";
+import { getCompanyResearchForJob } from "@/lib/db/repos/company-research";
 import { cleanDescriptionStrict } from "@/lib/traps/clean";
+import { COMPANY_RESEARCH_FIELDS } from "@/lib/research/fields";
+import { companyFieldText, httpsUrlOrNull } from "@/lib/writer/company-background";
+import { parseFitItems } from "@/lib/writer/fit";
+import { fitNoteOutdated } from "@/lib/writer/fit-hash";
 import { jdPointsOf } from "@/lib/writer/jd-points";
 import { parseSelection } from "@/lib/writer/selection";
 import { buildSnapshot, questionSettingsOf } from "@/lib/writer/snapshot";
@@ -30,7 +36,7 @@ function sentenceDto(sentence: CheckedSentence, clean: CleanText): WriterVersion
     text: clean(sentence.text),
     about: sentence.about,
     status: sentence.status,
-    evidence: sentence.evidence.map((entry) => ({ source: entry.source, ref: entry.ref ?? null, quote: clean(entry.quote), valid: entry.problem === null })),
+    evidence: sentence.evidence.map((entry) => ({ source: entry.source, ref: entry.ref === undefined ? null : clean(entry.ref), quote: clean(entry.quote), valid: entry.problem === null })),
     missing: sentence.missing.map(clean),
     needs_check: sentence.needsCheck.map(clean),
   };
@@ -50,13 +56,16 @@ export async function getApplicationContext(ctx: McpContext, args: GetApplicatio
   const detail = await getJobDetail(ctx.db, args.job_id);
   if (!detail) throw new ToolFailure("not_found", ctx.text("errors.notFound", { id: args.job_id }));
 
-  const [strict, breakdown, questions] = await Promise.all([
+  const [strict, breakdown, questions, research, fitRow] = await Promise.all([
     cleanDescriptionStrict(ctx.db, { jobId: detail.id, description: detail.description }, { settings: ctx.traps }),
     getJobBreakdown(ctx.db, detail.id),
     listApplicationQuestions(ctx.db, detail.id),
+    getCompanyResearchForJob(ctx.db, detail.id),
+    getFitNote(ctx.db, detail.id),
   ]);
   const versions = await listAnswerVersions(ctx.db, questions.map((question) => question.id));
-  const clean = shortFieldCleaner(readTraps(ctx));
+  const traps = readTraps(ctx);
+  const clean = shortFieldCleaner(traps);
 
   const notices: string[] = [];
   let description: DescriptionDto;
@@ -80,6 +89,16 @@ export async function getApplicationContext(ctx: McpContext, args: GetApplicatio
   };
   const pointsOf = (list: readonly Parameters<typeof pointDto>[0][]) => list.flatMap((point) => pointDto(point) ?? []);
 
+  // a field the rules take for an instruction becomes the cleaner's marker; the notice covers what no rule can recognise
+  const companyFields =
+    research === null
+      ? []
+      : COMPANY_RESEARCH_FIELDS.flatMap((field) => {
+          const entry = research.fields[field];
+          return entry ? [{ field, text: clean(companyFieldText(entry.text)), source_url: httpsUrlOrNull(entry.sourceUrl) }] : [];
+        });
+  if (research !== null || fitRow !== null) notices.push(ctx.text("notice.companyBackground"));
+
   const limit = resultLimit(ctx, undefined);
   let cutVersions = false;
   const output: GetApplicationContextOutput = {
@@ -94,6 +113,20 @@ export async function getApplicationContext(ctx: McpContext, args: GetApplicatio
       description,
     },
     jd_points: pointsOf(points),
+    company_background: research === null ? null : { expired: research.expired, fields: companyFields },
+    fit_note:
+      fitRow === null
+        ? null
+        : {
+            outdated: fitNoteOutdated(fitRow, research?.id ?? null, stories),
+            items: parseFitItems(fitRow.items).map((item) => ({
+              company_point: clean(item.companyPoint),
+              your_point: clean(item.yourPoint),
+              company_quote: clean(item.companyQuote),
+              story_quote: clean(item.storyQuote),
+              status: item.status,
+            })),
+          },
     questions: questions.map((question) => {
       const { materials } = buildSnapshot({
         question: questionSettingsOf(question),
@@ -103,6 +136,8 @@ export async function getApplicationContext(ctx: McpContext, args: GetApplicatio
         me,
         stories,
         writer,
+        company: research,
+        traps,
       });
       const own = versions.filter((version) => version.questionId === question.id);
       if (own.length > limit) cutVersions = true;
@@ -127,6 +162,7 @@ export async function getApplicationContext(ctx: McpContext, args: GetApplicatio
             period: story.period === null ? null : clean(story.period),
           })),
           emphasis: materials.emphasis === null ? null : clean(materials.emphasis),
+          company_fields: materials.company?.fields.map((entry) => entry.field) ?? [],
         },
         versions: own.slice(0, limit).map((version) => ({
           id: version.id,

@@ -4,15 +4,22 @@ import type { AiProviderId } from "@/lib/ai/types";
 import { parseStoredBreakdown } from "@/lib/breakdown/content";
 import { ConfigError, reloadConfig, writerSchema } from "@/lib/config";
 import type { LengthUnit, QuestionKind } from "@/lib/config/schemas/writer";
+import { openWriterFitRequestId } from "@/lib/control/writer-fit-request";
 import { readInitialWriterRequests, type InitialWriterRequest } from "@/lib/control/writer-request";
 import type { Db } from "@/lib/db/client";
 import { listAnswerVersions, listApplicationQuestions, listVersionOrigins } from "@/lib/db/repos/application-writer";
 import { getJobBreakdown, getJobForBreakdown } from "@/lib/db/repos/breakdowns";
+import { getFitNote } from "@/lib/db/repos/application-fit-notes";
+import { getCompanyResearchForJob } from "@/lib/db/repos/company-research";
 import { getJob } from "@/lib/db/repos/jobs";
 import { aiOutputLanguage } from "@/lib/i18n/config";
+import { COMPANY_RESEARCH_FIELDS, type CompanyResearchField } from "@/lib/research/fields";
 import { descriptionHash } from "@/lib/translation/hash";
 
+import { companyFieldText, httpsUrlOrNull } from "./company-background";
 import { companyMatchNames, legalSuffixes } from "./company-names";
+import { parseFitItems, type FitItem } from "./fit";
+import { fitNoteOutdated } from "./fit-hash";
 import { parseStoredCoach, type StoredCoach } from "./coach";
 import { jdPointsOf, resolveJdPoints, type JdPoint } from "./jd-points";
 import { defaultOutputLanguage, parseSelection } from "./selection";
@@ -54,6 +61,8 @@ export interface WorkbenchQuestion {
   startedFrom: { company: string; jobTitle: string; names: string[] }[];
   /** Chosen JD points / stories that no longer exist. */
   stale: { jdPoints: number; stories: number };
+  /** The ticked company background was replaced by a newer search, so none of it is sent until it is ticked again. */
+  companyUpdated: boolean;
 }
 
 export type WriterAvailability = "enabled" | "disabled" | "config_error";
@@ -70,6 +79,10 @@ export interface WorkbenchView {
   stories: { id: string; title: string; skills: string[]; period: string | null }[];
   /** stories.yaml cannot be read: the stories group says so (and no chosen story counts as stale). */
   storiesUnreadable: boolean;
+  /** The job's newest company background, field by field as it would be quoted (null: none yet). */
+  company: { researchId: number; expired: boolean; fields: { field: CompanyResearchField; text: string; sourceUrl: string | null }[] } | null;
+  /** The note on what the background means for this application. `outdated`: a newer search or a changed story since it was made. */
+  fit: { items: FitItem[]; outdated: boolean; createdAt: string; openRequestId: number | null };
   /** me.yaml could be read (the profile can be sent). */
   profile: { available: boolean; summary: string; skills: string[] };
   questions: WorkbenchQuestion[];
@@ -117,6 +130,7 @@ export async function loadWorkbench(db: Db, jobId: number): Promise<WorkbenchVie
   const [job, named, breakdownRow, questionRows] = await Promise.all([getJob(db, jobId), getJobForBreakdown(db, jobId), getJobBreakdown(db, jobId), listApplicationQuestions(db, jobId)]);
   if (!job || !named) return null;
   const inputs = readWriterInputs();
+  const research = await getCompanyResearchForJob(db, jobId);
   // the defaults when writer.yaml cannot be read (the page then shows the config error and writes nothing)
   const writer = inputs.writer ?? writerSchema.parse({});
   const availability: WriterAvailability = inputs.writer === null ? "config_error" : inputs.writer.enabled ? "enabled" : "disabled";
@@ -175,8 +189,13 @@ export async function loadWorkbench(db: Db, jobId: number): Promise<WorkbenchVie
       initialRequest: requests.get(row.id) ?? null,
       startedFrom: startedFrom(versionRows.filter((version) => version.questionId === row.id), origins, jobId, suffixes),
       stale: { jdPoints: resolved.stale, stories: inputs.storiesUnreadable ? 0 : selection.storyIds.filter((id) => !storyIds.has(id)).length },
+      companyUpdated: selection.company !== null && selection.company.fields.length > 0 && selection.company.researchId !== research?.id,
     };
   });
+
+  const fitRow = await getFitNote(db, jobId);
+  const fitOutdated = fitRow !== null && fitNoteOutdated(fitRow, research?.id ?? null, inputs.stories);
+  const fitRequest = await openWriterFitRequestId(db, jobId);
 
   const aiLanguage = aiOutputLanguage();
   const defaultLanguage = defaultOutputLanguage(job.language, aiLanguage);
@@ -188,6 +207,18 @@ export async function loadWorkbench(db: Db, jobId: number): Promise<WorkbenchVie
     jdPoints,
     stories: inputs.stories.map((story) => ({ id: story.id, title: story.title, skills: story.skills, period: story.period ?? null })),
     storiesUnreadable: inputs.storiesUnreadable,
+    company:
+      research === null
+        ? null
+        : {
+            researchId: research.id,
+            expired: research.expired,
+            fields: COMPANY_RESEARCH_FIELDS.flatMap((field) => {
+              const entry = research.fields[field];
+              return entry ? [{ field, text: companyFieldText(entry.text), sourceUrl: httpsUrlOrNull(entry.sourceUrl) }] : [];
+            }),
+          },
+    fit: { items: fitRow ? parseFitItems(fitRow.items) : [], outdated: fitOutdated, createdAt: fitRow?.createdAt.toISOString() ?? "", openRequestId: fitRequest },
     profile: { available: inputs.me !== null, summary: inputs.me?.summary ?? "", skills: inputs.me?.skills.map((skill) => skill.name) ?? [] },
     questions,
     limits: { maxQuestions: writer.questions.max_per_job, textMaxChars: writer.questions.text_max_chars, emphasisMaxChars: writer.emphasis_max_chars, draftMaxChars: writer.draft_max_chars, reuseMinWords: writer.reuse.min_question_words },

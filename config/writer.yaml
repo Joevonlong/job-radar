@@ -92,6 +92,11 @@ jd_head_share: 0.7
 # An answer that did not parse and reached this share of the output token cap counts as cut off ("output_truncated")
 output_truncated_share: 0.95
 
+# "What this means for your application": the note from the company background and the chosen stories
+fit:
+  # Most points in one note
+  max_items: 5
+
 # Starting from an answer you finalised for another job: when you add a question, finalised answers to similar questions
 # are offered as the starting text. Local only (no AI call, nothing is sent); similarity counts shared words, so the same
 # question in another language is not matched.

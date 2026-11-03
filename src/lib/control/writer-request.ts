@@ -5,10 +5,11 @@
  * on time even while no ai-worker runs. Server only; `app/jobs/[id]/apply/actions.ts` calls it.
  */
 import { parseStoredBreakdown } from "@/lib/breakdown/content";
-import type { MeConfig, Story, WriterConfig } from "@/lib/config";
+import { ConfigError, reloadConfig, type MeConfig, type Story, type TrapsConfig, type WriterConfig } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
 import { getAnswerVersion, getApplicationQuestion } from "@/lib/db/repos/application-writer";
 import { getJobBreakdown, getJobForBreakdown } from "@/lib/db/repos/breakdowns";
+import { getCompanyResearchForJob } from "@/lib/db/repos/company-research";
 import { findLatestWriterRequests, findOpenWriterRequest, getControlRequest, insertWriterRequestUnlessOpen, type ControlRequest } from "@/lib/db/repos/control-requests";
 import { createProcessLogger } from "@/lib/logging/process-logger";
 import { TRANSLATION_FAILURE_CODES } from "@/lib/translation/errors";
@@ -70,6 +71,16 @@ export interface WriterRequestInput {
 
 export async function requestWriterDraft(db: Db, input: WriterRequestInput): Promise<WriterRequestOutcome> {
   return requestWriter(db, input, { mode: "draft" });
+}
+
+/** traps.yaml as it is now, or null while it cannot be read. */
+export function readTrapsForWriter(): TrapsConfig | null {
+  try {
+    return reloadConfig("traps");
+  } catch (error) {
+    if (error instanceof ConfigError) return null;
+    throw error;
+  }
 }
 
 /** The selection a request sends: "language only" sends none of the material, only your text. */
@@ -136,6 +147,9 @@ export async function requestWriter(db: Db, input: WriterRequestInput, spec: Wri
     stories: input.stories,
     writer,
     draft,
+    // only ticked background is read for the request; an unticked one stays out
+    company: selection.company === null ? null : await getCompanyResearchForJob(db, input.jobId),
+    traps: selection.company === null ? null : readTrapsForWriter(),
   });
   // the question, its settings and the job alone are no material to write from
   if (writeInputFields(materials).length <= 3) return { state: "error", error: "no_material" };
@@ -152,6 +166,7 @@ export async function requestWriter(db: Db, input: WriterRequestInput, spec: Wri
       profile: materials.profile !== null,
       emphasis: materials.emphasis !== null,
       draft: materials.draft !== null,
+      companyResearchId: materials.company?.researchId ?? null,
     },
     materials,
   };
@@ -172,7 +187,7 @@ export type WriterRequestState =
 const payloadOf = (request: ControlRequest): { jobId?: unknown; questionId?: unknown } =>
   typeof request.payload === "object" && request.payload !== null ? (request.payload as { jobId?: unknown; questionId?: unknown }) : {};
 
-async function stateOf(db: Db, request: ControlRequest): Promise<Exclude<WriterRequestState, { state: "missing" }>> {
+export async function writerRequestState(db: Db, request: ControlRequest): Promise<Exclude<WriterRequestState, { state: "missing" }>> {
   if (request.status === "pending" || request.status === "running") return { state: "waiting", stage: request.status, queue: await loadQueueView(db, request) };
   if (request.status === "failed") {
     const result = typeof request.result === "object" && request.result !== null ? (request.result as { error?: unknown; detail?: unknown; resumeAt?: unknown }) : {};
@@ -191,7 +206,7 @@ export async function readWriterRequest(db: Db, input: { requestId: number; jobI
   await expireScrubbedRequests(db);
   const request = await getControlRequest(db, input.requestId);
   if (!request || request.kind !== "writer_job" || payloadOf(request).jobId !== input.jobId) return { state: "missing" };
-  return stateOf(db, request);
+  return writerRequestState(db, request);
 }
 
 /** What a question's write button starts with after a page load (absent: nothing to resume). */
@@ -207,7 +222,7 @@ export async function readInitialWriterRequests(db: Db, jobId: number, newestVer
   await expireScrubbedRequests(db);
   const out = new Map<number, InitialWriterRequest>();
   for (const [questionId, request] of await findLatestWriterRequests(db, jobId)) {
-    const state = await stateOf(db, request);
+    const state = await writerRequestState(db, request);
     if (state.state === "waiting") out.set(questionId, { state: "waiting", requestId: request.id, stage: state.stage, queue: state.queue });
     if (state.state !== "failed") continue;
     const newest = newestVersionAt.get(questionId);

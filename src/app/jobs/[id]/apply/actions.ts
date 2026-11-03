@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { parseStoredBreakdown } from "@/lib/breakdown/content";
 import { LENGTH_UNITS, QUESTION_KINDS } from "@/lib/config/schemas/writer";
+import { readWriterFitRequest, requestWriterFit } from "@/lib/control/writer-fit-request";
 import { readWriterRequest, requestWriter, type WriterErrorCode, type WriterRequestSpec } from "@/lib/control/writer-request";
 import type { ControlQueueView } from "@/lib/control/request-view-schema";
 import { getDb } from "@/lib/db";
@@ -21,6 +22,7 @@ import {
 } from "@/lib/db/repos/application-writer";
 import { getJobBreakdown, getJobForBreakdown } from "@/lib/db/repos/breakdowns";
 import { isLanguageCode } from "@/lib/i18n/languages";
+import { COMPANY_RESEARCH_FIELDS } from "@/lib/research/fields";
 import { logActionFailure } from "@/lib/logging/action-failure";
 import { applySuggestion, parseStoredCoach } from "@/lib/writer/coach";
 import { diffSentences } from "@/lib/writer/diff";
@@ -47,6 +49,7 @@ const selectionSchema = z.strictObject({
   storyIds: z.array(z.string().min(1).max(80)).max(1000),
   profile: z.boolean(),
   emphasis: z.string().max(5000),
+  company: z.strictObject({ researchId: positive, fields: z.array(z.enum(COMPANY_RESEARCH_FIELDS)).max(COMPANY_RESEARCH_FIELDS.length) }).nullable().default(null),
 });
 const settingsSchema = z.strictObject({
   text: z.string().trim().min(1).max(10_000),
@@ -249,6 +252,38 @@ export async function writerStatusAction(input: { jobId: number; requestId: numb
     return { ok: true, state: "done" };
   } catch (error) {
     logActionFailure("writerStatusAction", error);
+    return null;
+  }
+}
+
+/** Ask where the ticked company background meets the question's chosen stories. */
+export async function requestFitAction(input: { jobId: number; questionId: number }): Promise<WriteActionResult> {
+  const parsed = z.strictObject({ jobId: positive, questionId: positive }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  try {
+    const { writer, stories } = readWriterInputs();
+    const outcome = await requestWriterFit(getDb(), { ...parsed.data, writer, stories });
+    if (outcome.state === "error") return { ok: false, error: outcome.error };
+    return { ok: true, requestId: outcome.requestId };
+  } catch (error) {
+    logActionFailure("requestFitAction", error);
+    return { ok: false, error: "failed" };
+  }
+}
+
+/** State of a queued fit request. */
+export async function fitStatusAction(input: { jobId: number; requestId: number }): Promise<WriterStatusResult> {
+  const parsed = z.strictObject({ jobId: positive, requestId: positive }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  try {
+    const state = await readWriterFitRequest(getDb(), parsed.data);
+    if (state.state === "missing") return { ok: false, error: "not_found" };
+    if (state.state === "waiting") return { ok: true, state: "waiting", stage: state.stage, queue: state.queue };
+    if (state.state === "failed") return { ok: false, error: state.error, detail: state.detail, resumeAt: state.resumeAt };
+    revalidate(parsed.data.jobId);
+    return { ok: true, state: "done" };
+  } catch (error) {
+    logActionFailure("fitStatusAction", error);
     return null;
   }
 }

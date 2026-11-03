@@ -4,6 +4,7 @@ import { WRITE_LIMITS } from "@/lib/ai/prompts/write";
 import { parseStoredBreakdown } from "@/lib/breakdown/content";
 import { appendAnswerVersion, getApplicationQuestion } from "@/lib/db/repos/application-writer";
 import { getJobBreakdown, getJobForBreakdown } from "@/lib/db/repos/breakdowns";
+import { getCompanyResearchForJob } from "@/lib/db/repos/company-research";
 import { splitSentences } from "@/lib/writer/diff";
 import { materialsHash } from "@/lib/writer/hash";
 import { jdPointsOf } from "@/lib/writer/jd-points";
@@ -16,6 +17,7 @@ import { writerVerifyContext } from "@/lib/writer/verify-context";
 import { ToolFailure, type McpContext } from "../context";
 import { saveApplicationAnswerOutput, type SaveApplicationAnswerOutput } from "../dto";
 import { visibleText } from "../guard";
+import { readTraps } from "./shared";
 import { readWriterForTool } from "./writer-shared";
 
 /** The most characters of one answer a call can carry (writer.yaml `draft_max_chars` is the limit that counts, up to this). */
@@ -77,6 +79,8 @@ export async function saveApplicationAnswer(ctx: McpContext, args: SaveApplicati
     me,
     stories,
     writer,
+    company: await getCompanyResearchForJob(ctx.db, args.job_id),
+    traps: readTraps(ctx),
   });
 
   let sentences: CheckedSentence[];

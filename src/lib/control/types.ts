@@ -9,7 +9,7 @@ import type { Db } from "@/lib/db/client";
 import type { CycleSummary } from "@/lib/cycle/run-cycle";
 import type { ControlRequest } from "@/lib/db/repos/control-requests";
 import { STORY_EXTRACT_MAX_CHARS, STORY_EXTRACT_ORIGINS } from "@/lib/stories/extract";
-import { writerMaterialsSchema } from "@/lib/writer/materials";
+import { companySnapshotSchema, storySnapshotSchema, writerMaterialsSchema } from "@/lib/writer/materials";
 import { POLISH_OPTIONS, WRITE_MODES } from "@/lib/writer/types";
 
 /** Payload of a `run_cycle` request: run only these channels (default: every enabled channel). */
@@ -68,6 +68,7 @@ export const writerJobPayloadSchema = z.strictObject({
     profile: z.boolean(),
     emphasis: z.boolean(),
     draft: z.boolean().default(false),
+    companyResearchId: z.number().int().positive().nullable().default(null),
   }),
   materials: writerMaterialsSchema,
 });
@@ -86,6 +87,24 @@ export const storyExtractPayloadSchema = z.strictObject({
   text: z.string().min(1).max(STORY_EXTRACT_MAX_CHARS),
 });
 export type StoryExtractPayload = z.infer<typeof storyExtractPayloadSchema>;
+
+/**
+ * Payload of a `writer_fit` request (the "what this means for your application" button). `materials` holds the ticked company
+ * background and the chosen stories and is removed when the request ends, like a `writer_job`'s.
+ */
+export const writerFitPayloadSchema = z.strictObject({
+  jobId: z.number().int().positive(),
+  questionId: z.number().int().positive(),
+  materialsHash: z.string().regex(/^[0-9a-f]{64}$/),
+  refs: z.strictObject({ storyIds: z.array(z.string().max(80)).max(1000), companyResearchId: z.number().int().positive() }),
+  materials: z.strictObject({
+    job: z.strictObject({ title: z.string().max(1000), company: z.string().max(1000) }),
+    outputLanguage: z.string().min(2).max(35),
+    stories: z.array(storySnapshotSchema).min(1).max(1000),
+    company: companySnapshotSchema,
+  }),
+});
+export type WriterFitPayload = z.infer<typeof writerFitPayloadSchema>;
 
 /** Payload of a `salary_lookup` request (the "look up salary" button on the job page). */
 export const salaryLookupPayloadSchema = z.strictObject({

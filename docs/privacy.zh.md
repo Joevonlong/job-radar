@@ -18,7 +18,8 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 | 邮件元数据（Message-ID、发件人地址、IMAP UID） | 数据库表 `email_messages` | 直到你删除数据库 |
 | AI 结果（评分及理由、翻译、拆解、信号、陷阱标记、带引文的每周建议）和 AI 用量记录（模型、token、耗时） | 数据库 | 直到你删除数据库 |
 | 公司背景结果（每个字段及其来源链接、provider 和模型） | 数据库表 `company_research` | 直到你删除数据库；关闭功能不会删除 |
-| 已发出的 Telegram 消息（内容和消息 id）、控制请求及结果 | 数据库 | 直到你删除数据库；写作请求（`writer_job`）的素材和提取素材请求（`story_extract`）的文字在请求完成、失败或过期（排队时看 `writer.yaml: queue_timeout_seconds`，运行时看 `timeout_seconds` + `expiry_grace_seconds`）后即从请求里清除。请求未结束时做的备份会留下这些素材，包括部署时的迁移前备份：日备和周备约保留 8 周，系统备份和手动备份更久。Postgres 的堆和 WAL 也可能留着，直到 vacuum 和 checkpoint。 |
+| 申请契合要点（要点及其来自公司背景和经历的引用、服务商和模型） | 数据库表 `application_fit_notes` | 每个岗位一份，下一份替换它；随岗位删除 |
+| 已发出的 Telegram 消息（内容和消息 id）、控制请求及结果 | 数据库 | 直到你删除数据库；写作请求（`writer_job`、`writer_fit`）的素材和提取素材请求（`story_extract`）的文字在请求完成、失败或过期（排队时看 `writer.yaml: queue_timeout_seconds`，运行时看 `timeout_seconds` + `expiry_grace_seconds`）后即从请求里清除。请求未结束时做的备份会留下这些素材，包括部署时的迁移前备份：日备和周备约保留 8 周，系统备份和手动备份更久。Postgres 的堆和 WAL 也可能留着，直到 vacuum 和 checkpoint。 |
 | 申请问题和回答版本，以及每句话的依据核对结果 | 数据库表 `application_questions`、`application_answer_versions` | 直到你删除问题（或数据库）；超过 `questions.max_versions_per_question` 时删除最旧的版本 |
 | 从画像、文字或简历提取的素材草稿，以及它们引用的片段 | 数据库表 `profile_story_drafts` | 采用或丢弃草稿时清除文字；这一行在 `writer.yaml: import.draft_ttl_days` 天后删除。见[提取素材](#提取素材) |
 | runner 心跳 | 数据库 | 24 小时 |

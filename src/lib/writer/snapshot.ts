@@ -4,9 +4,11 @@
  * profile of me.yaml, the stories of stories.yaml, the emphasis note). The ai-worker writes from it and checks against
  * it, so a file edited meanwhile changes nothing of a running request. Pure: the caller loads the inputs.
  */
-import type { MeConfig, Story, WriterConfig } from "@/lib/config";
+import type { MeConfig, Story, TrapsConfig, WriterConfig } from "@/lib/config";
 import type { QuestionKind, LengthUnit } from "@/lib/config/schemas/writer";
+import type { CompanyResearchView } from "@/lib/research/fields";
 
+import { companySnapshot } from "./company-background";
 import { resolveJdPoints, type JdPoint } from "./jd-points";
 import type { DraftSnapshot, ProfileSnapshot, StorySnapshot, WriterMaterials } from "./materials";
 import type { QuestionSelection, QuestionSettings } from "./types";
@@ -25,12 +27,18 @@ export interface SnapshotInput {
    * (none for a review). Absent: a draft from the material.
    */
   draft?: { snapshot: DraftSnapshot; variants: { id: string; hint: string }[] } | undefined;
+  /** The job's newest company background (absent or null: none, and a tick for it is left out). */
+  company?: CompanyResearchView | null | undefined;
+  /** traps.yaml, to look at the company background once more; null when it cannot be read. */
+  traps?: TrapsConfig | null | undefined;
 }
 
 export interface Snapshot {
   materials: WriterMaterials;
   /** Chosen JD points the breakdown no longer has / chosen stories the library no longer has (both left out). */
   stale: { jdPoints: number; stories: number };
+  /** The ticks of the company background belong to an older result, so none of it was taken. */
+  companyUpdated: boolean;
 }
 
 export function profileSnapshot(me: MeConfig): ProfileSnapshot {
@@ -64,6 +72,7 @@ export function buildSnapshot(input: SnapshotInput): Snapshot {
     return story ? [storySnapshot(story)] : [];
   });
   const emphasis = selection.emphasis.trim().slice(0, writer.emphasis_max_chars);
+  const company = companySnapshot({ research: input.company ?? null, selection: selection.company, traps: input.traps ?? null });
   const materials: WriterMaterials = {
     question: {
       text: question.text.slice(0, writer.questions.text_max_chars),
@@ -81,6 +90,7 @@ export function buildSnapshot(input: SnapshotInput): Snapshot {
     stories,
     emphasis: emphasis === "" ? null : emphasis,
     draft: input.draft ? input.draft.snapshot : null,
+    company: company.snapshot,
   };
-  return { materials, stale: { jdPoints: jd.stale, stories: selection.storyIds.length - stories.length } };
+  return { materials, stale: { jdPoints: jd.stale, stories: selection.storyIds.length - stories.length }, companyUpdated: company.updated };
 }

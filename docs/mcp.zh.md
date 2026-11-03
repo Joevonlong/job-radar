@@ -25,7 +25,7 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 这份清单写死在代码里（`src/lib/mcp/dto.ts`）；每个回答都逐字段构建，数据库加了新列也不会自己出现在回答里。
 
-**打开 `get_application_context` 后，离开本机的内容会多出你自己的写作材料：** 岗位的拆解要点、申请问题和设置、已保存的答案版本及其每句状态和证据引用，以及你为每道题选的内容：画像摘要、技能和语言、选中的故事、强调说明。没选的故事、画像文件的其余部分、教练审阅和保存的快照都不给。
+**打开 `get_application_context` 后，离开本机的内容会多出你自己的写作材料：** 岗位的拆解要点、申请问题和设置、已保存的答案版本及其每句状态和证据引用，以及你为每道题选的内容：画像摘要、技能和语言、选中的故事、强调说明。没选的故事、画像文件的其余部分、教练审阅和保存的快照都不给。 它还给出公司背景（AI 网页搜索，未核对）和契合要点，并提示这些是引用数据；要点保留生成时所选经历的短引用，即使它们后来不再被选中。
 
 ## 打开它
 
@@ -72,7 +72,7 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 | `search_jobs` | 按排名返回岗位卡片，过滤方式和岗位列表一样：`query`（标题、公司名与别名、城市/地点和国家）、`search_in`（默认 `summary`；`all` 加搜原始 JD 和有效译文）、`country`（1–20 个两字母国家代码，不区分大小写、精确匹配，OR）、`city`、`workplace`、`min_rank`、`min_annual_salary`（市场基准货币）、`since` / `until`（首次发现日期，`YYYY-MM-DD`）、`application_status`、`sort`（`relevance`、`rank`、`posted`、`first_seen`；有 query 默认 relevance，无 query 默认 rank）、`limit`。被硬过滤去掉的、已关闭和数周未被列出的休眠岗位不返回。不含 JD 正文。 |
 | `get_job` | 一个岗位（`job_id`）的详情：上面所有字段，加上资历、语言、带引用的信号、发现的 AI 陷阱数量、你的申请，以及清洗后的 JD。 |
 | `list_applications` | 你的申请，排名高的在前；`status` 过滤；`stale_only: true` 只列超过每日提醒阈值（`notify.yaml: reminders.interested_days` / `applied_days`）还没动静的，等得最久的在前。 |
-| `get_application_context` | **默认关闭。** 写一个岗位答案所需的全部材料（`job_id`）：岗位事实、清洗后的 JD、拆解要点、问题、每题选中的材料和已保存的版本（最新的在前，每题最多 `max_results` 个）。 |
+| `get_application_context` | **默认关闭。** 写一个岗位答案所需的全部材料（`job_id`）：岗位事实、清洗后的 JD、拆解要点、公司背景和契合要点、问题、每题选中的材料和已保存的版本（最新的在前，每题最多 `max_results` 个）。 |
 | `save_application_answer` | **默认关闭。** 新增一个答案版本（`job_id`、`question_id`、`text`，可选 `sentences`）。 |
 
 `get_job` 仍能返回休眠岗位：`status` 仍是 `possibly_closed`，`closed_reason` 为 `dormant`。

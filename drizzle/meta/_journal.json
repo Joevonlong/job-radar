@@ -358,6 +358,13 @@
       "when": 1793684222584,
       "tag": "0050_story_extract_drafts",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1793688205406,
+      "tag": "0051_application_fit_notes",
+      "breakpoints": true
     }
   ]
 }

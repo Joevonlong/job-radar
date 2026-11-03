@@ -2,6 +2,7 @@
 import { z } from "zod";
 
 import { isLanguageCode } from "@/lib/i18n/languages";
+import { COMPANY_RESEARCH_FIELDS } from "@/lib/research/fields";
 
 import type { JdPoint } from "./jd-points";
 import { EMPTY_SELECTION, type QuestionSelection } from "./types";
@@ -12,6 +13,7 @@ export const questionSelectionSchema = z.object({
   storyIds: z.array(z.string().min(1).max(80)).max(1000).catch([]),
   profile: z.boolean().catch(EMPTY_SELECTION.profile),
   emphasis: z.string().max(5000).catch(""),
+  company: z.strictObject({ researchId: z.number().int().positive(), fields: z.array(z.enum(COMPANY_RESEARCH_FIELDS)).max(COMPANY_RESEARCH_FIELDS.length) }).nullable().catch(null),
 });
 
 export function parseSelection(value: unknown): QuestionSelection {
@@ -50,6 +52,7 @@ export function initialSelection(input: {
     storyIds: preselectStories(input.stories, input.jobSkills, input.preselectCount),
     profile: true,
     emphasis: "",
+    company: null,
   };
 }
 
