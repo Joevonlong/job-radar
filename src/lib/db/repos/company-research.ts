@@ -2,7 +2,7 @@
 import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { isPublicWebsiteDomain } from "@/lib/ai/web-tasks";
+import { isCompanyWebsiteCandidate } from "@/lib/ai/web-tasks";
 import { COMPANY_RESEARCH_FIELDS, type CompanyResearchView } from "@/lib/research/fields";
 
 import type { Executor } from "../executor";
@@ -42,9 +42,10 @@ export async function getJobForCompanyResearch(db: Executor, jobId: number): Pro
  * The website domain that may leave this machine and open pages on it: only one the user confirmed, and only while it still
  * passes the public-name check (a stored row is not trusted). An inferred domain comes from third-party postings: never here.
  */
-export function confirmedWebsiteDomain(company: Pick<JobForCompanyResearch, "websiteDomain" | "websiteDomainSource">): string | null {
+export function confirmedWebsiteDomain(company: Pick<JobForCompanyResearch, "websiteDomain" | "websiteDomainSource">, nonCompanyHosts: readonly string[]): string | null {
   if (company.websiteDomainSource !== "user" || company.websiteDomain === null) return null;
-  return isPublicWebsiteDomain(company.websiteDomain) ? company.websiteDomain : null;
+  // the host list may have grown since the user confirmed it: a job board is no company's website, whoever said so
+  return isCompanyWebsiteCandidate(company.websiteDomain, nonCompanyHosts) ? company.websiteDomain : null;
 }
 
 export async function getCompanyRowForDomain(db: Executor, companyId: number): Promise<{ websiteDomain: string | null; websiteDomainSource: string | null } | null> {

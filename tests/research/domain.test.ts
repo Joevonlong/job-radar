@@ -13,6 +13,10 @@ describe("the domain a link belongs to", () => {
     ["EXAMPLE.de.", "example.de"],
     ["http://www.example-company.com:8080/", "example-company.com"],
     ["acme.github.io", "acme.github.io"],
+    // an international name is kept in the form that is looked up and sent (punycode), whether it is typed with its letters or already encoded
+    ["https://www.münchen-bau.de/jobs", "xn--mnchen-bau-9db.de"],
+    ["https://karriere.xn--mnchen-bau-9db.de", "xn--mnchen-bau-9db.de"],
+    ["xn--80aswg.xn--p1ai", "xn--80aswg.xn--p1ai"],
   ])("%s -> %s", (input, domain) => {
     expect(registrableDomainOf(input, BOARDS)).toBe(domain);
   });

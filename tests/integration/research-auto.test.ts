@@ -374,6 +374,15 @@ describe("the bar", () => {
     expect((await status(jobId, research({}, false), off))?.items.breakdown).toMatchObject({ state: "done" });
   });
 
+  it("keeps listing a stored result when research is off and a newer request failed", async () => {
+    const jobId = await addJob();
+    await db().insert(schema.jobBreakdowns).values({ jobId, sourceHash: descriptionHash("Build models."), promptVersion: BREAKDOWN_PROMPT_VERSION, content: {}, outputLang: "en", provider: "anthropic", model: "m", analyzedAt: new Date(NOW.getTime() - 3_600_000) });
+    await requestAutoResearch(db(), { jobId, event: "favorite", now: NOW }, deps({ research: research({ items: ["breakdown"] }) }));
+    await db().update(schema.controlRequests).set({ status: "failed", finishedAt: NOW, result: { jobId, error: "provider_error" } });
+    expect((await status(jobId, research()))?.items.breakdown).toMatchObject({ state: "failed" });
+    expect((await status(jobId, research({}, false)))?.items.breakdown).toMatchObject({ state: "done" });
+  });
+
   it("does not treat a request stopped by the switch as a failure", async () => {
     const jobId = await addJob();
     await requestAutoResearch(db(), { jobId, event: "favorite", now: NOW }, deps({ research: research({ items: ["breakdown"] }) }));
