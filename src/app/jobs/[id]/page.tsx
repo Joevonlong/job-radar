@@ -68,6 +68,8 @@ import { bcp47, displayLanguageName, languageAutonym, sameLanguage } from "@/lib
 import { describeSalary } from "@/lib/dashboard/salary";
 import { effectiveStatus } from "@/lib/dashboard/status";
 import { getDb, getJobDetail, getTranslation, listTrapsOfJob, loadMonthSalaryStats, strongestFirst } from "@/lib/db";
+import { ResearchBar } from "@/components/jobs/detail/research-bar";
+import { getResearchBarStatus } from "@/lib/research/bar";
 import { getCompanyResearchContext } from "@/lib/research/view";
 import { readResearchSettings } from "@/lib/research/settings";
 import { trapsEnabled } from "@/lib/traps/settings";
@@ -230,6 +232,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const breakdownRow = await getJobBreakdown(getDb(), job.id);
   // An unfinished or failed request of this job is the card's starting state (a reload must not forget it)
   const breakdownRequest = await readInitialBreakdownRequest(getDb(), job.id, breakdownRow?.analyzedAt ?? null);
+  const researchBar = await getResearchBarStatus(getDb(), { jobId: job.id, research: researchSettings.state === "ok" ? researchSettings.config : null, ai: salaryAi, salary: salarySettings, breakdown: breakdownSettings, now });
   const answers = await countApplicationAnswers(getDb(), job.id);
   const writerEnabled = readWriterEnabled();
   // the workbench, or (off and nothing written yet) the setting that turns it on
@@ -378,6 +381,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
             <span aria-hidden>·</span>
             <span>{job.contract === "unknown" ? <Unknown label={t("unknown")} /> : contractLabel}</span>
           </div>
+          {researchBar ? <ResearchBar jobId={job.id} initial={researchBar} timeZone={timezone} /> : null}
           {summary ? (
             <p className="max-w-[70ch]" lang={bcp47(summary.lang)} data-testid="job-summary" data-lang={summary.lang}>
               {summary.text}

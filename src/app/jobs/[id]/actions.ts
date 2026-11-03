@@ -10,6 +10,7 @@ import { requestScoreJobs, type ControlActionState } from "@/lib/control/service
 import { MARK_APPLIED_FROM } from "@/lib/dashboard/apply";
 import { NOTES_MAX_CHARS } from "@/lib/dashboard/limits";
 import { getDb, jobExists, setApplicationNotes, setApplicationStatus, APPLICATION_STATUSES, type ApplicationStatus } from "@/lib/db";
+import { statusStartsResearch, triggerAutoResearch } from "@/lib/research/auto";
 import type { JobTranslation, PartialTranslation } from "@/lib/translation/service";
 
 /**
@@ -47,6 +48,7 @@ export async function setApplicationStatusAction(input: { jobId: number; status:
     if (!(await jobExists(db, parsed.data.jobId))) return { ok: false, error: "not_found" };
     const change = await setApplicationStatus(db, parsed.data.jobId, parsed.data.status);
     refreshViews();
+    if (change.changed && statusStartsResearch(change.status)) void triggerAutoResearch(db, { jobId: parsed.data.jobId, event: "status" });
     return { ok: true, previous: change.previous, status: change.status, changed: change.changed };
   } catch (error) {
     logActionFailure("setApplicationStatusAction", error);
@@ -74,6 +76,7 @@ export async function markAppliedAction(input: { jobId: number }): Promise<MarkA
     const change = await setApplicationStatus(db, parsed.data.jobId, "applied", null, { allowFrom: MARK_APPLIED_FROM });
     if (change.rejected) return { ok: false, error: "not_allowed" };
     refreshViews();
+    if (change.changed) void triggerAutoResearch(db, { jobId: parsed.data.jobId, event: "status" });
     return { ok: true, previous: change.previous, status: "applied", changed: change.changed };
   } catch (error) {
     logActionFailure("markAppliedAction", error);

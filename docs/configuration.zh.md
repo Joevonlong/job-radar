@@ -139,7 +139,7 @@ web 和 runner 启动时会补缺，升级冻结期间跳过补缺。已有安�
 
 ### 公司背景（`research.yaml`）
 
-新文件，默认关闭（`enabled: false`）。没有这个文件的安装使用出厂默认值，打开之前什么都不变。每次请求都重新读取。加载文件时，站点列表会拒绝私有地址、本地名称和公共后缀。见 [research.zh.md](research.zh.md)。
+新文件，默认关闭（`enabled: false`）。没有这个文件的安装使用出厂默认值，打开之前什么都不变。每次请求都重新读取。加载文件时，站点列表会拒绝私有地址、本地名称和公共后缀。见 [research.zh.md](research.zh.md)。`auto` 块设置[自动调研](research.zh.md#自动调研)；没有这一块的 `research.yaml` 按 `trigger: manual` 处理，所以你已有的文件在加上这一块前不会变。
 
 ### LinkedIn Monid（`sources.yaml`）
 

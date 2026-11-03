@@ -160,7 +160,8 @@ See [salary.md](salary.md) for the cards and [the changelog](../CHANGELOG.md) fo
 
 A new file, off by default (`enabled: false`). An install that has none uses the shipped defaults, so nothing changes until you turn it
 on. It is read afresh for every request. The site list refuses private addresses, local names and public suffixes when the file is
-loaded. See [research.md](research.md).
+loaded. The `auto` block sets [automatic research](research.md#automatic-research); a `research.yaml` without it behaves as `trigger: manual`,
+so a file you already have changes nothing until you add the block. See [research.md](research.md).
 
 ### LinkedIn Monid (`sources.yaml`)
 

@@ -1,3 +1,8 @@
+import fs from "node:fs";
+import path from "node:path";
+
+import postgres from "postgres";
+
 import { expect, test, type Page } from "./fixtures";
 
 /**
@@ -15,6 +20,26 @@ async function openJob(page: Page, name: RegExp) {
 }
 
 const panel = (page: Page) => page.getByTestId("company-research-panel");
+
+/** Change research.yaml of this run's config copy for one test; this spec has its own project in SERIAL_CHAIN. */
+async function withResearchFile(edit: (text: string) => string, run: () => Promise<void>): Promise<void> {
+  const configDir = process.env.E2E_CONFIG_DIR;
+  if (!configDir) throw new Error("E2E_CONFIG_DIR is required");
+  const file = path.join(configDir, "research.yaml");
+  const original = fs.readFileSync(file, "utf8");
+  fs.writeFileSync(file, edit(original));
+  try {
+    await run();
+  } finally {
+    fs.writeFileSync(file, original);
+  }
+}
+
+function database() {
+  const url = process.env.E2E_DATABASE_URL;
+  if (!url || !new URL(url).pathname.slice(1).startsWith("jobradar_e2e")) throw new Error("A disposable E2E_DATABASE_URL is required");
+  return postgres(url, { max: 1, onnotice: () => {} });
+}
 
 test.describe("company background", () => {
   test("before a lookup the panel says what it would send", async ({ page }) => {
@@ -60,11 +85,94 @@ test.describe("company background", () => {
   });
 });
 
+test.describe("the website domain", () => {
+  test("an inferred domain waits for the user's confirmation, and stays confirmed after a reload", async ({ page }) => {
+    await openJob(page, /Forward Deployed Engineer/);
+    const sql = database();
+    try {
+      await sql`update companies set website_domain = 'quillfeather.example', website_domain_source = 'inferred', website_domain_confirmed_at = null where name ilike 'Quillfeather%'`;
+    } finally {
+      await sql.end();
+    }
+    await page.reload();
+    await expect(page.getByTestId("company-domain")).toHaveAttribute("data-state", "inferred");
+    await page.getByTestId("company-domain-confirm").click();
+    await expect(page.getByTestId("company-domain")).toHaveAttribute("data-state", "confirmed");
+    await page.reload();
+    await expect(page.getByTestId("company-domain")).toHaveAttribute("data-state", "confirmed");
+    await expect(page.getByTestId("company-domain")).toContainText("quillfeather.example");
+  });
+});
+
+test.describe("the research bar", () => {
+  test("shows each part, runs them, and remembers them after a reload", async ({ page }) => {
+    await openJob(page, /LLM Engineer/);
+    const bar = page.getByTestId("research-bar");
+    await expect(bar).toBeVisible();
+    await expect(page.getByTestId("research-bar-company")).toBeVisible();
+    const salary = page.getByTestId("research-bar-salary");
+    await expect(salary).toBeVisible();
+    await page.getByTestId("research-bar-salary-run").click();
+    await expect(salary).toHaveAttribute("data-state", "done", { timeout: 30_000 });
+    await page.reload();
+    await expect(page.getByTestId("research-bar-salary")).toHaveAttribute("data-state", "done");
+  });
+
+  test("a star starts research by itself when the setting asks for it", async ({ page }) => {
+    await withResearchFile(
+      (text) => text.replace(/^  trigger: \w+$/m, "  trigger: favorite"),
+      async () => {
+        await page.goto("/jobs");
+        await page.waitForLoadState("networkidle");
+        const row = page.getByRole("row", { name: /Backend Engineer/ }).first();
+        const link = row.getByRole("link", { name: /Backend Engineer/ }).first();
+        const href = await link.getAttribute("href");
+        await row.getByTestId("row-favorite").click();
+        await expect(row.getByTestId("row-favorite")).toHaveAttribute("aria-pressed", "true");
+        await page.goto(href as string);
+        await page.waitForLoadState("networkidle");
+        // running or already finished, but no longer waiting to be asked
+        await expect.poll(async () => {
+          await page.reload();
+          return page.getByTestId("research-bar-company").getAttribute("data-state");
+        }, { timeout: 30_000 }).toMatch(/running|done/);
+        // put the star back as it was: other specs count stars
+        await page.goto("/jobs");
+        await page.waitForLoadState("networkidle");
+        await page.getByRole("row", { name: /Backend Engineer/ }).first().getByTestId("row-favorite").click();
+      },
+    );
+  });
+
+  test("with research switched off nothing can be pressed", async ({ page }) => {
+    await withResearchFile(
+      (text) => text.replace(/^enabled: true$/m, "enabled: false"),
+      async () => {
+        await openJob(page, /LLM Engineer/);
+        await expect(page.getByTestId("research-bar-all")).toHaveCount(0);
+        await expect(page.locator('[data-testid^="research-bar-"][data-testid$="-run"]')).toHaveCount(0);
+        await expect(page.getByTestId("company-research-panel")).toHaveCount(0);
+      },
+    );
+  });
+
+  test("the bar fits a phone", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openJob(page, /LLM Engineer/);
+    await expect(page.getByTestId("research-bar")).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+});
+
 test.describe("research settings", () => {
   test("the tab shows the switch and the limits", async ({ page }) => {
     await page.goto("/settings?tab=research");
     await page.waitForLoadState("networkidle");
     await expect(page.getByRole("tab", { name: /Research|调研/ })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("tabpanel").getByText(/company name|公司名/).first()).toBeVisible();
+    const trigger = page.getByRole("combobox", { name: /by itself|自动开始/ });
+    await expect(trigger).toBeVisible();
+    await expect(trigger.locator("option")).toHaveCount(3);
   });
 });

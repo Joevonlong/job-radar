@@ -38,7 +38,7 @@ export type SalaryRequestOutcome =
 
 export async function requestSalaryLookup(
   db: Db,
-  input: { jobId: number; force: boolean; salary: SalaryConfig | null; ai: AiConfig | null; now?: Date },
+  input: { jobId: number; force: boolean; origin?: "auto"; salary: SalaryConfig | null; ai: AiConfig | null; now?: Date },
 ): Promise<SalaryRequestOutcome> {
   if (!input.salary || !input.ai) return { state: "error", error: "config_error" };
   if (!input.salary.lookup.enabled) return { state: "error", error: "disabled" };
@@ -52,9 +52,9 @@ export async function requestSalaryLookup(
     const cached = await findLatestSalaryLookup(db, { lookupKey, promptVersion: SALARY_PROMPT_VERSION });
     if (cached && cached.expiresAt > now) return { state: "cached" };
   }
-  const reserved = await reserveSalaryLookupRequest(db, { lookupKey, jobId: input.jobId, force: input.force, maxPerDay: input.salary.lookup.max_per_day, now });
+  const reserved = await reserveSalaryLookupRequest(db, { lookupKey, jobId: input.jobId, force: input.force, ...(input.origin ? { origin: input.origin } : {}), maxPerDay: input.salary.lookup.max_per_day, now });
   if (reserved.state === "quota") return { state: "error", error: "quota" };
-  if (reserved.state === "queued") log.info("manual request queued", { request: reserved.requestId, kind: "salary_lookup", jobId: input.jobId });
+  if (reserved.state === "queued") log.info(input.origin === "auto" ? "automatic request queued" : "manual request queued", { request: reserved.requestId, kind: "salary_lookup", jobId: input.jobId });
   return { state: "queued", requestId: reserved.requestId, existing: reserved.state === "existing" };
 }
 

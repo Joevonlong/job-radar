@@ -105,7 +105,7 @@ describe("registration", () => {
   it("the built-in AI sub-tasks include signals and translate, after score", () => {
     resetAiSubtasks();
     registerBuiltinAiSubtasks();
-    expect(listAiSubtasks().map((s) => s.name)).toEqual(["traps", "score", "signals", "translate", "breakdown"]);
+    expect(listAiSubtasks().map((s) => s.name)).toEqual(["traps", "score", "signals", "translate", "breakdown", "research"]);
     resetAiSubtasks();
   });
 });

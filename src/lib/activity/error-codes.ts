@@ -9,7 +9,7 @@ import { REASON_CODES } from "./names";
 export const AI_ERROR_CODES = ["not_configured", "auth", "rate_limited", "timeout", "network", "provider_error", "invalid_output", "budget", "aborted"] as const satisfies readonly AiProviderErrorKind[];
 export const BACKUP_ERROR_CODES = ["invalid_url", "start_failed", "pg_dump_failed", "timeout", "aborted", "invalid_output", "io"] as const satisfies readonly BackupErrorCode[];
 export const CONTROL_ERROR_CODES = [
-  "invalid_payload", "no_handler", "handler_error", "cycle_failed", "another_cycle_running", "cycle_not_found", "config_error", "disabled", "aborted",
+  "invalid_payload", "no_handler", "handler_error", "cycle_failed", "another_cycle_running", "cycle_not_found", "config_error", "disabled", "research_disabled", "aborted",
   "suggest_failed", "telegram_not_configured", "telegram_failed", "score_ai_unavailable", "score_failed", "score_profile_incomplete", "score_stopped",
   "rescore_ai_unavailable", "rescore_failed", "rescore_profile_incomplete", "rescore_stopped", "not_found", "no_description", "same_language", "failed",
   "no_web_provider", "quota", "not_ready", "ai_failed", "invalidPayload", "unknownChannel", "nothingStale", "nothingToScore", "databaseUnavailable", "tooSoon",

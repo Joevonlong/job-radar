@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { loadConfig } from "@/lib/config";
 import { getDb, jobExists, setApplicationResumePath, type ApplicationStatus } from "@/lib/db";
+import { statusStartsResearch, triggerAutoResearch } from "@/lib/research/auto";
 import { readResumeConfig } from "@/lib/resume/config";
 import { prepareResumeKit } from "@/lib/resume/export";
 import { resolveAllowedPdf } from "@/lib/resume/paths";
@@ -56,6 +57,7 @@ export async function exportResumeKitAction(input: { jobId: number }): Promise<E
     if (!result.ok) return { ok: false, error: result.error };
     refreshViews();
     const { statusChange } = result;
+    if (statusChange.changed && statusStartsResearch(statusChange.status)) void triggerAutoResearch(getDb(), { jobId: parsed.data.jobId, event: "status" });
     return { ok: true, jdPath: result.jdPath, command: result.command, status: statusChange.rejected ? (statusChange.previous ?? "new") : statusChange.status, statusChanged: statusChange.changed };
   } catch (error) {
     logActionFailure("exportResumeKitAction", error);

@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { FAVORITE_NOTE_MAX_CHARS } from "@/lib/dashboard/limits";
 import { addFavorite, getDb, jobExists, removeFavorite, setFavoriteNote } from "@/lib/db";
+import { triggerAutoResearch } from "@/lib/research/auto";
 
 /**
  * Server Actions for the star on a job. They set a value rather than flip one, so a double click or two tabs end in the
@@ -44,6 +45,7 @@ export async function setFavoriteAction(input: { jobId: number; favorite: boolea
     if (parsed.data.favorite) {
       const { changed } = await addFavorite(db, parsed.data.jobId);
       refreshViews();
+      if (changed) void triggerAutoResearch(db, { jobId: parsed.data.jobId, event: "favorite" });
       return { ok: true, favorite: true, changed, removed: null };
     }
     const removed = await removeFavorite(db, parsed.data.jobId);

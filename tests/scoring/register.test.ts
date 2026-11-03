@@ -16,9 +16,9 @@ describe("AI sub-task registration", () => {
     expect(listAiSubtasks()).toEqual([]);
   });
 
-  it("the runner / cycle:run registration adds the AI sub-tasks in order (traps, score, signals, translate, breakdown), once", () => {
+  it("the runner / cycle:run registration adds the AI sub-tasks in order (traps, score, signals, translate, breakdown, research), once", () => {
     registerBuiltinAiSubtasks();
     registerBuiltinAiSubtasks();
-    expect(listAiSubtasks().map((s) => s.name)).toEqual(["traps", "score", "signals", "translate", "breakdown"]);
+    expect(listAiSubtasks().map((s) => s.name)).toEqual(["traps", "score", "signals", "translate", "breakdown", "research"]);
   });
 });

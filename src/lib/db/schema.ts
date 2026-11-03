@@ -833,6 +833,24 @@ export const salaryLookups = pgTable(
  * company's result serves all its jobs. `result_json` is the checked answer (`lib/research/verify.ts`: only fields with a source
  * that passed the trap and range checks); a failed lookup keeps its `error_code`, has no result and is never served from the cache.
  */
+/**
+ * One automatic research run: what limits them (`research.yaml` auto.max_per_day, counted for `favorite` and `status`;
+ * auto.high_score.max_per_day for `high_score_new`) and what stops a job counting twice in 24 hours. `items`: what each part did.
+ */
+export const researchAutoRuns = pgTable(
+  "research_auto_runs",
+  {
+    id: id(),
+    jobId: bigint("job_id", { mode: "number" })
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    trigger: text("trigger").notNull(),
+    items: jsonb("items").notNull(),
+    createdAt: timestamptz("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("research_auto_runs_created_idx").on(t.createdAt), index("research_auto_runs_job_created_idx").on(t.jobId, t.createdAt)],
+);
+
 export const companyResearch = pgTable(
   "company_research",
   {

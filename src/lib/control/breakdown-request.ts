@@ -6,7 +6,7 @@ import type { BreakdownSettingsState } from "@/lib/breakdown/settings";
 import { BREAKDOWN_PROMPT_VERSION } from "@/lib/ai/prompts/breakdown";
 import type { Db } from "@/lib/db/client";
 import { getJobBreakdown, getJobForBreakdown } from "@/lib/db/repos/breakdowns";
-import { findLatestJobControlRequest, findOpenJobControlRequest, getControlRequest, insertControlRequest } from "@/lib/db/repos/control-requests";
+import { clearControlRequestOrigin, findLatestJobControlRequest, findOpenJobControlRequest, getControlRequest, insertControlRequest } from "@/lib/db/repos/control-requests";
 import { createProcessLogger } from "@/lib/logging/process-logger";
 import { TRANSLATION_FAILURE_CODES } from "@/lib/translation/errors";
 import { descriptionHash } from "@/lib/translation/hash";
@@ -19,6 +19,7 @@ const log = createProcessLogger({ fields: { component: "control" } });
 export const BREAKDOWN_ERROR_CODES = [
   ...TRANSLATION_FAILURE_CODES,
   "disabled",
+  "research_disabled",
   "config_error",
   "not_found",
   "no_description",
@@ -36,7 +37,7 @@ export type BreakdownRequestOutcome =
   | { state: "queued"; requestId: number; existing: boolean }
   | { state: "error"; error: "disabled" | "config_error" | "not_found" | "no_description" };
 
-export async function requestBreakdownJob(db: Db, input: { jobId: number; force: boolean; settings: BreakdownSettingsState }): Promise<BreakdownRequestOutcome> {
+export async function requestBreakdownJob(db: Db, input: { jobId: number; force: boolean; origin?: "auto"; settings: BreakdownSettingsState }): Promise<BreakdownRequestOutcome> {
   if (input.settings.state === "error") return { state: "error", error: "config_error" };
   if (!input.settings.config.enabled) return { state: "error", error: "disabled" };
   const job = await getJobForBreakdown(db, input.jobId);
@@ -47,9 +48,13 @@ export async function requestBreakdownJob(db: Db, input: { jobId: number; force:
     if (existing && existing.sourceHash === descriptionHash(job.description) && existing.promptVersion === BREAKDOWN_PROMPT_VERSION) return { state: "cached" };
   }
   const open = await findOpenJobControlRequest(db, "breakdown_job", input.jobId);
-  if (open) return { state: "queued", requestId: open.id, existing: true };
-  const created = await insertControlRequest(db, { kind: "breakdown_job", payload: { jobId: input.jobId, force: input.force } });
-  log.info("manual request queued", { request: created.id, kind: created.kind, jobId: input.jobId });
+  if (open) {
+    // the user asks for what an automatic request is waiting to do: it moves to the interactive lane
+    if (input.origin === undefined) await clearControlRequestOrigin(db, open.id);
+    return { state: "queued", requestId: open.id, existing: true };
+  }
+  const created = await insertControlRequest(db, { kind: "breakdown_job", payload: { jobId: input.jobId, force: input.force, ...(input.origin ? { origin: input.origin } : {}) } });
+  log.info(input.origin === "auto" ? "automatic request queued" : "manual request queued", { request: created.id, kind: created.kind, jobId: input.jobId });
   return { state: "queued", requestId: created.id, existing: false };
 }
 

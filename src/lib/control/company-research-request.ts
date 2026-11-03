@@ -51,7 +51,7 @@ export async function requestCompanyResearch(
   }
   const reserved = await reserveCompanyResearchRequest(db, { companyId: job.companyId, jobId: input.jobId, force: input.force, ...(input.origin ? { origin: input.origin } : {}), maxPerDay: input.research.company.max_per_day, now });
   if (reserved.state === "quota") return { state: "error", error: "quota" };
-  if (reserved.state === "queued") log.info("manual request queued", { request: reserved.requestId, kind: "company_research", jobId: input.jobId });
+  if (reserved.state === "queued") log.info(input.origin === "auto" ? "automatic request queued" : "manual request queued", { request: reserved.requestId, kind: "company_research", jobId: input.jobId });
   return { state: "queued", requestId: reserved.requestId, existing: reserved.state === "existing" };
 }
 

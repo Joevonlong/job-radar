@@ -92,7 +92,7 @@ Job Radar is a single-user tool that you run on your own machine:
   (`RUNNER_MEM_LIMIT`, `JOBSPY_MEM_LIMIT`). The database keeps the capabilities its entrypoint needs.
 - **AI calls run without tools, with two exceptions.** Every AI call (scoring, signals, translation, summaries,
   suggestions, breakdown, trap checks, writing) runs with no tools at all: no shell, no files, no web. The exceptions are
-  two buttons on the job page, each off until you turn it on: the salary lookup (`salary.yaml`) and the company background
+  two features on the job page, each off until you turn it on: the salary lookup (`salary.yaml`) and the company background
   (`research.yaml`). They may search the public web. The task list is fixed in the code, not in any setting. Be aware of
   what the limits are and are not. For the salary lookup:
   - only the company name, job title, city, country and seniority go into the request, never your profile or the JD;
@@ -106,6 +106,9 @@ Job Radar is a single-user tool that you run on your own machine:
   - with the Anthropic API, search results are limited to those domains by the API (an empty list means no search);
   - public suffixes such as `co.uk` or `github.io` are refused in that list;
   - with `codex-cli` (only if you add it to the task), web search has no domain limit at all.
+
+  Both can also start without a press when research is on and you save a job (`research.yaml` `auto`): the same fields go out, and
+  the timing of the requests reflects what you save and apply to. `auto.trigger: manual` turns that off.
 
   For the company background the same provider limits apply, with `company.allowed_domains` as the list, and:
   - only the company name and a website domain you confirmed yourself go into the request. A domain inferred from postings never

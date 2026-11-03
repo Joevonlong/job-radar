@@ -35,6 +35,7 @@ export const SERIAL_CHAIN: readonly ChainEntry[] = [
   { name: "chromium-config-settings-invalid", spec: "settings-invalid.spec.ts" },
   { name: "chromium-config-language", spec: "language.spec.ts" },
   { name: "chromium-config-breakdown", spec: "breakdown.spec.ts" },
+  { name: "chromium-config-research", spec: "research.spec.ts" },
   { name: "chromium-config-resume", spec: "resume.spec.ts" },
   // interests.yaml (saved views, accepted suggestions)
   { name: "chromium-interests", spec: "interests.spec.ts" },

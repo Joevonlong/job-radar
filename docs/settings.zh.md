@@ -179,7 +179,7 @@ claude-cli，然后 Anthropic API；只用能搜索网页的 provider，codex-cl
 
 ## 调研标签：公司背景
 
-"调研"标签（在"薪资"之后）编辑 `data/config/research.yaml`：开关（`enabled`）和公司背景的上限（`company.ttl_days`、`max_per_day`、`max_searches`、`timeout_seconds`）。允许的站点、绝不当作公司官网的主机和合理范围在 YAML 里改（高级标签）。默认关闭；用哪个 AI 由 AI 页的任务"公司背景"决定（默认 claude-cli，然后是 Anthropic API；只使用能搜索网页的 provider，codex-cli 如果被你加入，其搜索不限域名）。ai-worker 每次请求都重新读这个文件，所以关闭后，还在排队的请求也不会执行。见 [research.zh.md](research.zh.md)。
+"调研"标签（在"薪资"之后）编辑 `data/config/research.yaml`：开关（`enabled`）和公司背景的上限（`company.ttl_days`、`max_per_day`、`max_searches`、`timeout_seconds`）。允许的站点、绝不当作公司官网的主机和合理范围在 YAML 里改（高级标签）。默认关闭；用哪个 AI 由 AI 页的任务"公司背景"决定（默认 claude-cli，然后是 Anthropic API；只使用能搜索网页的 provider，codex-cli 如果被你加入，其搜索不限域名）。ai-worker 每次请求都重新读这个文件，所以关闭后，还在排队的请求也不会执行。见 [research.zh.md](research.zh.md)。同一标签还设置自动调研（`auto.*`）：什么时候自动开始、运行哪些、每日上限，以及可选的高分新岗位。见 [research.zh.md](research.zh.md#自动调研)。
 
 ## 手动触发和测试
 

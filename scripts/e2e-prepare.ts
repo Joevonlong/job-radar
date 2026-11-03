@@ -84,7 +84,10 @@ if (fresh) {
   fs.writeFileSync(writerFile, writerText);
   // The shipped company background is off; the e2e copy turns it on (the e2e runner stands in for its AI)
   const researchFile = path.join(configDir, "research.yaml");
-  const researchText = fs.readFileSync(researchFile, "utf8").replace(/^enabled: (false|true)$/m, "enabled: true");
+  const researchText = fs.readFileSync(researchFile, "utf8")
+    .replace(/^enabled: (false|true)$/m, "enabled: true")
+    // a star in another spec must not start research there; the research spec turns this on for itself
+    .replace(/^  trigger: \w+$/m, "  trigger: manual");
   parseConfigText("research", researchText);
   fs.writeFileSync(researchFile, researchText);
   // The shipped salary lookup is off; the e2e copy turns it on (the e2e runner answers the requests, no AI is called)
