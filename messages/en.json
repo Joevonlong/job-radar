@@ -1863,7 +1863,8 @@
         "title": "Who may receive job text",
         "hint": "Per task, the providers that may be sent the job text (for scoring also the profile fields the prompt uses), in the order they are tried: a provider further down receives it when the ones before it are unavailable. Switched-off providers are not listed. Read from ai.yaml on disk. <docs>Which providers receive job text</docs>",
         "none": "No provider is switched on for this task, so it cannot run.",
-        "web": "also searches the public web"
+        "web": "also searches the public web",
+        "webUnrestricted": "codex-cli searches the web without a domain limit."
       },
       "edit": "Edit",
       "done": "Done",

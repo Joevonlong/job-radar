@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
 import { createAiRouter, createDbUsageStore } from "@/lib/ai";
-import { AiProviderError } from "@/lib/ai/errors";
+import { AiProviderError, AiUnavailableError } from "@/lib/ai/errors";
 import { COMPANY_RESEARCH_PROMPT_VERSION } from "@/lib/ai/prompts/company-research";
 import { researchSchema, type ResearchConfig } from "@/lib/config";
 import { processNextControlRequest, registerControlHandler, resetControlHandlers } from "@/lib/control";
@@ -216,6 +216,24 @@ describe("a lookup through the queue", () => {
   });
 });
 
+describe("the usage cap", () => {
+  it("fails a queued lookup with the time the AI is expected back, stores nothing and does not queue it again", async () => {
+    const { jobId, companyId } = await addJob("Acme Robotics");
+    const resumeAt = "2026-11-01T14:30:00.000Z";
+    const r = router([answer()]);
+    const capped = new AiUnavailableError("company_research", [{ provider: "anthropic", outcome: "skipped", kind: "rate_limited", message: "usage cap", guard: { reason: "window", resumeAt } }]);
+    registerControlHandler("company_research", handler({ ...r, router: { ...r.router, run: async () => Promise.reject(capped) } }));
+    const requestId = await queue(jobId, r.ai);
+    await work();
+
+    expect(await readCompanyResearchRequest(db(), { requestId, jobId })).toMatchObject({ state: "failed", error: "quota_guard", resumeAt });
+    expect(await readInitialCompanyResearchRequest(db(), { jobId, companyId, fetchedAt: null })).toMatchObject({ state: "failed", error: "quota_guard", resumeAt });
+    expect(await getCompanyResearchForJob(db(), jobId, NOW)).toBeNull();
+    expect(r.transport.calls).toHaveLength(0);
+    expect((await getControlRequest(db(), requestId))?.status).toBe("failed");
+  });
+});
+
 describe("the request rules", () => {
   it("refuses without a web provider, without settings and when off", async () => {
     const { jobId } = await addJob("Acme Robotics");
@@ -301,7 +319,9 @@ describe("the panel's state", () => {
     registerControlHandler("company_research", handler(r));
     await queue(jobId, r.ai);
     await work();
-    const later = new Date(NOW.getTime() + 31 * 86_400_000);
+    // the worker stamps the row on its own clock, not on this file's NOW
+    const stored = await getCompanyResearchForJob(db(), jobId, NOW);
+    const later = new Date((stored?.expiresAt?.getTime() ?? 0) + 1000);
     expect((await getCompanyResearchContext(db(), { jobId, research: config(), ai: r.ai, now: later }))?.latest?.expired).toBe(true);
     expect(await getCompanyResearchContext(db(), { jobId, research: null, ai: r.ai, now: NOW })).toMatchObject({ availability: "config_error" });
   });

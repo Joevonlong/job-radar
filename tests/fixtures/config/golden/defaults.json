@@ -92,11 +92,6 @@
       "hash": "3adb443f725dfd68bf0e4e88abd52e795d95c472173c040ba41ef36cf824b27a",
       "valid": true
     },
-    "research": {
-      "layer": "default",
-      "hash": "dc0772e3030c47b7e8e59b42b55fb7163e78a812f5f3712fecad6a69f76fa371",
-      "valid": true
-    },
     "signalPresets": {
       "layer": "default",
       "hash": "823dbb7602e146b018a2ec3689fa56718d998eb542282d0743560978e077ab2f",

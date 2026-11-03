@@ -272,6 +272,15 @@ describe("anthropic web search", () => {
     expect(limits.budget.remaining).toBe(2);
   });
 
+  it("company_research offers web_search limited in the same way", async () => {
+    const { fetch: f, seen } = fake([() => reply([answer({ answer: "ok" })], "tool_use", 1)]);
+    await make(f).run("company_research", prompt, schema, { web: webLimits(["linkedin.com", "example-company.de"], 8) });
+    expect(seen[0]?.body.tools).toEqual([
+      expect.objectContaining({ name: "respond" }),
+      { type: "web_search_20250305", name: "web_search", max_uses: 8, allowed_domains: ["linkedin.com", "example-company.de"] },
+    ]);
+  });
+
   it("extracts respond after thinking and search content", async () => {
     const { fetch: f, seen } = fake([
       () => reply([

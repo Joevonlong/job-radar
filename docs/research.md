@@ -38,7 +38,7 @@ you.
   to those sites.
 - **Anthropic API:** search results and fetches are limited to those sites by the API, and `max_searches` is enforced by the API.
 - **`codex-cli`:** not in the default order, because its web search has no domain limit at all. If you add it to the task
-  yourself, the panel warns about this.
+  yourself, the panel and the AI settings tab warn about this.
 - A site list entry that is a private address, a local name or a public suffix is refused when the file is loaded.
 
 ## Checks before anything is stored

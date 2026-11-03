@@ -1,5 +1,6 @@
 import { DocLink } from "@/components/ui/doc-link";
 import { Badge } from "@/components/ui/badge";
+import { UNRESTRICTED_WEB_PROVIDERS } from "@/lib/ai/web-tasks";
 
 import { nodeLabels } from "../field-control";
 import { SubHeading } from "./block";
@@ -38,6 +39,11 @@ export function DisclosureSection({ ctx }: { ctx: Pick<AiTabContext, "t" | "aiDi
                 ))}
                 {row.web ? (
                   <li className="text-cap text-ink-2">{t("ai.disclosure.web")}</li>
+                ) : null}
+                {row.web && row.providers.some((provider) => UNRESTRICTED_WEB_PROVIDERS.has(provider)) ? (
+                  <li className="text-cap text-ink-2" data-testid={`disclosure-unrestricted-${row.task}`}>
+                    {t("ai.disclosure.webUnrestricted")}
+                  </li>
                 ) : null}
               </ol>
             )}

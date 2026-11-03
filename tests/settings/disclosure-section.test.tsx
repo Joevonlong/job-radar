@@ -41,6 +41,17 @@ describe("DisclosureSection", () => {
     expect(screen.getByTestId("disclosure-none-score").textContent).toBe(en.settings.ai.disclosure.none);
   });
 
+  it("warns on a web task that may use a provider without a domain limit, and only there", () => {
+    mount("en", [
+      { task: "company_research", providers: ["claude-cli", "codex-cli"], web: true },
+      { task: "salary_lookup", providers: ["claude-cli", "anthropic"], web: true },
+      { task: "score", providers: ["codex-cli"], web: false },
+    ]);
+    expect(screen.getByTestId("disclosure-unrestricted-company_research").textContent).toBe(en.settings.ai.disclosure.webUnrestricted);
+    expect(screen.queryByTestId("disclosure-unrestricted-salary_lookup")).toBeNull();
+    expect(screen.queryByTestId("disclosure-unrestricted-score")).toBeNull();
+  });
+
   it("links the hint to the English or the Chinese provider doc", () => {
     const rows = aiDisclosure(pinnedAi());
     const first = mount("en", rows);

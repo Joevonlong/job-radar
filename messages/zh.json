@@ -1863,7 +1863,8 @@
         "title": "哪些 provider 可能收到岗位文本",
         "hint": "按任务列出可能收到岗位文本（评分时还有提示词用到的画像字段）的 provider，顺序就是尝试顺序：前面的不可用时，后面的才会收到。已关闭的 provider 不列出。数据读自磁盘上的 ai.yaml。<docs>哪些 provider 会收到岗位文本</docs>",
         "none": "这个任务没有开启任何 provider，无法运行。",
-        "web": "还会联网搜索公开网页"
+        "web": "还会联网搜索公开网页",
+        "webUnrestricted": "codex-cli 的网页搜索不限域名。"
       },
       "edit": "编辑",
       "done": "完成",
