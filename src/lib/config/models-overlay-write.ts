@@ -8,6 +8,7 @@
  * outside the lock and written afterwards.
  */
 import fsp from "node:fs/promises";
+import path from "node:path";
 
 import { Document, isMap, isSeq, YAMLMap, YAMLSeq } from "yaml";
 
@@ -172,19 +173,27 @@ function visitPrices(node: unknown): void {
 }
 
 /**
- * `pnpm models:export --full`: write the effective catalog to `file` (default: the user's models.yaml, under the write lock, the old
- * text backed up). Returns where it went and the backup, if any.
+ * `pnpm models:export --full`: write the effective catalog to the user's models.yaml, under the write lock, the old text backed up;
+ * or, given another path, to that file. Returns where it went and the backup, if any.
  */
 export async function writeFullModels(file: string = getUserConfigPath("models")): Promise<{ file: string; backup: string | null }> {
   const userFile = getUserConfigPath("models");
-  const write = async (): Promise<{ file: string; backup: string | null }> => {
-    const effective = reloadConfig("models");
-    const text = renderFullModelsText(effective);
-    const old = await readIfExists(file);
-    const backup = file === userFile && old !== null && old !== text ? await backupConfigText("models", old, backupsKeep()) : null;
-    await atomicWrite(file, text);
-    if (file === userFile) primeConfigCache("models", effective, text);
-    return { file, backup };
-  };
-  return file === userFile ? withFileLock(file, () => withConfigWriteLock(write, file)) : write();
+  if (path.resolve(file) !== path.resolve(userFile)) return exportFullModels(file);
+  return withFileLock(userFile, () =>
+    withConfigWriteLock(async () => {
+      const effective = reloadConfig("models");
+      const text = renderFullModelsText(effective);
+      const old = await readIfExists(userFile);
+      const backup = old !== null && old !== text ? await backupConfigText("models", old, backupsKeep()) : null;
+      await atomicWrite(userFile, text);
+      primeConfigCache("models", effective, text);
+      return { file, backup };
+    }, userFile),
+  );
+}
+
+/** A copy for the user, outside the configuration: nothing reads it, so it needs neither the lock nor the database behind it. */
+async function exportFullModels(file: string): Promise<{ file: string; backup: null }> {
+  await fsp.writeFile(file, renderFullModelsText(reloadConfig("models")), { mode: 0o600 });
+  return { file, backup: null };
 }
