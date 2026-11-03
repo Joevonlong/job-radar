@@ -104,6 +104,19 @@ describe("provider cooldown", () => {
     expect((await t.health.get("claude-cli")).coolingUntil).toBeNull();
   });
 
+  it("does not count a provider that cannot search the web for a web task", async () => {
+    const config = pinnedAi((raw) => {
+      (raw.tasks as Record<string, unknown>).score = { order: ["openai"] };
+      const providers = raw.providers as Record<string, { enabled: boolean }>;
+      for (const entry of Object.values(providers)) entry.enabled = true;
+    });
+    const router = createAiRouter({ config, providers: [scriptedProvider("openai", []).provider], usage: null });
+    expect((await router.usable("score")).usable).toBe(true);
+    const web = await router.usable("score", { requireWeb: true });
+    expect(web.usable).toBe(false);
+    expect(web.blocked[0]).toMatchObject({ provider: "openai", kind: "not_configured" });
+  });
+
   it("reports which providers cannot be tried", async () => {
     const t = setup({ claude: [new AiProviderError("claude-cli", "rate_limited", "rate limit")] });
     await t.router.run("score", prompt, schema);

@@ -12,6 +12,7 @@ import { CompanyResearchFields } from "@/components/jobs/detail/company-research
 import { useControlRequest } from "@/components/control/use-control-request";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { withActionFeedback } from "@/lib/actions/client";
 import type { AiProviderId } from "@/lib/ai/types";
 import { formatClock } from "@/lib/format/clock";
@@ -19,6 +20,23 @@ import type { CompanyResearchItem } from "@/lib/research/company-overview";
 import { toastTone } from "@/lib/toast";
 
 const requestAction = withActionFeedback(rawRequest)(() => ({ ok: false, error: "failed" }));
+
+/** A company without a stored result: its website behind one small button in the row's actions, so the list gets no extra row. */
+export function CompanyWebsiteAction({ company, companyId, website }: { company: string; companyId: number; website: CompanyResearchItem["website"] }) {
+  const t = useTranslations("research.overview");
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="ghost" size="sm" aria-label={t("websiteLabel", { company })} data-testid="company-website-action">
+          {t("website")}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))]">
+        <CompanyDomainRow companyId={companyId} website={website} />
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 /**
  * A company's background in the company list: one line with its summary and size, and on request the fields with their sources and
@@ -65,10 +83,10 @@ export function CompanyResearchDetails({ company, companyId, info, canRefresh, c
     });
   };
 
-  const summary = latest?.fields.summary?.text ?? null;
-  const size = latest?.fields.size?.text ?? null;
-  const hasPanel = latest !== null || canEditDomain;
-  if (!hasPanel) return null;
+  // the extra row is for a stored result; a company without one has `CompanyWebsiteAction` in its actions
+  if (latest === null) return null;
+  const summary = latest.fields.summary?.text ?? null;
+  const size = latest.fields.size?.text ?? null;
   const busy = pending || waiting !== null;
 
   return (
@@ -86,14 +104,13 @@ export function CompanyResearchDetails({ company, companyId, info, canRefresh, c
         ) : null}
         <Button type="button" variant="ghost" size="sm" aria-expanded={open} aria-controls={panelId} aria-label={t("toggleLabel", { company })} onClick={() => setOpen((value) => !value)} data-testid="company-research-toggle">
           <ChevronDown className={open ? "rotate-180 motion-reduce:transition-none" : "motion-reduce:transition-none"} aria-hidden />
-          {open ? t("hide") : latest ? t("details") : t("website")}
+          {open ? t("hide") : t("details")}
         </Button>
       </div>
       <div id={panelId} hidden={!open} className="border-border flex min-w-0 flex-col gap-3 border-l-2 pl-3 [overflow-wrap:anywhere]">
         {open ? (
           <>
-            {latest ? (
-              <>
+            <>
                 <Badge variant="gate-note" className="w-fit max-w-full whitespace-normal">
                   {t("unverified")}
                 </Badge>
@@ -102,10 +119,9 @@ export function CompanyResearchDetails({ company, companyId, info, canRefresh, c
                 <p className="text-data text-ink-3 font-mono [overflow-wrap:anywhere]" data-testid="company-research-meta">
                   {[latest.provider, latest.model, format.dateTime(new Date(latest.fetchedAt), { dateStyle: "medium", timeStyle: "short", timeZone })].filter((part): part is string => part !== null && part !== "").join(" · ")}
                 </p>
-              </>
-            ) : null}
+            </>
             {canEditDomain ? <CompanyDomainRow companyId={companyId} website={website} /> : null}
-            {latest && canRefresh && jobId !== null ? (
+            {canRefresh && jobId !== null ? (
               <Button type="button" variant="outline" size="sm" className="w-fit" disabled={busy} aria-busy={busy} onClick={refresh} data-testid="company-overview-refresh">
                 {busy ? <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden /> : <RefreshCw aria-hidden />}
                 {t("refresh")}

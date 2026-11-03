@@ -114,7 +114,9 @@ Job Radar is a single-user tool that you run on your own machine:
   - only the company name and a website domain you confirmed yourself go into the request. A domain inferred from postings never
     enters the request or the list of pages that may be opened, because anyone can write any link into a posting. A confirmed
     domain must be a public name (no address, no local or reserved name, no public suffix), checked again when it is read back;
-    a public name can still point at a private address (a `*.nip.io` name, say). This name check is the limit; there is no network
+    a public name can still point at a private address (a `*.nip.io` name, say), and a shared host can widen the pages that may be
+    opened to other people's sites (`*.notion.site`, say). `company.non_company_hosts` refuses the known ones; any other name is
+    only stopped by you not confirming it, and only you can confirm one. This name check is the limit; there is no network
     boundary;
   - the answer is untrusted: each field needs a public `https` source, and a field with invisible characters, text written at an
     AI (the patterns of `traps.yaml`, whether or not the trap scan is on) or an impossible value is dropped before storing.

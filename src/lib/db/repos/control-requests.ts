@@ -179,9 +179,14 @@ export async function getRunAiNotificationWindow(db: Db, requestId: number): Pro
 /** The host worker splits interactive and batch work; the runner and --once keep one queue (`all`). */
 export type ControlLane = "interactive" | "batch" | "all";
 
+/** Queued by automatic research or a cycle rather than by a person. */
+export function isAutoOriginRequest(payload: unknown): boolean {
+  return typeof payload === "object" && payload !== null && "origin" in payload && payload.origin === "auto";
+}
+
 /** Pure counterpart of the SQL lane filter. Missing origin means user work, including older queued requests. */
 export function controlLaneOf(kind: ControlRequestKind, payload: unknown): Exclude<ControlLane, "all"> {
-  const auto = typeof payload === "object" && payload !== null && "origin" in payload && payload.origin === "auto";
+  const auto = isAutoOriginRequest(payload);
   return (INTERACTIVE_CONTROL_REQUEST_KINDS as readonly ControlRequestKind[]).includes(kind) && !auto ? "interactive" : "batch";
 }
 

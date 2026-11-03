@@ -10,7 +10,7 @@ import { COMPANY_SORTS, serializeCompaniesParams, type CompaniesSearchParams } f
 import { formatInteger, formatScoreValue, UNKNOWN } from "@/lib/format/numbers";
 import { formatFullTime, formatRelativeTime } from "@/lib/format/time";
 
-import { CompanyResearchDetails } from "./company-research-details";
+import { CompanyResearchDetails, CompanyWebsiteAction } from "./company-research-details";
 import { WatchToggle } from "./watch-toggle";
 
 interface CompanyTableProps {
@@ -39,12 +39,14 @@ function CompanyStatus({ row }: { row: CompanyOverviewItem }) {
   );
 }
 
-function CompanyActions({ row }: { row: CompanyOverviewItem }) {
+function CompanyActions({ row, research }: { row: CompanyOverviewItem; research: CompanyResearchOverview | null }) {
+  const info = research?.items[row.id];
   const t = useTranslations("companies");
   return (
     <div className="flex flex-wrap items-center gap-2">
       <WatchToggle row={row} />
       {!row.excluded ? <Link href="/me#exclude-companies" className={`${linkClass} inline-flex min-h-8 items-center text-body-sm`}>{t("exclude")}</Link> : null}
+      {research?.canEditDomain && info && !info.latest ? <CompanyWebsiteAction company={row.name} companyId={row.id} website={info.website} /> : null}
     </div>
   );
 }
@@ -63,7 +65,7 @@ export function CompanyTable({ rows, params, now, timezone, research = null }: C
 
   const researchOf = (row: CompanyOverviewItem) => {
     const info = research?.items[row.id];
-    return research && info ? <CompanyResearchDetails company={row.name} companyId={row.id} info={info} canRefresh={research.canRefresh} canEditDomain={research.canEditDomain} providers={research.providers} timeZone={timezone} /> : null;
+    return research && info?.latest ? <CompanyResearchDetails company={row.name} companyId={row.id} info={info} canRefresh={research.canRefresh} canEditDomain={research.canEditDomain} providers={research.providers} timeZone={timezone} /> : null;
   };
 
   if (rows.length === 0) return <p className="rounded-card border border-dashed border-border p-sp-4 text-body text-ink-2" data-testid="companies-empty">{t("empty")}</p>;
@@ -99,7 +101,7 @@ export function CompanyTable({ rows, params, now, timezone, research = null }: C
                 <td className="px-2 py-4 font-mono tabular-nums" data-column="score">{score(row)}</td>
                 <td className="px-2 py-4 font-mono text-data-sm">{latest(row)}</td>
                 <td className="wrap-anywhere px-2 py-4"><CompanyStatus row={row} /></td>
-                <td className="wrap-anywhere px-2 py-4"><CompanyActions row={row} /></td>
+                <td className="wrap-anywhere px-2 py-4"><CompanyActions row={row} research={research} /></td>
               </tr>
               {researchOf(row) ? <tr data-testid="company-research-row" className="border-t-0!"><td colSpan={6} className="px-2 pb-4">{researchOf(row)}</td></tr> : null}
               </Fragment>
@@ -117,7 +119,7 @@ export function CompanyTable({ rows, params, now, timezone, research = null }: C
               <div className="col-span-2"><dt className="text-ink-2">{t("columns.recent")}</dt><dd className="font-mono">{latest(row)}</dd></div>
             </dl>
             {row.watched || row.excluded ? <div className="mb-sp-3"><CompanyStatus row={row} /></div> : null}
-            <CompanyActions row={row} />
+            <CompanyActions row={row} research={research} />
             {researchOf(row) ? <div className="mt-sp-3">{researchOf(row)}</div> : null}
           </li>
         ))}

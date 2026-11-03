@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { withActionFeedback } from "@/lib/actions/client";
 import { RESEARCH_ITEMS, type ResearchItem } from "@/lib/config/schemas/research";
 import { formatClock } from "@/lib/format/clock";
-import type { ResearchBarStatus, ResearchItemStatus } from "@/lib/research/bar";
+import { canMoveUp, type ResearchBarStatus, type ResearchItemStatus } from "@/lib/research/bar-view";
 import { toastTone } from "@/lib/toast";
 
 const requestAll = withActionFeedback(rawRequestAll)((): ResearchActionResult => ({ ok: false, error: "failed" }));
@@ -40,7 +40,7 @@ function StateIcon({ item }: { item: ResearchItemStatus }) {
     case "done":
       return item.expired ? <Clock className="text-warn size-3.5" aria-hidden /> : <Check className="text-good size-3.5" aria-hidden />;
     case "running":
-      return <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden />;
+      return canMoveUp(item) ? <Clock className="text-ink-3 size-3.5" aria-hidden /> : <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden />;
     case "deferred":
       return <Clock className="text-warn size-3.5" aria-hidden />;
     case "failed":
@@ -103,7 +103,7 @@ export function ResearchBar({ jobId, initial, timeZone }: { jobId: number; initi
       case "done":
         return item.expired ? t("state.expired") : t("state.done", { n: item.ageDays });
       case "running":
-        return t("state.running");
+        return canMoveUp(item) ? t("state.queuedAuto") : t("state.running");
       case "deferred":
         return item.resumeAt ? t("state.deferred", { time: formatClock(format, item.resumeAt, timeZone) }) : t("state.deferredUnknown");
       case "failed":
@@ -120,7 +120,7 @@ export function ResearchBar({ jobId, initial, timeZone }: { jobId: number; initi
   const shown = RESEARCH_ITEMS.filter((item) => status.items[item] !== undefined);
   const canRunAll = status.canRequest && shown.some((name) => {
     const item = status.items[name];
-    return item !== undefined && (item.state === "missing" || item.state === "failed" || item.state === "deferred" || (item.state === "done" && item.expired));
+    return item !== undefined && (canMoveUp(item) || item.state === "missing" || item.state === "failed" || item.state === "deferred" || (item.state === "done" && item.expired));
   });
 
   return (
@@ -128,7 +128,7 @@ export function ResearchBar({ jobId, initial, timeZone }: { jobId: number; initi
       <ul className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
         {shown.map((name) => {
           const item = status.items[name] as ResearchItemStatus;
-          const canRun = status.canRequest && item.state !== "running" && item.state !== "off" && item.state !== "unavailable";
+          const canRun = status.canRequest && (item.state !== "running" || canMoveUp(item)) && item.state !== "off" && item.state !== "unavailable";
           const label = t(`item.${name}`);
           return (
             <li key={name} className="text-body-sm flex min-w-0 flex-wrap items-center gap-1" data-testid={`research-bar-${name}`} data-state={item.state}>

@@ -17,32 +17,22 @@ import { salaryLookupKey } from "@/lib/salary/lookup-key";
 import type { SalarySettingsState } from "@/lib/salary/settings";
 import { descriptionHash } from "@/lib/translation/hash";
 
-export type ResearchItemStatus =
-  /** A result exists; `expired`: it is out of date and shown as such. */
-  | { state: "done"; ageDays: number; expired: boolean }
-  | { state: "running" }
-  /** Paused by the AI usage cap until about `resumeAt`, if that is known. */
-  | { state: "deferred"; resumeAt: string | null }
-  | { state: "failed"; error: string }
-  /** Cannot run until the user changes something on that settings tab. */
-  | { state: "off"; settingsTab: "ai" | "salary" | "breakdown" }
-  /** The job has no JD text, so this part has nothing to work on. */
-  | { state: "unavailable" }
-  | { state: "missing" };
+import type { ResearchBarStatus, ResearchItemStatus } from "./bar-view";
 
-export interface ResearchBarStatus {
-  /** research.enabled: the buttons are there. When off, only stored results are listed. */
-  canRequest: boolean;
-  items: Partial<Record<ResearchItem, ResearchItemStatus>>;
-}
+export type { ResearchBarStatus, ResearchItemStatus } from "./bar-view";
 
 const ageDays = (at: Date, now: Date): number => Math.max(0, Math.floor((now.getTime() - at.getTime()) / 86_400_000));
 
-type Initial = { state: "waiting" } | { state: "failed"; error: string; resumeAt?: string | null } | null;
+type Initial = { state: "waiting"; stage: "pending" | "running"; auto?: true } | { state: "failed"; error: string; resumeAt?: string | null } | null;
 
-/** An open or failed request, then a result, then whatever the settings say. `research_disabled`: stopped earlier, nothing to report. */
-function fromParts(initial: Initial, result: { at: Date; expired: boolean } | null, now: Date, otherwise: ResearchItemStatus): ResearchItemStatus {
-  if (initial?.state === "waiting") return { state: "running" };
+/**
+ * An open request, then a part that is off (a result would come with a refresh that cannot run), then a failed request, a result,
+ * and whatever the settings say. `research_disabled`: stopped earlier, nothing to report. With research itself off nothing can be
+ * pressed, so `offWins` is false and stored results stay listed.
+ */
+function fromParts(initial: Initial, result: { at: Date; expired: boolean } | null, now: Date, otherwise: ResearchItemStatus, offWins: boolean): ResearchItemStatus {
+  if (initial?.state === "waiting") return { state: "running", stage: initial.stage, auto: initial.auto === true };
+  if (offWins && otherwise.state === "off") return otherwise;
   if (initial?.state === "failed" && initial.error === "quota_guard") return { state: "deferred", resumeAt: initial.resumeAt ?? null };
   if (initial?.state === "failed" && initial.error !== "research_disabled") return { state: "failed", error: initial.error };
   if (result) return { state: "done", ageDays: ageDays(result.at, now), expired: result.expired };
@@ -56,20 +46,20 @@ async function companyStatus(db: Db, jobId: number, research: ResearchConfig, ai
   const initial = await readInitialCompanyResearchRequest(db, { jobId, companyId: job.companyId, fetchedAt: latest?.fetchedAt ?? null });
   const usable = ai !== null && companyResearchProviders(ai).length > 0;
   const result = latest ? { at: latest.fetchedAt, expired: !companyResearchCurrent(latest, confirmedWebsiteDomain(job)) } : null;
-  return fromParts(initial, result, now, usable && research.enabled ? { state: "missing" } : { state: "off", settingsTab: "ai" });
+  return fromParts(initial, result, now, usable && research.enabled ? { state: "missing" } : { state: "off", settingsTab: "ai" }, research.enabled);
 }
 
-async function breakdownStatus(db: Db, jobId: number, settings: BreakdownSettingsState, now: Date): Promise<ResearchItemStatus> {
+async function breakdownStatus(db: Db, jobId: number, settings: BreakdownSettingsState, now: Date, offWins: boolean): Promise<ResearchItemStatus> {
   const row = await getJobBreakdown(db, jobId);
   const initial = await readInitialBreakdownRequest(db, jobId, row?.analyzedAt ?? null);
   const job = await getJobForBreakdown(db, jobId);
   const hasText = job !== null && job.description !== null && job.description.trim() !== "";
   const result = row && row.analyzedAt ? { at: row.analyzedAt, expired: !hasText || row.sourceHash !== descriptionHash(job.description) || row.promptVersion !== BREAKDOWN_PROMPT_VERSION } : null;
   const on = settings.state === "ok" && settings.config.enabled;
-  return fromParts(initial, result, now, !on ? { state: "off", settingsTab: "breakdown" } : hasText ? { state: "missing" } : { state: "unavailable" });
+  return fromParts(initial, result, now, !on ? { state: "off", settingsTab: "breakdown" } : hasText ? { state: "missing" } : { state: "unavailable" }, offWins);
 }
 
-async function salaryStatus(db: Db, jobId: number, settings: SalarySettingsState, ai: AiConfig | null, now: Date): Promise<ResearchItemStatus> {
+async function salaryStatus(db: Db, jobId: number, settings: SalarySettingsState, ai: AiConfig | null, now: Date, offWins: boolean): Promise<ResearchItemStatus> {
   const on = settings.state === "ok" && settings.config.lookup.enabled;
   if (settings.state !== "ok") return { state: "off", settingsTab: "salary" };
   const job = await getJobForSalaryLookup(db, jobId);
@@ -79,7 +69,7 @@ async function salaryStatus(db: Db, jobId: number, settings: SalarySettingsState
   const initial = await readInitialSalaryRequest(db, { jobId, lookupKey, fetchedAt: cached?.fetchedAt ?? null });
   const result = cached ? { at: cached.fetchedAt, expired: cached.expiresAt <= now } : null;
   const otherwise: ResearchItemStatus = !on ? { state: "off", settingsTab: "salary" } : ai === null || salaryLookupProviders(ai).length === 0 ? { state: "off", settingsTab: "ai" } : { state: "missing" };
-  return fromParts(initial, result, now, otherwise);
+  return fromParts(initial, result, now, otherwise, offWins);
 }
 
 /**
@@ -90,8 +80,8 @@ export async function getResearchBarStatus(db: Db, input: { jobId: number; resea
   if (!input.research) return null;
   const all: Record<ResearchItem, ResearchItemStatus> = {
     company: await companyStatus(db, input.jobId, input.research, input.ai, input.now),
-    breakdown: await breakdownStatus(db, input.jobId, input.breakdown, input.now),
-    salary: await salaryStatus(db, input.jobId, input.salary, input.ai, input.now),
+    breakdown: await breakdownStatus(db, input.jobId, input.breakdown, input.now, input.research.enabled),
+    salary: await salaryStatus(db, input.jobId, input.salary, input.ai, input.now, input.research.enabled),
   };
   if (input.research.enabled) return { canRequest: true, items: all };
   const items: ResearchBarStatus["items"] = {};

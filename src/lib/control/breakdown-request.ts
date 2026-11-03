@@ -6,7 +6,7 @@ import type { BreakdownSettingsState } from "@/lib/breakdown/settings";
 import { BREAKDOWN_PROMPT_VERSION } from "@/lib/ai/prompts/breakdown";
 import type { Db } from "@/lib/db/client";
 import { getJobBreakdown, getJobForBreakdown } from "@/lib/db/repos/breakdowns";
-import { clearControlRequestOrigin, findLatestJobControlRequest, findOpenJobControlRequest, getControlRequest, insertControlRequest } from "@/lib/db/repos/control-requests";
+import { clearControlRequestOrigin, isAutoOriginRequest, findLatestJobControlRequest, findOpenJobControlRequest, getControlRequest, insertControlRequest } from "@/lib/db/repos/control-requests";
 import { createProcessLogger } from "@/lib/logging/process-logger";
 import { TRANSLATION_FAILURE_CODES } from "@/lib/translation/errors";
 import { descriptionHash } from "@/lib/translation/hash";
@@ -87,7 +87,7 @@ export async function readBreakdownRequest(db: Db, input: { requestId: number; j
 
 /** What the card starts with after a page load, from the job's newest `breakdown_job` request (null: nothing to resume). */
 export type InitialBreakdownRequest =
-  | { state: "waiting"; requestId: number; stage: "pending" | "running"; queue: ControlQueueView | null }
+  | { state: "waiting"; requestId: number; stage: "pending" | "running"; queue: ControlQueueView | null; /** Queued automatically: a press still moves it up. */ auto?: true }
   | { state: "failed"; error: BreakdownErrorCode; detail: string | null; resumeAt?: string | null };
 
 /**
@@ -98,7 +98,7 @@ export async function readInitialBreakdownRequest(db: Db, jobId: number, analyze
   const request = await findLatestJobControlRequest(db, "breakdown_job", jobId);
   if (!request) return null;
   const state = await readBreakdownRequest(db, { requestId: request.id, jobId });
-  if (state.state === "waiting") return { state: "waiting", requestId: request.id, stage: state.stage, queue: state.queue };
+  if (state.state === "waiting") return { state: "waiting", requestId: request.id, stage: state.stage, queue: state.queue, ...(isAutoOriginRequest(request.payload) ? { auto: true as const } : {}) };
   if (state.state !== "failed") return null;
   if (analyzedAt !== null && request.finishedAt !== null && request.finishedAt <= analyzedAt) return null;
   return state;

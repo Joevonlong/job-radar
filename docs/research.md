@@ -45,8 +45,8 @@ kind up. With research off the bar only lists stored results, without buttons, a
 
 On `/companies` a company with a stored result shows its summary and size in one line. "Details" opens the same fields with their
 sources, read only and marked as unverified, a button that looks it up again (one manual lookup, through the company's newest job),
-and the website to confirm or change. Opening the list sends nothing: a company without a result stays without one, and there is no
-button for all of them.
+and the website to confirm or change. A company without a result gets no extra row, only a "Website" button in its actions. Opening
+the list sends nothing, and there is no button for all of them.
 
 ## Automatic research
 

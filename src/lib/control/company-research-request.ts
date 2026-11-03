@@ -9,7 +9,7 @@ import type { AiProviderId } from "@/lib/ai/types";
 import type { AiConfig, ResearchConfig } from "@/lib/config";
 import { AI_PROVIDER_CONFIG_KEYS } from "@/lib/config/ai-options";
 import type { Db } from "@/lib/db/client";
-import { getControlRequest } from "@/lib/db/repos/control-requests";
+import { getControlRequest, isAutoOriginRequest } from "@/lib/db/repos/control-requests";
 import { companyResearchCurrent, companyResearchTableReady, confirmedWebsiteDomain, findLatestCompanyResearch, findLatestCompanyResearchRequest, getJobForCompanyResearch, reserveCompanyResearchRequest } from "@/lib/db/repos/company-research";
 import { createProcessLogger } from "@/lib/logging/process-logger";
 import { COMPANY_RESEARCH_ERROR_CODES, type CompanyResearchErrorCode } from "@/lib/research/company";
@@ -87,7 +87,7 @@ export async function readCompanyResearchRequest(db: Db, input: { requestId: num
 }
 
 export type InitialCompanyResearchRequest =
-  | { state: "waiting"; requestId: number; stage: "pending" | "running"; queue: ControlQueueView | null }
+  | { state: "waiting"; requestId: number; stage: "pending" | "running"; queue: ControlQueueView | null; /** Queued automatically: a press still moves it up. */ auto?: true }
   | { state: "failed"; error: CompanyResearchErrorCode; detail: string | null; resumeAt?: string | null };
 
 /** What the panel starts with after a reload: an open request waits again; a failure newer than the shown result is shown. */
@@ -95,7 +95,7 @@ export async function readInitialCompanyResearchRequest(db: Db, input: { jobId: 
   const request = await findLatestCompanyResearchRequest(db, input.companyId);
   if (!request) return null;
   const state = await readCompanyResearchRequest(db, { requestId: request.id, jobId: input.jobId, companyId: input.companyId });
-  if (state.state === "waiting") return { state: "waiting", requestId: request.id, stage: state.stage, queue: state.queue };
+  if (state.state === "waiting") return { state: "waiting", requestId: request.id, stage: state.stage, queue: state.queue, ...(isAutoOriginRequest(request.payload) ? { auto: true as const } : {}) };
   if (state.state !== "failed") return null;
   if (input.fetchedAt !== null && request.finishedAt !== null && request.finishedAt <= input.fetchedAt) return null;
   return state;

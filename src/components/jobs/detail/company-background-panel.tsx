@@ -56,8 +56,8 @@ export function CompanyBackgroundPanel({ jobId, company, context, timeZone }: { 
     initialRequest?.state === "failed" ? { key: initialRequest.error, detail: initialRequest.detail, resumeAt: initialRequest.resumeAt } : null,
   );
   const [pending, startTransition] = useTransition();
-  const [waiting, setWaiting] = useState<{ requestId: number; stage: "pending" | "running"; queue?: ControlQueueView | null } | null>(
-    initialRequest?.state === "waiting" ? { requestId: initialRequest.requestId, stage: initialRequest.stage, queue: initialRequest.queue } : null,
+  const [waiting, setWaiting] = useState<{ requestId: number; stage: "pending" | "running"; queue?: ControlQueueView | null; auto?: true } | null>(
+    initialRequest?.state === "waiting" ? { requestId: initialRequest.requestId, stage: initialRequest.stage, queue: initialRequest.queue, ...(initialRequest.auto ? { auto: true as const } : {}) } : null,
   );
 
   // a fresh result from the server: stop waiting
@@ -107,7 +107,8 @@ export function CompanyBackgroundPanel({ jobId, company, context, timeZone }: { 
     },
   });
   const stage = waiting ? wait.stage : null;
-  const busy = pending || waiting !== null;
+  // an automatic request still waiting stays pressable: the press moves it to the interactive lane
+  const busy = pending || (waiting !== null && !(waiting.auto === true && stage === "pending"));
 
   const run = (force: boolean): void => {
     setError(null);

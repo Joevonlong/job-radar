@@ -18,6 +18,7 @@ import { countSalaryLookupRequests } from "@/lib/db/repos/salary-lookups";
 import { listHighScoreResearchCandidates, reserveAutoResearchRun } from "@/lib/db/repos/research-auto-runs";
 import { requestAutoResearch, type AutoResearchDeps } from "@/lib/research/auto";
 import { getResearchBarStatus } from "@/lib/research/bar";
+import { canMoveUp, researchAllItems } from "@/lib/research/bar-view";
 import { runResearchSubtask } from "@/lib/research/subtask";
 import { descriptionHash } from "@/lib/translation/hash";
 
@@ -272,7 +273,7 @@ describe("high-score new jobs", () => {
     await db().insert(schema.jobFavorites).values({ jobId: starred });
     const ran = await scored(98);
     await reserveAutoResearchRun(db(), { jobId: ran, trigger: "favorite", items: {}, maxPerDay: 5, now: NOW });
-    expect(await listHighScoreResearchCandidates(db(), { minRank: 80, maxAgeDays: 3, limit: 10, now: NOW })).toEqual([best, good]);
+    expect(await listHighScoreResearchCandidates(db(), { minRank: 80, maxAgeDays: 3, limit: 10, now: NOW, isExcludedCompany: () => false })).toEqual([best, good]);
   });
 
   const ctx = (dryRun = false) => ({ cycle: { db: db(), dryRun, signal: new AbortController().signal, logger: quietLogger }, router: { usable: async () => ({ usable: true, blocked: [] }) } as unknown as AiRouter }) as never;
@@ -282,6 +283,37 @@ describe("high-score new jobs", () => {
     listCandidates: listHighScoreResearchCandidates,
     request: requestAutoResearch,
     deps: () => deps({ research: settings }),
+    excludedCompany: () => () => false,
+  });
+
+  it("spends nothing on a job the user is done with or on a company the user excluded", async () => {
+    const open = await scored(90);
+    const archived = await scored(99);
+    await db().insert(schema.applications).values({ jobId: archived, status: "archived" });
+    const rejected = await scored(98);
+    await db().insert(schema.applications).values({ jobId: rejected, status: "rejected" });
+    const closedByUser = await scored(97);
+    await db().insert(schema.jobClosureOverrides).values({ jobId: closedByUser, action: "closed" });
+    const excluded = await scored(96);
+    const [row] = await db().select({ company: schema.jobs.companyId }).from(schema.jobs).where(eq(schema.jobs.id, excluded));
+    const [company] = await db().select({ name: schema.companies.name }).from(schema.companies).where(eq(schema.companies.id, row!.company));
+    const candidates = await listHighScoreResearchCandidates(db(), { minRank: 80, maxAgeDays: 3, limit: 1, now: NOW, isExcludedCompany: (c) => c.name === company!.name });
+    expect(candidates).toEqual([open]);
+  });
+
+  it("records a deferral once per cycle, however many jobs it held back", async () => {
+    for (const rank of [95, 94, 93]) await scored(rank, new Date());
+    const held = { ...subtaskDeps(research({ items: ["company"] })), deps: () => deps({ research: research({ items: ["company"] }), webOpen: async () => false }) };
+    expect(await runResearchSubtask(ctx(), held)).toMatchObject({ candidates: 3, queued: 0 });
+    expect(await db().select().from(schema.activitySpans).where(eq(schema.activitySpans.name, "system.research_auto"))).toHaveLength(1);
+  });
+
+  it("records the deferral of a run that queued the other parts", async () => {
+    const jobId = await addJob();
+    const result = await requestAutoResearch(db(), { jobId, event: "favorite", now: NOW }, deps({ webOpen: async () => false }));
+    expect(result.outcome).toBe("queued");
+    const spans = await db().select().from(schema.activitySpans).where(eq(schema.activitySpans.name, "system.research_auto"));
+    expect(spans.map((span) => span.status).sort()).toEqual(["ok", "skipped"]);
   });
 
   it("queues at most the per-cycle limit", async () => {
@@ -315,6 +347,31 @@ describe("the bar", () => {
     });
     await requestAutoResearch(db(), { jobId, event: "favorite", now: NOW }, deps());
     expect((await status(jobId, research()))?.items).toMatchObject({ company: { state: "running" }, breakdown: { state: "running" }, salary: { state: "running" } });
+  });
+
+  it("lets a press move up an automatic request that is still waiting, and no other", async () => {
+    const jobId = await addJob();
+    await requestAutoResearch(db(), { jobId, event: "favorite", now: NOW }, deps({ research: research({ items: ["breakdown"] }) }));
+    const waiting = await status(jobId, research());
+    expect(waiting?.items.breakdown).toEqual({ state: "running", stage: "pending", auto: true });
+    expect(canMoveUp(waiting?.items.breakdown)).toBe(true);
+    expect(researchAllItems(waiting)).toContain("breakdown");
+
+    await requestBreakdownJob(db(), { jobId, force: false, settings: { state: "ok", config: breakdown() } });
+    const [request] = await db().select().from(schema.controlRequests).where(eq(schema.controlRequests.kind, "breakdown_job"));
+    expect(controlLaneOf(request!.kind, request!.payload)).toBe("interactive");
+    const movedUp = await status(jobId, research());
+    expect(movedUp?.items.breakdown).toEqual({ state: "running", stage: "pending", auto: false });
+    expect(canMoveUp(movedUp?.items.breakdown)).toBe(false);
+    expect(researchAllItems(movedUp)).not.toContain("breakdown");
+  });
+
+  it("says off rather than showing a result that cannot be refreshed, unless research itself is off", async () => {
+    const jobId = await addJob();
+    await db().insert(schema.jobBreakdowns).values({ jobId, sourceHash: descriptionHash("Build models."), promptVersion: BREAKDOWN_PROMPT_VERSION, content: {}, outputLang: "en", provider: "anthropic", model: "m", analyzedAt: NOW });
+    const off = { breakdown: breakdown(false) };
+    expect((await status(jobId, research(), off))?.items.breakdown).toEqual({ state: "off", settingsTab: "breakdown" });
+    expect((await status(jobId, research({}, false), off))?.items.breakdown).toMatchObject({ state: "done" });
   });
 
   it("does not treat a request stopped by the switch as a failure", async () => {

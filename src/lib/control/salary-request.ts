@@ -10,7 +10,7 @@ import type { AiProviderId } from "@/lib/ai/types";
 import type { AiConfig, SalaryConfig } from "@/lib/config";
 import { AI_PROVIDER_CONFIG_KEYS } from "@/lib/config/ai-options";
 import type { Db } from "@/lib/db/client";
-import { getControlRequest } from "@/lib/db/repos/control-requests";
+import { getControlRequest, isAutoOriginRequest } from "@/lib/db/repos/control-requests";
 import { findLatestSalaryLookup, findLatestSalaryLookupRequest, getJobForSalaryLookup, reserveSalaryLookupRequest, salaryTablesReady } from "@/lib/db/repos";
 import { createProcessLogger } from "@/lib/logging/process-logger";
 import { compileFamilies } from "@/lib/salary/families";
@@ -90,7 +90,7 @@ export async function readSalaryLookupRequest(db: Db, input: { requestId: number
 }
 
 export type InitialSalaryRequest =
-  | { state: "waiting"; requestId: number; stage: "pending" | "running"; queue: ControlQueueView | null }
+  | { state: "waiting"; requestId: number; stage: "pending" | "running"; queue: ControlQueueView | null; /** Queued automatically: a press still moves it up. */ auto?: true }
   | { state: "failed"; error: SalaryErrorCode; detail: string | null; resumeAt?: string | null };
 
 /** What the salary panel starts with after a reload: an open request waits again; a failure newer than the shown result is shown. */
@@ -98,7 +98,7 @@ export async function readInitialSalaryRequest(db: Db, input: { jobId: number; l
   const request = await findLatestSalaryLookupRequest(db, input);
   if (!request) return null;
   const state = await readSalaryLookupRequest(db, { requestId: request.id, jobId: input.jobId, lookupKey: input.lookupKey });
-  if (state.state === "waiting") return { state: "waiting", requestId: request.id, stage: state.stage, queue: state.queue };
+  if (state.state === "waiting") return { state: "waiting", requestId: request.id, stage: state.stage, queue: state.queue, ...(isAutoOriginRequest(request.payload) ? { auto: true as const } : {}) };
   if (state.state !== "failed") return null;
   if (input.fetchedAt !== null && request.finishedAt !== null && request.finishedAt <= input.fetchedAt) return null;
   return state;

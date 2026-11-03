@@ -1,10 +1,12 @@
 import { noopSpan } from "@/lib/activity";
 import { registerAiSubtask, type AiSubtask, type AiSubtaskContext } from "@/lib/ai";
-import { ConfigError, reloadConfig, type ResearchConfig } from "@/lib/config";
+import { buildBlacklistedCompanyKeys, isCompanyExcluded } from "@/lib/companies/marks";
+import { ConfigError, loadConfig, reloadConfig, type ResearchConfig } from "@/lib/config";
+import { loadPipeline } from "@/lib/market";
 import type { Db } from "@/lib/db/client";
-import { listHighScoreResearchCandidates } from "@/lib/db/repos/research-auto-runs";
+import { listHighScoreResearchCandidates, type ResearchCandidateCompany } from "@/lib/db/repos/research-auto-runs";
 
-import { autoResearchDeps, requestAutoResearch, type AutoResearchDeps } from "./auto";
+import { autoResearchDeps, requestAutoResearch, type AutoResearchDeps, type AutoResearchOutcome } from "./auto";
 
 export const RESEARCH_SUBTASK_NAME = "research";
 
@@ -21,6 +23,8 @@ export interface ResearchSubtaskDeps {
   listCandidates: typeof listHighScoreResearchCandidates;
   request: typeof requestAutoResearch;
   deps(ctx: AiSubtaskContext): AutoResearchDeps;
+  /** The companies the user excluded (`preferences.yaml`, and the flag on the company). */
+  excludedCompany(): (company: ResearchCandidateCompany) => boolean;
 }
 
 const defaultDeps: ResearchSubtaskDeps = {
@@ -28,7 +32,12 @@ const defaultDeps: ResearchSubtaskDeps = {
   listCandidates: listHighScoreResearchCandidates,
   request: requestAutoResearch,
   // the ai-worker's router knows what this process can start
-  deps: (ctx) => ({ ...autoResearchDeps("ai-worker"), webOpen: async (task) => (await ctx.router.usable(task)).usable }),
+  excludedCompany: () => {
+    const pipeline = loadPipeline();
+    const keys = buildBlacklistedCompanyKeys(loadConfig("preferences").exclude_companies, pipeline);
+    return (company) => isCompanyExcluded(company, keys, pipeline.company.legal_suffixes);
+  },
+  deps: (ctx) => ({ ...autoResearchDeps("ai-worker"), webOpen: async (task) => (await ctx.router.usable(task, { requireWeb: true })).usable }),
 };
 
 /** More candidates than the limit: some will find everything cached, which does not use it up. */
@@ -54,11 +63,19 @@ export async function runResearchSubtask(ctx: AiSubtaskContext, deps: ResearchSu
   if (ctx.cycle.dryRun || db === null) return { ...result, skipped: ctx.cycle.dryRun ? "dry run" : "no database" };
 
   const now = new Date();
-  const candidates = await deps.listCandidates(db, { minRank: settings.min_rank, maxAgeDays: settings.max_age_days, limit: settings.per_cycle_limit + CANDIDATE_MARGIN, now });
+  let isExcludedCompany: (company: ResearchCandidateCompany) => boolean;
+  try {
+    isExcludedCompany = deps.excludedCompany();
+  } catch (error) {
+    // without the exclusion list nothing may be spent
+    if (error instanceof ConfigError) return { ...result, skipped: "config_error" };
+    throw error;
+  }
+  const candidates = await deps.listCandidates(db, { minRank: settings.min_rank, maxAgeDays: settings.max_age_days, limit: settings.per_cycle_limit + CANDIDATE_MARGIN, now, isExcludedCompany });
   result.candidates = candidates.length;
   const activity = ctx.activity ?? noopSpan;
   activity.progress(0, settings.per_cycle_limit);
-  const requestDeps = deps.deps(ctx);
+  const requestDeps = { ...deps.deps(ctx), reportedOnce: new Set<AutoResearchOutcome>() };
   for (const jobId of candidates) {
     if (ctx.cycle.signal.aborted || result.queued >= settings.per_cycle_limit) break;
     const { outcome } = await deps.request(db, { jobId, event: "high_score_new", now }, requestDeps);

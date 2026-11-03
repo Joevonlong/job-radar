@@ -12,6 +12,7 @@ import { requestSalaryLookup } from "@/lib/control/salary-request";
 import { getDb } from "@/lib/db";
 import { logActionFailure } from "@/lib/logging/action-failure";
 import { getResearchBarStatus, type ResearchBarStatus } from "@/lib/research/bar";
+import { researchAllItems } from "@/lib/research/bar-view";
 import { readResearchSettings } from "@/lib/research/settings";
 import { readSalarySettings } from "@/lib/salary/settings";
 
@@ -72,11 +73,8 @@ export async function requestResearchAction(jobId: number): Promise<ResearchActi
   if (!parsed.success) return { ok: false, error: "invalid" };
   try {
     const status = await readStatus(parsed.data);
-    // a part that is off stays off: the bar links to its settings
-    const items = RESEARCH_ITEMS.filter((item) => {
-      const state = status?.items[item]?.state;
-      return state !== "off" && state !== "unavailable" && state !== "running";
-    });
+    // a part that is off stays off (the bar links to its settings); an automatic request still waiting moves up
+    const items = researchAllItems(status);
     return await request(parsed.data, items, false);
   } catch (error) {
     logActionFailure("requestResearchAction", error);

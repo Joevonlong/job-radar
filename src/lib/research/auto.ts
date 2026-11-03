@@ -56,6 +56,8 @@ export interface AutoResearchDeps {
   timeZone(): string;
   /** Whether a web task could run now. Default: what shared state says of its providers (the web and the runner cannot start a CLI). */
   webOpen?(task: "company_research" | "salary_lookup", providers: readonly string[]): Promise<boolean>;
+  /** Outcomes already recorded by this batch: a cycle's high-score run writes one activity row per reason, not one per job. */
+  reportedOnce?: Set<AutoResearchOutcome>;
   process: ActivityProcess;
 }
 
@@ -128,8 +130,15 @@ async function itemNeed(db: Db, item: ResearchItem, input: { jobId: number; now:
 async function run(db: Db, input: { jobId: number; event: ResearchAutoTrigger; now: Date }, deps: AutoResearchDeps): Promise<{ outcome: AutoResearchOutcome; items: ResearchAutoItems }> {
   const research = deps.research();
   if (!shouldAutoResearch(input.event, research)) return { outcome: "off", items: {} };
-  const report = async (outcome: AutoResearchOutcome, items: ResearchAutoItems, queued = 0) => {
+  const record = async (outcome: AutoResearchOutcome, queued: number): Promise<void> => {
+    if (outcome !== "queued" && deps.reportedOnce) {
+      if (deps.reportedOnce.has(outcome)) return;
+      deps.reportedOnce.add(outcome);
+    }
     await writeRunActivity(db, { jobId: input.jobId, process: deps.process, trigger: input.event, outcome, queued, now: input.now });
+  };
+  const report = async (outcome: AutoResearchOutcome, items: ResearchAutoItems, queued = 0) => {
+    await record(outcome, queued);
     return { outcome, items };
   };
   if (await hasRecentAutoRun(db, input.jobId, input.now)) return report("recent", {});
@@ -181,6 +190,8 @@ async function run(db: Db, input: { jobId: number; event: ResearchAutoTrigger; n
     } else items[item] = result.state === "cached" ? "cached" : "failed";
   }
   await updateAutoRunItems(db, reserved.runId, items);
+  // a part held back by the usage cap in a run that queued the others: the log says so too
+  if (Object.values(items).includes("deferred_quota")) await record("deferred_quota", 0);
   return report("queued", items, queued);
 }
 

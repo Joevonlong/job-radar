@@ -56,8 +56,8 @@ describe("CompanyResearchDetails", () => {
     expect(screen.queryByTestId("company-overview-refresh")).toBeNull();
   });
 
-  it("renders nothing with no result and no website editing", () => {
-    show(<CompanyResearchDetails {...props} info={{ latest: null, website: null, jobId: 7 }} />);
+  it("adds no row without a stored result, even when the website can be edited", () => {
+    show(<CompanyResearchDetails {...props} canEditDomain info={{ latest: null, website: null, jobId: 7 }} />);
     expect(screen.queryByTestId("company-research-details")).toBeNull();
   });
 });

@@ -84,7 +84,7 @@ export interface AiRouter {
   /** The providers that would be tried for `task`, in order (configured or not). */
   plan(task: AiTask): AiProviderId[];
   /** Whether any provider of `task`'s plan could be tried right now, and why the others cannot (cooldown, cap, off, not installed). */
-  usable(task: AiTask): Promise<{ usable: boolean; blocked: AiAttempt[] }>;
+  usable(task: AiTask, opts?: Pick<AiRunOptions, "requireWeb">): Promise<{ usable: boolean; blocked: AiAttempt[] }>;
   run<T>(task: AiTask, prompt: AiPrompt, schema: ZodType<T>, opts?: AiRunOptions): Promise<AiResult<T>>;
 }
 
@@ -302,10 +302,15 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
   return {
     plan: (task) => resolveProviderOrder(config, task),
 
-    async usable(task) {
+    async usable(task, opts = {}) {
       const blocked: AiAttempt[] = [];
       let heldBack = false;
       for (const id of resolveProviderOrder(config, task)) {
+        // the same skip as `run`: a provider that cannot search the web never serves this task
+        if (opts.requireWeb && !webCapable(id)) {
+          blocked.push({ provider: id, outcome: "skipped", kind: "not_configured", message: "cannot search the web (this task needs claude-cli, codex-cli or anthropic)" });
+          continue;
+        }
         const reason = apiClosed(heldBack, id) ?? (await gate(id, task));
         if (!reason) return { usable: true, blocked };
         heldBack ||= holdsBack(reason);
