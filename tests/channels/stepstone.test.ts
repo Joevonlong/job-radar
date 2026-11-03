@@ -116,7 +116,7 @@ describe("search URLs", () => {
   });
 
   it("never builds a URL robots.txt disallows: no query other than a lone q=, whatever the keyword, city or kind", () => {
-    const keywords = ["AI Engineer", "Machine Learning Engineer", "KI-Entwickler", "C++ & Rust", "a&b=c", "x?y=1", "Müller & Söhne", "\"quoted\" OR other", "100% remote", "a/b"];
+    const keywords = ["AI Engineer", "Vollzeit", "Home Office", "Teilzeit", "Machine Learning Engineer", "KI-Entwickler", "C++ & Rust", "a&b=c", "x?y=1", "Müller & Söhne", "\"quoted\" OR other", "100% remote", "a/b"];
     const places: Array<string | null> = ["Berlin", "München", "Frankfurt (Oder)", "Halle & Saale", "Köln?sort=2", null];
     let built = 0;
     for (const keyword of keywords) {
@@ -135,6 +135,16 @@ describe("search URLs", () => {
       }
     }
     expect(built).toBeGreaterThan(100);
+  });
+
+  it("has no URL for the listing words robots.txt disallows below /jobs/ when a city follows, but searches them nationwide", () => {
+    expect(searchUrl(base, { keyword: "Vollzeit", location: "Berlin" })).toBeNull();
+    expect(searchUrl(base, { keyword: "Home Office", location: "Berlin" })).toBeNull();
+    expect(robotsAllows(new URL("https://www.stepstone.de/jobs/vollzeit/in-berlin?q=vollzeit"))).toBe(false);
+    expect(robotsAllows(new URL("https://www.stepstone.de/jobs/home-office/in-berlin?q=home-office"))).toBe(false);
+    // /jobs/teilzeit/in-* is re-allowed for ?q=, and a nationwide slug has no "/" after it
+    expect(searchUrl(base, { keyword: "Teilzeit", location: "Berlin" })).toBe("https://www.stepstone.de/jobs/teilzeit/in-berlin?q=teilzeit");
+    for (const keyword of ["Vollzeit", "Home Office"]) expect(robotsAllows(new URL(searchUrl(base, { keyword, location: null }) ?? ""))).toBe(true);
   });
 
   it("the robots matcher refuses the forms the channel used to send", () => {
@@ -206,6 +216,31 @@ describe("search page", () => {
     expect(fixtureHtml("stepstone", "search-berlin.html")).toMatch(/captcha/i);
     const { ctx } = makeContext(site(), extra());
     await expect(fetchSearchPage(ctx, settings(), "https://www.stepstone.de/jobs/x")).resolves.toBeDefined();
+  });
+});
+
+describe("search redirects", () => {
+  const url = "https://www.stepstone.de/jobs/ai-engineer/in-berlin?q=ai-engineer";
+  const redirect = (location: string): Handler => ({ url: u }) =>
+    u.pathname === "/jobs/ai-engineer/in-berlin" ? htmlResponse(302, "", { Location: location }) : htmlResponse(200, fixtureHtml("stepstone", "search-berlin.html"));
+
+  it("follows a redirect to a permitted search URL", async () => {
+    const { ctx, calls } = makeContext(redirect("/jobs/ai-engineer/in-berlin-mitte?q=ai-engineer"), extra());
+    await expect(fetchSearchPage(ctx, settings(), url)).resolves.toMatchObject({ rejected: 0 });
+    expect(calls.map((c) => c.url.pathname)).toEqual(["/jobs/ai-engineer/in-berlin", "/jobs/ai-engineer/in-berlin-mitte"]);
+  });
+
+  it.each([
+    "/jobs/ai-engineer/in-berlin?sort=2&q=ai-engineer",
+    "/jobs/ai-engineer/in-berlin?q=ai-engineer&page=2",
+    "/jobs/vollzeit/in-berlin?q=vollzeit",
+    "/jobs/ai-engineer/in-berlin",
+    "/work/in-berlin?radius=30",
+    "https://evil.example/jobs/ai-engineer/in-berlin?q=x",
+  ])("does not follow a redirect to %s", async (location) => {
+    const { ctx, calls } = makeContext(redirect(location), extra());
+    await expect(fetchSearchPage(ctx, settings(), url)).rejects.toMatchObject({ code: "unknown", retryable: false });
+    expect(calls).toHaveLength(1);
   });
 });
 

@@ -25,6 +25,7 @@ type ClientSettings = Pick<StepstoneSettings, "base_url" | "user_agent">;
  * out, so the channel has no time sort, no look-back or radius filter and no paging: one request per keyword and place, answered
  * in StepStone's own order, and the look-back window is applied afterwards from each result's posting date.
  */
+const PATH_DISALLOWED_SLUGS: ReadonlySet<string> = new Set(["vollzeit", "home-office"]);
 const PERMITTED_SEARCH_URL = /^[^?#]*\?q=[A-Za-z0-9%-]+$/;
 /** A longer slug (for example seven keywords joined by "-or-") is answered with 403 "Access denied". */
 export const MAX_SLUG_LENGTH = 100;
@@ -52,8 +53,18 @@ export function searchUrl(settings: ClientSettings, params: SearchParams): strin
   if (slug === "" || slug.length > MAX_SLUG_LENGTH) return null;
   const nationwide = params.kind === "company";
   const where = params.location === null || nationwide ? "" : `/in-${encodeURIComponent(slugify(params.location))}`;
+  // robots.txt disallows /jobs/vollzeit/ and /jobs/home-office/ (every path below them); /jobs/teilzeit/in-* is re-allowed, and a slug
+  // with no city has no "/" after it
+  if (where !== "" && PATH_DISALLOWED_SLUGS.has(slug)) return null;
   const url = `${settings.base_url.replace(/\/+$/, "")}/jobs/${encodeURIComponent(slug)}${where}?q=${encodeURIComponent(slug)}`;
   return PERMITTED_SEARCH_URL.test(url) ? url : null;
+}
+
+/** Whether a redirect target of a search request is itself a URL the search may request: the same shape, on a /jobs/ path. */
+export function isPermittedSearchTarget(target: URL): boolean {
+  const segments = target.pathname.split("/"); // ["", "jobs", slug, "in-city"?]
+  if (segments[1] !== "jobs" || !PERMITTED_SEARCH_URL.test(target.pathname + target.search)) return false;
+  return !(segments.length > 3 && PATH_DISALLOWED_SLUGS.has(segments[2] ?? ""));
 }
 
 export interface SearchPage {
@@ -68,7 +79,7 @@ export interface SearchPage {
 /** One page of search results. A page without search state is a block page or a layout change. */
 export async function fetchSearchPage(ctx: ChannelContext, settings: ClientSettings, url: string): Promise<SearchPage> {
   const host = new URL(url).host;
-  const html = await fetchHtml(ctx, { url, userAgent: settings.user_agent });
+  const html = await fetchHtml(ctx, { url, userAgent: settings.user_agent, allowRedirectTo: (target) => target.origin === new URL(url).origin && isPermittedSearchTarget(target) });
   if (html === null) throw new ChannelError("unknown", `${host}: search page not found`, { retryable: false, status: 404 });
   const raw = extractJsonAfter(html, STATE_ANCHOR, "StepStone search state");
   if (raw === null) throw missingDataError(html, host, "the search state");

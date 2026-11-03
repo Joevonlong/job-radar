@@ -19,8 +19,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ### Upgrade notes
 
 - **`sources.stepstone.radius_km` and `max_pages` are removed** (`sources.yaml` config version 8; the config update deletes
-  them, and `pnpm config:check` passes on the result). **Rollback:** an older version requires both keys, so add
-  `radius_km: 30` and `max_pages: 2` under `sources.stepstone` in `data/config/sources.yaml` before downgrading. XING keeps its own.
+  them, and `pnpm config:check` passes on the result). **Rollback:** the update also raises `config_version` of `sources.yaml`, and an older version refuses a file with a
+  newer version. Restore the file from `data/config/.backup/<timestamp>/` (the copy from before the update), or add
+  `radius_km: 30` and `max_pages: 2` under `sources.stepstone` **and** set `config_version` back to the older version's
+  value. XING keeps its own.
 - **Berlin Startup Jobs now starts by itself on existing German installs.** The new Berlin Startup Jobs channel is on by
   default for installs whose market is Germany, so the next cycle after upgrading starts reading it. To turn it off, set
   `sources.berlinstartupjobs.enabled: false` in `data/config/sources.yaml`.

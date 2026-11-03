@@ -357,10 +357,10 @@ const atsPrefilter = (prefix: string): FieldDef[] => [
 ];
 
 /** Settings of the two job-board channels, after the shared channel fields. */
-const jobBoardFields = (prefix: string, paged = true): FieldDef[] => [
+const jobBoardFields = (prefix: string, withRadiusAndPaging = true): FieldDef[] => [
   text(`${prefix}.base_url`, "base_url", { mono: true }),
   text(`${prefix}.user_agent`, "user_agent", { mono: true }),
-  ...(paged ? [int(`${prefix}.radius_km`, "radius_km"), int(`${prefix}.max_pages`, "max_pages")] : []),
+  ...(withRadiusAndPaging ? [int(`${prefix}.radius_km`, "radius_km"), int(`${prefix}.max_pages`, "max_pages")] : []),
   bool(`${prefix}.fetch_details`, "fetch_details"),
   int(`${prefix}.max_details_per_query`, "max_details"),
   bool(`${prefix}.reuse_known_details`, "reuse_known_details"),
