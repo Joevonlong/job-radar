@@ -2,10 +2,10 @@
  * Checks of interests.yaml that the schema cannot make errors of: a valid file that cannot do what its author
  * wants. They are warnings: `pnpm config:check` prints them and the file editor shows them, a save still goes through.
  */
-import { unknownViewFilterKeys, type InterestsConfig } from "./schemas/interests";
+import { invalidViewDateKeys, unknownViewFilterKeys, type InterestsConfig } from "./schemas/interests";
 
 export interface InterestsWarning {
-  code: "interests.semantic_only_unreachable" | "interests.unknown_view_filter";
+  code: "interests.semantic_only_unreachable" | "interests.unknown_view_filter" | "interests.invalid_view_date";
   path: Array<string | number>;
   message: string;
 }
@@ -29,19 +29,27 @@ export function interestsWarnings(config: Pick<InterestsConfig, "signals" | "lim
 }
 
 /**
- * A saved view whose filters carry a key this version does not know (a newer version wrote it): the loader ignores the key, so the view
- * filters less than it did there. `raw` is the parsed YAML before validation, which is the only place the ignored keys still exist.
+ * A saved view whose filters carry a key this version does not know (a newer version wrote it), or a date value it does not take: the
+ * loader ignores the key, so the view filters less than it did there. `raw` is the parsed YAML before validation, which is the only place the ignored keys still exist.
  */
 export function interestsRawWarnings(raw: unknown): InterestsWarning[] {
   const views = typeof raw === "object" && raw !== null ? (raw as { views?: unknown }).views : undefined;
   if (!Array.isArray(views)) return [];
-  return views.flatMap((view: unknown, index) =>
-    unknownViewFilterKeys(typeof view === "object" && view !== null ? (view as { filters?: unknown }).filters : undefined).map((key) => ({
-      code: "interests.unknown_view_filter" as const,
-      path: ["views", index, "filters", key],
-      message: `view filter "${key}" is not known to this version of Job Radar and is ignored (it was written by a newer version; the rest of the view still applies)`,
-    })),
-  );
+  return views.flatMap((view: unknown, index) => {
+    const filters = typeof view === "object" && view !== null ? (view as { filters?: unknown }).filters : undefined;
+    return [
+      ...unknownViewFilterKeys(filters).map((key) => ({
+        code: "interests.unknown_view_filter" as const,
+        path: ["views", index, "filters", key],
+        message: `view filter "${key}" is not known to this version of Job Radar and is ignored (it was written by a newer version; the rest of the view still applies)`,
+      })),
+      ...invalidViewDateKeys(filters).map((key) => ({
+        code: "interests.invalid_view_date" as const,
+        path: ["views", index, "filters", key],
+        message: `view filter "${key}" has a value this version of Job Radar does not take and is ignored (within: Nd with N from 1 to 366, or month; dateBy: posted or seen; the rest of the view still applies)`,
+      })),
+    ];
+  });
 }
 
 /** The message of an interests.yaml pattern that is too slow on the probe's test texts (the file editor shows its own text for it). */
