@@ -360,6 +360,23 @@ If you deploy from a pull (no `deploy-prod.sh`): do steps 2 and 3 before `git sw
 `scripts/ops/deploy.sh --skip-pull`. Check with the older version's `pnpm config:check`. Upgrading later converts the files
 again: see [Your file is an overlay](configuration.md#your-file-is-an-overlay).
 
+**If you deployed the older commit without `--to-full`.** The deploy stops at step 4 ("config") with the old code's
+`config_version … is newer than this version of Job Radar supports`. The checkout has already moved and step 3 installed
+the old dependencies, so `--to-full` is not available: the old command does not know the flag. The services have not been
+restarted and still run the newer version. Recover like this:
+
+1. Switch back to the previous commit, the one on the left of `<before> -> <after>` in the deploy's "pull" step:
+   `git switch --detach <previous commit>`, then `pnpm install --frozen-lockfile`.
+2. Stop `web` and `runner`, then run `pnpm config:migrate --to-full --write`.
+3. Deploy again: `git switch main` and `deploy-prod.sh`, or from a pull `git switch --detach <older commit>` and
+   `scripts/ops/deploy.sh --skip-pull`.
+
+`--to-full --write` needs the database, and so does `--restore`: without it they stop with "Config writes need the
+database". While the database cannot be started, the only way is to copy the files by hand:
+`cp data/config/.backup/<time>/* data/config/`, with the `<time>` of the `data/config/conversion-<time>.json` record. This
+puts back the files as they were before the conversion, so changes saved since then are lost. A file created after the
+conversion has no copy there and stays an overlay: the older version's `pnpm config:check` names it.
+
 Before restoring config from `data/config/.backup/` or restoring a database backup, read the rollback notes in
 [CHANGELOG.md](../CHANGELOG.md) for the version you are leaving.
 

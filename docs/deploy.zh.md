@@ -302,6 +302,14 @@ ai-worker 切换或配置写入。doctor 只有在当前市场实际启用了依
 
 拉取模式（没有 `deploy-prod.sh`）：先做第 2、3 步，再 `git switch --detach <commit>`，然后 `scripts/ops/deploy.sh --skip-pull`。用旧版本的 `pnpm config:check` 确认。以后再升级会重新转换：见[你的文件是一个叠加层](configuration.zh.md#你的文件是一个叠加层)。
 
+**没跑 `--to-full` 就部署了旧提交。** 部署停在第 4 步（“config”），报旧代码的 `config_version … is newer than this version of Job Radar supports`。这时 checkout 已经切走，第 3 步也装好了旧依赖，所以 `--to-full` 用不了：旧命令不认识这个参数。服务还没重启，仍在运行新版本。这样恢复：
+
+1. 切回上一个提交，也就是部署 “pull” 步骤输出的 `<before> -> <after>` 左边那个：`git switch --detach <上一个提交>`，再 `pnpm install --frozen-lockfile`。
+2. 停 `web` 和 `runner`，运行 `pnpm config:migrate --to-full --write`。
+3. 重新部署：`git switch main` 后运行 `deploy-prod.sh`；拉取模式则 `git switch --detach <旧提交>` 后运行 `scripts/ops/deploy.sh --skip-pull`。
+
+`--to-full --write` 需要数据库，`--restore` 也一样：没有数据库时它们会停下并提示 “Config writes need the database”。数据库起不来时，唯一的办法是手工复制：`cp data/config/.backup/<时间>/* data/config/`，`<时间>` 取 `data/config/conversion-<时间>.json` 这份记录的时间。这样放回的是转换之前的文件，之后保存的改动会丢失。转换之后才创建的文件在那里没有副本，仍是叠加层：旧版本的 `pnpm config:check` 会指出它。
+
 从 `data/config/.backup/` 恢复配置或恢复数据库备份之前，先读 [CHANGELOG.md](../CHANGELOG.md) 里要离开的那个版本的回滚说明。
 
 **回滚到 AI 查薪资改为仅供参考（`salary.yaml` 的 `config_version: 2`）之前的版本。** 旧代码不会隐藏含 AI 数字的对比。

@@ -61,6 +61,11 @@ Two limits you accept with the conversion:
 2. **An old default stays pinned.** A value that came from an earlier shipped default and differs from today's looks like
    your own choice, so it stays. Remove it from your file to follow the product again.
 
+Conversion removes the comments on dropped keys: after that they exist only in `data/config/.backup/<time>/`
+(`schedule.yaml config_writes.backups_keep` keeps the latest 5 by default) and in earlier config archives (`….config.tgz`),
+and a comment can end up sitting above a neighbouring key. An entry map you emptied, such as `glossary: {}` under
+`translation` in `ai.yaml`, becomes one `!unset` per shipped term, so terms shipped later will appear.
+
 Back to whole files for older code: `pnpm config:migrate --to-full --write`, see
 [Rollback](deploy.md#5-rollback). Downgrading and upgrading again converts once more: a value that the older version's
 shipped file held and that you kept is compared with the new shipped file, so limit 1 applies again. Values you saved while
