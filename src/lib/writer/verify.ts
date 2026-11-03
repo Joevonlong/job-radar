@@ -89,10 +89,17 @@ function foldedUnits(units: FigureUnits): { scale: Map<string, number>; multiple
 const figurePattern = (words: readonly string[]): RegExp => {
   const cjk = words.filter((word) => ONLY_CJK.test(word));
   const other = words.filter((word) => !ONLY_CJK.test(word));
-  const alternatives = [...(cjk.length > 0 ? [`(?:${anyOf(cjk)})+`] : []), ...(other.length > 0 ? [anyOf(other)] : [])];
+  // a one-letter Latin unit (5M, 5x) must stand against the digits: "5 m" is five metres or minutes as often as five million
+  const spaced = other.filter((word) => word.length > 1);
+  const attached = other.filter((word) => word.length === 1);
+  const alternatives = [
+    ...(cjk.length > 0 ? [String.raw`\s*(?:${anyOf(cjk)})+`] : []),
+    ...(spaced.length > 0 ? [String.raw`\s*(?:${anyOf(spaced)})`] : []),
+    ...(attached.length > 0 ? [anyOf(attached)] : []),
+  ];
   const unit = alternatives.length > 0 ? `(${alternatives.join("|")})?` : "()";
   return new RegExp(
-    String.raw`(?<=^|[^\p{L}\p{N}]|[${CJK_CLASS}])(\d{1,3}(?:[.,\u00a0\u202f ]\d{3})+|\d+)(?:[.,](\d+))?\s*(k(?![a-z]))?${unit}(?=$|[^\p{L}\p{N}]|[${CJK_CLASS}])(\s*(?:%|percent|per cent|prozent|pct)(?!(?![${CJK_CLASS}])\p{L}))?`,
+    String.raw`(?<=^|[^\p{L}\p{N}]|[${CJK_CLASS}])(\d{1,3}(?:[.,\u00a0\u202f ]\d{3})+|\d+)(?:[.,](\d+))?(?:\s*(k(?![a-z])))?${unit}(?=$|[^\p{L}\p{N}]|[${CJK_CLASS}])(\s*(?:%|percent|per cent|prozent|pct)(?!(?![${CJK_CLASS}])\p{L}))?`,
     "giu",
   );
 };
