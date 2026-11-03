@@ -19,7 +19,7 @@ import type { CheckedSentence } from "@/lib/writer/types";
 
 import { ToolFailure, type McpContext } from "../context";
 import { getApplicationContextOutput, toLinkDto, toLocationDto, type CleanText, type DescriptionDto, type GetApplicationContextOutput, type WriterVersionDto } from "../dto";
-import { availableDescription, jdQuoteGuard, shortFieldCleaner, unavailableDescription } from "../guard";
+import { availableDescription, jdQuoteGuard, shortFieldCleaner, unavailableDescription, visibleText } from "../guard";
 import { readTraps, resultLimit, truncationNotice } from "./shared";
 import { readWriterForTool } from "./writer-shared";
 
@@ -90,12 +90,24 @@ export async function getApplicationContext(ctx: McpContext, args: GetApplicatio
   const pointsOf = (list: readonly Parameters<typeof pointDto>[0][]) => list.flatMap((point) => pointDto(point) ?? []);
 
   // a field the rules take for an instruction becomes the cleaner's marker; the notice covers what no rule can recognise
+  // an address is given as written, unless it spells an instruction (in the path or the query, plain or percent-encoded)
+  const safeUrl = (url: string | null): string | null => {
+    if (url === null) return null;
+    let decoded = url;
+    try {
+      decoded = decodeURIComponent(url);
+    } catch {
+      // not valid percent-encoding: the address as written is what is checked
+    }
+    const spaced = decoded.replace(/[-_+/?&=.]+/g, " ");
+    return [url, decoded, spaced].every((form) => clean(form) === visibleText(form)) ? url : null;
+  };
   const companyFields =
     research === null
       ? []
       : COMPANY_RESEARCH_FIELDS.flatMap((field) => {
           const entry = research.fields[field];
-          return entry ? [{ field, text: clean(companyFieldText(entry.text)), source_url: httpsUrlOrNull(entry.sourceUrl) }] : [];
+          return entry ? [{ field, text: clean(companyFieldText(entry.text)), source_url: safeUrl(httpsUrlOrNull(entry.sourceUrl)) }] : [];
         });
   if (research !== null || fitRow !== null) notices.push(ctx.text("notice.companyBackground"));
 
