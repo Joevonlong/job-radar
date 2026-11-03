@@ -19,6 +19,7 @@ import { commitConfigFile } from "./atomic";
 import { installedConfigFiles } from "./install";
 import { getConfigDir, getDefaultsDir } from "./paths";
 import { copyPrivateIfMissing } from "./private-file";
+import { readUserText } from "./read-user-file";
 import { configRegistry, LAYERED_CONFIG_NAMES, type ConfigName } from "./registry";
 import { withFileLock } from "./write";
 import { withConfigWriteLock } from "./write-lock";
@@ -53,7 +54,7 @@ const WIZARD_FILES: readonly ConfigName[] = ["setup", "language"];
 
 async function readOrNull(file: string): Promise<string | null> {
   try {
-    return await fsp.readFile(/*turbopackIgnore: true*/ file, "utf8");
+    return readUserText(file);
   } catch (err) {
     if (err instanceof Error && "code" in err && err.code === "ENOENT") return null;
     throw err;

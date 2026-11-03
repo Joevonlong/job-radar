@@ -9,6 +9,7 @@ import path from "node:path";
 import { ConfigError } from "../errors";
 import { parseConfigDocument, resetConfigCache, validateConfigValue } from "../load";
 import { getConfigDir, getUserConfigPath } from "../paths";
+import { readUserText } from "../read-user-file";
 import { CONFIG_NAMES, isProfileName, type ConfigName } from "../registry";
 import { commitConfigFile, sha256 } from "../atomic";
 import { withConfigWriteLock } from "../write-lock";
@@ -59,7 +60,7 @@ export function planConfigMigrations(names: readonly ConfigName[] = CONFIG_NAMES
     const file = getUserConfigPath(name);
     let before: string;
     try {
-      before = fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8");
+      before = readUserText(file);
     } catch (err) {
       if (err instanceof Error && "code" in err && err.code === "ENOENT") continue; // read from the defaults: nothing of the user's to migrate
       plan.problems.push({ name, path: file, message: firstLine(err) });

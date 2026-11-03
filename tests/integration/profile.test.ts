@@ -2,7 +2,7 @@ import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import fs from "node:fs";
 import path from "node:path";
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
 import { getConfigPath, loadConfig, ensureProfileFiles, reloadConfig, setOnProfileSaved } from "@/lib/config";
@@ -135,6 +135,19 @@ describe("saving the profile", () => {
     await saveProfile("preferences", draft);
     await saveProfile("preferences", draft);
     expect(await listProfileSnapshots(getDb(), "preferences", 10)).toHaveLength(1);
+  });
+
+  it("reports a failed snapshot after the file was written", async () => {
+    const db = getDb();
+    // the lock's own session still works; only the snapshot's insert fails
+    await db.execute(sql`alter table profile_snapshots rename to profile_snapshots_away`);
+    try {
+      const result = await saveProfile("preferences", { ...prefsDraft(), salary_floor_year: "91000" });
+      expect(result).toMatchObject({ status: "error", formError: "snapshotFailed" });
+      expect(reloadConfig("preferences").salary_floor_year).toBe(91000);
+    } finally {
+      await db.execute(sql`alter table profile_snapshots_away rename to profile_snapshots`);
+    }
   });
 
   it("refuses the save and leaves the file alone when the database is down", async () => {

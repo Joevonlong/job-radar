@@ -9,6 +9,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 
 import { ConfigError } from "./errors";
+import { readUserFile } from "./read-user-file";
 import { currentConfigWriteLock, isLockedConfigPath, lockLostError, lockTestPause } from "./write-lock";
 
 /**
@@ -39,7 +40,7 @@ function stale(file: string): ConfigError {
 
 function targetSha256(file: string): string | null {
   try {
-    return sha256(fs.readFileSync(/*turbopackIgnore: true*/ file));
+    return sha256(readUserFile(file));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;

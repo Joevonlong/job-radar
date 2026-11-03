@@ -3587,7 +3587,7 @@
         "requestUnavailable": "The refreshed list is gone. Refresh it and try again.",
         "notAddable": "One of the selected models cannot be added (already in the catalog, or no JSON mode). Refresh the list and try again.",
         "catalogInvalid": "The catalog would not be valid with these models, so nothing was written. Check your models.yaml under Settings → Advanced.",
-        "frozen": "Configuration is frozen during an upgrade. Try again in a moment.",
+        "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
         "busy": "Another process is writing the configuration. Try again in a moment.",
         "stale": "The file changed while saving. Refresh the list and try again.",
         "protected": "That change touches a protected setting.",

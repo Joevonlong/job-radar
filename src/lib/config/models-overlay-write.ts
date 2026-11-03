@@ -18,6 +18,7 @@ import { loadConfig, parseConfigDocument, primeConfigCache, reloadConfig, resolv
 import { CONFIG_VERSION_KEY, currentConfigVersion, documentConfigVersion, migrateConfigDocument, stampConfigVersion, withoutConfigVersion } from "./migrations/version";
 import { issuesInUserFile } from "./models-overlay";
 import { getUserConfigPath } from "./paths";
+import { readUserText } from "./read-user-file";
 import { type CatalogModel, modelsSchema } from "./schemas/models";
 import { CONFIG_EDITOR_DEFAULTS } from "./schemas/ui";
 import { CONFIG_YAML_OPTIONS } from "./yaml-options";
@@ -45,7 +46,7 @@ function backupsKeep(): number {
 
 async function readIfExists(file: string): Promise<string | null> {
   try {
-    return await fsp.readFile(/*turbopackIgnore: true*/ file, "utf8");
+    return readUserText(file);
   } catch (err) {
     if (err instanceof Error && "code" in err && err.code === "ENOENT") return null;
     throw err;
@@ -102,12 +103,12 @@ function putEntries(doc: Document, provider: AiProviderIdChoice, entries: readon
 
 /**
  * Add or replace `entries` (full catalog entries) of `provider` in the user's models.yaml. Throws `ConfigError` when the file
- * cannot be parsed, the result would not be a valid catalog (`schema`, naming the user's file), or the file is frozen / busy.
+ * cannot be parsed, the result would not be a valid catalog (`schema`, naming the user's file), or the file is busy.
  */
 export async function writeModelsOverlay(provider: AiProviderIdChoice, entries: readonly CatalogModel[]): Promise<ModelsOverlayWrite> {
   const filePath = getUserConfigPath("models");
   return withFileLock(filePath, () =>
-    withConfigWriteLock(filePath, async () => {
+    withConfigWriteLock(async () => {
       const userText = await readIfExists(filePath);
       let doc: Document;
       if (userText === null) {
@@ -185,5 +186,5 @@ export async function writeFullModels(file: string = getUserConfigPath("models")
     if (file === userFile) primeConfigCache("models", effective, text);
     return { file, backup };
   };
-  return file === userFile ? withFileLock(file, () => withConfigWriteLock(file, write)) : write();
+  return file === userFile ? withFileLock(file, () => withConfigWriteLock(write, file)) : write();
 }

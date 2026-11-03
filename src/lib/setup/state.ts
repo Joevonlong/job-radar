@@ -10,6 +10,7 @@ import path from "node:path";
 
 import { commitConfigFile, ConfigError, getDefaultConfigPath, getUserConfigPath, mutateConfig, parseConfigText, withConfigWriteLock, withFileLock, type SetupConfig } from "@/lib/config";
 
+import { readUserText } from "@/lib/config/read-user-file";
 import { type SetupCompletedBy, type SetupStepId, type SetupStepStatus } from "./steps";
 
 export type SetupSource =
@@ -57,7 +58,7 @@ function firstLine(error: unknown): string {
 function readFile(file: string, source: "user" | "default"): SetupStatus {
   let text: string;
   try {
-    text = fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8");
+    text = readUserText(file);
   } catch (error) {
     return { pending: false, state: null, error: firstLine(error), source, path: file };
   }

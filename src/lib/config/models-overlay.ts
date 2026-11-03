@@ -17,6 +17,7 @@ import fs from "node:fs";
 import { AI_PROVIDER_IDS, type AiProviderIdChoice } from "./ai-options";
 import type { ConfigIssue } from "./errors";
 import { getDefaultConfigPath, getUserConfigPath } from "./paths";
+import { readUserText } from "./read-user-file";
 import { modelsOverlaySchema } from "./schemas/models";
 import { parseConfigYamlDocument } from "./yaml-options";
 
@@ -220,7 +221,7 @@ export function inspectModelsOverlay(): OverlayInspection | null {
   if (shipped === null) return null;
   let user: unknown;
   try {
-    const doc = parseConfigYamlDocument(fs.readFileSync(/*turbopackIgnore: true*/ getUserConfigPath("models"), "utf8"));
+    const doc = parseConfigYamlDocument(readUserText(getUserConfigPath("models")));
     if (doc.errors.length > 0) return null;
     user = doc.toJS();
   } catch {

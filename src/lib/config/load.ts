@@ -7,6 +7,7 @@ import { issuesInUserFile, mergeModelsWithShipped, type ModelsMerge, type Overla
 import { migrateConfigDocument, withoutConfigVersion, type DocumentMigrationResult } from "./migrations/version";
 import { getDefaultConfigPath, getDefaultsDir, getPollIntervalMs, getUserConfigPath, resolveConfigPath, resolveConfigReadPath } from "./paths";
 import { CONFIG_NAMES, configRegistry, isProfileName, type ConfigName, type ConfigValue, type ProfileName } from "./registry";
+import { readUserText } from "./read-user-file";
 import { parseConfigYamlDocument } from "./yaml-options";
 
 interface CacheEntry {
@@ -73,7 +74,7 @@ export function readProfileText(name: ProfileName): string {
 
 function readTextAt(name: ConfigName, filePath: string): string {
   try {
-    return fs.readFileSync(/*turbopackIgnore: true*/ filePath, "utf8");
+    return readUserText(filePath);
   } catch (err) {
     const code = err instanceof Error && "code" in err ? String(err.code) : "";
     throw new ConfigError({

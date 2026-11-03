@@ -15,6 +15,7 @@ import { configLayer, getDefaultConfigPath, getProfileExampleDir, getUserConfigP
 import { pruneRedundantKeys } from "./overlay";
 import { notifyProfileSaved } from "./profile";
 import { assertProtectedUnchanged } from "./protected-check";
+import { readUserText } from "./read-user-file";
 import { configRegistry, isProfileName, type ConfigName, type ConfigValue } from "./registry";
 import { CONFIG_YAML_OPTIONS, parseConfigYaml, parseConfigYamlDocument } from "./yaml-options";
 import { CONFIG_EDITOR_DEFAULTS } from "./schemas/ui";
@@ -213,7 +214,7 @@ function renderYaml<N extends ConfigName>(name: N, existingText: string | null, 
 
 async function readIfExists(file: string): Promise<string | null> {
   try {
-    return await fsp.readFile(/*turbopackIgnore: true*/ file, "utf8");
+    return readUserText(file);
   } catch (err) {
     if (err instanceof Error && "code" in err && err.code === "ENOENT") return null;
     throw err;
