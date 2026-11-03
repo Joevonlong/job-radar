@@ -156,7 +156,7 @@ questions share. **Start from this answer** adds the new question and puts the e
 right; nothing is stored until you press **Save as first version** (or **Discard**).
 
 - Similarity is the share of words the two questions have in common (accents, case and punctuation ignored, and without
-  the words of `reuse.stopwords` that nearly every question has), at least
+  the two companies' names and the words of `reuse.stopwords` that nearly every question has), at least
   `reuse.min_similarity`; at most `reuse.max_candidates` answers are offered, the most similar first. Words are compared
   as written, so **the same question in another language is not matched**. Chinese is compared character by character,
   so a short Chinese question counts as several words. Nothing is looked up for a question with fewer than

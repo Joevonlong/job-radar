@@ -346,7 +346,14 @@ export async function findSimilarAnswersAction(input: { jobId: number; text: str
     // too short a question says too little to compare
     if (questionTokens(text).size < writer.reuse.min_question_words) return { ok: true, matches: [] };
     const suffixes = legalSuffixes();
-    const ranked = rankSimilar(text, await listReusableAnswers(db, { excludeJobId: jobId }), { minSimilarity: writer.reuse.min_similarity, maxCandidates: writer.reuse.max_candidates, stopwords: writer.reuse.stopwords });
+    const job = await getJobForBreakdown(db, jobId);
+    const ownNames = job ? companyMatchNames(job.company, suffixes) : [];
+    const ranked = rankSimilar(text, await listReusableAnswers(db, { excludeJobId: jobId }), {
+      minSimilarity: writer.reuse.min_similarity,
+      maxCandidates: writer.reuse.max_candidates,
+      stopwords: writer.reuse.stopwords,
+      ignored: (candidate) => [...ownNames, ...companyMatchNames(candidate.company, suffixes)],
+    });
     const matches: SimilarAnswer[] = [];
     for (const entry of ranked) {
       const answer = await getReusableAnswerText(db, { versionId: entry.versionId, excludeJobId: jobId });

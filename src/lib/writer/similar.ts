@@ -35,11 +35,17 @@ export interface SimilarCandidate {
 
 /**
  * The candidates whose question is at least `minSimilarity` like `text`, the most similar first (a tie keeps the order
- * given, so pass the newest first), at most `maxCandidates`.
+ * given, so pass the newest first), at most `maxCandidates`. `ignored` names further words per candidate that are left out like the
+ * stopwords: the two companies, since "why join A" and "why join B" ask the same thing, however many words the names have.
  */
-export function rankSimilar<T extends SimilarCandidate>(text: string, candidates: readonly T[], limits: { minSimilarity: number; maxCandidates: number; stopwords?: readonly string[] }): (T & { similarity: number })[] {
+export function rankSimilar<T extends SimilarCandidate>(
+  text: string,
+  candidates: readonly T[],
+  limits: { minSimilarity: number; maxCandidates: number; stopwords?: readonly string[]; ignored?: (candidate: T) => readonly string[] },
+): (T & { similarity: number })[] {
+  const stopwords = limits.stopwords ?? [];
   return candidates
-    .map((candidate, index) => ({ candidate, index, similarity: similarity(text, candidate.text, limits.stopwords) }))
+    .map((candidate, index) => ({ candidate, index, similarity: similarity(text, candidate.text, [...stopwords, ...(limits.ignored?.(candidate) ?? [])]) }))
     .filter((entry) => entry.similarity >= limits.minSimilarity)
     .sort((a, b) => b.similarity - a.similarity || a.index - b.index)
     .slice(0, Math.max(0, limits.maxCandidates))

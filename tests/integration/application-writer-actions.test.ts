@@ -102,10 +102,10 @@ describe("findSimilarAnswersAction", () => {
     const draft = await addQuestion(acme, "Why do you want to join Acme right now?");
     await addVersion(draft.id, "never finalised", null);
 
-    const result = await findSimilarAnswersAction({ jobId: here, text: "Why do you want to join Initech?" });
+    const result = await findSimilarAnswersAction({ jobId: here, text: "Why do you want to join Globex?" });
     expect(result).toEqual({
       ok: true,
-      matches: [{ versionId, question: "Why do you want to join Acme?", answer: "Acme answer", company: "Acme GmbH", companyNames: ["Acme GmbH", "acme"], jobTitle: "Backend Engineer", percent: 60 }],
+      matches: [{ versionId, question: "Why do you want to join Acme?", answer: "Acme answer", company: "Acme GmbH", companyNames: ["Acme GmbH", "acme"], jobTitle: "Backend Engineer", percent: 100 }],
     });
     // from the other job's own page its own answer is not offered back; the first job's final answer is
     const fromAcme = await findSimilarAnswersAction({ jobId: acme, text: "Why do you want to join Acme?" });

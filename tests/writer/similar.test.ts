@@ -42,6 +42,17 @@ describe("similarity without the words every question has", () => {
     expect(similarity("Why do you want to work here?", "Why do you want to work at our company?", stopwords)).toBeGreaterThanOrEqual(0.55);
   });
 
+  it("the company in a question does not count, however many words its name has", () => {
+    const candidates = [{ text: "Why do you want to join Windrose Mobility?", company: "Windrose Mobility" }];
+    const limits = { minSimilarity: 0.55, maxCandidates: 3, stopwords };
+    const question = "Why do you want to join Aurelia Dynamics?";
+    expect(rankSimilar(question, candidates, limits)).toEqual([]);
+    const ignored = (candidate: { company: string }) => ["Aurelia Dynamics", candidate.company];
+    expect(rankSimilar(question, candidates, { ...limits, ignored }).map((entry) => entry.similarity)).toEqual([1]);
+    // the questions still have to ask the same thing
+    expect(rankSimilar("What do you know about Aurelia Dynamics?", candidates, { ...limits, ignored })).toEqual([]);
+  });
+
   it("questions made only of such words are compared as written", () => {
     expect(similarity("What is it?", "What is it?", stopwords)).toBe(1);
     expect(similarity("What is it?", "Describe a conflict", stopwords)).toBe(0);
