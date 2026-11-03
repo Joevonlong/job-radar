@@ -1,6 +1,13 @@
 /** Data for the /me page (server only): the profile files, their history and the stale-score count. */
-import { diffYaml, reloadConfig, readProfileText, type ProfileName } from "@/lib/config";
-import { WRITER_STORIES_DEFAULTS, type WriterStoriesLimits } from "@/lib/config/schemas/writer";
+import { aiDisclosure } from "@/lib/ai/disclosure";
+import type { AiProviderId } from "@/lib/ai/types";
+import { diffYaml, reloadConfig, readProfileText, type ProfileName, type WriterConfig } from "@/lib/config";
+import { WRITER_STORIES_DEFAULTS, writerSchema, type StoryImportFormat, type WriterStoriesLimits } from "@/lib/config/schemas/writer";
+import type { ControlQueueView } from "@/lib/control/request-view-schema";
+import { readOpenStoryExtract } from "@/lib/control/story-extract-request";
+import { deleteExpiredStoryDrafts } from "@/lib/db/repos/story-drafts";
+import { loadPendingStoryDrafts } from "@/lib/stories/adopt";
+import type { PendingStoryDraft } from "@/lib/stories/extract";
 import { storiesConfigToDraft, type StoriesDraft } from "@/lib/stories/draft";
 import { countStaleScores, getDb, hashProfileYaml, listProfileSnapshots, type ProfileSnapshot } from "@/lib/db";
 
@@ -16,12 +23,58 @@ import type { HistoryEntry, ProfileSection } from "./types";
 export const HISTORY_LIMIT = 20;
 export { diffYaml };
 
+export interface StoryImportView {
+  /** writer.yaml says the writer is on: otherwise nothing can be sent. */
+  enabled: boolean;
+  /** writer.yaml `import`, as the card shows and pre-checks it. */
+  maxFileBytes: number;
+  maxChars: number;
+  formats: StoryImportFormat[];
+  ttlDays: number;
+  /** The providers the `story_extract` task may go to, in order. */
+  providers: AiProviderId[];
+  /** Empty while the database cannot be reached. */
+  drafts: PendingStoryDraft[];
+  /** The extraction still running, to follow after a reload. */
+  open: { requestId: number; stage: "pending" | "running"; queue: ControlQueueView | null } | null;
+}
+
+async function loadStoryImport(dbAvailable: boolean): Promise<StoryImportView> {
+  let writer: WriterConfig | null = null;
+  try {
+    writer = reloadConfig("writer");
+  } catch {
+    // an unreadable writer.yaml is reported by its settings tab; nothing can be sent meanwhile
+  }
+  const limits = writer?.import ?? writerSchema.parse({}).import;
+  let providers: AiProviderId[] = [];
+  try {
+    providers = aiDisclosure(reloadConfig("ai")).find((row) => row.task === "story_extract")?.providers ?? [];
+  } catch {
+    // an unreadable ai.yaml is reported by its settings tab
+  }
+  let drafts: PendingStoryDraft[] = [];
+  let open: StoryImportView["open"] = null;
+  if (dbAvailable) {
+    try {
+      const db = getDb();
+      await deleteExpiredStoryDrafts(db, limits.draft_ttl_days);
+      [drafts, open] = await Promise.all([loadPendingStoryDrafts(db), readOpenStoryExtract(db)]);
+    } catch {
+      // not migrated yet, or gone since the first read: the card shows no drafts
+    }
+  }
+  return { enabled: writer?.enabled ?? false, maxFileBytes: limits.max_file_bytes, maxChars: limits.max_chars, formats: limits.formats, ttlDays: limits.draft_ttl_days, providers, drafts, open };
+}
+
 export interface ProfilePageData {
   me: ProfileSection<MeDraft>;
   preferences: ProfileSection<PreferencesDraft>;
   stories: ProfileSection<StoriesDraft>;
   /** writer.yaml `stories` (the form's length hints), or its defaults when writer.yaml cannot be read. */
   storyLimits: WriterStoriesLimits;
+  /** Extracting stories from your profile, a text or a résumé, and the drafts waiting for review. */
+  storyImport: StoryImportView;
   staleScores: number;
   /** False when the database could not be reached: history and stale count are unavailable. */
   dbAvailable: boolean;
@@ -95,5 +148,5 @@ export async function loadProfilePage(): Promise<ProfilePageData> {
   } catch {
     // an unreadable writer.yaml is reported by its settings tab; the save uses the same defaults
   }
-  return { me, preferences, stories, storyLimits, staleScores, dbAvailable };
+  return { me, preferences, stories, storyLimits, storyImport: await loadStoryImport(dbAvailable), staleScores, dbAvailable };
 }

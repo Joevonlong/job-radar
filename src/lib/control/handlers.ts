@@ -82,6 +82,7 @@ const DEFAULT_HANDLERS: Record<ControlRequestKind, ControlHandler> = {
   salary_lookup: noHandler,
   company_research: noHandler,
   writer_job: noHandler,
+  story_extract: noHandler,
   models_sync: noHandler,
 };
 

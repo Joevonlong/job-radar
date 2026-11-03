@@ -66,6 +66,22 @@ coach:
   # Most sentence suggestions one review returns
   max_suggestions: 8
 
+# Extracting stories from your profile, a pasted text or an uploaded résumé (the buttons of the stories card on /me). The text
+# goes to the providers of the `story_extract` task in ai.yaml. The file itself is never stored.
+import:
+  # Largest résumé file, in bytes; a larger one is refused unread
+  max_file_bytes: 2000000
+  # Longest source text sent to the AI, in characters; a longer one is cut and the page says so
+  max_chars: 30000
+  # A source with less text than this has nothing to extract (a scanned PDF has no text layer)
+  min_chars: 20
+  # File types a résumé may have
+  formats: [pdf, md, txt]
+  # Most drafts one extraction may return
+  max_drafts: 12
+  # Days a draft waits for review; older ones are deleted, reviewed or not
+  draft_ttl_days: 14
+
 # Longest JD excerpt sent when no breakdown points are selected
 jd_max_chars: 6000
 # Share of jd_max_chars taken from the beginning of a longer JD (the rest from its end)

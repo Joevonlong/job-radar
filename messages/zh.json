@@ -828,6 +828,76 @@
         "period": "自由填写，例如 2021–2023。",
         "language": "语言代码，如 en、de、zh。"
       }
+    },
+    "storyImport": {
+      "title": "从你写过的内容里提取素材",
+      "description": "AI 从你的画像、粘贴的文字或简历里起草素材。你采用之前，素材库不会有任何变化。",
+      "sendsTo": "文字会发给：",
+      "noProvider": "这个任务没有启用的 AI 提供方",
+      "residue": "处理结束后会从请求里清除，但可能在数据库日志和处理期间做的备份里保留一段时间。草稿和采用后的素材里也含有其中的片段。",
+      "residueLink": "还会留下什么、留多久",
+      "fromProfile": "从我的画像提取",
+      "paste": "粘贴自述",
+      "upload": "上传简历",
+      "pasteLabel": "你的自述",
+      "pasteHint": "只用前 {max} 个字符。",
+      "fileLabel": "简历文件",
+      "fileHint": "{formats}，最大 {maxMb} MB。PDF 要有文字层，扫描件读不出来。文件只在内存里读取，不保存。",
+      "send": "提取素材",
+      "requesting": "正在等 AI worker…",
+      "running": "正在提取素材…",
+      "truncated": "文字超过了 {max} 个字符，只发送了开头部分。",
+      "doneToast": "{count} 条草稿待审核",
+      "noneFound": "AI 没有从这段文字里找到素材",
+      "off": "提取素材要用申请写作功能，它现在是关闭的，所以不会发送任何内容。",
+      "offLink": "到设置里打开",
+      "pendingTitle": "{count} 条草稿待审核",
+      "pendingHint": "请逐条对照真实情况核对。草稿 {days} 天后删除，无论是否审核过。",
+      "saveFirst": "请先保存或重置上面素材库里的改动：采用草稿会重新载入素材库。",
+      "quote": "原文：“{quote}”",
+      "flagged": "{count} 个字段需核对",
+      "flag": {
+        "quote_missing": "需核对：原文里没有这段引用",
+        "quote_too_short": "需核对：引用太短，不足以作为依据",
+        "figure_missing": "需核对：引用里没有 {missing}"
+      },
+      "adopt": "采用",
+      "adoptEdited": "按我的修改采用",
+      "edit": "先修改",
+      "cancelEdit": "取消修改",
+      "discard": "丢弃",
+      "adopted": "已加入素材库：{title}",
+      "adoptFailed": "操作没有成功，内容没有变化，请重试。",
+      "adoptRefused": "暂时无法保存：{detail}",
+      "stale": "素材库在别处改过，页面已重新载入。请核对后再采用。",
+      "gone": "这条草稿已不在待审核状态。",
+      "unreadable": "stories.yaml 读取失败。请先修好它，草稿会继续保留。",
+      "error": {
+        "invalid": "请求无法识别。请刷新页面后重试。",
+        "too_large": "文件超过 {maxMb} MB，没有读取。",
+        "bad_type": "无法读取这种文件类型，请使用 {formats}。",
+        "unreadable": "无法读取这个 PDF：文件已损坏或有密码保护。",
+        "no_text": "没有可提取的文字。扫描版 PDF 没有文字层：请改为粘贴文字；如果是从画像提取，请先填好画像。",
+        "disabled": "申请写作功能已关闭，没有发送任何内容。",
+        "busy": "另一次提取还在进行，请等它结束。",
+        "config_error": "配置文件读取失败，没有发送任何内容。设置页会指出是哪个文件。",
+        "unavailable": "暂时连不上数据库，请稍后重试。",
+        "auth": "AI 提供方拒绝了登录，请到数据源页检查。",
+        "timeout": "AI 用时过长，已停止并清除文字。请重试，或发送更短的文字。",
+        "rate_limited": "AI 提供方当前限流，请稍后重试。",
+        "invalid_output": "AI 的回复无法解析，请重试。",
+        "provider_error": "AI 提供方报错，请稍后重试。",
+        "network": "连不上 AI 提供方，请稍后重试。",
+        "budget": "AI API 的月度预算已用完。",
+        "quota_guard": "Job Radar 自己的 AI 用量上限已到（只计它自己的调用）。{time, select, none {稍后会自动继续。} other {{time} 之后可再用。}}",
+        "failed": "提取失败，文字已清除，请重试。",
+        "expired": "AI worker 没有按时完成，文字已清除。请确认它在运行后重试。",
+        "output_truncated": "AI 的回复被截断了。请发送更短的文字，或调高这个任务的输出上限。",
+        "aborted": "AI worker 被停止，文字已清除，请重试。",
+        "invalid_payload": "请求无法读取，请重试。",
+        "handler_error": "草稿无法保存，请重试。",
+        "no_handler": "AI worker 还不认识这种请求：更新后需要重启它。"
+      }
     }
   },
   "filter": {
@@ -3239,6 +3309,13 @@
       "writer_timeout_seconds": {
         "label": "单个请求最长运行时间",
         "hint": "从 ai-worker 领取时算起。超过时 AI 调用停止，请求以超时失败，素材从数据库清除。"
+      },
+      "task_story_extract": {
+        "label": "提取素材",
+        "hint": "从画像、文字或简历里提取素材草稿；不会搜索网页。"
+      },
+      "reasoning_effort_story_extract": {
+        "label": "推理强度：提取素材"
       }
     },
     "control": {
@@ -3298,7 +3375,8 @@
           "salary_lookup": "查薪资",
           "company_research": "公司背景",
           "writer_job": "申请回答",
-          "models_sync": "刷新模型列表"
+          "models_sync": "刷新模型列表",
+          "story_extract": "提取素材"
         },
         "status": {
           "pending": "排队中",
@@ -3835,7 +3913,8 @@
         "traps": "AI 陷阱",
         "salary_lookup": "查薪资",
         "company_research": "公司背景",
-        "write": "申请写作"
+        "write": "申请写作",
+        "story_extract": "提取素材"
       },
       "details": "详细统计 →"
     },
@@ -7208,7 +7287,8 @@
       "system__telegram_callback": "Telegram 按钮操作",
       "system__reminder": "每日提醒",
       "request__writer_job": "写申请回答",
-      "request__models_sync": "刷新模型列表"
+      "request__models_sync": "刷新模型列表",
+      "request__story_extract": "提取素材"
     },
     "event": {
       "item__ok": "单项处理成功",
@@ -7538,7 +7618,8 @@
       "salary_lookup": "查询薪资",
       "company_research": "查公司背景",
       "writer_job": "写申请回答",
-      "models_sync": "刷新模型列表"
+      "models_sync": "刷新模型列表",
+      "story_extract": "提取素材"
     },
     "level": {
       "all": "全部级别",

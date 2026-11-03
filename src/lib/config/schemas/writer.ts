@@ -10,6 +10,10 @@ export const WRITER_DEFAULT_QUEUE_TIMEOUT_SECONDS = 900;
 
 export const WRITER_STORIES_DEFAULTS = { max_items: 60, title_max_chars: 120, text_max_chars: 1500, preselect_count: 4 } as const;
 
+/** The file types a résumé upload accepts (`import.formats`). */
+export const STORY_IMPORT_FORMATS = ["pdf", "md", "txt"] as const;
+export type StoryImportFormat = (typeof STORY_IMPORT_FORMATS)[number];
+
 /** The two kinds of application question: a form question, or a cover letter (one long question). */
 export const QUESTION_KINDS = ["question", "letter"] as const;
 export type QuestionKind = (typeof QUESTION_KINDS)[number];
@@ -86,6 +90,27 @@ export const writerSchema = z.strictObject({
       preselect_count: z.number().int().min(0).max(50).default(WRITER_STORIES_DEFAULTS.preselect_count),
     })
     .default(WRITER_STORIES_DEFAULTS),
+  /** Extracting stories from your profile, a pasted text or an uploaded résumé. */
+  import: z
+    .strictObject({
+      /** Largest résumé file, in bytes; a larger one is refused unread. */
+      max_file_bytes: z.number().int().min(10_000).max(9_000_000).default(2_000_000),
+      /** Longest source text sent to the AI, in characters; a longer one is cut and the page says so. */
+      max_chars: z.number().int().min(1000).max(200_000).default(30_000),
+      /** A source with less text than this has nothing to extract (a scanned PDF has no text layer). */
+      min_chars: z.number().int().min(1).max(1000).default(20),
+      /** File types a résumé may have. */
+      formats: z
+        .array(z.enum(STORY_IMPORT_FORMATS))
+        .min(1)
+        .refine((items) => new Set(items).size === items.length, "must not contain duplicates")
+        .default(["pdf", "md", "txt"]),
+      /** Most drafts one extraction may return. */
+      max_drafts: z.number().int().min(1).max(50).default(12),
+      /** Days a draft waits for review; older ones are deleted, reviewed or not. */
+      draft_ttl_days: z.number().int().min(1).max(365).default(14),
+    })
+    .prefault({}),
   questions: z
     .strictObject({
       /** Most questions per job. */

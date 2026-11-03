@@ -20,8 +20,9 @@ description, not legal advice.
 | Email metadata (message id, sender address, IMAP uid) | database table `email_messages` | until you delete the database |
 | AI results (scores with reasons, translations, breakdowns, signals, trap marks, weekly suggestions with quotes) and AI usage records (model, tokens, duration) | database | until you delete the database |
 | Company background results (each field with its source link, the provider and the model) | database table `company_research` | until you delete the database; turning the feature off keeps them |
-| Telegram messages that were sent (payload and message id), control requests and their results | database | until you delete the database; the material of a writing request (`writer_job`) is removed from the request once it is done, failed or expired (`writer.yaml: queue_timeout_seconds` while queued, `timeout_seconds` + `expiry_grace_seconds` while running). A backup taken while a request is open keeps that material, and this includes the pre-migration backup at deploy: about 8 weeks for daily and weekly backups, longer for system and manual backups. Postgres heap and WAL can also keep it until vacuum and checkpoint. |
+| Telegram messages that were sent (payload and message id), control requests and their results | database | until you delete the database; the material of a writing request (`writer_job`) and the text of a story extraction (`story_extract`) are removed from the request once it is done, failed or expired (`writer.yaml: queue_timeout_seconds` while queued, `timeout_seconds` + `expiry_grace_seconds` while running). A backup taken while a request is open keeps that material, and this includes the pre-migration backup at deploy: about 8 weeks for daily and weekly backups, longer for system and manual backups. Postgres heap and WAL can also keep it until vacuum and checkpoint. |
 | Application questions and answer versions, with the evidence check of every sentence | database tables `application_questions`, `application_answer_versions` | until you delete the question (or the database); beyond `questions.max_versions_per_question` the oldest version goes |
+| Story drafts extracted from your profile, a text or a résumé, with the passages they quote | database table `profile_story_drafts` | the text is cleared when you adopt or discard a draft; the row goes after `writer.yaml: import.draft_ttl_days`. See [Story extraction](#story-extraction) |
 | Runner heartbeats | database | 24 hours |
 | Database backups | `data/backups/` | automatic: 14 daily and 8 weekly dumps; manual backups are never removed. A deleted record stays in older backups until those are removed. |
 | Job description exports for resume-kit | `data/exports/jd/` | until you delete them |
@@ -55,6 +56,26 @@ Any future retention period would be off by default.
 | The model provider of an MCP client you configured yourself (Claude Desktop, Claude Code, ...; **off by default**) | what its tools return when you ask: job facts, source links, scores and ranks, signals with their JD quotes, the JD after AI-trap cleaning, the status, dates, next step and interview rounds of your applications. **Never:** your profile, match reasons and gaps, filter reasons, your salary floor, notes, emails, local paths, keys. See [mcp.md](mcp.md) | only when you ask your client | leave `mcp.yaml: enabled` at `false`, or remove the server from your client |
 
 Nothing is sent to the project's maintainers or to any analytics service.
+
+### Story extraction
+
+The buttons in the stories card on `/me` send your profile summary and skills, a text you paste or the text of your résumé to
+the providers of the `story_extract` task in `ai.yaml`, only when you press them and only while `writer.yaml: enabled` is true.
+No web search. An uploaded file is read in memory and never written to disk, not even to a temporary folder; its name is not
+kept. Its text goes into one `story_extract` control request, where it stays until the request ends: every way it ends (done,
+failed, expired, cut off by a restart) clears the text in the same statement and leaves only the SHA-256 and the length. A
+request is not retried after a restart.
+
+What can remain after that:
+
+- **Inside Postgres:** old row versions keep the text in the table files until autovacuum reuses them, and the write-ahead log
+  keeps it until it is recycled. Normally that is hours.
+- **Database logs:** a failed statement can be logged with its values by Postgres.
+- **Backups:** a backup taken while a request is open keeps the text. Daily and weekly backups go after about 8 weeks;
+  pre-migration, pre-deploy and manual backups stay longer, until you remove them.
+- **Drafts and adopted stories:** a draft holds snippets of the text (each field and its quote) until you adopt or discard it, or
+  until `import.draft_ttl_days`. An adopted story is yours to keep in `data/profile/stories.yaml` and holds what you adopted.
+- **The AI provider:** what it keeps is under [Where the AI providers keep it](#where-the-ai-providers-keep-it).
 
 ### Where the AI providers keep it
 

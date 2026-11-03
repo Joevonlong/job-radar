@@ -159,6 +159,8 @@ tasks:
   #     order: [claude-cli, api]
   #     max_output_tokens: 8192
   #     api_timeout_seconds: 150
+  # Story extraction for the experience library (from your profile, a pasted text or a résumé) has a task of its own too,
+  # `story_extract`: unset = global order and limits. It sends that text and never searches the web.
   # max_output_tokens / api_timeout_seconds can be set on any task; they only apply to the API providers.
 
 # API provider request timeout (seconds) and max output tokens per call

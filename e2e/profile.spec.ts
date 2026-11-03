@@ -1,6 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import postgres from "postgres";
+
+import { minimalPdf } from "../tests/fixtures/pdf";
 import { expect, test, type Page } from "./fixtures";
 
 // playwright.config.ts points the web server at this directory (and a disposable database).
@@ -263,6 +266,75 @@ test("experience library: add a story, save, reload, reorder and see it in the h
     await history.getByRole("button", { name: "经历素材" }).click();
     await expect(history.getByTestId("history-item")).toHaveCount(2, { timeout: 1000 });
   }).toPass({ timeout: 15_000 });
+});
+
+/** Story extraction leaves rows behind on purpose (drafts wait for review): each test starts without any. */
+async function clearStoryExtraction(): Promise<void> {
+  const sql = postgres(process.env.E2E_DATABASE_URL ?? "", { max: 1, onnotice: () => {} });
+  try {
+    await sql`delete from profile_story_drafts`;
+    await sql`delete from control_requests where kind = 'story_extract'`;
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
+
+test("story extraction from a pasted text: drafts wait for review, flags show, adopt and discard", async ({ page }) => {
+  await clearStoryExtraction();
+  await open(page);
+  const card = page.getByTestId("story-import");
+  await expect(card.getByTestId("story-import-disclosure")).toBeVisible();
+
+  await page.getByTestId("story-import-paste").click();
+  await page.getByTestId("story-import-text").fill("Led the migration of the billing service to Postgres\nwith no downtime for customers.");
+  await page.getByTestId("story-import-send-text").click();
+
+  const drafts = page.getByTestId("story-draft");
+  await expect(drafts).toHaveCount(2, { timeout: 30_000 });
+  // Nothing enters the library before it is adopted, and the review survives a reload.
+  expect(read(STORIES_FILE)).toBe("");
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+  await expect(drafts).toHaveCount(2);
+
+  const backed = drafts.filter({ hasText: "Led the migration" });
+  const invented = drafts.filter({ hasText: "Invented achievement" });
+  await expect(backed.getByTestId("story-draft-flagged")).toHaveCount(0);
+  await expect(invented.getByTestId("story-draft-flagged")).toBeVisible();
+  await expect(invented.locator('[data-testid="story-draft-field"][data-flag="quote_missing"]').first()).toBeVisible();
+
+  await backed.getByTestId("story-draft-adopt").click();
+  await expect(drafts).toHaveCount(1);
+  await expect.poll(() => read(STORIES_FILE)).toContain("Led the migration");
+  expect(read(STORIES_FILE)).toContain("source: self_description");
+  await expect(page.getByTestId("story-row")).toHaveCount(1);
+
+  await invented.getByTestId("story-draft-discard").click();
+  await expect(page.getByTestId("story-drafts")).toHaveCount(0);
+  expect(read(STORIES_FILE)).not.toContain("Invented achievement");
+});
+
+test("story extraction from an uploaded résumé: a PDF is read, a scan and a wrong type are refused", async ({ page }) => {
+  await clearStoryExtraction();
+  await open(page);
+  await page.getByTestId("story-import-upload").click();
+
+  await page.getByTestId("story-import-file").setInputFiles({ name: "scan.pdf", mimeType: "application/pdf", buffer: Buffer.from(minimalPdf([])) });
+  await page.getByTestId("story-import-send-file").click();
+  await expect(page.getByTestId("story-import-error")).toContainText("没有可提取的文字");
+
+  await page.getByTestId("story-import-file").setInputFiles({ name: "resume.docx", mimeType: "application/octet-stream", buffer: Buffer.from("not a resume") });
+  await page.getByTestId("story-import-send-file").click();
+  await expect(page.getByTestId("story-import-error")).toContainText("无法读取这种文件类型");
+  await expect(page.getByTestId("story-draft")).toHaveCount(0);
+
+  const pdf = minimalPdf(["Shipped the search rewrite for the Atlas product team.", "Reduced query latency for all customers."]);
+  await page.getByTestId("story-import-file").setInputFiles({ name: "resume.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf) });
+  await page.getByTestId("story-import-send-file").click();
+  const drafts = page.getByTestId("story-draft");
+  await expect(drafts).toHaveCount(2, { timeout: 30_000 });
+  await expect(drafts.filter({ hasText: "Shipped the search rewrite" })).toHaveCount(1);
+  await clearStoryExtraction();
 });
 
 test.describe("mobile (390px)", () => {

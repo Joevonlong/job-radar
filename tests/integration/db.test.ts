@@ -47,6 +47,7 @@ const EXPECTED_TABLES = [
   "jobs",
   "notifications",
   "profile_snapshots",
+  "profile_story_drafts",
   "raw_postings",
   "run_deliveries",
   "runner_heartbeats",

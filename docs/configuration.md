@@ -43,7 +43,7 @@ To change a `shipped` file, copy it into the user directory and edit it there (t
 Market packs (`config/packs/<id>/`: countries, cities, local-language rules) are `shipped` the same way: a copy in `data/config/packs/<id>/` replaces the shipped pack as a whole. See [market-packs.md](market-packs.md).
 
 The profile files `me.yaml`, `preferences.yaml` and `stories.yaml` (your experience library, see
-[application-writer.md](application-writer.md)) live in `data/profile/` and are edited on `/me`. The optional
+[application-writer.md](application-writer.md)) live in `data/profile/` and are edited on `/me`, where stories can also be extracted from a text or résumé (`writer.yaml: import`). The optional
 `deal_breakers` list of `preferences.yaml` (rules that veto a job before any AI call) is described in
 [deal-breakers.md](deal-breakers.md); its limits are in `pipeline.yaml: filter.deal_breakers`.
 Runtime profile readers can use `config/profile.example/` without creating a file. Raw-file checks, the doctor and

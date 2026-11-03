@@ -1,3 +1,4 @@
+import { writerSchema } from "@/lib/config/schemas/writer";
 import { currentScoresBackfill } from "@/lib/db/current-scores-config";
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -12,6 +13,7 @@ import { spanScope, createActivityRecorder, reconcileActivity, startActivityMain
 import { resolveMigrationsFolder, runMigrations } from "@/lib/db/migrate";
 import { readJournal } from "@/lib/db/migration-journal";
 import { requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
+import { deleteExpiredStoryDrafts } from "@/lib/db/repos/story-drafts";
 import { failOrphanedCycles, getDbNow, type CycleKind } from "@/lib/db/repos/cycles";
 import { deliveryPayloadBytes, deliveryTablesReady, pruneDeliveryItems } from "@/lib/db/repos/deliveries";
 import { createDeliveryPruner } from "./delivery-prune";
@@ -51,6 +53,15 @@ import { runRunnerHeartbeats } from "./heartbeat";
 
 const PROCESS_NAME = "runner";
 const PRUNE_EVERY_MS = 60 * 60 * 1000;
+
+/** writer.yaml `import.draft_ttl_days`, or its default while the file does not load (the drafts still expire). */
+function storyDraftTtlDays(): number {
+  try {
+    return loadConfig("writer").import.draft_ttl_days;
+  } catch {
+    return writerSchema.parse({}).import.draft_ttl_days;
+  }
+}
 
 function log(message: string): void {
   console.log(`${new Date().toISOString()} [runner] ${message}`);
@@ -490,6 +501,8 @@ async function main(): Promise<number> {
         const pruned = await pruneHeartbeats(db, new Date(Date.now() - retentionMs));
         lastPruneAt = Date.now();
         if (pruned > 0) log(`pruned ${pruned} old heartbeats`);
+        const drafts = await deleteExpiredStoryDrafts(db, storyDraftTtlDays());
+        if (drafts > 0) log(`deleted ${drafts} expired story drafts`);
       }
     },
     reportConfig: () => shippedConfig.report(),

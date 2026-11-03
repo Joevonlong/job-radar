@@ -8,7 +8,7 @@ export type ControlRequest = typeof controlRequests.$inferSelect;
 export type ControlRequestKind = ControlRequest["kind"];
 export type ControlRequestStatus = ControlRequest["status"];
 
-export const CONTROL_REQUEST_KINDS = ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup", "writer_job", "models_sync", "company_research"] as const satisfies readonly ControlRequestKind[];
+export const CONTROL_REQUEST_KINDS = ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup", "writer_job", "models_sync", "company_research", "story_extract"] as const satisfies readonly ControlRequestKind[];
 /** The requests the settings page offers and lists; the AI ones belong to the ai-worker and show on /sources. */
 export const SETTINGS_REQUEST_KINDS = ["run_cycle", "rescore_stale", "score_jobs"] as const satisfies readonly ControlRequestKind[];
 /**
@@ -18,14 +18,14 @@ export const SETTINGS_REQUEST_KINDS = ["run_cycle", "rescore_stale", "score_jobs
  * processes (`src/lib/control/kinds.ts`) and the `/sources` queue count derive from it.
  * `tests/ai-worker/units.test.ts` fails while a kind of the database enum is in neither list.
  */
-export const AI_CONTROL_REQUEST_KINDS = ["run_ai", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup", "writer_job", "company_research"] as const satisfies readonly ControlRequestKind[];
+export const AI_CONTROL_REQUEST_KINDS = ["run_ai", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup", "writer_job", "story_extract", "company_research"] as const satisfies readonly ControlRequestKind[];
 /**
  * Kinds that call no AI but hold a provider key's neighbourhood: only the host ai-worker claims them, whatever `ai.yaml: execution`
  * says (the container runner never does). `models_sync` reads a provider's model list for the "refresh models" button.
  */
 export const HOST_ONLY_CONTROL_REQUEST_KINDS = ["models_sync"] as const satisfies readonly ControlRequestKind[];
 /** User requests served independently of batch AI work. Automatic requests stay in the batch lane. */
-export const INTERACTIVE_CONTROL_REQUEST_KINDS = ["translate_job", "breakdown_job", "salary_lookup", "test_ai", "writer_job", "models_sync", "company_research"] as const satisfies readonly (typeof AI_CONTROL_REQUEST_KINDS | typeof HOST_ONLY_CONTROL_REQUEST_KINDS)[number][];
+export const INTERACTIVE_CONTROL_REQUEST_KINDS = ["translate_job", "breakdown_job", "salary_lookup", "test_ai", "writer_job", "story_extract", "models_sync", "company_research"] as const satisfies readonly (typeof AI_CONTROL_REQUEST_KINDS | typeof HOST_ONLY_CONTROL_REQUEST_KINDS)[number][];
 /** The kinds that call no AI: the container runner's own work (the channel test and the Telegram test message). */
 export const NON_AI_CONTROL_REQUEST_KINDS = ["run_cycle", "test_channel", "test_telegram"] as const satisfies readonly ControlRequestKind[];
 /** The test buttons of /sources and /settings; their result is shown next to the button, not in the request list. */
@@ -35,8 +35,9 @@ export const TEST_CONTROL_REQUEST_KINDS = ["test_channel", "test_ai", "test_tele
  * test message sent again minutes later would surprise. `run_cycle`: the runner's catch-up already runs again the slot of a cycle a
  * restart cut off, and a queued manual cycle next to it would only collect twice; the "collect now" shows as failed and can be clicked again.
  * `salary_lookup`, `company_research`: a paid web search the user clicked; a restart must not run it (and bill it) again unasked, the card offers "try again".
+ * `story_extract`: it carries the text of a résumé or profile, which must not outlive a restart; the card offers to send it again.
  */
-export const NOT_REQUEUED_CONTROL_REQUEST_KINDS = [...TEST_CONTROL_REQUEST_KINDS, "run_cycle", "salary_lookup", "company_research"] as const satisfies readonly ControlRequestKind[];
+export const NOT_REQUEUED_CONTROL_REQUEST_KINDS = [...TEST_CONTROL_REQUEST_KINDS, "run_cycle", "salary_lookup", "company_research", "story_extract"] as const satisfies readonly ControlRequestKind[];
 /**
  * Kinds whose payload carries the user's own text (the material of an application answer). Every path that ends such a
  * request (done, failed, failed by a restart, expired) removes these keys from the payload in the same statement, so the
@@ -45,6 +46,7 @@ export const NOT_REQUEUED_CONTROL_REQUEST_KINDS = [...TEST_CONTROL_REQUEST_KINDS
  */
 export const SCRUBBED_PAYLOAD_KEYS = {
   writer_job: ["materials"],
+  story_extract: ["text"],
 } as const satisfies Partial<Record<ControlRequestKind, readonly string[]>>;
 export type ScrubbedPayloadKind = keyof typeof SCRUBBED_PAYLOAD_KEYS;
 export const SCRUBBED_PAYLOAD_KINDS = Object.keys(SCRUBBED_PAYLOAD_KEYS) as ScrubbedPayloadKind[];
@@ -458,6 +460,17 @@ export async function findOpenWriterRequest(db: Db, input: { jobId: number; ques
       sql`${controlRequests.payload} ->> 'questionId' = ${String(input.questionId)}`,
     ))
     .orderBy(controlRequests.id)
+    .limit(1);
+  return row ?? null;
+}
+
+/** The newest `story_extract` request (what the stories card resumes after a reload), or null. There is one owner, so there is one at a time. */
+export async function findLatestStoryExtractRequest(db: Db): Promise<ControlRequest | null> {
+  const [row] = await db
+    .select()
+    .from(controlRequests)
+    .where(sql`${controlRequests.kind}::text = 'story_extract'`)
+    .orderBy(desc(controlRequests.id))
     .limit(1);
   return row ?? null;
 }
