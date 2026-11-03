@@ -63,22 +63,25 @@ it("uses UTC for display when the schedule starts invalid", () => {
   expect(getDisplayTimeZone()).toBe("UTC");
 });
 
-it("does not replace a file that a bind mount hides for a moment: the save comes back stale, the file stays", async () => {
+it("does not replace a file that a bind mount keeps hiding: the save fails, the file stays", async () => {
   const file = getUserConfigPath("search");
   const before = fs.readFileSync(file, "utf8");
-  const { default: fsp } = await import("node:fs/promises");
-  const realRead = fsp.readFile.bind(fsp);
-  const read = vi.spyOn(fsp, "readFile").mockImplementation(((target: Parameters<typeof realRead>[0], options: Parameters<typeof realRead>[1]) => {
-    if (target === file) return Promise.reject(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
+  const max = reloadConfig("search").max_per_group_per_location + 1;
+  const realRead = fs.readFileSync;
+  const read = vi.spyOn(fs, "readFileSync").mockImplementation(((target: Parameters<typeof realRead>[0], options: Parameters<typeof realRead>[1]) => {
+    if (target === file) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
     return realRead(target, options);
-  }) as typeof fsp.readFile);
+  }) as typeof realRead);
+  const start = Date.now();
+  let calls = 0;
+  const now = vi.spyOn(Date, "now").mockImplementation(() => start + 60_000 * calls++);
   try {
-    const max = reloadConfig("search").max_per_group_per_location + 1;
     const error = await mutateConfig("search", (current) => ({ ...current, max_per_group_per_location: max })).catch((caught: unknown) => caught);
-    expect(error).toBeInstanceOf(ConfigError);
-    expect(configErrorKey(error)).toBe("stale");
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("search.yaml");
   } finally {
     read.mockRestore();
+    now.mockRestore();
   }
   expect(fs.readFileSync(file, "utf8")).toBe(before);
   expect(fs.readdirSync(tmp.configDir).filter((name) => name.endsWith(".tmp"))).toEqual([]);
