@@ -297,6 +297,17 @@ describe("coach review", () => {
 });
 
 describe("one open request per question", () => {
+  it("concurrent clicks leave one request: the AI is called once, the other click joins it", async () => {
+    const jobId = await addJob();
+    const question = await addQuestion(jobId);
+    const input = { jobId, questionId: question.id, writer: writerOn(), me, stories };
+    const outcomes = await Promise.all(Array.from({ length: 5 }, () => requestWriter(db(), input, { mode: "draft" })));
+    const rows = await db().select().from(schema.controlRequests).where(eq(schema.controlRequests.kind, "writer_job"));
+    expect(rows).toHaveLength(1);
+    expect(outcomes.map((outcome) => (outcome.state === "queued" ? outcome.requestId : null))).toEqual(outcomes.map(() => rows[0]!.id));
+    expect(outcomes.filter((outcome) => outcome.state === "queued" && !outcome.existing)).toHaveLength(1);
+  });
+
   it("writing again joins the open write; a polish or a review while any request is open is refused as busy", async () => {
     const jobId = await addJob();
     const question = await addQuestion(jobId);
