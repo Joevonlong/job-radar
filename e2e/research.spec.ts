@@ -4,6 +4,7 @@ import path from "node:path";
 import postgres from "postgres";
 
 import { expect, test, type Page } from "./fixtures";
+import { listRows } from "./list-rows";
 
 /**
  * The company background on the seeded e2e database. research.yaml of the e2e config copy is switched on by
@@ -90,7 +91,7 @@ test.describe("the website domain", () => {
     await openJob(page, /Forward Deployed Engineer/);
     const sql = database();
     try {
-      await sql`update companies set website_domain = 'quillfeather.example', website_domain_source = 'inferred', website_domain_confirmed_at = null where name ilike 'Quillfeather%'`;
+      await sql`update companies set website_domain = 'quillfeather-labs.com', website_domain_source = 'inferred', website_domain_confirmed_at = null where name ilike 'Quillfeather%'`;
     } finally {
       await sql.end();
     }
@@ -100,7 +101,7 @@ test.describe("the website domain", () => {
     await expect(page.getByTestId("company-domain")).toHaveAttribute("data-state", "confirmed");
     await page.reload();
     await expect(page.getByTestId("company-domain")).toHaveAttribute("data-state", "confirmed");
-    await expect(page.getByTestId("company-domain")).toContainText("quillfeather.example");
+    await expect(page.getByTestId("company-domain")).toContainText("quillfeather-labs.com");
   });
 });
 
@@ -124,9 +125,8 @@ test.describe("the research bar", () => {
       async () => {
         await page.goto("/jobs");
         await page.waitForLoadState("networkidle");
-        const row = page.getByRole("row", { name: /Backend Engineer/ }).first();
-        const link = row.getByRole("link", { name: /Backend Engineer/ }).first();
-        const href = await link.getAttribute("href");
+        const row = listRows(page).filter({ hasText: "Senior Backend Engineer" }).first();
+        const href = await row.getByRole("link", { name: /Senior Backend Engineer/ }).first().getAttribute("href");
         await row.getByTestId("row-favorite").click();
         await expect(row.getByTestId("row-favorite")).toHaveAttribute("aria-pressed", "true");
         await page.goto(href as string);
@@ -139,7 +139,7 @@ test.describe("the research bar", () => {
         // put the star back as it was: other specs count stars
         await page.goto("/jobs");
         await page.waitForLoadState("networkidle");
-        await page.getByRole("row", { name: /Backend Engineer/ }).first().getByTestId("row-favorite").click();
+        await listRows(page).filter({ hasText: "Senior Backend Engineer" }).first().getByTestId("row-favorite").click();
       },
     );
   });
@@ -151,7 +151,9 @@ test.describe("the research bar", () => {
         await openJob(page, /LLM Engineer/);
         await expect(page.getByTestId("research-bar-all")).toHaveCount(0);
         await expect(page.locator('[data-testid^="research-bar-"][data-testid$="-run"]')).toHaveCount(0);
-        await expect(page.getByTestId("company-research-panel")).toHaveCount(0);
+        // the result this job already has stays readable, but it cannot be asked for again
+        await expect(page.getByTestId("company-research-refresh")).toHaveCount(0);
+        await expect(page.getByTestId("company-research-button")).toHaveCount(0);
       },
     );
   });
@@ -160,6 +162,48 @@ test.describe("the research bar", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openJob(page, /LLM Engineer/);
     await expect(page.getByTestId("research-bar")).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+});
+
+test.describe("the company list", () => {
+  test("shows a stored result, opens its fields, and starts nothing by itself", async ({ page }) => {
+    const sql = database();
+    let requestsBefore: number;
+    try {
+      const [{ n }] = await sql<[{ n: number }]>`select count(*)::int as n from control_requests where kind = 'company_research'`;
+      requestsBefore = n;
+    } finally {
+      await sql.end();
+    }
+    await page.goto("/companies");
+    await page.waitForLoadState("networkidle");
+    // the manual lookup above left a result for this company
+    const details = page.getByTestId("company-research-details").filter({ has: page.getByTestId("company-research-summary") }).filter({ visible: true }).first();
+    await expect(details.getByTestId("company-research-summary")).toContainText("Builds analytics software");
+    await details.getByTestId("company-research-toggle").click();
+    await expect(details.getByTestId("company-research-toggle")).toHaveAttribute("aria-expanded", "true");
+    await expect(details.getByTestId("company-research-field-summary")).toBeVisible();
+    await expect(details.getByTestId("company-research-source").first()).toHaveAttribute("target", "_blank");
+    await expect(details.getByTestId("company-domain")).toBeVisible();
+    await expect(details.getByTestId("company-overview-refresh")).toBeEnabled();
+    const check = database();
+    try {
+      const [{ n }] = await check<[{ n: number }]>`select count(*)::int as n from control_requests where kind = 'company_research'`;
+      expect(n).toBe(requestsBefore);
+    } finally {
+      await check.end();
+    }
+  });
+
+  test("fits a phone with the details open", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/companies");
+    await page.waitForLoadState("networkidle");
+    const details = page.getByTestId("company-research-details").filter({ has: page.getByTestId("company-research-summary") }).filter({ visible: true }).first();
+    await details.getByTestId("company-research-toggle").click();
+    await expect(details.getByTestId("company-research-field-summary")).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
   });

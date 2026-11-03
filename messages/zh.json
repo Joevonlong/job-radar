@@ -7037,6 +7037,17 @@
     }
   },
   "research": {
+    "overview": {
+      "details": "详情",
+      "hide": "收起",
+      "website": "官网",
+      "toggleLabel": "{company} 的公司背景",
+      "unverified": "AI 网页搜索，未核对",
+      "refresh": "重新查询",
+      "queued": "正在查询，可能要几分钟",
+      "done": "公司背景已更新",
+      "expired": "这个结果已过期。"
+    },
     "bar": {
       "label": "调研",
       "item": {

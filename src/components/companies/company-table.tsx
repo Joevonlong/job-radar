@@ -1,13 +1,16 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
+import { Fragment } from "react";
 
 import { resolveLocale } from "@/i18n/locale";
 import type { CompanyOverviewItem } from "@/lib/companies/overview";
+import type { CompanyResearchOverview } from "@/lib/research/company-overview";
 import { COMPANY_SORTS, serializeCompaniesParams, type CompaniesSearchParams } from "@/lib/companies/search-params";
 import { formatInteger, formatScoreValue, UNKNOWN } from "@/lib/format/numbers";
 import { formatFullTime, formatRelativeTime } from "@/lib/format/time";
 
+import { CompanyResearchDetails } from "./company-research-details";
 import { WatchToggle } from "./watch-toggle";
 
 interface CompanyTableProps {
@@ -15,6 +18,8 @@ interface CompanyTableProps {
   params: CompaniesSearchParams;
   now: Date;
   timezone: string;
+  /** Null: research is off and nothing is stored, the list looks as it always did. */
+  research?: CompanyResearchOverview | null;
 }
 
 const linkClass = "font-bold underline decoration-2 underline-offset-4 hover:bg-hi";
@@ -45,7 +50,7 @@ function CompanyActions({ row }: { row: CompanyOverviewItem }) {
 }
 
 /** Table on wide screens, cards below sm; both use the server's links and watch-list entries. */
-export function CompanyTable({ rows, params, now, timezone }: CompanyTableProps) {
+export function CompanyTable({ rows, params, now, timezone, research = null }: CompanyTableProps) {
   const t = useTranslations("companies");
   const locale = resolveLocale(useLocale());
   const timeOptions = { locale, timeZone: timezone };
@@ -55,6 +60,11 @@ export function CompanyTable({ rows, params, now, timezone }: CompanyTableProps)
       {formatRelativeTime(row.lastFirstSeenAt, now, timeOptions)}
     </time>
   );
+
+  const researchOf = (row: CompanyOverviewItem) => {
+    const info = research?.items[row.id];
+    return research && info ? <CompanyResearchDetails company={row.name} companyId={row.id} info={info} canRefresh={research.canRefresh} canEditDomain={research.canEditDomain} providers={research.providers} timeZone={timezone} /> : null;
+  };
 
   if (rows.length === 0) return <p className="rounded-card border border-dashed border-border p-sp-4 text-body text-ink-2" data-testid="companies-empty">{t("empty")}</p>;
 
@@ -82,7 +92,8 @@ export function CompanyTable({ rows, params, now, timezone }: CompanyTableProps)
           </thead>
           <tbody className="divide-y divide-border">
             {rows.map((row) => (
-              <tr key={row.id} data-testid="company-row" className="align-top hover:bg-muted/50">
+              <Fragment key={row.id}>
+              <tr data-testid="company-row" className="align-top hover:bg-muted/50">
                 <th scope="row" className="wrap-anywhere px-2 py-4"><CompanyName row={row} /></th>
                 <td className="px-2 py-4 font-mono tabular-nums" data-column="jobs">{formatInteger(row.jobCount, locale)}</td>
                 <td className="px-2 py-4 font-mono tabular-nums" data-column="score">{score(row)}</td>
@@ -90,6 +101,8 @@ export function CompanyTable({ rows, params, now, timezone }: CompanyTableProps)
                 <td className="wrap-anywhere px-2 py-4"><CompanyStatus row={row} /></td>
                 <td className="wrap-anywhere px-2 py-4"><CompanyActions row={row} /></td>
               </tr>
+              {researchOf(row) ? <tr data-testid="company-research-row" className="border-t-0!"><td colSpan={6} className="px-2 pb-4">{researchOf(row)}</td></tr> : null}
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -105,6 +118,7 @@ export function CompanyTable({ rows, params, now, timezone }: CompanyTableProps)
             </dl>
             {row.watched || row.excluded ? <div className="mb-sp-3"><CompanyStatus row={row} /></div> : null}
             <CompanyActions row={row} />
+            {researchOf(row) ? <div className="mt-sp-3">{researchOf(row)}</div> : null}
           </li>
         ))}
       </ul>

@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Loader2, RefreshCw, Search } from "lucide-react";
+import { Loader2, RefreshCw, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
@@ -15,12 +15,12 @@ import { INK_LINK } from "@/components/ui/ink-link";
 import { callAction, withActionFeedback } from "@/lib/actions/client";
 import { controlQueueViewSchema, type ControlQueueView } from "@/lib/control/request-view-schema";
 import { formatClock } from "@/lib/format/clock";
-import { COMPANY_RESEARCH_FIELDS } from "@/lib/research/fields";
 import type { CompanyResearchContext } from "@/lib/research/view";
 import { toastTone } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 import { CompanyDomainRow } from "./company-domain-row";
+import { CompanyResearchFields } from "./company-research-fields";
 import { Panel, PlaceholderBox } from "./panel";
 
 const requestAction = withActionFeedback(rawRequestAction)(() => ({ ok: false, error: "failed" }));
@@ -29,7 +29,7 @@ const statusAction = (input: Parameters<typeof rawStatusAction>[0]) => callActio
 type ErrorKey = CompanyResearchActionErrorKey;
 type StatusFailure = Extract<CompanyResearchStatusResult, { ok: false }>;
 
-async function readRequest(jobId: number, requestId: number): Promise<ControlRequestRead<null, null, StatusFailure>> {
+export async function readCompanyResearchRequestState(jobId: number, requestId: number): Promise<ControlRequestRead<null, null, StatusFailure>> {
   const result = await statusAction({ jobId, requestId });
   if (result === null) return null;
   if (!result.ok) return result.error === "not_found" ? { state: "missing" } : { state: "failed", failed: result };
@@ -40,16 +40,6 @@ async function readRequest(jobId: number, requestId: number): Promise<ControlReq
   return { state: "done", done: null };
 }
 
-/** Only an https link is ever rendered as a link (the stored sources were checked; this is the second fence). */
-function httpsSource(url: string): { href: string; host: string } | null {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" ? { href: parsed.href, host: parsed.hostname } : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * The company background of a job: AI web search results, each field with its source, marked as unverified, all plain
  * text. A button asks the ai-worker for the lookup (off by default); the request is followed until it has finished, then the
@@ -58,7 +48,6 @@ function httpsSource(url: string): { href: string; host: string } | null {
 export function CompanyBackgroundPanel({ jobId, company, context, timeZone }: { jobId: number; company: string; context: CompanyResearchContext; timeZone: string }) {
   const t = useTranslations("research.company");
   const tError = useTranslations("research.error");
-  const tField = useTranslations("research.field");
   const router = useRouter();
   const format = useFormatter();
   const { availability, latest, initialRequest, maxPerDay } = context;
@@ -106,7 +95,7 @@ export function CompanyBackgroundPanel({ jobId, company, context, timeZone }: { 
     requestId: waiting?.requestId ?? null,
     initialStage: waiting?.stage,
     initialQueue: waiting?.queue ?? null,
-    read: (id) => readRequest(jobId, id),
+    read: (id) => readCompanyResearchRequestState(jobId, id),
     onDone: () => {
       setWaiting(null);
       toastTone("success", t("done"));
@@ -220,27 +209,7 @@ export function CompanyBackgroundPanel({ jobId, company, context, timeZone }: { 
                 {t("domainChanged")}
               </p>
             ) : null}
-            <dl className="grid gap-x-4 gap-y-2.5 sm:grid-cols-[9rem_minmax(0,1fr)]" data-testid="company-research-fields">
-              {COMPANY_RESEARCH_FIELDS.map((field) => {
-                const value = latest.fields[field];
-                if (!value) return null;
-                const source = httpsSource(value.sourceUrl);
-                return (
-                  <div key={field} className="contents" data-testid={`company-research-field-${field}`}>
-                    <dt className="text-cap text-ink-3 text-cap-style sm:pt-0.5">{tField(field)}</dt>
-                    <dd className="min-w-0">
-                      <span className={cn("max-w-[72ch]", field === "recentNews" && "whitespace-pre-line")}>{value.text}</span>
-                      {source ? (
-                        <a href={source.href} target="_blank" rel="noopener noreferrer" className={cn(INK_LINK, "text-data ml-1.5 inline-flex items-center gap-1 font-mono")} aria-label={t("sourceOf", { field: tField(field), host: source.host })} data-testid="company-research-source">
-                          {source.host}
-                          <ExternalLink className="size-3" aria-hidden />
-                        </a>
-                      ) : null}
-                    </dd>
-                  </div>
-                );
-              })}
-            </dl>
+            <CompanyResearchFields fields={latest.fields} />
             {latest.dropped > 0 ? (
               <p className="text-ink-3 text-data font-mono" data-testid="company-research-dropped">
                 {t("dropped", { n: latest.dropped })}

@@ -278,7 +278,8 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   [AI providers](docs/ai-providers.md#checklist-for-a-new-model-release). The refresh has limits in `ai.yaml` `model_list`
   (`timeout_seconds`, `max_response_bytes`, `max_name_chars`; defaults added when missing, `config_version` unchanged).
 - **Research bar on the job page, and research that starts by itself.** With research on, a line under the job's title shows where
-  its company lookup, JD breakdown and salary lookup stand, with a button each. Starring a job can start them by itself, in the batch
+  its company lookup, JD breakdown and salary lookup stand, with a button each; `/companies` shows a stored company background and
+  lets you confirm the website. Starring a job can start them by itself, in the batch
   lane and under its own daily limit, and can be set to include status changes or high-score new jobs; this sends the title, city,
   country and seniority for the salary lookup, and the timing shows what you save. See [Automatic research](docs/research.md#automatic-research).
 - **Company background on the job page.** Off by default (`research.yaml`, Settings → Research). One click asks an AI provider with

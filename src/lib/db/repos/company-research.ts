@@ -113,6 +113,33 @@ export async function findLatestCompanyResearch(db: Executor, input: { companyId
   return row ? toView(row, input.now) : null;
 }
 
+export interface CompanyResearchOverviewRow {
+  companyId: number;
+  websiteDomain: string | null;
+  websiteDomainSource: string | null;
+  /** The company's newest job: what a refresh from the company list asks through. */
+  jobId: number | null;
+  latest: CompanyResearchView | null;
+}
+
+/** For one page of the company list: each company's newest good result, website and newest job, in one read per kind. */
+export async function listCompanyResearchOverview(db: Executor, input: { companyIds: readonly number[]; promptVersion: number; now: Date }): Promise<CompanyResearchOverviewRow[]> {
+  if (input.companyIds.length === 0) return [];
+  const ids = [...input.companyIds];
+  const [rows, results, newest] = await Promise.all([
+    db.select({ id: companies.id, websiteDomain: companies.websiteDomain, websiteDomainSource: companies.websiteDomainSource }).from(companies).where(inArray(companies.id, ids)),
+    db
+      .selectDistinctOn([companyResearch.companyId])
+      .from(companyResearch)
+      .where(and(inArray(companyResearch.companyId, ids), eq(companyResearch.promptVersion, input.promptVersion), eq(companyResearch.status, "ok")))
+      .orderBy(companyResearch.companyId, desc(companyResearch.fetchedAt), desc(companyResearch.id)),
+    db.selectDistinctOn([jobs.companyId], { companyId: jobs.companyId, jobId: jobs.id }).from(jobs).where(inArray(jobs.companyId, ids)).orderBy(jobs.companyId, desc(jobs.firstSeenAt), desc(jobs.id)),
+  ]);
+  const resultOf = new Map(results.map((row) => [row.companyId, toView(row, input.now)]));
+  const jobOf = new Map(newest.map((row) => [row.companyId, row.jobId]));
+  return rows.map((row) => ({ companyId: row.id, websiteDomain: row.websiteDomain, websiteDomainSource: row.websiteDomainSource, jobId: jobOf.get(row.id) ?? null, latest: resultOf.get(row.id) ?? null }));
+}
+
 /** Whether `latest` can stand in for a new lookup: not expired, and made with the domain confirmed now. */
 export function companyResearchCurrent(latest: CompanyResearchView | null, confirmedDomain: string | null): boolean {
   return latest !== null && !latest.expired && latest.domainUsed === confirmedDomain;

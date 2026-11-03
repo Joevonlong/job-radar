@@ -28,3 +28,18 @@ company:
   rating: {min: 0, max: 5}
   # USD per web search of the Anthropic API (counted in ai_usage and the monthly API budget)
   web_search_usd: 0.01
+
+auto:
+  # manual | favorite | favorite_or_applying (also when the status becomes interested, preparing or applied)
+  trigger: manual
+  # Which parts run automatically. salary also needs salary.yaml lookup.enabled
+  items: [company, breakdown, salary]
+  # Most automatic research runs per 24 hours for saved / applied jobs, counted per job; separate from the manual limits
+  max_per_day: 10
+  high_score:
+    enabled: false
+    min_rank: 80
+    per_cycle_limit: 3
+    max_age_days: 3
+    # Most automatic research runs per 24 hours for high-score new jobs, counted separately from max_per_day
+    max_per_day: 5

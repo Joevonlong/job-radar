@@ -14,6 +14,7 @@ import { getOrCreateCompany, mergeCompanyInto } from "@/lib/db/repos/companies";
 import { controlLaneOf, getControlRequest } from "@/lib/db/repos/control-requests";
 import { confirmInferredCompanyDomain, countCompanyResearchRequests, findLatestCompanyResearch, getCompanyResearchForJob, insertCompanyResearchOfJob, reserveCompanyResearchRequest, saveUserCompanyDomain } from "@/lib/db/repos/company-research";
 import { insertJob } from "@/lib/db/repos/jobs";
+import { getCompanyResearchOverview } from "@/lib/research/company-overview";
 import { getCompanyResearchContext } from "@/lib/research/view";
 
 import { pinnedAi, scriptedProvider } from "../ai/helpers";
@@ -533,5 +534,39 @@ describe("the website domain", () => {
     await saveUserCompanyDomain(db(), { companyId, domain: "acme-robotics.com", now: NOW });
     await addPosting(jobId, "https://careers.other-name.de/2");
     expect((await context(jobId))?.website).toEqual({ domain: "acme-robotics.com", source: "user" });
+  });
+});
+
+describe("the company list", () => {
+  it("reads each company's newest result, website and newest job, and asks for nothing", async () => {
+    const researched = await addJob("Acme Robotics", { domain: "acme-robotics.com", source: "inferred" });
+    const bare = await addJob("Bare Company");
+    const r = router([answer()]);
+    registerControlHandler("company_research", handler(r));
+    await queue(researched.jobId, r.ai);
+    await work();
+    const before = (await db().select().from(schema.controlRequests)).length;
+
+    const overview = await getCompanyResearchOverview(db(), { companyIds: [researched.companyId, bare.companyId], research: config(), ai: r.ai, now: NOW });
+    expect(overview?.canRefresh).toBe(true);
+    const item = overview?.items[researched.companyId];
+    expect(item).toMatchObject({ jobId: researched.jobId, website: { domain: "acme-robotics.com", source: "inferred" } });
+    expect(item?.latest?.fields.summary?.text).toBe("Builds warehouse robots.");
+    expect(overview?.items[bare.companyId]).toMatchObject({ latest: null, jobId: bare.jobId });
+    expect((await db().select().from(schema.controlRequests)).length).toBe(before);
+  });
+
+  it("with research off shows stored results only, read only, and nothing when none is stored", async () => {
+    const researched = await addJob("Acme Robotics");
+    const bare = await addJob("Bare Company");
+    const r = router([answer()]);
+    registerControlHandler("company_research", handler(r));
+    await queue(researched.jobId, r.ai);
+    await work();
+    const off = config((raw) => { raw.enabled = false; });
+    const overview = await getCompanyResearchOverview(db(), { companyIds: [researched.companyId, bare.companyId], research: off, ai: r.ai, now: NOW });
+    expect(overview).toMatchObject({ canRefresh: false, canEditDomain: false });
+    expect(Object.keys(overview?.items ?? {})).toEqual([String(researched.companyId)]);
+    expect(await getCompanyResearchOverview(db(), { companyIds: [bare.companyId], research: off, ai: r.ai, now: NOW })).toBeNull();
   });
 });

@@ -7037,6 +7037,17 @@
     }
   },
   "research": {
+    "overview": {
+      "details": "Details",
+      "hide": "Hide",
+      "website": "Website",
+      "toggleLabel": "Company background of {company}",
+      "unverified": "AI web search, unverified",
+      "refresh": "Look up again",
+      "queued": "Looking up, this can take a few minutes",
+      "done": "Company background updated",
+      "expired": "This result is out of date."
+    },
     "bar": {
       "label": "Research",
       "item": {
