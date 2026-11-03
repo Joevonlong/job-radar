@@ -1,6 +1,7 @@
 /**
- * The read-only MCP server (`pnpm mcp:serve`, docs/mcp.md): three tools over the existing job and application queries, nothing that
- * writes. `buildServer` registers only the tools mcp.yaml switches on; the stdio entry point is `scripts/mcp-serve.ts`.
+ * The MCP server (`pnpm mcp:serve`, docs/mcp.md): three tools over the existing job and application queries, and the application
+ * writer's two tools, which are off until mcp.yaml switches them on. Only `save_application_answer` writes, and all it can do is
+ * add an answer version. `buildServer` registers only the tools offered; the stdio entry point is `scripts/mcp-serve.ts`.
  */
 import { McpServer, type StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 
@@ -11,24 +12,29 @@ import { cityMembers } from "@/lib/jobs/city-groups";
 import { loadCityGroups } from "@/lib/jobs/cities";
 import { buildSearchPlanLenient } from "@/lib/jobs/search";
 import { loadBaseCurrency } from "@/lib/signals/floor";
+import { readWriterInputs } from "@/lib/writer/settings";
 
 import { formatCallLine, stderrLine, type LogLine } from "./call-log";
 import { runLogged, type McpContext } from "./context";
-import { getJobOutput, listApplicationsOutput, searchJobsOutput } from "./dto";
+import { getApplicationContextOutput, getJobOutput, listApplicationsOutput, saveApplicationAnswerOutput, searchJobsOutput } from "./dto";
 import { toolResult } from "./guard";
-import { enabledTools } from "./settings";
+import { offeredTools } from "./settings";
 import { mcpTranslator, type McpTranslator } from "./text";
+import { getApplicationContext, getApplicationContextInput } from "./tools/application-context";
 import { getJob, getJobInput } from "./tools/get-job";
 import { listApplications, listApplicationsInput } from "./tools/list-applications";
+import { saveApplicationAnswer, saveApplicationAnswerInput } from "./tools/save-application-answer";
 import { searchJobs, searchJobsInput } from "./tools/search-jobs";
 
 export const MCP_SERVER_NAME = "job-radar";
 
-/** Every tool only reads, and reads only this installation's own database. */
+/** These tools only read, and read only this installation's own database. */
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
+/** Adds a row and changes or removes nothing; calling it twice adds two. */
+const ADDS_ONLY = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
 
 /** The context with the real loaders (config files, the city groups of the database). */
-export function defaultContext(db: Db, settings: McpConfig, options: { text?: McpTranslator; log?: LogLine } = {}): McpContext {
+export function defaultContext(db: Db, settings: McpConfig, options: { text?: McpTranslator; log?: LogLine; writeDb?: Db | null } = {}): McpContext {
   return {
     db,
     settings,
@@ -44,6 +50,7 @@ export function defaultContext(db: Db, settings: McpConfig, options: { text?: Mc
     searchPlan: buildSearchPlanLenient,
     text: options.text ?? mcpTranslator(),
     log: options.log ?? stderrLine,
+    writer: { inputs: readWriterInputs, writeDb: options.writeDb ?? null },
   };
 }
 
@@ -69,7 +76,7 @@ export function observeInvalidInput<S extends StandardSchemaWithJSON>(schema: S,
 export function buildServer(ctx: McpContext, options: { version?: string } = {}): McpServer {
   const server = new McpServer({ name: MCP_SERVER_NAME, version: options.version ?? "0.0.0" }, { capabilities: { tools: {} } });
   const t = ctx.text;
-  const on = new Set<McpToolName>(enabledTools(ctx.settings));
+  const on = new Set<McpToolName>(offeredTools(ctx.settings, ctx.writer?.inputs().writer?.enabled === true));
 
   if (on.has("search_jobs")) {
     server.registerTool(
@@ -121,6 +128,42 @@ export function buildServer(ctx: McpContext, options: { version?: string } = {})
         runLogged(ctx, "list_applications", async () => {
           const output = await listApplications(ctx, args);
           return { result: toolResult(output), count: output.returned };
+        }),
+    );
+  }
+
+  if (on.has("get_application_context")) {
+    server.registerTool(
+      "get_application_context",
+      {
+        title: t("tools.get_application_context.title"),
+        description: t("tools.get_application_context.description"),
+        inputSchema: observeInvalidInput(getApplicationContextInput(ctx), "get_application_context", ctx.log),
+        outputSchema: getApplicationContextOutput,
+        annotations: READ_ONLY,
+      },
+      async (args) =>
+        runLogged(ctx, "get_application_context", async () => {
+          const output = await getApplicationContext(ctx, args);
+          return { result: toolResult(output), count: output.questions.length };
+        }),
+    );
+  }
+
+  if (on.has("save_application_answer")) {
+    server.registerTool(
+      "save_application_answer",
+      {
+        title: t("tools.save_application_answer.title"),
+        description: t("tools.save_application_answer.description"),
+        inputSchema: observeInvalidInput(saveApplicationAnswerInput(ctx), "save_application_answer", ctx.log),
+        outputSchema: saveApplicationAnswerOutput,
+        annotations: ADDS_ONLY,
+      },
+      async (args) =>
+        runLogged(ctx, "save_application_answer", async () => {
+          const output = await saveApplicationAnswer(ctx, args);
+          return { result: toolResult(output), count: 1 };
         }),
     );
   }

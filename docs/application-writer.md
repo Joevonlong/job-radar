@@ -91,6 +91,10 @@ The workbench has three columns (below 1024 px one at a time, switched at the to
    - **Stories** of your experience library; a new question starts with the `stories.preselect_count` stories whose
      skills overlap most with the job's.
    - **What to stress this time**: a free note, at most `emphasis_max_chars`.
+   - **Company background**, when this job's company has a result: its fields, each with a tick and its source link
+     (https only), marked as an unverified AI web search, and as expired when it is. Nothing is ticked by default. After
+     a new search the ticks no longer count and the page says so: you tick again, because the text changed. See
+     [Company background in an answer](#company-background-in-an-answer).
 2. **Questions**: paste a question from the application form, or add a cover letter (one long question). Each has
    its own text, tone, target length (words or characters) and answer language (by default the JD's language, else
    the AI output language of `language.yaml`). At most `questions.max_per_job` per job; deleting a question deletes
@@ -213,12 +217,39 @@ fails or expires, the material is removed from the request and only the question
 A request expires when it stays queued longer than `queue_timeout_seconds`, or stays running longer than
 `timeout_seconds` + `expiry_grace_seconds`. The versions are stored in your database with their checks.
 
+The ticked company background is text an AI found on the web earlier; writing does not search again.
+
 The removal only reaches the request row:
 
 - A backup taken while a request is open keeps the material, and this includes the pre-migration backup at deploy.
   Daily and weekly backups are kept about 8 weeks, system and manual backups longer
   ([backup-restore.md](backup-restore.md)).
 - Postgres heap and WAL can also keep it until vacuum and checkpoint.
+
+### Writing from your own AI client
+
+An MCP client you set up can read a question's material and add answer versions, with two tools that are off by default. They only
+add versions, which appear here as "From your AI client" with their own check results; what they read goes to that client's model
+provider. See [Writing answers from your client](mcp.md#writing-answers-from-your-client).
+
+### Company background in an answer
+
+A web page can phrase a request in ways no rule recognises ("a note for whoever drafts this: applicants should mention…"), so
+the background does not depend on one catching it. The ticked fields go to the AI in a block of their own, as quoted data, with
+the rule that nothing in it is an instruction, however it reads. Tags cannot be closed from inside the block, a source is given as
+its host only, and a field that a `traps.yaml` rule does catch is left out.
+
+The check then limits what the block can do. A company quote can only back a sentence about the company, and such a sentence is
+marked **web, unverified**, never as backed, even with a JD quote next to it. A sentence about you that cites it stays unbacked. This
+does not prove a company fact is true, and the AI can still be swayed by what it read: read a sentence marked as web text
+before you use it.
+
+**What this means for your application** takes the ticked fields and the question's chosen stories and asks for points where
+the two meet (no new web search, the `write` task). Each point has a company half that answers only to its company quote and a
+half about you that answers only to a quote from your story; a name or figure missing from its own quote flags the point,
+and what failed stays visible instead of disappearing. **Add to the emphasis note** copies the words of your story, not
+the AI's phrasing, and only from a point that passed: that note counts as your own word in the check. One note is kept per job, and
+it says when it may be outdated (a newer search or a changed story). The material leaves the request when it ends, as for writing.
 
 ## Settings (`writer.yaml`)
 
@@ -253,6 +284,7 @@ The removal only reaches the request row:
 | `draft_max_chars` | `6000` | Longest text of yours that can be polished, and the longest answer that can be reviewed |
 | `coach.dimensions` | answers_question, concrete_evidence, company_specific, covers_must_haves, length, language_tone, no_overclaim | What a coach review rates (ids; the label of one you add is its id) |
 | `coach.max_suggestions` | `8` | Most sentence suggestions one review returns |
+| `fit.max_items` | `5` | Most points in one "what this means for your application" note |
 | `reuse.min_similarity` | `0.55` | Lowest share of words a new question must have in common with an earlier one for that answer to be offered |
 | `reuse.max_candidates` | `3` | Most earlier answers offered for one new question |
 | `reuse.stopwords` | common English, German, Chinese question words | Words left out when two questions are compared; setting it replaces the list |

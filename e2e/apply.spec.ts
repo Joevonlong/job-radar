@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import axe from "axe-core";
 import postgres from "postgres";
 
@@ -32,7 +35,9 @@ async function reset(id: number): Promise<void> {
   const sql = postgres(E2E_URL, { max: 1, onnotice: () => {} });
   try {
     await sql`delete from application_questions where job_id = ${id}`;
-    await sql`delete from control_requests where kind = 'writer_job' and payload ->> 'jobId' = ${String(id)}`;
+    await sql`delete from control_requests where kind in ('writer_job', 'writer_fit') and payload ->> 'jobId' = ${String(id)}`;
+    await sql`delete from application_fit_notes where job_id = ${id}`;
+    await sql`delete from company_research where company_id = (select company_id from jobs where id = ${id})`;
   } finally {
     await sql.end({ timeout: 5 });
   }
@@ -108,6 +113,41 @@ test("from the job page: add a question, write, read the evidence, edit a senten
   // the job page counts it, and a reload keeps it
   await page.goto(`/jobs/${id}`);
   await expect(page.getByTestId("action-write-count")).toHaveText("1/1");
+});
+
+// Rewrites the shared stories.yaml, so it runs in the exclusive project (e2e/projects.ts), not next to the profile page's specs.
+test("company background: a tick stays after a reload, and the fit button answers", { tag: "@exclusive" }, async ({ page }) => {
+  const sql = postgres(E2E_URL, { max: 1, onnotice: () => {} });
+  const storiesFile = path.join(process.env.E2E_PROFILE_DIR ?? "", "stories.yaml");
+  const storiesBefore = fs.existsSync(storiesFile) ? fs.readFileSync(storiesFile, "utf8") : null;
+  try {
+    fs.mkdirSync(path.dirname(storiesFile), { recursive: true });
+    fs.writeFileSync(storiesFile, "config_version: 1\nstories:\n  - id: fit-story\n    title: Fit story\n    what: I moved the billing service to Kotlin.\n");
+    await sql`
+      insert into company_research (company_id, job_id, status, result_json, prompt_version, fetched_at, expires_at)
+      select company_id, id, 'ok', ${sql.json({ fields: { summary: { text: "The company builds ML platforms.", sourceUrl: "https://example.org/about" } }, dropped: 0 })}, 1, now(), now() + interval '30 days'
+      from jobs where id = ${id}`;
+
+    await page.goto(`/jobs/${id}/apply`);
+    await addQuestion(page, "How does your work meet this company?");
+    const field = page.getByTestId("writer-company-field");
+    await expect(field).not.toBeChecked();
+    await expect(page.getByTestId("writer-fit-button")).toBeDisabled();
+    await field.click();
+    await expect(field).toBeChecked();
+    const story = page.getByTestId("writer-story").first();
+    if (!(await story.isChecked())) await story.click();
+    await expect(page.getByTestId("writer-fit-button")).toBeEnabled();
+
+    await page.reload();
+    await expect(page.getByTestId("writer-company-field")).toBeChecked();
+    await page.getByTestId("writer-fit-button").click();
+    await expect(page.getByTestId("writer-fit-empty")).toBeVisible({ timeout: 30_000 });
+  } finally {
+    if (storiesBefore === null) fs.rmSync(storiesFile, { force: true });
+    else fs.writeFileSync(storiesFile, storiesBefore);
+    await sql.end({ timeout: 5 });
+  }
 });
 
 test.describe("mobile (390px)", () => {

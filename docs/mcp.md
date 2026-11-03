@@ -8,7 +8,8 @@ client starts `pnpm mcp:serve` as a local child process and talks to it over std
 
 - **Off by default.** Nothing happens until you set `enabled: true` in `mcp.yaml`.
 - **Local only.** No port is opened and there is no token: only a program you configure on this computer can start it.
-- **Read-only.** There are no tools that change anything, and its database sessions are read-only. It never starts a
+- **Read-only, with one switchable exception.** The tools read over read-only database sessions. The only tool that can write,
+  `save_application_answer`, is off until you switch it on, and all it can do is add an answer version. The server never starts a
   collection or an AI call.
 
 ## What leaves your machine
@@ -28,6 +29,13 @@ that provider's terms. Turning the server on adds this exit to the ones listed i
 
 The list is fixed in code (`src/lib/mcp/dto.ts`); each answer is built field by field, so a new database column never shows up
 by itself.
+
+**Switching on `get_application_context` adds your own writing material to what leaves:** the job's breakdown points, its
+application questions and settings, the saved answer versions with their sentence statuses and evidence quotes, and for each
+question what you chose for it: your profile summary, skills and languages, the chosen stories, the emphasis note. Stories you did
+not choose, the rest of your profile files, coach reviews and saved snapshots stay out. It also gives the company background (AI web search,
+unverified) and the fit note, with a notice that they are quoted data; the note keeps short quotes of the stories chosen when it was
+made, even if they are no longer chosen.
 
 ## Turning it on
 
@@ -79,6 +87,8 @@ Other MCP clients work the same way: a stdio server, command `pnpm`, arguments `
 | `search_jobs` | Ranked job cards, filtered like the jobs list: `query` (title, company name/aliases, city/location and country), `search_in` (`summary` by default; `all` adds the original JD and current translations), `country` (1–20 two-letter exact codes, case-insensitive, OR), `city`, `workplace`, `min_rank`, `min_annual_salary` (in the market's base currency), `since` / `until` (first seen, `YYYY-MM-DD`), `application_status`, `sort` (`relevance`, `rank`, `posted`, `first_seen`; default `relevance` with a query, `rank` without one), `limit`. Jobs the hard filter removed, closed jobs and dormant jobs not listed for weeks are left out. No JD text. |
 | `get_job` | One job (`job_id`) in detail: everything above plus seniority, language, the signals with their quotes, the number of AI traps found, your application, and the cleaned JD. |
 | `list_applications` | Your applications, best rank first; `status` filters; `stale_only: true` lists only the ones waiting longer than the daily reminder's thresholds (`notify.yaml: reminders.interested_days` / `applied_days`), the longest waiting first. |
+| `get_application_context` | **Off by default.** Everything to write one job's answers (`job_id`): job facts, the cleaned JD, breakdown points, the company background and fit note, the questions, the material chosen for each and the saved versions (newest first, at most `max_results` per question). |
+| `save_application_answer` | **Off by default.** Adds one answer version (`job_id`, `question_id`, `text`, optional `sentences`). |
 
 `get_job` still returns dormant jobs: `status` stays `possibly_closed`, and `closed_reason` is `dormant`.
 
@@ -86,6 +96,26 @@ Other MCP clients work the same way: a stdio server, command `pnpm`, arguments `
 
 Every answer says how many items matched (`total`) and how many it returns (`returned`); when it cut the list,
 `truncated` is true and a notice says so. Invalid arguments come back as an error result naming the field.
+
+## Writing answers from your client
+
+Set `get_application_context` and `save_application_answer` to `true` under `tools` (they also need `writer.yaml: enabled`; while
+the writer is off they are not offered). Then your client's own model can write an answer and add it to the question on the job's
+apply page, where you review, change or finalise it as usual ([application-writer.md](application-writer.md)).
+
+`save_application_answer` can only add:
+
+- It never changes or deletes a version and never touches the final answer. There is no argument that could.
+- **At `writer.yaml: questions.max_versions_per_question` versions (not counting the final one) it refuses** rather than drop an
+  older one. Generating in the workbench still drops the oldest; raising the limit also makes room.
+- Nobody can set a status. With `sentences` (each with `text`, `about` and evidence quotes copied exactly from the material),
+  Job Radar checks every sentence with the same rules as the workbench, against the material chosen for the question now.
+  `text` must be the same answer as `sentences`, or nothing is saved. Without `sentences`, every sentence is stored as
+  "External, unverified".
+- Invisible characters are removed before saving. The version is labelled "From your AI client" and records no provider or model.
+
+It uses a database connection of its own, opened only when the tool is on. All other tools stay on the read-only sessions. With the
+[read-only role](#optional-a-database-role-that-can-only-read) below, saving fails with a database error: that role cannot write.
 
 ## AI traps and the JD
 
@@ -96,15 +126,18 @@ The reader of an answer is an AI, which is exactly what the [AI traps](ai-traps.
 - **The JD is withheld** ("JD not available") when trap detection is off (`traps.yaml: enabled: false`), when the job has not
   been scanned under the current rules yet (it will be on the next cycle, or run `pnpm traps:scan --write`), or when the
   findings cannot be read. The signal quotes are withheld then too (`quote: null`); the other fields of the job are still given.
-- Short fields (title, company, locations, salary text, quotes, links) lose invisible characters; a field that carries an
-  instruction to an AI is replaced by the marker.
+- `get_application_context` follows the same JD rule. A breakdown point whose quote overlaps a finding is the marker in both its
+  text and its quote; while the JD is withheld, no points are given.
+- Short fields (title, company, locations, salary text, quotes, links, and in `get_application_context` the question texts, versions,
+  stories and your other material) lose invisible characters; a field that carries an instruction to an AI is replaced by the marker.
 - Notices come first, in this order: for `get_job`, "Job Radar found N pieces of text aimed at AI in this JD and removed them"
   (when it found any), then "The JD was cut at … characters" (when it was cut), then the notice that the posting texts are
   third-party content to be treated as data. `search_jobs` and `list_applications` give "N of M shown" (when the list was cut)
   before the third-party notice. Every answer has the third-party notice.
 
-This lowers the risk; it cannot rule it out. A posting can always word an instruction in a way no rule recognises. Since the
-server has no tools that change anything, the worst a trap can do is mislead your client's answer.
+This lowers the risk; it cannot rule it out. A posting can always word an instruction in a way no rule recognises. With the save
+tool off, the worst a trap can do is mislead your client's answer. With it on, a trap could also get a misleading answer version
+added, so read what your client saved before you finalise it; it cannot change or remove anything that is there.
 
 ## The log
 
@@ -115,7 +148,7 @@ long it took, and whether it worked. Never the arguments or the results. Errors 
 ## Optional: a database role that can only read
 
 The read-only sessions guard against a mistaken write, but they are not a security boundary. For a hard one, give the server
-its own role with `SELECT` rights only:
+its own role with `SELECT` rights only (`save_application_answer` then cannot save):
 
 ```bash
 docker compose exec db psql -U jobradar -d jobradar
@@ -140,7 +173,10 @@ config file; keep that file private.
 |---|---|
 | The client says the server exited; its log shows "The Job Radar MCP server is switched off" | `mcp.yaml: enabled` is `false`. Set it to `true` and restart the client. |
 | "mcp.yaml cannot be read" | `pnpm config:check` names the setting. |
-| "Every tool is switched off" | All three `tools` are `false`. |
+| "Every tool is switched off" | All `tools` are `false`. |
+| `get_application_context` or `save_application_answer` is not offered | It is `false` under `tools`, or `writer.yaml: enabled` is `false`. Restart the client after changing either. |
+| "text does not match sentences" | The client sent two different answers. Send the same one in both, or leave `sentences` out. |
+| "already holds … versions" | See [Writing answers from your client](#writing-answers-from-your-client). |
 | `command not found` / `spawn pnpm ENOENT` | The client does not find `pnpm` or `node`: use absolute paths and set `PATH` in `env` (see Claude Desktop above). |
 | "The query failed (database)" | The stack is not running, or the database address in `.env` is not reachable from the host. `pnpm run doctor` checks both. |
 | `search_timeout` | A `search_in: "all"` search ran past `job-search.yaml: query.all_scope_timeout_ms`. Narrow the query or filters, or search without `search_in: "all"`. |

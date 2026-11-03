@@ -20,9 +20,10 @@ import { locateQuote } from "@/lib/signals/quote";
 import { cleanDescriptionForAi } from "@/lib/traps/clean";
 import { classifyTranslationFailure, resumeOf } from "@/lib/translation/errors";
 import { createRequestRouter } from "@/lib/translation/router";
-import { buildWriteInput, profileEvidenceText, storyEvidenceText, type WriterMaterials } from "@/lib/writer/materials";
+import { buildWriteInput, type WriterMaterials } from "@/lib/writer/materials";
 import { COACH_REWRITE_VARIANT, type CheckedSentence } from "@/lib/writer/types";
-import { countStatuses, joinSentences, verifySentences, verifySuggestion, type VerifyContext } from "@/lib/writer/verify";
+import { countStatuses, joinSentences, verifySentences, verifySuggestion } from "@/lib/writer/verify";
+import { writerVerifyContext } from "@/lib/writer/verify-context";
 
 import { writerJobPayloadSchema, type ControlHandler, type ControlHandlerContext, type ControlOutcome } from "./types";
 
@@ -38,9 +39,6 @@ function writeOutputTokenCap(): number {
   const ai = loadConfig("ai");
   return ai.tasks.write.max_output_tokens ?? ai.max_output_tokens;
 }
-
-/** The skill names of the profile snapshot ("Python (5 years)" -> "Python"). */
-const skillName = (entry: string): string => entry.replace(/\s*\(\d+(?:\.\d+)?(?: years|y)\)$/u, "");
 
 /** Pair the variants the request asked for with the ones the AI returned: by id, else in order. */
 function pairVariants(materials: WriterMaterials, output: WriteOutput): { id: string; sentences: WriteOutput["variants"][number]["sentences"] }[] {
@@ -89,9 +87,10 @@ export function createWriterJobHandler(options: WriterJobHandlerOptions = {}): C
     const jdPoints = cleaned === null ? [] : materials.jdPoints.filter((point) => locateQuote(cleaned, point.quote) !== null);
     const sent: WriterMaterials = { ...materials, jdPoints };
     const excerpt = sent.useJdText && cleaned !== null ? truncateJd(cleaned, settings.jd_max_chars, settings.jd_head_share).text : null;
-    const { input } = buildWriteInput(sent, excerpt);
+    const { input, companyBackground } = buildWriteInput(sent, excerpt);
     const prompt = buildWritePrompt({
       input,
+      companyBackground,
       mode,
       outputLanguage: materials.question.outputLanguage,
       quoteMaxChars: settings.evidence.quote_max_chars,
@@ -130,23 +129,7 @@ export function createWriterJobHandler(options: WriterJobHandlerOptions = {}): C
 
     const breakdown = await getJobBreakdown(db, jobId);
     const content = breakdown ? parseStoredBreakdown(breakdown.promptVersion, breakdown.content) : null;
-    const verify: VerifyContext = {
-      jd: raw,
-      profile: materials.profile ? profileEvidenceText(materials.profile) : null,
-      stories: new Map(materials.stories.map((story) => [story.id, storyEvidenceText(story)])),
-      emphasis: materials.emphasis,
-      draft: materials.draft ? (materials.draft.evidenceText ?? materials.draft.text) : null,
-      company: null,
-      entities: [
-        ...(content?.tech_stack.map((item) => item.name) ?? []),
-        ...materials.stories.flatMap((story) => story.skills),
-        ...(materials.profile?.skills.map(skillName) ?? []),
-        job.company,
-      ],
-      companyName: job.company,
-      language: materials.question.outputLanguage,
-      config: settings.evidence,
-    };
+    const verify = writerVerifyContext({ jd: raw, materials, techStack: content?.tech_stack.map((item) => item.name) ?? [], company: job.company, evidence: settings.evidence });
 
     if (mode === "coach") {
       const called = await callAi<CoachOutput>(coachOutputSchema);

@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
 import { createAiRouter } from "@/lib/ai";
+import { WRITE_PROMPT_VERSIONS } from "@/lib/ai/prompts/write";
 import { meSchema, storySchema, writerSchema, type WriterConfig } from "@/lib/config";
 import { processNextControlRequest, registerControlHandler, resetControlHandlers } from "@/lib/control";
 import { createWriterJobHandler } from "@/lib/control/writer-job";
@@ -141,7 +142,7 @@ describe("improve my draft", () => {
     expect(transport.calls[0]!.system).toContain("Keep every fact of the draft");
 
     const [version] = await listAnswerVersions(db(), [question.id]);
-    expect(version).toMatchObject({ mode: "polish", variantId: "align_to_job", promptVersion: "write-polish-v1", controlRequestId: requestId });
+    expect(version).toMatchObject({ mode: "polish", variantId: "align_to_job", promptVersion: WRITE_PROMPT_VERSIONS.polish, controlRequestId: requestId });
     // backed by the draft, a figure that is not in the quote, a jd quote
     expect({ supported: version!.supportedCount, partial: version!.partialCount, unsupported: version!.unsupportedCount }).toEqual({ supported: 2, partial: 1, unsupported: 0 });
   });
@@ -229,7 +230,7 @@ describe("coach review", () => {
     expect(coach.score).toBe(72);
     expect(coach.dimensions.map((entry) => entry.id)).toEqual(["answers_question", "no_overclaim"]);
     expect(coach.dropped).toEqual({ dimensions: 2, suggestions: 1 });
-    expect(coach.promptVersion).toBe("write-coach-v1");
+    expect(coach.promptVersion).toBe(WRITE_PROMPT_VERSIONS.coach);
     expect(coach.suggestions.map((entry) => [entry.sentenceIndex, entry.sentence.status])).toEqual([
       [1, "supported"],
       [0, "ai_suggestion_unverified"],
@@ -366,7 +367,7 @@ describe("rewrite by the review", () => {
 
     const versions = await listAnswerVersions(db(), [question.id]);
     const written = versions.find((entry) => entry.mode === "coach_rewrite")!;
-    expect(written).toMatchObject({ variantId: "coach_rewrite", parentVersionId: versionId, promptVersion: "write-coach-rewrite-v1", supportedCount: 2 });
+    expect(written).toMatchObject({ variantId: "coach_rewrite", parentVersionId: versionId, promptVersion: WRITE_PROMPT_VERSIONS.coach_rewrite, supportedCount: 2 });
     expect(written.text).toBe("I moved our billing service to Kotlin. Errors fell by 40% after the move.");
   });
 

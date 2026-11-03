@@ -10,6 +10,7 @@ import { updateQuestionAction } from "@/app/jobs/[id]/apply/actions";
 import { QueueHint } from "@/components/control/queue-hint";
 import { useControlRequest } from "@/components/control/use-control-request";
 import { Panel } from "@/components/jobs/detail/panel";
+import { FitNote } from "@/components/writer/fit-note";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,7 +18,9 @@ import { callAction } from "@/lib/actions/client";
 import { controlQueueViewSchema } from "@/lib/control/request-view-schema";
 import { toastTone } from "@/lib/toast";
 import { jdMaterialMode, jdPointKey, type JdPoint } from "@/lib/writer/jd-points";
+import { appendToEmphasis } from "@/lib/writer/fit";
 import type { QuestionSelection } from "@/lib/writer/types";
+import type { CompanyResearchField } from "@/lib/research/fields";
 import type { WorkbenchQuestion, WorkbenchView } from "@/lib/writer/view";
 
 const GROUPS = ["must", "nice", "other"] as const;
@@ -52,6 +55,7 @@ function Pick({ checked, onChange, disabled, children, testId }: { checked: bool
 export function MaterialsPanel({ view, question, enabled, timeZone }: { view: WorkbenchView; question: WorkbenchQuestion | null; enabled: boolean; timeZone: string }) {
   const t = useTranslations("writer.materials");
   const tw = useTranslations("writer");
+  const tr = useTranslations("research.field");
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [selection, setSelection] = useState<QuestionSelection | null>(question?.selection ?? null);
@@ -87,6 +91,20 @@ export function MaterialsPanel({ view, question, enabled, timeZone }: { view: Wo
     const stories = new Set(view.stories.map((story) => story.id));
     save({ ...selection, jdPoints: selection.jdPoints.filter((ref) => points.has(jdPointKey(ref))), storyIds: selection.storyIds.filter((id) => stories.has(id)) });
   };
+  const toggleCompany = (field: CompanyResearchField, on: boolean): void => {
+    if (view.company === null) return;
+    // ticks of an older result are not carried over: they were made on another text
+    const current = selection.company?.researchId === view.company.researchId ? selection.company.fields : [];
+    const fields = current.filter((entry) => entry !== field);
+    const next = on ? [...fields, field] : fields;
+    save({ ...selection, company: next.length === 0 ? null : { researchId: view.company.researchId, fields: next } });
+  };
+  const addToEmphasis = (addition: string): void => {
+    const next = appendToEmphasis(selection.emphasis, addition, view.limits.emphasisMaxChars);
+    if (next === null) toastTone("error", t("fit.emphasisFull"));
+    else if (next !== selection.emphasis) save({ ...selection, emphasis: next });
+  };
+  const companyTicks = selection.company?.researchId === view.company?.researchId ? (selection.company?.fields ?? []) : [];
   const disabled = !enabled;
   const stale = question.stale.jdPoints + question.stale.stories;
 
@@ -154,6 +172,33 @@ export function MaterialsPanel({ view, question, enabled, timeZone }: { view: Wo
             </Pick>
           ))}
         </Group>
+
+        {view.company !== null ? (
+          <Group title={t("companyGroup")} testId="writer-company">
+            <p className="text-ink-3 text-body-sm">{t("companyUnverified")}</p>
+            {view.company.expired ? (
+              <p className="text-warning-text text-body-sm" role="status" data-testid="writer-company-expired">
+                {t("companyExpired")}
+              </p>
+            ) : null}
+            {question.companyUpdated ? (
+              <p className="text-warning-text text-body-sm" role="status" data-testid="writer-company-updated">
+                {t("companyUpdated")}
+              </p>
+            ) : null}
+            {view.company.fields.map((entry) => (
+              <Pick key={entry.field} checked={companyTicks.includes(entry.field)} onChange={(on) => toggleCompany(entry.field, on)} disabled={disabled} testId="writer-company-field">
+                <span className="font-semibold">{tr(entry.field)}</span> <span>{entry.text}</span>
+                {entry.sourceUrl !== null ? (
+                  <a href={entry.sourceUrl} target="_blank" rel="noopener noreferrer nofollow" className="text-ink-3 ml-1 underline" data-testid="writer-company-source">
+                    {t("companySource")}
+                  </a>
+                ) : null}
+              </Pick>
+            ))}
+            <FitNote view={view} question={question} enabled={enabled && companyTicks.length > 0 && selection.storyIds.length > 0} timeZone={timeZone} onAddToEmphasis={addToEmphasis} />
+          </Group>
+        ) : null}
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor={emphasisId} className="text-cap text-ink-3 text-cap-style">

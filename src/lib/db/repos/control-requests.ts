@@ -8,7 +8,7 @@ export type ControlRequest = typeof controlRequests.$inferSelect;
 export type ControlRequestKind = ControlRequest["kind"];
 export type ControlRequestStatus = ControlRequest["status"];
 
-export const CONTROL_REQUEST_KINDS = ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup", "writer_job", "models_sync", "company_research", "story_extract"] as const satisfies readonly ControlRequestKind[];
+export const CONTROL_REQUEST_KINDS = ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup", "writer_job", "writer_fit", "models_sync", "company_research", "story_extract"] as const satisfies readonly ControlRequestKind[];
 /** The requests the settings page offers and lists; the AI ones belong to the ai-worker and show on /sources. */
 export const SETTINGS_REQUEST_KINDS = ["run_cycle", "rescore_stale", "score_jobs"] as const satisfies readonly ControlRequestKind[];
 /**
@@ -18,14 +18,14 @@ export const SETTINGS_REQUEST_KINDS = ["run_cycle", "rescore_stale", "score_jobs
  * processes (`src/lib/control/kinds.ts`) and the `/sources` queue count derive from it.
  * `tests/ai-worker/units.test.ts` fails while a kind of the database enum is in neither list.
  */
-export const AI_CONTROL_REQUEST_KINDS = ["run_ai", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup", "writer_job", "story_extract", "company_research"] as const satisfies readonly ControlRequestKind[];
+export const AI_CONTROL_REQUEST_KINDS = ["run_ai", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup", "writer_job", "writer_fit", "story_extract", "company_research"] as const satisfies readonly ControlRequestKind[];
 /**
  * Kinds that call no AI but hold a provider key's neighbourhood: only the host ai-worker claims them, whatever `ai.yaml: execution`
  * says (the container runner never does). `models_sync` reads a provider's model list for the "refresh models" button.
  */
 export const HOST_ONLY_CONTROL_REQUEST_KINDS = ["models_sync"] as const satisfies readonly ControlRequestKind[];
 /** User requests served independently of batch AI work. Automatic requests stay in the batch lane. */
-export const INTERACTIVE_CONTROL_REQUEST_KINDS = ["translate_job", "breakdown_job", "salary_lookup", "test_ai", "writer_job", "story_extract", "models_sync", "company_research"] as const satisfies readonly (typeof AI_CONTROL_REQUEST_KINDS | typeof HOST_ONLY_CONTROL_REQUEST_KINDS)[number][];
+export const INTERACTIVE_CONTROL_REQUEST_KINDS = ["translate_job", "breakdown_job", "salary_lookup", "test_ai", "writer_job", "writer_fit", "story_extract", "models_sync", "company_research"] as const satisfies readonly (typeof AI_CONTROL_REQUEST_KINDS | typeof HOST_ONLY_CONTROL_REQUEST_KINDS)[number][];
 /** The kinds that call no AI: the container runner's own work (the channel test and the Telegram test message). */
 export const NON_AI_CONTROL_REQUEST_KINDS = ["run_cycle", "test_channel", "test_telegram"] as const satisfies readonly ControlRequestKind[];
 /** The test buttons of /sources and /settings; their result is shown next to the button, not in the request list. */
@@ -47,6 +47,7 @@ export const NOT_REQUEUED_CONTROL_REQUEST_KINDS = [...TEST_CONTROL_REQUEST_KINDS
 export const SCRUBBED_PAYLOAD_KEYS = {
   writer_job: ["materials"],
   story_extract: ["text"],
+  writer_fit: ["materials"],
 } as const satisfies Partial<Record<ControlRequestKind, readonly string[]>>;
 export type ScrubbedPayloadKind = keyof typeof SCRUBBED_PAYLOAD_KEYS;
 export const SCRUBBED_PAYLOAD_KINDS = Object.keys(SCRUBBED_PAYLOAD_KEYS) as ScrubbedPayloadKind[];
@@ -447,6 +448,17 @@ export async function findLatestWriterRequests(db: Db, jobId: number): Promise<M
     if (Number.isInteger(questionId)) out.set(questionId, row);
   }
   return out;
+}
+
+/** The open `writer_fit` request of a job, or null: a job has one fit note, so one request at a time. */
+export async function findOpenFitRequest(db: Db, jobId: number): Promise<ControlRequest | null> {
+  const [row] = await db
+    .select()
+    .from(controlRequests)
+    .where(and(sql`${controlRequests.kind}::text = 'writer_fit'`, inArray(controlRequests.status, [...OPEN_CONTROL_STATUSES]), sql`${controlRequests.payload} ->> 'jobId' = ${String(jobId)}`))
+    .orderBy(controlRequests.id)
+    .limit(1);
+  return row ?? null;
 }
 
 /** The open `writer_job` request of a question, or null. */

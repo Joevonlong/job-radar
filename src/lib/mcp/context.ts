@@ -2,10 +2,22 @@ import type { McpConfig } from "@/lib/config/schemas/mcp";
 import type { TrapsConfig } from "@/lib/config/schemas/traps";
 import type { SearchPlan } from "@/lib/jobs/search-query";
 import type { Db } from "@/lib/db/client";
+import type { WriterInputs } from "@/lib/writer/settings";
 
 import { formatCallLine, type LogLine } from "./call-log";
 import { errorResult } from "./guard";
 import type { McpTranslator } from "./text";
+
+/** What the application writer's tools need beyond the read-only connection. */
+export interface McpWriterAccess {
+  /** writer.yaml, me.yaml and stories.yaml as they are now. */
+  inputs: () => WriterInputs;
+  /**
+   * The only connection that can write, used by `save_application_answer` and by nothing else. Null unless that tool is switched
+   * on and the application writer is on.
+   */
+  writeDb: Db | null;
+}
 
 /** Everything a tool reads besides its arguments; the server passes the real loaders, tests their own. */
 export interface McpContext {
@@ -27,6 +39,8 @@ export interface McpContext {
   searchPlan: (query: string) => SearchPlan;
   text: McpTranslator;
   log: LogLine;
+  /** Absent: the writer tools are not offered. */
+  writer?: McpWriterAccess;
 }
 
 type ErrorResult = ReturnType<typeof errorResult>;

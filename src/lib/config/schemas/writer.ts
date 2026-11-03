@@ -183,6 +183,8 @@ export const writerSchema = z.strictObject({
   jd_head_share: z.number().min(0.1).max(0.9).default(0.7),
   /** A call whose output reached this share of the output token cap and did not parse was cut off (`output_truncated`), not malformed. */
   output_truncated_share: z.number().min(0.5).max(1).default(0.95),
+  /** The note on what the company background means for an application. */
+  fit: z.strictObject({ /** Most points in one note. */ max_items: z.number().int().min(1).max(20).default(5) }).prefault({}),
   /** Offering a finalised answer to a similar question of another job as the starting text (local, no AI call). */
   reuse: z
     .strictObject({
