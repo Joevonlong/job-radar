@@ -6409,6 +6409,7 @@
       "aiRunning": "Salary or company background requests are running ({ids}). Nothing was changed; run this again when they have finished.",
       "lockLost": "The cycle lock was lost: stopped with {count} pairs not processed.",
       "suggestWritten": "{count} candidate pairs written to {file}.",
+      "outInUserDirectory": "Cannot write the plan file {file}: it is in the config or profile directory. Choose another path.",
       "outUnwritable": "Cannot write the plan file {file}.",
       "suggestNone": "# no candidates",
       "suggestGroup": "# tier {tier}: keeps {name} ({jobs} jobs)",

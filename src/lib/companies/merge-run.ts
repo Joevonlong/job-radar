@@ -1,8 +1,10 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, realpathSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { parseArgs } from "node:util";
 
 import { z } from "zod";
 
+import { getConfigDir, getProfileDir } from "@/lib/config/paths";
 import type { Db } from "@/lib/db/client";
 import { withCycleLock } from "@/lib/db/cycle-lock";
 import type { Executor } from "@/lib/db/executor";
@@ -71,6 +73,24 @@ export function failureText(error: unknown): string {
   const root = error instanceof Error && error.cause instanceof Error ? error.cause : error;
   if (!(root instanceof Error)) return oneLine(String(root));
   return oneLine(root.message) || root.name;
+}
+
+/** The real path of a directory that may not exist yet. */
+function realDir(dir: string): string {
+  try {
+    return realpathSync(dir);
+  } catch {
+    return path.resolve(dir);
+  }
+}
+
+/** Those two directories are written only under the config write lock, and a plan file is no config. */
+function isInUserDirectories(file: string): boolean {
+  const target = path.join(realDir(path.dirname(path.resolve(file))), path.basename(file));
+  return [getConfigDir(), getProfileDir()].some((dir) => {
+    const relative = path.relative(realDir(dir), target);
+    return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+  });
 }
 
 /** Everything without `--apply` runs in a read-only transaction: Postgres itself refuses a write. */
@@ -283,6 +303,10 @@ async function runUndo(input: CompanyMergeRunInput, mergeId: number, apply: bool
 
 async function runSuggest(input: CompanyMergeRunInput, tier: 1 | 2 | null, outFile: string | undefined): Promise<number> {
   const { db, t } = input;
+  if (outFile !== undefined && isInUserDirectories(outFile)) {
+    input.err(t("outInUserDirectory", { file: outFile }));
+    return EXIT_USAGE;
+  }
   // A file holds the plan alone: redirecting stdout also catches what the package manager prints around the command.
   const lines: string[] = [];
   const out = outFile === undefined ? input.out : (line: string) => void lines.push(line);

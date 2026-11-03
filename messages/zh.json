@@ -6409,6 +6409,7 @@
       "aiRunning": "有薪资或公司背景请求正在运行（{ids}）。没有做任何改动；等它们结束后再跑。",
       "lockLost": "周期锁丢失：已停止，还有 {count} 对没有处理。",
       "suggestWritten": "{count} 对候选已写入 {file}。",
+      "outInUserDirectory": "无法写入计划文件 {file}：它在配置或画像目录里，请换一个路径。",
       "outUnwritable": "无法写入计划文件 {file}。",
       "suggestNone": "# 没有候选",
       "suggestGroup": "# 第 {tier} 档：留下 {name}（{jobs} 条岗位）",

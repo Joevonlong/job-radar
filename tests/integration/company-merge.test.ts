@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -693,6 +693,29 @@ describe("--suggest and --list", () => {
     expect((await run(["--suggest", "--out", path.join(planDir, "no-such-dir", "plan.txt")])).code).toBe(2);
     expect((await run(["--list", "--out", path.join(planDir, "x.txt")])).code).toBe(2);
     expect((await run(["--suggest", "--out", ""])).code).toBe(2);
+  });
+
+  it("refuses --out in the config and profile directories", async () => {
+    const saved = { config: process.env.JOB_RADAR_CONFIG_DIR, profile: process.env.JOB_RADAR_PROFILE_DIR };
+    process.env.JOB_RADAR_CONFIG_DIR = path.join(planDir, "config");
+    process.env.JOB_RADAR_PROFILE_DIR = path.join(planDir, "profile");
+    try {
+      for (const dir of ["config", "profile"]) {
+        mkdirSync(path.join(planDir, dir), { recursive: true });
+        const file = path.join(planDir, dir, "plan.txt");
+        const result = await run(["--suggest", "--out", file]);
+        expect(result.code).toBe(2);
+        expect(result.errText).toContain("config or profile directory");
+        expect(existsSync(file)).toBe(false);
+      }
+      // a name that only starts like the directory is outside it
+      expect((await run(["--suggest", "--out", path.join(planDir, "config-plan.txt")])).code).toBe(0);
+    } finally {
+      for (const [key, value] of [["JOB_RADAR_CONFIG_DIR", saved.config], ["JOB_RADAR_PROFILE_DIR", saved.profile]] as const) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 
   it("keeps a name that would break a plan line on one line", async () => {
