@@ -612,11 +612,11 @@ export const channelsSchema = z
           any: z.string(),
         }),
         /**
-         * The actor input of one query. String values may use {keywords}, {location}, {date_posted} and {limit}
+         * The actor input of one query. String values may use {keywords}, {location}, {date_posted}, {posted_within_seconds} and {limit}
          * (a value that is exactly "{limit}" becomes a number); keys whose value ends up empty are left out.
          */
         input_template: z.record(z.string(), z.unknown()),
-        /** Keys merged over `input_template` for remote queries. */
+        /** Keys merged over `input_template` for remote queries (two `{key, value}` lists merge by key). */
         remote_input: z.record(z.string(), z.unknown()),
       }),
       monid: monidSettingsSchema,

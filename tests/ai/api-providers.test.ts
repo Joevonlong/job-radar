@@ -179,7 +179,9 @@ describe("anthropic provider", () => {
     expect(body).not.toHaveProperty("output_config");
     expect(body?.system).toBe(`${prompt.system}\n\nAnswer only by calling the respond tool.`);
     expect(body?.tools).toEqual([expect.objectContaining({ name: "respond", input_schema: toJsonSchema(schema) })]);
-    expect(seen[0]?.headers.get("x-api-key")).toBe(KEY);
+    // SDK 1.x sends the key as a bearer token (0.x sent x-api-key) and pins API version 2026-10-21
+    expect(seen[0]?.headers.get("authorization")).toBe(`Bearer ${KEY}`);
+    expect(seen[0]?.headers.get("anthropic-version")).toBe("2026-10-21");
   });
 
   it("extracts the respond input after thinking and other content", async () => {

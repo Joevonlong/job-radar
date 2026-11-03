@@ -18,18 +18,19 @@ The `linkedin-apify` channel takes over the main LinkedIn search after the Brigh
 | `memory_mb` / `timeout_secs` | Memory and timeout of one run; the synchronous endpoint caps at 300 seconds, and a timeout is recorded as a retryable failure |
 | `country_name` | Location of city queries = `<city>, <country name>` |
 | `remote_locations` | The location used by remote queries per `search.yaml: remote_scope` |
-| `date_posted` | How the actor's "date posted" filter is written: window <=24 hours / <=7 days / <=30 days / longer (empty = omit this key) |
-| `input_template` | The actor input template; strings may use `{keywords}` `{location}` `{date_posted}` `{limit}` (when the whole string is `"{limit}"` it becomes a number); keys with empty values are omitted |
-| `remote_input` | Keys layered onto the template by remote queries (default `urlParam: f_WT=2`) |
+| `date_posted` | Value of `{date_posted}` for a template that uses the actor's coarse filter: window <=24 hours / <=7 days / <=30 days / longer (empty = omit this key). The default template does not use it |
+| `input_template` | The actor input template; strings may use `{keywords}` `{location}` `{date_posted}` `{posted_within_seconds}` `{limit}` (when the whole string is `"{limit}"` it becomes a number); keys with empty values are omitted |
+| `remote_input` | Keys layered onto the template by remote queries (default `urlParam: f_WT=2`); a key replaces the template's, except that two `{key, value}` lists merge by `key` with the remote entry winning, and an empty list changes nothing. A list of any other shape replaces the template's list, which drops its `f_TPR` |
 
 `input_template`, `remote_input` and `date_posted` are not shown on the settings page (they are actor-specific data); edit the YAML directly.
 
 ## How it works
 
+- **Exact window:** the default template sends LinkedIn's date filter with the query's own window, `urlParam: f_TPR=r<seconds>` (10 hours is `r36000`), so you no longer pay for records of the rest of the day. The actor's `datePosted` only offers day, week and month; when both are sent, `f_TPR` wins.
+- **Order:** results are not newest first. The actor ignores `sortBy=DD` (measured), so it is not sent; when more jobs match than the limit, the ones returned are picked by relevance within the window.
 - **Catch-up:** Apify always keeps the base window; automatic [catch-up](sources.md#catch-up-windows) is disabled
-  because its date ranges are coarse and results are not newest first. It will be enabled only after exact-window
-  requests and newest-first results under the channel's active settings have been measured. A manual
-  backfill can fetch more records per query and increase per-record charges.
+  because results are not newest first. It will be enabled only after newest-first results under the channel's
+  active settings have been measured. A manual backfill can fetch more records per query and increase per-record charges.
 - Each query = one synchronous run: `POST /v2/acts/<actor>/run-sync-get-dataset-items` (201 on success, 408 after 300 seconds, 402 when there is no credit). Keyword groups are merged as `"A" OR "B"` (over 200 characters it is split into several runs sharing the limit).
 - Before triggering, the maximum number of results this run may request is computed from the remaining monthly budget (start fee deducted first), and sent to Apify as the hard caps `maxItems`/`maxTotalChargeUsd`; if the budget cannot cover one run plus one result it is `budget_exceeded` directly, and the same query goes to the next channel in the cascade.
 - Accounting = start fee + results actually delivered x unit price; every result that was billed (duplicates and ones dropped by the local time window included) counts toward the channel's monthly usage and the global paid cap.
@@ -41,9 +42,10 @@ Records filtered out locally remain in the [delivery ledger](sources.md#paid-del
 
 ## Posting dates and local time windows
 
-When the requested window is narrower than the actor's day/week/month filter, the channel also filters locally.
-For example, a 10-hour query uses a local 10-hour cutoff after the actor's day filter; a 24-hour query relies on the
-actor's day filter without an additional local cutoff. The local comparison respects the precision of `postedDate`:
+When the requested window is narrower than the actor's day/week/month ranges, the channel also filters locally, as a
+second check on the exact window and the main filter for a template that still uses `datePosted`. For example, a
+10-hour query has a local 10-hour cutoff; a 24-hour query has none. Records the source relists can carry today's
+`postedDate` and an older `postedTimeAgo`; they count as day precision and stay. The local comparison respects the precision of `postedDate`:
 
 | Source time fields | Local comparison |
 |---|---|

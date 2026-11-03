@@ -1,7 +1,13 @@
 import type { DeliveryFlag } from "../delivery";
 
+const SECONDS_PER_HOUR = 3600;
 const MS_PER_DAY = 24 * 3_600_000;
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The value of LinkedIn's `f_TPR=r<seconds>` date filter for a look-back window; it accepts any number of seconds. */
+export function postedWithinSeconds(windowHours: number): number {
+  return Math.max(1, Math.round(windowHours * SECONDS_PER_HOUR));
+}
 
 export type DateEvidenceFlag = Extract<DeliveryFlag, `date_${string}`>;
 export interface DateEvidence {

@@ -659,6 +659,10 @@ first available source only, so a "Collect now" of a later source in the cascade
 Before rolling back to a version without `partial_cycle_wait`, remove the block from `data/config/schedule.yaml`:
 older versions reject unknown keys.
 
+## Cron times and daylight saving
+
+A cron with one fixed time (such as `0 7 * * 1-5`) runs once per day on clock-change days: in the spring gap it runs at the first valid time after it, and in the repeated autumn hour it runs once. An interval cron (several hours, minutes or seconds, such as `*/30 * * * *`) may run extra in the repeated hour at fall back and skips the times inside the gap at spring forward.
+
 ## Log level (`schedule.yaml` `logging.level`, `JOB_RADAR_LOG_LEVEL`)
 
 The web app, the runner, the ai-worker and `pnpm cycle:run` log at `info` unless told otherwise. `debug` adds the

@@ -50,8 +50,8 @@ sources:
 describe("sources.yaml 6 -> 7", () => {
   it("brings a v6 file to what the shipped defaults hold, and it validates", () => {
     const { text, steps } = migrate("channels", older("sources.yaml", ["sources", "berlinstartupjobs"], 6));
-    expect(steps).toBe(1);
-    expect(text).toMatch(/^config_version: 7$/m);
+    expect(steps).toBe(2); // 7 -> 8 (Apify exact window) follows
+    expect(text).toMatch(/^config_version: 8$/m);
     const shipped = parse(fs.readFileSync(path.join(FIXTURE_DEFAULTS_DIR, "sources.yaml"), "utf8")) as Record<string, unknown>;
     expect(parse(text)).toEqual(shipped);
     expect(validateConfigValue("channels", parse(text), "sources.yaml").sources.berlinstartupjobs).toMatchObject({
