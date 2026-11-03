@@ -62,25 +62,15 @@ const HIGH: readonly FixturePosting[] = [
   posting("twice", { title: "Twice Engineer", company: "Twice AG", city: "Essen", description: `${OTHER} Twice.` }),
 ];
 
-/** One registry per channel, so that a channel's postings are collected, and get their raw ids, in this order. */
-function channelRegistries(): ChannelRegistry[] {
-  const channels = [
-    { id: "fx-low", family: "linkedin", postings: [...LOW] },
-    { id: "fx-low-twin", family: "linkedin", postings: LOW.filter((p) => p.id === "twice") },
-    { id: "fx-high", family: "ats", postings: [...HIGH] },
-  ];
-  return channels.map((channel) => {
-    const registry = new ChannelRegistry();
-    registerFixtureChannel(registry, { ...channel, usesQueries: false });
-    return registry;
-  });
-}
+const CHANNELS = [
+  { id: "fx-low", family: "linkedin", postings: LOW },
+  { id: "fx-low-twin", family: "linkedin", postings: LOW.filter((p) => p.id === "twice") },
+  { id: "fx-high", family: "ats", postings: HIGH },
+] as const;
 
-function registryWith(): ChannelRegistry {
+function registryOf(channels: ReadonlyArray<(typeof CHANNELS)[number]>): ChannelRegistry {
   const registry = new ChannelRegistry();
-  for (const [id, family, postings] of [["fx-low", "linkedin", LOW], ["fx-low-twin", "linkedin", LOW.filter((p) => p.id === "twice")], ["fx-high", "ats", HIGH]] as const) {
-    registerFixtureChannel(registry, { id, family, usesQueries: false, postings: [...postings] });
-  }
+  for (const { id, family, postings } of channels) registerFixtureChannel(registry, { id, family, usesQueries: false, postings: [...postings] });
   return registry;
 }
 
@@ -123,8 +113,9 @@ describe("the offline replay", () => {
     ["the title check off", false],
   ])("groups postings exactly as the pipeline does, with %s", async (_name, enabled) => {
     const config = pipelineWith((raw) => ((raw.dedupe as Record<string, unknown>).title_guard = { enabled, same_title_max_distance: 6 }));
-    const registry = registryWith();
-    for (const single of channelRegistries()) await collect(single);
+    const registry = registryOf(CHANNELS);
+    // one channel at a time, so that the postings get their raw ids in this order
+    for (const channel of CHANNELS) await collect(registryOf([channel]));
     const raws = await getDb().select().from(schema.rawPostings).orderBy(schema.rawPostings.id);
     expect(raws.length).toBe(LOW.length + 1 + HIGH.length);
     const result = await runPipeline(getDb(), { relist: { minGapDays: 9 }, config, registry, logger: quietLogger });
@@ -151,7 +142,7 @@ describe("the offline replay", () => {
 
   it("reports the header, the sweep, the three lists and the audit", async () => {
     const config = pipelineWith(() => {});
-    const registry = registryWith();
+    const registry = registryOf(CHANNELS);
     const fixture = fs.readFileSync(path.resolve(import.meta.dirname, "../fixtures/simhash/snapshot.ndjson"), "utf8");
     const snapshot = parseSnapshot(fixture);
     const report = await buildGuardReport({ snapshot, sha256: "feed", productSha: "cafe", config: withTitleGuard(config, { enabled: true }), seed: 7, registry });
