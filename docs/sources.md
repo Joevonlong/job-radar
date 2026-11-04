@@ -558,6 +558,10 @@ URL with a single `q=` parameter. The channel therefore sends exactly one form,
 no `sort`, `ag` (look-back), `radius`, `wfh` or `page` parameter. Consequences: one request per keyword and place returns
 about 25 results in StepStone's own order (relevance, not newest first), there is no paging, and the look-back window is
 applied afterwards from each posting's date, so a window of one day keeps only the few of those 25 that are that new.
+A new posting older than the window is not stored. A posting that is already stored and is listed again on that page is
+refreshed as seen at no extra request (it keeps its stored version), so jobs that only StepStone lists do not age into
+"possibly closed" just because they fell out of the window. The title prefilter still applies to these. When a query stores nothing,
+the log says how many listed answers the window dropped (`outsideWindow` on `stepstone query done` and `stepstone query stored nothing`).
 The radius is StepStone's default for the city, and a remote query searches nationwide and keeps postings that mention
 home office ("home office possible" or "only"). The `radius_km` and `max_pages` settings of `sources.stepstone` no longer
 exist (the config update removes them; XING keeps its own). Coverage is lower than before, so StepStone is best used
