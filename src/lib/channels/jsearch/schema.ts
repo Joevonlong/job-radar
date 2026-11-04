@@ -5,7 +5,7 @@ import { z } from "zod";
  *  - product page https://www.openwebninja.com/api/jsearch (sample job record),
  *  - OpenAPI file https://openwebninja.s3.us-east-1.amazonaws.com/portal/openapi/jsearch.yaml
  *    (`/search-v2` and `/job-details` records, field names, enums),
- *  - the RapidAPI listing `GET https://jsearch.p.rapidapi.com/search-v2`, which answers as the spec says.
+ *  - the RapidAPI listing `GET https://jsearch.p.rapidapi.com/search-v2`.
  * The OpenAPI file documents `data` of `/search-v2` as `{ jobs: [...], cursor }` and of `/job-details`
  * as an array; the removed RapidAPI `/search` returned `data` as an array. The envelope accepts both.
  *

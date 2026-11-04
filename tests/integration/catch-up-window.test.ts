@@ -445,7 +445,7 @@ describe("catch-up preserves provider spending controls", () => {
       fetch: async (requestUrl) => {
         const request = new URL(requestUrl);
         calls.push(request);
-        if (request.pathname === "/search-v2") return response(200, { status: "OK", data: records });
+        if (request.pathname === "/search-v2") return response(200, { status: "OK", data: { jobs: records } });
         expect(request.pathname).toBe("/job-details");
         return response(200, { status: "OK", data: (request.searchParams.get("job_id") ?? "").split(",").map((id) => ({ job_id: id, job_description: "Build software" })) });
       },
