@@ -121,7 +121,7 @@ describe("jsearch request", () => {
   it("sends the company search with the market's country, and no work_from_home", async () => {
     const h = await jsearchHarness(jsearchApi(), { settings: { fetch_details: false } });
     await h.channel.collect(asCompany(jsearchQuery()), h.ctx);
-    const search = h.calls.filter((c) => c.url.pathname === "/search");
+    const search = h.calls.filter((c) => c.url.pathname === "/search-v2");
     expect(search).toHaveLength(1);
     expect(search[0]?.url.searchParams.get("query")).toBe(`Acme in ${market.countryName}`);
     expect(search[0]?.url.searchParams.has("work_from_home")).toBe(false);

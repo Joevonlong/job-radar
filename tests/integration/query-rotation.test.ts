@@ -116,7 +116,7 @@ function setupJsearch() {
       sleep: async () => {},
       fetch: async (requestUrl) => {
         const request = new URL(requestUrl);
-        expect(request.pathname).toBe("/search");
+        expect(request.pathname).toBe("/search-v2");
         calls.push(request.searchParams.get("query") ?? "");
         return response(200, SEARCH_EMPTY);
       },

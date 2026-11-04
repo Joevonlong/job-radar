@@ -445,12 +445,12 @@ describe("catch-up preserves provider spending controls", () => {
       fetch: async (requestUrl) => {
         const request = new URL(requestUrl);
         calls.push(request);
-        if (request.pathname === "/search") return response(200, { status: "OK", data: records });
+        if (request.pathname === "/search-v2") return response(200, { status: "OK", data: records });
         expect(request.pathname).toBe("/job-details");
         return response(200, { status: "OK", data: (request.searchParams.get("job_id") ?? "").split(",").map((id) => ({ job_id: id, job_description: "Build software" })) });
       },
     });
-    expect(calls.filter((call) => call.pathname === "/search").map((call) => call.searchParams.get("date_posted"))).toEqual(["3days"]);
+    expect(calls.filter((call) => call.pathname === "/search-v2").map((call) => call.searchParams.get("date_posted"))).toEqual(["3days"]);
     const details = calls.filter((call) => call.pathname === "/job-details");
     expect(details).toHaveLength(1);
     const detailIds = details.flatMap((call) => (call.searchParams.get("job_id") ?? "").split(","));
@@ -489,7 +489,7 @@ describe("catch-up preserves provider spending controls", () => {
       now: () => now,
       fetch: async (requestUrl) => { calls.push(new URL(requestUrl)); return response(200, SEARCH_EMPTY); },
     });
-    expect(calls.map((call) => [call.pathname, call.searchParams.get("date_posted")])).toEqual([["/search", "today"]]);
+    expect(calls.map((call) => [call.pathname, call.searchParams.get("date_posted")])).toEqual([["/search-v2", "today"]]);
     expect(await rowsOf(result)).toEqual([expect.objectContaining({ windowHours: 24, windowExtended: false })]);
     await expectRotation(result, channel.id, { stretched: 0, maxWindowHours: 24, capped: 0 });
   });

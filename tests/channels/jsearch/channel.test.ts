@@ -104,8 +104,8 @@ describe("collect", () => {
     await h.channel.collect(query(), h.ctx);
     expect(h.calls).toHaveLength(1);
     const call = h.calls[0];
-    expect(call?.url.origin + call?.url.pathname).toBe("https://jsearch.p.rapidapi.com/search");
-    expect(Object.fromEntries(call?.url.searchParams ?? [])).toEqual({ query: "AI Engineer in Berlin", page: "1", num_pages: "1", country: "de", date_posted: "today" });
+    expect(call?.url.origin + call?.url.pathname).toBe("https://jsearch.p.rapidapi.com/search-v2");
+    expect(Object.fromEntries(call?.url.searchParams ?? [])).toEqual({ query: "AI Engineer in Berlin", num_pages: "1", country: "de", date_posted: "today" });
     expect(call?.headers).toMatchObject({ "X-RapidAPI-Key": "test-key-not-real", "X-RapidAPI-Host": "jsearch.p.rapidapi.com" });
   });
 
@@ -190,7 +190,7 @@ describe("collect", () => {
   });
 
   it("keeps the search results when the details lookup fails", async () => {
-    const h = await harness(({ url }) => (url.pathname === "/search" ? response(200, SEARCH_PAGE) : response(500, "down")), { settings: { fetch_details: true } });
+    const h = await harness(({ url }) => (url.pathname === "/search-v2" ? response(200, SEARCH_PAGE) : response(500, "down")), { settings: { fetch_details: true } });
     const postings = await h.channel.collect(query(), h.ctx);
     expect(postings).toHaveLength(4);
     expect(h.logs.some((l) => l.level === "warn" && l.message.includes("details unavailable"))).toBe(true);
@@ -357,7 +357,7 @@ async function partial(promise: Promise<unknown>): Promise<PartialCollectError> 
 
 /** The first request is answered as `api()` does, every later search fails with `later`. */
 function laterSearchFails(later: () => ReturnType<typeof response> | Error): Handler {
-  return (call, n) => (call.url.pathname === "/search" && n >= 1 ? later() : api()(call, n));
+  return (call, n) => (call.url.pathname === "/search-v2" && n >= 1 ? later() : api()(call, n));
 }
 
 const IDS = [ID_DIRECT, ID_AGGREGATOR, ID_NO_DESCRIPTION, ID_BROKEN];
@@ -369,7 +369,7 @@ describe("a later keyword whose request fails", () => {
     expect(error.planned).toBeFalsy();
     expect(error.cause).toMatchObject({ code: "network", retryable: true });
     expect(error.postings.map((p) => p.externalId)).toEqual(IDS);
-    expect(h.calls.map((c) => c.url.pathname)).toEqual(["/search", "/search"]);
+    expect(h.calls.map((c) => c.url.pathname)).toEqual(["/search-v2", "/search-v2"]);
     // only the answered request is booked
     expect(h.budget.attempt.records).toBe(1);
     expect(h.usage.rows.get("jsearch")).toEqual({ records: 1, usd: 0 });
@@ -468,9 +468,9 @@ const detailRecord = (id: string, description: string | null, extra: Record<stri
 const storedPayload = (id: string, description: string | null) => ({ search: rec(id), detail: detailRecord(id, description) });
 const OLD = "Old description, as stored weeks ago.";
 
-/** `/search` answers `page`; `/job-details` answers with `details(ids)` (default: nothing found). */
+/** `/search-v2` answers `page`; `/job-details` answers with `details(ids)` (default: nothing found). */
 function routes(page: unknown, details: (ids: string[]) => ReturnType<typeof response> = () => response(200, pageOf())): Handler {
-  return ({ url }) => (url.pathname === "/search" ? response(200, page) : details((url.searchParams.get("job_id") ?? "").split(",")));
+  return ({ url }) => (url.pathname === "/search-v2" ? response(200, page) : details((url.searchParams.get("job_id") ?? "").split(",")));
 }
 const detailsOf = (build: (id: string) => unknown) => (ids: string[]) => response(200, pageOf(...ids.map(build)));
 const payloadOf = (postings: readonly RawPostingInput[], id: string) => postings.find((p) => p.externalId === id)?.payload as Record<string, unknown>;
@@ -480,12 +480,12 @@ describe("a stored detail keeps the description of a posting the search left wit
   const expected = { search: rec("a"), detail: detailRecord("a", OLD), detail_source: "stored" };
 
   it("after a later keyword's request failed (no detail request goes out)", async () => {
-    const h = await harness((call, n) => (call.url.pathname === "/search" && n >= 1 ? response(503, "unavailable") : routes(pageOf(rec("a")))(call, n)), {
+    const h = await harness((call, n) => (call.url.pathname === "/search-v2" && n >= 1 ? response(503, "unavailable") : routes(pageOf(rec("a")))(call, n)), {
       settings: { keywords_per_query: 2, fetch_details: true },
       known,
     });
     const error = await partial(h.channel.collect(query(), h.ctx));
-    expect(h.calls.map((c) => c.url.pathname)).toEqual(["/search", "/search"]);
+    expect(h.calls.map((c) => c.url.pathname)).toEqual(["/search-v2", "/search-v2"]);
     expect(payloadOf(error.postings, "a")).toEqual(expected);
   });
 
@@ -493,14 +493,14 @@ describe("a stored detail keeps the description of a posting the search left wit
     const h = await harness(routes(pageOf(rec("a"))), { usage: { jsearch: { records: 45, usd: 0 } }, settings: { keywords_per_query: 2, fetch_details: true }, known });
     const error = await partial(h.channel.collect(query(), h.ctx));
     expect(error.planned).toBe(true);
-    expect(h.calls.map((c) => c.url.pathname)).toEqual(["/search"]);
+    expect(h.calls.map((c) => c.url.pathname)).toEqual(["/search-v2"]);
     expect(payloadOf(error.postings, "a")).toEqual(expected);
   });
 
   it("after the detail request failed", async () => {
     const h = await harness(routes(pageOf(rec("a")), () => response(503, "unavailable")), { settings: { fetch_details: true }, known });
     const postings = await h.channel.collect(query(), h.ctx);
-    expect(h.calls.map((c) => c.url.pathname)).toEqual(["/search", "/job-details"]);
+    expect(h.calls.map((c) => c.url.pathname)).toEqual(["/search-v2", "/job-details"]);
     expect(payloadOf(postings, "a")).toEqual(expected);
   });
 
@@ -518,7 +518,7 @@ describe("a stored detail keeps the description of a posting the search left wit
   it("when fetch_details is off (nothing is requested, the store is still read)", async () => {
     const h = await harness(routes(pageOf(rec("a"))), { settings: { fetch_details: false }, known });
     const postings = await h.channel.collect(query(), h.ctx);
-    expect(h.calls.map((c) => c.url.pathname)).toEqual(["/search"]);
+    expect(h.calls.map((c) => c.url.pathname)).toEqual(["/search-v2"]);
     expect(payloadOf(postings, "a")).toEqual(expected);
   });
 
