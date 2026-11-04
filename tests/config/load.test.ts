@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { ConfigError, getAppRoot, getConfigDir, getDefaultsDir, getProfileDir, getProfileExampleDir, loadConfig, parseConfigText, reloadConfig, resetConfigCache } from "@/lib/config";
+import { ConfigError, overlayFormatVersion, getAppRoot, getConfigDir, getDefaultsDir, getProfileDir, getProfileExampleDir, loadConfig, parseConfigText, reloadConfig, resetConfigCache } from "@/lib/config";
 
 import { makeTempConfig, type TempConfig } from "./helpers";
 
@@ -23,6 +23,22 @@ function catchError(fn: () => unknown): ConfigError {
   }
   throw new Error("expected ConfigError");
 }
+
+describe("!unset of a required key", () => {
+  it.each([
+    ["timezone", "timezone: !unset\n"],
+    ["cycles.weekend", "cycles:\n  weekend: !unset\n"],
+  ])("%s: the load fails and the error names the key and the file", (key, body) => {
+    tmp.cleanup();
+    tmp = makeTempConfig({ user: "empty" });
+    const file = path.join(tmp.configDir, "schedule.yaml");
+    fs.writeFileSync(file, `config_version: ${overlayFormatVersion("schedule")}\n${body}`);
+    const error = catchError(() => loadConfig("schedule"));
+    expect(error.message).toContain(key);
+    expect(error.message).toContain("schedule.yaml");
+    expect(error.filePath).toBe(file);
+  });
+});
 
 describe("loadConfig", () => {
   it("returns a typed value and caches it", () => {
