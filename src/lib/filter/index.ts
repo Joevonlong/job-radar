@@ -1,5 +1,6 @@
 import { scoreTransaction } from "@/lib/db/repos/current-scores";
 import { inScoreIdOrder } from "@/lib/db/repos/score-lock-order";
+import { promoteSnapshotScores } from "@/lib/db/repos/scores";
 import { createHash } from "node:crypto";
 
 import type { CycleStepContext, StepResult } from "@/lib/cycle/steps";
@@ -9,6 +10,7 @@ import { loadPipeline } from "@/lib/market";
 import type { Db } from "@/lib/db/client";
 import {
   getFilterResults,
+  getLatestProfileSnapshot,
   insertFilterResults,
   listFilterCandidates,
   updateFilterResult,
@@ -258,6 +260,10 @@ export async function filterStep(ctx: CycleStepContext): Promise<StepResult> {
   const db = requireDb(ctx);
   const { preferences, snapshot, me } = await currentPreferences(db);
   const result = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline: loadPipeline(), me, logger: ctx.logger, signal: ctx.signal });
+  // rows an earlier rollback left out of order come forward here; the version is read again in the transaction, because a rollback
+  // during this step has made another one current, and moving the rows of the version left behind would show it until the next cycle
+  const promoted = await scoreTransaction(db, async (tx) => ((await getLatestProfileSnapshot(tx, "preferences"))?.id === snapshot.id ? promoteSnapshotScores(tx, snapshot.id) : 0));
+  if (promoted > 0) ctx.logger.info("score rows of the current preferences version moved ahead of older versions", { promoted });
   // a deal-breaker too slow to judge every job is shown on the runs view (the jobs it did not reach keep their stored veto)
   const tooSlow = result.dealBreakerWarnings.some((warning) => warning.code === "too_slow");
   return { status: result.aborted || tooSlow ? "partial" : "ok", result };

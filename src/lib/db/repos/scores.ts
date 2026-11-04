@@ -37,6 +37,43 @@ export async function markScoresStaleExcept(db: ScoreTx, currentSnapshotId: numb
   return rows.length;
 }
 
+/**
+ * Make the rows of a preferences snapshot the ones every reader picks. Readers take a job's newest row by
+ * `created_at`, so a row that becomes current again (a rollback to a version the job already has a row for) moves ahead of
+ * the rows of the version left behind. `created_at` therefore means "became the job's current row", not "was inserted".
+ * Only rows that are not the newest already change, so running it again changes nothing. Returns the rows moved.
+ */
+export async function promoteSnapshotScores(db: ScoreTx, snapshotId: number): Promise<number> {
+  const rows = await db
+    .update(scores)
+    // ahead of a row dated after the database clock as well
+    .set({ createdAt: sql`greatest(now(), (select max(other.created_at) from scores other where other.job_id = "scores"."job_id") + interval '1 microsecond')` })
+    .where(inScoreLockOrder(and(
+      eq(scores.profileSnapshotId, snapshotId),
+      sql`exists (select 1 from scores other where other.job_id = "scores"."job_id" and (other.created_at, other.id) > ("scores"."created_at", "scores"."id"))`,
+    )))
+    .returning({ jobId: scores.jobId });
+  db.touch(rows.map((row) => row.jobId));
+  return rows.length;
+}
+
+/**
+ * The preferences changed to this snapshot: the scores of the others go stale and its own rows become the ones shown.
+ * Both writes touch rows of any id, so all of them are locked first, in one ascending pass (`score-lock-order.ts`).
+ * Returns the number of rows newly marked stale.
+ */
+export async function switchScoresToSnapshot(db: ScoreTx, snapshotId: number): Promise<number> {
+  await db
+    .select({ id: scores.id })
+    .from(scores)
+    .where(or(eq(scores.profileSnapshotId, snapshotId), and(hasAiScore, ne(scores.profileSnapshotId, snapshotId), eq(scores.stale, false))))
+    .orderBy(scores.id)
+    .for("update");
+  const staleMarked = await markScoresStaleExcept(db, snapshotId);
+  await promoteSnapshotScores(db, snapshotId);
+  return staleMarked;
+}
+
 /** Number of scores (rows with AI output) currently flagged stale: what "rescore N" would process. */
 export async function countStaleScores(db: Db): Promise<number> {
   const [row] = await db.select({ n: count() }).from(scores).where(and(hasAiScore, eq(scores.stale, true)));

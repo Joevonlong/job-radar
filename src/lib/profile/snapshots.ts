@@ -10,6 +10,7 @@ import {
   markScoresStaleExcept,
   rebaseProfileSnapshot,
   saveProfileSnapshot,
+  switchScoresToSnapshot,
   type Db,
   type ProfileSnapshot,
 } from "@/lib/db";
@@ -38,7 +39,9 @@ export async function recordProfileSnapshot(db: Db, kind: ScoredProfileName, yam
       return { snapshot: await rebaseProfileSnapshot(tx, previous.id, yamlText), staleMarked: 0 };
     }
     const snapshot = await saveProfileSnapshot(tx, kind, yamlText);
-    const staleMarked = previous?.id === snapshot.id ? 0 : await markScoresStaleExcept(tx, snapshot.id);
+    if (previous?.id === snapshot.id) return { snapshot, staleMarked: 0 };
+    // scores are filed under preferences snapshots, so only those have rows to bring forward
+    const staleMarked = kind === "preferences" ? await switchScoresToSnapshot(tx, snapshot.id) : await markScoresStaleExcept(tx, snapshot.id);
     return { snapshot, staleMarked };
   });
 }
@@ -66,7 +69,10 @@ function sameProfileValues(kind: ScoredProfileName, a: string, b: string): boole
 }
 
 /**
- * The snapshot a profile text is filed under. The same text: its snapshot. Text that only a config migration changed
+ * The snapshot a profile text is filed under. The same text: its snapshot, which becomes the current version when it was not
+ * (the file was edited back to old text by hand: the same as a rollback in the app, so scoring, which goes by the file, and
+ * reconciliation, which goes by the newest saved snapshot, agree on the version), unless that text means the same as the current
+ * version, which then stays. Text that only a config migration changed
  * (`pnpm config:migrate --write`: preferences.yaml got `market` and renamed values): the newest snapshot, given
  * the new text, so nothing is marked stale and nothing is scored again; the same for a text whose only change is
  * preferences `deal_breakers` (the filter step updates the results in place). Anything else is a real change: a new snapshot,
@@ -74,8 +80,13 @@ function sameProfileValues(kind: ScoredProfileName, a: string, b: string): boole
  */
 export async function snapshotForProfileText(db: Db, kind: ScoredProfileName, yamlText: string): Promise<ProfileSnapshot> {
   const found = await findProfileSnapshotByHash(db, kind, hashProfileYaml(yamlText));
-  if (found) return found;
   const latest = await getLatestProfileSnapshot(db, kind);
+  if (found) {
+    if (found.id === latest?.id) return found;
+    // an older snapshot has this exact text but the current one means the same: nothing changed, so nothing goes stale
+    if (latest && sameProfileValues(kind, latest.contentYaml, yamlText)) return latest;
+    return (await recordProfileSnapshot(db, kind, yamlText)).snapshot;
+  }
   if (latest && sameProfileValues(kind, latest.contentYaml, yamlText)) return rebaseProfileSnapshot(db, latest.id, yamlText);
   return (await recordProfileSnapshot(db, kind, yamlText)).snapshot;
 }
