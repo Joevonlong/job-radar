@@ -64,6 +64,8 @@ company:
     "Meta": ["Meta Platforms", "Facebook"]
   # 已知的猎头 / 中介公司名（忽略法律形式）；其岗位带"中介"标记
   agency_names: []
+  # `pnpm companies:merge --suggest` 第二档比较时忽略的结尾词（小写）：只产生候选，由人确认
+  duplicate_tail_words: [germany, deutschland, group, gruppe, holding, global, international, technologies, technology, software, systems, solutions, services, consulting, labs]
 
 agency:
   # 匹配公司名

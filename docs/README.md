@@ -32,7 +32,7 @@ mock-ups.
 | [ai-providers.md](ai-providers.md) | AI via a subscription CLI, an API key, or both: who runs what where, the host ai-worker, `execution` / `host_worker` / `translation` settings, troubleshooting |
 | [ai-usage.md](ai-usage.md) | AI usage and cost statistics, model catalog (`models.yaml`) |
 | [deal-breakers.md](deal-breakers.md) | Your own veto rules (`preferences.yaml: deal_breakers`): language gate, phrases, visa rule, what happens to a vetoed job, `pnpm deal-breakers:check`, before rolling back |
-| [extraction.md](extraction.md) | Rules for work mode, German level, agency detection and description cleanup; `pnpm reprocess` |
+| [extraction.md](extraction.md) | Rules for work mode, German level, agency detection and description cleanup; `pnpm reprocess`; merging duplicate companies (`pnpm companies:merge`) |
 | [signals.md](signals.md) | Compensation and benefit signals: tiers, vocabularies, the two-step extraction, the board |
 | [salary.md](salary.md) | The job page's salary panel (benchmark of your collected postings, the company's other salaries, links to salary sites) and the optional AI salary lookup with web search, `salary.yaml` |
 | [research.md](research.md) | The job page's company background: AI web search on request, off by default, what is sent, the checks before storing, `research.yaml` |

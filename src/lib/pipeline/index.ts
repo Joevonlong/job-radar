@@ -7,7 +7,8 @@ import type { ChannelLogger } from "@/lib/channels/types";
 import { loadCompanies, loadConfig, type PipelineConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import type { Db } from "@/lib/db/client";
-import { getOrCreateCompany } from "@/lib/db/repos/companies";
+import type { Executor } from "@/lib/db/executor";
+import { getCompanyById, getCompanyByNameNorm, getOrCreateCompany, listCompaniesWithAliases, type Company } from "@/lib/db/repos/companies";
 import { bestOtherPriority, getJobSourceByRawPosting, upsertJobSource } from "@/lib/db/repos/job-sources";
 import { getJob, insertJob, statusWhenSeenAgain, updateJob, type Job } from "@/lib/db/repos/jobs";
 import { listPendingRawPostings, lockPendingRawPosting, markRawParseFailed, markRawParsed, type RawPosting } from "@/lib/db/repos/raw-postings";
@@ -16,7 +17,7 @@ import { registerCycleStep } from "@/lib/cycle/steps";
 import { refreshSalaryBenchmark, type BenchmarkRefreshResult } from "@/lib/salary/benchmark";
 import { loadBaseCurrency } from "@/lib/signals/floor";
 
-import { resolveCompanyName } from "./company";
+import { buildStoredAliasIndex, resolveCompanyName, type ResolvedCompanyName } from "./company";
 import { syncCompanyDisplayNames } from "./company-names";
 import { applyMerge, fieldsOf, fieldsOfJob, findMatchingJob, sourceWins, type MatchKind } from "./dedupe";
 import { refreshIdentityKeysIfStale, splitMergedJobs, type IdentityKeyRefreshResult, type SplitMergedResult } from "./identity-keys";
@@ -92,13 +93,26 @@ function sourceLocationLabel(locations: NormalizedJob["locations"]): string | nu
   return labels.length === 0 ? null : labels.join("; ").slice(0, 300);
 }
 
+/**
+ * The company row of a posting: the row of its own key; without one, the company that stores this key as an alias (a spelling
+ * that was merged away must not grow a new row); else a new row.
+ */
+export async function companyOfPosting(tx: Executor, resolved: ResolvedCompanyName, aliasTargets: ReadonlyMap<string, number>): Promise<Company> {
+  const targetId = aliasTargets.get(resolved.nameNorm);
+  if (targetId !== undefined && (await getCompanyByNameNorm(tx, resolved.nameNorm)) === null) {
+    const target = await getCompanyById(tx, targetId);
+    if (target) return target;
+  }
+  return getOrCreateCompany(tx, resolved);
+}
+
 /** Match or create the job, then link the posting to it and mark the posting parsed. One transaction. */
-async function persist(db: Db, raw: RawPosting, normalized: NormalizedJob, family: string, options: PipelineOptions): Promise<Outcome> {
+async function persist(db: Db, raw: RawPosting, normalized: NormalizedJob, family: string, options: PipelineOptions, aliasTargets: ReadonlyMap<string, number>): Promise<Outcome> {
   const { config } = options;
   const priority = config.apply_priority[family as keyof PipelineConfig["apply_priority"]];
   return db.transaction(async (tx): Promise<Outcome> => {
     if (!(await lockPendingRawPosting(tx, raw))) return { kind: "skipped" };
-    const company = await getOrCreateCompany(tx, resolveCompanyName(normalized.companyName, config));
+    const company = await companyOfPosting(tx, resolveCompanyName(normalized.companyName, config), aliasTargets);
     const existingSource = await getJobSourceByRawPosting(tx, raw.id);
 
     let job: Job | null = existingSource ? await getJob(tx, existingSource.jobId) : null;
@@ -107,7 +121,7 @@ async function persist(db: Db, raw: RawPosting, normalized: NormalizedJob, famil
     if (!job) {
       const found = await findMatchingJob(
         tx,
-        { normalized, companyId: company.id, companyName: normalized.companyName, channelFamily: family, externalId: raw.externalId, rawPostingId: raw.id },
+        { normalized, companyId: company.id, companyName: normalized.companyName, companyKey: company.nameNorm, channelFamily: family, externalId: raw.externalId, rawPostingId: raw.id },
         config,
       );
       blockedByTitle = found.blockedByTitle;
@@ -201,6 +215,10 @@ export async function runPipeline(db: Db, options: PipelineOptions): Promise<Pip
     if (result.failures.length < MAX_FAILURE_SAMPLES) result.failures.push({ rawPostingId: raw.id, channelId: raw.channelId, reason });
   };
 
+  // merges and this step both run under the cycle lock, so the index cannot go stale during the run
+  const aliasIndex = buildStoredAliasIndex(await listCompaniesWithAliases(db), options.config.company.legal_suffixes);
+  for (const { key, companyIds } of aliasIndex.ambiguous) logger.warn("the stored aliases of several companies give one key; it is not redirected", { key, companyIds });
+
   let afterId = 0;
   for (;;) {
     const batch = await listPendingRawPostings(db, { afterId, limit: options.config.batch_size });
@@ -230,7 +248,7 @@ export async function runPipeline(db: Db, options: PipelineOptions): Promise<Pip
         }
 
         try {
-          const outcome = await persist(db, raw, prepared.normalized, prepared.family, options);
+          const outcome = await persist(db, raw, prepared.normalized, prepared.family, options, aliasIndex.targets);
           if (outcome.kind === "skipped") continue;
           if ((outcome.kind === "merged" || outcome.kind === "updated") && outcome.relisted) result.relisted += 1;
           result.parsed += 1;

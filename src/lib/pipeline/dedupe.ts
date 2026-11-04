@@ -69,6 +69,8 @@ export interface MatchInput {
   companyId: number;
   /** The posting's company name, as the channel wrote it. */
   companyName: string;
+  /** `name_norm` of the company row the posting was filed under; without it the key is worked out from `companyName`. */
+  companyKey?: string;
   channelFamily: string;
   externalId: string;
   rawPostingId: number;
@@ -145,7 +147,7 @@ export async function decideMatch(input: MatchInput, loaders: MatchLoaders, conf
   }
 
   if (normalized.titleNorm !== "") {
-    const companyKey = resolveCompanyName(input.companyName, config).nameNorm;
+    const companyKey = input.companyKey ?? resolveCompanyName(input.companyName, config).nameNorm;
     const limit = config.dedupe.cross_company_simhash_max_distance;
     for (const candidate of present(await loaders.relatedCompanyByTitle())) {
       if (candidate.simhash === null || !relatedCompanyKeys(companyKey, candidate.companyNameNorm)) continue;

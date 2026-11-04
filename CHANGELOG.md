@@ -8,6 +8,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **Gmail replies (optional, off by default).** Reads one Gmail label read-only with local rules and suggests status changes on `/pipeline`, each confirmed by you and undoable. No AI reads the mails and no mail content leaves the machine. See `docs/gmail-replies.md`. Adds the table `email_replies`.
+- **Merge duplicate companies.** `pnpm companies:merge` lists likely duplicate company rows and merges the pairs you confirm, with a dry run and an undo; a merged spelling no longer grows its row back in later cycles. See `docs/extraction.md`. Adds the table `company_merges` and `company.duplicate_tail_words` in `pipeline.yaml`.
 
 ### Changed
 

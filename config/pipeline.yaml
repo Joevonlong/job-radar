@@ -87,6 +87,8 @@ company:
     "Meta": ["Meta Platforms", "Facebook"]
   # Known headhunter / agency company names (legal form ignored); their jobs get the "agency" tag
   agency_names: []
+  # Words at the end of a company name that `pnpm companies:merge --suggest` ignores for its second tier (lowercase): candidates for a person to check, nothing is merged by them
+  duplicate_tail_words: [germany, deutschland, group, gruppe, holding, global, international, technologies, technology, software, systems, solutions, services, consulting, labs]
 
 agency:
   # Matched against the company name

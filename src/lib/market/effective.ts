@@ -154,6 +154,7 @@ export function buildEffectivePipeline(file: PipelineFileConfig, market: Market,
       legal_suffixes: listOf(file.company.legal_suffixes, (r) => r.company.legal_suffixes),
       aliases: file.company.aliases,
       agency_names: listOf(file.company.agency_names, (r) => r.company.agency_names),
+      duplicate_tail_words: file.company.duplicate_tail_words,
     },
     agency: {
       ...file.agency,
