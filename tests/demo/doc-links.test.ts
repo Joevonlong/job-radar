@@ -98,7 +98,7 @@ describe("docs:check references", () => {
     expect(result.status).toBe(0);
   });
 
-  it("reads what git tracks and does not ignore, and skips a broken symlink", () => {
+  it("reads what git tracks and does not ignore, and skips broken and looping symlinks", () => {
     const files = { ".gitignore": "local/\n", "local/notes.ts": "// docs/missing.md\n", "src/a.ts": "export const a = 1;\n" };
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "doc-links-"));
     for (const [name, text] of Object.entries(files)) {
@@ -106,6 +106,8 @@ describe("docs:check references", () => {
       fs.writeFileSync(path.join(dir, name), text);
     }
     fs.symlinkSync(path.join(dir, "gone.ts"), path.join(dir, "src/link.ts"));
+    fs.symlinkSync(path.join(dir, "gone.md"), path.join(dir, "link.md"));
+    fs.symlinkSync("loop.ts", path.join(dir, "src/loop.ts"));
     expect(spawnSync("git", ["init", "-q"], { cwd: dir }).status).toBe(0);
     const result = spawnSync(process.execPath, [SCRIPT, dir], { encoding: "utf8" });
     expect(result.stderr).toBe("");

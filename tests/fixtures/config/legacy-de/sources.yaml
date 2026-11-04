@@ -353,7 +353,7 @@ sources:
       xing: [xing.com]
 
 # ATS 公司清单。
-# 由旧项目 eu-ai-jobs-tracker/config/automatic-sources.json 转换而来（共 79 家 Greenhouse / Lever board）。
+# 最初共 79 家 Greenhouse / Lever board。
 # ats：greenhouse | lever | ashby | personio | smartrecruiters；token 是公开 API 里的 board 标识（smartrecruiters 的 token 区分大小写）。
 # region（可选，只对 lever 有效）：global（默认，api.lever.co）| eu（api.eu.lever.co，jobs.eu.lever.co 上的 board）。
 # name：显示名（列表和详情页里的公司名，按它归一后和其他来源的同名公司合并）；别写成 token 的小写形式。

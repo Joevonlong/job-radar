@@ -1,8 +1,8 @@
 /**
- * What the MCP server may return: the ONLY implementation of the "MCP client" exit and its data
- * scope in `docs/privacy.md`. Every output is a zod `strictObject` built field by field from the query results, never
+ * What the MCP server may return: the ONLY implementation of the MCP client row of `docs/privacy.md`, with the data scope in
+ * `docs/mcp.md`. Every output is a zod `strictObject` built field by field from the query results, never
  * "the whole row minus some fields", so a new column can never leak by itself. Adding a field here means updating
- * `docs/privacy.md` in the same change; a field beyond its data scope needs the maintainer's decision first.
+ * both docs in the same change; a field beyond its data scope needs the maintainer's decision first.
  *
  * Given: job facts, source links, score numbers and rank, compensation and benefit signals with their JD quotes, the JD after
  * AI-trap cleaning, and the status, status dates, next step and interview rounds of the user's applications.

@@ -29,12 +29,21 @@ const HASH_COMMENT_FILE = /(\.(sh|py|ya?ml|toml)|(^|\/)\.env\.example|(^|\/)Dock
 const TEST_FILE = /^(tests|e2e|e2e-demo|e2e-setup|jobspy\/tests)\//;
 const REFERENCE_SUFFIXES = ["", ".md", ".html", ".ts", ".tsx", ".mjs"];
 
+/** Whether a file can be read; a broken or looping symlink cannot. @param {string} file @returns {boolean} */
+function isFile(file) {
+  try {
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
 /** @param {string} dir @param {string[]} out @returns {string[]} */
 function collect(dir, out) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory()) {
       if (!SKIP_DIRS.has(entry.name) && !entry.name.startsWith(".")) collect(path.join(dir, entry.name), out);
-    } else if (/\.(md|html)$/.test(entry.name)) out.push(path.join(dir, entry.name));
+    } else if (/\.(md|html)$/.test(entry.name) && isFile(path.join(dir, entry.name))) out.push(path.join(dir, entry.name));
   }
   return out;
 }
@@ -112,7 +121,7 @@ function collectForReferences() {
   return names
     .filter((name) => !REFERENCE_SKIPPED.test(name))
     .map((name) => path.join(root, name))
-    .filter((file) => fs.statSync(file, { throwIfNoEntry: false })?.isFile());
+    .filter(isFile);
 }
 
 /**

@@ -15,7 +15,7 @@ describe("schedule.yaml: doctor block and backup.max_age_hours", () => {
     expect(parsed.doctor).toMatchObject({ compose_project: "job-radar", web_url: "http://127.0.0.1:3000", compose_services: ["db", "web", "runner", "jobspy"] });
   });
 
-  it("a file without them (an older config, the UAT copy) gets the same values as defaults", () => {
+  it("a file without them (an older config) gets the same values as defaults", () => {
     const raw = shipped();
     delete raw.doctor;
     delete (raw.backup as Record<string, unknown>).max_age_hours;
