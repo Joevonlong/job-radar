@@ -19,6 +19,7 @@ import { runMigrations } from "@/lib/db/migrate";
 import { claimNextControlRequest, requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
 import { deleteExpiredStoryDrafts, discardStoryDraft, insertStoryDrafts, listPendingStoryDrafts } from "@/lib/db/repos/story-drafts";
 import { adoptStoryDraft, loadPendingStoryDrafts } from "@/lib/stories/adopt";
+import { enterUpload } from "@/lib/stories/upload-gate";
 
 import { pinnedAi, scriptedProvider, type Step } from "../ai/helpers";
 import { quietLogger } from "../cycle/helpers";
@@ -286,15 +287,16 @@ describe("the upload route", () => {
   it("reads only import.max_concurrent_uploads files at once and turns the rest away, then reads again", async () => {
     writerFile("enabled: true\nimport:\n  max_concurrent_uploads: 1\n");
     const file = () => upload({ origin: "resume", file: new File([minimalPdf([`${MARKER} Moved the billing service.`]).slice()], "cv.pdf") });
-    const [first, second] = await Promise.all([POST(file()), POST(file())]);
-    expect([first.status, second.status].sort()).toEqual([200, 429]);
+    // the slot is held explicitly, so nothing depends on how fast a PDF is read
+    const held = enterUpload(1);
+    expect(held).not.toBeNull();
+    const refused = await POST(file());
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toEqual({ ok: false, error: "too_many" });
+    // pasted text has no file and needs no slot
+    expect((await POST(upload({ origin: "self_description", text: SOURCE }))).status).toBe(200);
     await db().delete(schema.controlRequests);
-    // pasted text and the profile have no file and do not use a slot (one open extraction at a time may still answer busy)
-    const [held, pasted] = await Promise.all([POST(file()), POST(upload({ origin: "self_description", text: SOURCE }))]);
-    expect([held.status, pasted.status].sort()).toEqual([200, 409]);
-    expect(held.status).not.toBe(429);
-    expect(pasted.status).not.toBe(429);
-    await db().delete(schema.controlRequests);
+    held?.();
     // the slot is back once the first is done, also after a refusal
     expect((await POST(file())).status).toBe(200);
     writerFile("enabled: true\n");
