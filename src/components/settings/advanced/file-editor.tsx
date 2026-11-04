@@ -39,6 +39,8 @@ interface Base {
   layer: AdvancedLayer;
   /** The text this base hash belongs to (masked): the left side of the conflict diff. */
   text: string;
+  /** Whether the user file changes anything against the shipped file (the server's answer for this base). */
+  canReset: boolean;
 }
 
 /** One config file as raw text: edit, live validation, preview, save, restore. All checks that decide anything run on the server. */
@@ -47,7 +49,7 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
   const baseId = useId();
   const editorRef = useRef<YamlTextareaHandle>(null);
   const { stem, file } = data.entry;
-  const [base, setBase] = useState<Base>({ hash: data.hash, layer: data.layer, text: data.text });
+  const [base, setBase] = useState<Base>({ hash: data.hash, layer: data.layer, text: data.text, canReset: data.canReset });
   const [text, setText] = useState(data.text);
   const [issues, setIssues] = useState<TextIssue[]>([]);
   const [warnings, setWarnings] = useState<TextIssue[]>([]);
@@ -58,13 +60,13 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
   const [resetOpen, setResetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<Exclude<AdvancedFailure, { status: "stale" } | { status: "invalid" }> | null>(null);
-  const [conflict, setConflict] = useState<{ text: string; hash: string; layer: AdvancedLayer } | null>(null);
+  const [conflict, setConflict] = useState<{ text: string; hash: string; layer: AdvancedLayer; canReset: boolean } | null>(null);
   const requestNo = useRef(0);
 
   const dirty = text !== base.text;
   // models.yaml keeps its own overlay by model id: the first save of the full catalog pins every model in it
   const firstOverride = stem === "models" && base.layer !== "user";
-  const canReset = data.defaultText !== null && base.layer === "user" && stem !== "setup";
+  const canReset = data.defaultText !== null && base.canReset;
 
   useEffect(() => {
     if (!dirty) return undefined;
@@ -104,7 +106,7 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
     if (canSave) setPreviewOpen(true);
   }
 
-  function adopt(next: { hash: string; layer: AdvancedLayer; text: string }) {
+  function adopt(next: Base) {
     setBase(next);
     setText(next.text);
     setConflict(null);
@@ -118,7 +120,7 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
       const result = await saveAdvancedAction({ file: stem, text, baseHash: base.hash, baseLayer: base.layer, confirmOverride });
       if (result.status === "saved") {
         setPreviewOpen(false);
-        adopt({ hash: result.hash, layer: result.layer, text: result.text });
+        adopt({ hash: result.hash, layer: result.layer, text: result.text, canReset: result.canReset });
         toastTone("success", t("savedToast", { file }));
         onChanged();
         return;
@@ -140,7 +142,7 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
       const result = await resetAdvancedAction({ file: stem, baseHash: base.hash, baseLayer: base.layer });
       setResetOpen(false);
       if (result.status === "reset") {
-        adopt({ hash: result.hash, layer: result.layer, text: result.text });
+        adopt({ hash: result.hash, layer: result.layer, text: result.text, canReset: result.canReset });
         toastTone("success", t("resetToast", { file }));
         onChanged();
       } else if (result.status === "stale") setConflict(result.current);
@@ -189,7 +191,7 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
         <ConflictBanner
           opened={base.text}
           current={conflict}
-          onLoadLatest={() => adopt({ hash: conflict.hash, layer: conflict.layer, text: conflict.text })}
+          onLoadLatest={() => adopt(conflict)}
           onCopyMine={() => void copyMine()}
         />
       ) : null}

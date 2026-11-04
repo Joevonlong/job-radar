@@ -30,7 +30,7 @@ interface PreviewDialogProps {
   baseHash: string;
   baseLayer: AdvancedLayer;
   /** The file changed behind the editor's back: the dialog closes and the conflict banner takes over. */
-  onStale: (current: { text: string; hash: string; layer: AdvancedLayer }) => void;
+  onStale: (current: { text: string; hash: string; layer: AdvancedLayer; canReset: boolean }) => void;
 }
 
 /** "Preview and save": the diff against what is saved (or against the product default), the changed key paths, and the save button. */

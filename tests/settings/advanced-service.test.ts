@@ -150,9 +150,12 @@ describe("restore the default", () => {
   it("removes the user file, whichever it is, and the shipped value answers", async () => {
     const pipeline = opened("pipeline");
     fs.writeFileSync(userFile("pipeline.yaml"), `${pipeline.text}\n# mine\n`);
+    // comments only: nothing to undo yet
+    expect(opened("pipeline").canReset).toBe(false);
+    fs.writeFileSync(userFile("pipeline.yaml"), `${userText("pipeline.yaml")}\nbatch_size: 7\n`);
     let state = opened("pipeline");
     expect(state.canReset).toBe(true);
-    expect(await resetAdvanced({ file: "pipeline", baseHash: state.hash, baseLayer: state.layer })).toMatchObject({ status: "reset", layer: "default", backup: true });
+    expect(await resetAdvanced({ file: "pipeline", baseHash: state.hash, baseLayer: state.layer })).toMatchObject({ status: "reset", layer: "default", canReset: false, backup: true });
     expect(fs.existsSync(userFile("pipeline.yaml"))).toBe(false);
 
     fs.writeFileSync(userFile("notify.yaml"), userText("notify.yaml").replace(/^max_per_cycle: \d+/m, "max_per_cycle: 2"));
@@ -161,6 +164,16 @@ describe("restore the default", () => {
     await resetAdvanced({ file: "notify", baseHash: state.hash, baseLayer: state.layer });
     expect(fs.existsSync(userFile("notify.yaml"))).toBe(false);
     expect(opened("notify").canReset).toBe(false);
+  });
+
+  it("a save that adds an override and one that removes it move canReset with them", async () => {
+    const state = opened("pipeline");
+    expect(state.canReset).toBe(false);
+    const saved = await saveAdvanced({ file: "pipeline", text: `${state.text}\nbatch_size: 7\n`, baseHash: state.hash, baseLayer: state.layer, confirmOverride: false });
+    expect(saved).toMatchObject({ status: "saved", layer: "user", canReset: true });
+    if (saved.status !== "saved") return;
+    const back = await saveAdvanced({ file: "pipeline", text: state.text, baseHash: saved.hash, baseLayer: saved.layer, confirmOverride: false });
+    expect(back).toMatchObject({ status: "saved", layer: "user", canReset: false });
   });
 
   it("refuses when the file changed since it was opened", async () => {

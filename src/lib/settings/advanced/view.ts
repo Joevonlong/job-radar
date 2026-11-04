@@ -8,6 +8,7 @@ import {
   displayConfigPathForWeb,
   documentConfigVersion,
   currentConfigVersion,
+  inspectOverlayFiles,
   isProfileName,
   layeredConfigFingerprint,
   maskConfigText,
@@ -104,6 +105,27 @@ export function loadAdvancedIndex(): AdvancedFileEntry[] {
   return ADVANCED_NAMES.map(entryOf);
 }
 
+/**
+ * Whether "restore the default" has something to undo: the user file lays at least one override, unset or pin over the shipped file.
+ * A file that is only a stub or comments changes nothing, so the button stays hidden. A whole-file (older format) or unreadable file
+ * is not an overlay: it replaces the shipped file, so it can always be restored.
+ */
+export function canResetFile(name: ConfigName): boolean {
+  let hasDefault = false;
+  try {
+    hasDefault = readShippedText(name) !== null;
+  } catch {
+    hasDefault = false;
+  }
+  return hasDefault && configLayer(name) === "user" && name !== "setup" && overlayNotEmpty(name);
+}
+
+function overlayNotEmpty(name: ConfigName): boolean {
+  const file = inspectOverlayFiles([name])[0];
+  if (file === undefined) return readOverlayText(name) !== null;
+  return file.format !== "overlay" || file.entries.length > 0;
+}
+
 export function loadAdvancedFile(stem: string): AdvancedLoad {
   const name = advancedNameOfStem(stem);
   if (name === null) return { ok: false, reason: "unknown_file" };
@@ -129,7 +151,7 @@ export function loadAdvancedFile(stem: string): AdvancedLoad {
       defaultText: defaultText === null ? null : maskConfigText(name, defaultText),
       codeVersion: currentConfigVersion(name),
       maxBytes: editorLimits().maxBytes,
-      canReset: defaultText !== null && layer === "user" && name !== "setup",
+      canReset: defaultText !== null && canResetFile(name),
       protectedKeys: [...protectedPatterns(name)],
       protectedUnlocked: protectedEditAllowed(),
     },
