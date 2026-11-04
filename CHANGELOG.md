@@ -22,6 +22,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
   and place (about 25 results in StepStone's own order, no paging, no newest-first sort), and the look-back window is applied
   afterwards, so StepStone finds fewer postings than before. See [Sources](docs/sources.md#scraping).
 
+- **A rollback of your preferences now shows the score of that version.** After a rollback, the job page, lists, Today, pushes, search through MCP and the automatic follow-ups kept reading the score and filter result of the version you left, even after re-scoring. Every one of them now reads the version you rolled back to, marked out of date until it is re-scored. A preferences or profile file edited back to older text by hand now counts as the same rollback: it marks the other versions' scores out of date, so those jobs are scored again. The first cycle after the upgrade corrects rows left over from earlier rollbacks.
+
 ### Upgrade notes
 
 - **Your config files now hold only what differs from the shipped ones.** A file in `data/config/` is laid over the shipped
