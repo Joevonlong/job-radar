@@ -492,10 +492,15 @@ export async function findOpenWriterRequest(db: Executor, input: { jobId: number
 
 /** The newest `story_extract` request (what the stories card resumes after a reload), or null. There is one owner, so there is one at a time. */
 export async function findLatestStoryExtractRequest(db: Db): Promise<ControlRequest | null> {
+  // Compared as the enum, so `control_requests_job_id_idx` finds the few rows of this kind: as text, no index can hold it and
+  // the newest-first scan reads the whole table. A worker of a newer release can get here before the web has migrated, and
+  // naming a kind the enum does not have yet is an error; without the kind there are no such requests.
+  const known = await db.execute(sql`select 1 from pg_enum where enumtypid = 'control_request_kind'::regtype and enumlabel = 'story_extract'`);
+  if (known.length === 0) return null;
   const [row] = await db
     .select()
     .from(controlRequests)
-    .where(sql`${controlRequests.kind}::text = 'story_extract'`)
+    .where(eq(controlRequests.kind, "story_extract"))
     .orderBy(desc(controlRequests.id))
     .limit(1);
   return row ?? null;
