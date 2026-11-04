@@ -616,3 +616,30 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
   }
   return null;
 }
+
+/**
+ * The job's title says it is a talent pool or an open application (the packs' `title_patterns`): the first pattern that matches a
+ * title that no `title_exclude` matches. A title is short and has no sentences: no negation, no segments, no trap spans. The quote is
+ * the title around the hit (cut at `quote_max_chars`, never inside a surrogate pair, always with the hit) and a verbatim piece of it (C7).
+ */
+export function evergreenTitle(title: string | null, rules: CompiledGhostRules): GhostReasonOf<"evergreen_wording"> | null {
+  const { enabled, title_points: points } = rules.settings.evergreen_wording;
+  if (!enabled || points <= 0 || title === null || title.trim() === "" || rules.titlePatterns.length === 0) return null;
+  if (rules.titleExclude.some((re) => title.search(re) !== -1)) return null;
+  for (const pattern of rules.titlePatterns) {
+    const hit = pattern.re.exec(title);
+    if (hit === null || hit[0] === "") continue;
+    const clipped = clipQuote(title, 0, title.length, { start: hit.index, end: hit.index + hit[0].length }, rules.settings.quote_max_chars);
+    // a cut may fall inside a surrogate pair: drop the lone half (the hit itself starts and ends between code points)
+    let { quote, offset } = clipped;
+    if (/^[\uDC00-\uDFFF]/u.test(quote)) {
+      quote = quote.slice(1);
+      offset += 1;
+    }
+    if (/[\uD800-\uDBFF]$/u.test(quote)) quote = quote.slice(0, -1);
+    // C7: the quote must be the title at its offset; a quote that is not is never stored
+    if (quote === "" || title.slice(offset, offset + quote.length) !== quote) continue;
+    return { code: "evergreen_wording", points, patternId: pattern.id, quote, offset, field: "title" };
+  }
+  return null;
+}

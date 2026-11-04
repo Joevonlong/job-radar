@@ -108,6 +108,7 @@ export function buildGhostInput(row: GhostInputRow, channels: GhostChannels, tru
     firstSeenAt: row.firstSeenAt,
     trustedCompany: row.companyNameNorm !== null && trustedKeys.has(row.companyNameNorm),
     trustedPostedAt: trustedPostedAtOf(row, channels),
+    title: row.title,
     description: row.description,
     descriptionSource: descriptionSourceOf(row, channels),
     postings,

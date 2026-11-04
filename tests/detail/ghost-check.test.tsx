@@ -68,6 +68,21 @@ describe("ChecksPanel ghost row", () => {
     expect(action).toHaveBeenCalledWith({ jobId: 9, action: "dismiss" });
   });
 
+  it("a title reason shows what the title said, in both languages, without a quote block or a jump", () => {
+    const title: GhostReason = { code: "evergreen_wording", points: 3, patternId: "talent_pool_title", quote: "AI Talent Pool", offset: 0, field: "title" };
+    const view = buildGhostCheckView(stored({ level: "watch", score: 3, reasons: [title] }));
+    expect(view.quote).toBeNull();
+    for (const locale of ["en", "zh"] as const) {
+      const { unmount } = render(wrap(<ChecksPanel {...base} ghost={{ jobId: 9, view, jdIndex: null }} />, locale));
+      const row = screen.getByTestId("ghost-check");
+      expect(row).toHaveTextContent(locale === "en" ? "The title says so: “AI Talent Pool”" : "标题写明了：“AI Talent Pool”");
+      expect(within(row).getAllByTestId("ghost-check-reason")).toHaveLength(1);
+      expect(within(row).queryByText(en.ghostJobs.checks.jump)).toBeNull();
+      expect(within(row).queryByText(zh.ghostJobs.checks.jump)).toBeNull();
+      unmount();
+    }
+  });
+
   it("names the channels by the page's display names", () => {
     render(wrap(<ChecksPanel {...base} ghost={{ jobId: 9, view: buildGhostCheckView(stored()), jdIndex: 0, channelNames: { greenhouse: "Greenhouse" } }} />));
     expect(screen.getByTestId("ghost-check")).toHaveTextContent("Open 214 days (source posted date 2026-02-28, Greenhouse)");

@@ -5440,6 +5440,7 @@
       "repost_label": "{channel} 标注为“{label}”",
       "reposted": "在 {channel} 以新编号重发（{dates}）",
       "evergreen_wording": "写明是人才库或常年招聘",
+      "evergreen_title": "标题写明了：“{quote}”",
       "thin_short_none": "JD 只有 {words} 个词，没有职责段落",
       "thin_short": "JD 只有 {words} 个词",
       "thin_none": "JD 里没有职责段落",
@@ -5450,6 +5451,7 @@
       "repost_label": "来源标注重发",
       "reposted": "以新编号重发",
       "evergreen_wording": "写明是人才库",
+      "evergreen_title": "标题写明是人才库或开放投递",
       "thin_description": "JD 空泛"
     },
     "filter": {

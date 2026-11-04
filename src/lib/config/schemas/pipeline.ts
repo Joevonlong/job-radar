@@ -70,7 +70,7 @@ export const GHOST_CHECK_DEFAULTS = {
   },
   repost_label: { enabled: true, points: 1 },
   reposted: { enabled: true, min_gap_days: 30, points: 2 },
-  evergreen_wording: { enabled: true, points: 2 },
+  evergreen_wording: { enabled: true, points: 2, title_points: 3 },
   thin_description: { enabled: true, min_words: 120, points: 1, infer_from_headings: true },
   quote_max_chars: 280,
   negation_words_before: 6,
@@ -113,7 +113,14 @@ const ghostCheckSchema = z
       .strictObject({ enabled: z.boolean().default(true), min_gap_days: ghostDays.default(GHOST_CHECK_DEFAULTS.reposted.min_gap_days), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.reposted.points) })
       .default(GHOST_CHECK_DEFAULTS.reposted),
     /** The JD says it is a talent pool / always open (the market packs' `ghost.evergreen_patterns`). */
-    evergreen_wording: z.strictObject({ enabled: z.boolean().default(true), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.evergreen_wording.points) }).default(GHOST_CHECK_DEFAULTS.evergreen_wording),
+    evergreen_wording: z
+      .strictObject({
+        enabled: z.boolean().default(true),
+        points: ghostPoints.default(GHOST_CHECK_DEFAULTS.evergreen_wording.points),
+        /** Points when the job's title says it (the packs' `ghost.title_patterns`); the title is read first and a job counts once. 0 = the title is not read. */
+        title_points: ghostPoints.default(GHOST_CHECK_DEFAULTS.evergreen_wording.title_points),
+      })
+      .default(GHOST_CHECK_DEFAULTS.evergreen_wording),
     /** A JD from a full-text source with fewer than `min_words` words, or without a duties section. */
     thin_description: z
       .strictObject({
@@ -161,7 +168,7 @@ export interface GhostCheckConfig {
   long_open: { enabled: boolean; tiers: Array<{ days: number; points: number }>; first_seen_max_points: number };
   repost_label: { enabled: boolean; points: number };
   reposted: { enabled: boolean; min_gap_days: number; points: number };
-  evergreen_wording: { enabled: boolean; points: number };
+  evergreen_wording: { enabled: boolean; points: number; title_points: number };
   thin_description: { enabled: boolean; min_words: number; points: number; infer_from_headings: boolean };
   quote_max_chars: number;
   negation_words_before: number;

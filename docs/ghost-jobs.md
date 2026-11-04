@@ -21,7 +21,7 @@ Each signal adds points; the points come from `pipeline.yaml: job_checks.ghost` 
 | `long_open` | An open job whose source gives a trusted posted date (company ATS, LinkedIn with your login) has been online for at least 90 days (1) or 180 days (2). Without a trusted date the days count from when Job Radar first saw it, at most 1 point. | 1–2 |
 | `repost_label` | The source itself labels the posting "Reposted" (LinkedIn with your login) | 1 |
 | `reposted` | The same source listed the job again under a new id, at the same place, at least 30 days after the earlier one. Only sources whose ids stay the same for one posting (company ATS, LinkedIn with your login, StepStone, XING, Arbeitsagentur) count; never two different sources. | 2 |
-| `evergreen_wording` | The job description says it is a talent pool or always open ("This posting is for our talent pool", "We are always hiring", "Wir stellen laufend ein", "Initiativbewerbung (m/w/d)", "Es gibt keine konkrete Stelle"). Not "We're always looking for people who …" (the About-us text of many real postings) | 2 |
+| `evergreen_wording` | The job description says it is a talent pool or always open ("This posting is for our talent pool", "We are always hiring", "Wir stellen laufend ein", "Initiativbewerbung (m/w/d)", "Es gibt keine konkrete Stelle"). Not "We're always looking for people who …" (the About-us text of many real postings). The **title** is read first (see [The title](#the-title)): a title that says it counts `title_points` (3) instead, and a job has only one such reason | 2 (title: 3) |
 | `thin_description` | The description comes from a source that keeps the full text and has fewer than 120 words, or no duties section (a heading such as "Responsibilities", "Your tasks", "What will I be doing?", "The impact you'll have", "Deine Aufgaben", "Darum geht's"; read without emoji or arrows around it, with "&amp;" as "&" and a final "…" as ":"; a line ending in "..." or in a "?" after a question word is a heading only right above a list, with at most one lead-in line between that ends in ":" or looks like a heading, so "Which tasks can our AI automate?" in the company text is none). When the job has a current [JD breakdown](breakdown.md), its duties list decides instead of the headings, an empty one included. With `thin_description.infer_from_headings: false` the headings are not read: without a current breakdown only a short description counts. | 1 |
 
 The sum gives the level:
@@ -98,6 +98,25 @@ The quote is a verbatim piece of the description with its position. Text hidden 
 [AI trap detection](ai-traps.md) found does not count. The phrases live in the market packs
 ([market-packs.md](market-packs.md#ghost-job-patterns)); English comes with every market, German with the German market.
 
+## The title
+
+Some postings only say it in the title ("AI Talent Pool", "Open Application", "Initiativbewerbung (m/w/d)", "Evergreen - AI
+Engineer", "Candidature spontanée"), with an ordinary description. The check reads the **title** first, with the packs'
+`ghost.title_patterns`: narrow phrases tested against the whole title (no sentences, no negation). A title that matches
+`ghost.title_exclude` never counts: those are the recruiting jobs themselves ("Talent Pool Manager", "Recruiter - Talent
+Community", "Head of Talent Community"). "Open Application" counts only as the title or one part of it, so "Open Application
+Security Engineer" and "AI Application Engineer" do not.
+
+A job has one `evergreen_wording` reason. When the title says it, that reason has `field: "title"`, the points are
+`evergreen_wording.title_points` (3, not added to the 2 of the description), and the quote is the title around the phrase. Only
+when the title says nothing is the description read. The title evidence is not in the description, so it has no mark there and
+no **View in the original**. If you dismissed a job for its description, a later title hit counts as dismissed too (the reason
+code is the same). A title that changes is checked again.
+
+If you keep a full copy of a pack in your config folder (`packs/<id>/rules.yaml`), copy the new `ghost.title_patterns` and
+`ghost.title_exclude` keys into it, or the title is not read (the description check works as before). `title_points: 0` turns
+the title check off.
+
 ## Where you see it
 
 Only while `ui.yaml: job_checks.ghost.enabled` is `true`:
@@ -110,7 +129,9 @@ Only while `ui.yaml: job_checks.ghost.enabled` is `true`:
   filter.
 - **Job page**: the mark on the score card (a link to the checks card) and the line **Is the job real?** on the checks card,
   after the AI trap line and before the visa line. It lists every reason, quotes the evergreen sentence with **View in the
-  original** (a wavy underline in the description), and has **Not a ghost job**.
+  original** (a wavy underline in the description), and has **Not a ghost job**. When the title said it, the reason reads
+  "The title says so: “…”" and there is no description mark and no **View in the original** (the title is not in the
+  description).
 
 The pipeline board shows no mark.
 
@@ -123,7 +144,7 @@ relisting), the mark comes back. **Undo** takes the dismissal back. Nothing else
 ## When it runs
 
 The cycle's `signals` step runs the check after the AI trap and visa checks. A job is checked again only when something
-it is made from changed (its description, status, sources, AI breakdown, hidden text, the patterns, the settings or a
+it is made from changed (its title, description, status, sources, AI breakdown, hidden text, the patterns, the settings or a
 source's declarations), or when it reaches the next `long_open` tier; at most
 `pipeline.yaml: job_checks.ghost.per_cycle_limit` jobs per cycle (never-checked jobs first, newest first). A failure makes
 the step "partial" and is retried next cycle.
@@ -157,7 +178,8 @@ job_checks:
 | `job_checks.ghost.long_open.first_seen_max_points` | 1 | most points without a trusted posted date |
 | `job_checks.ghost.repost_label.points` | 1 | |
 | `job_checks.ghost.reposted.min_gap_days`, `.points` | 30, 2 | |
-| `job_checks.ghost.evergreen_wording.points` | 2 | |
+| `job_checks.ghost.evergreen_wording.points` | 2 | when the description says it |
+| `job_checks.ghost.evergreen_wording.title_points` | 3 | when the title says it (`0`: the title is not read). 3 reaches `watch` on its own; with 2 more points (a relisting, a posting open 180 days) it is `likely` |
 | `job_checks.ghost.thin_description.min_words`, `.points` | 120, 1 | |
 | `job_checks.ghost.thin_description.infer_from_headings` | `true` | without a current JD breakdown, the duties headings decide whether a long description has duties; `false`: they are not read, and only a short description counts |
 | `job_checks.ghost.quote_max_chars` | 280 | longest quote |
