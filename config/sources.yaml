@@ -242,7 +242,7 @@ sources:
     user_agent: "JobRadar/0.1 (personal job search)"
     fetch_details: true # whether to also fetch the detail page of each job (the JD body is only on the detail page)
     max_details_per_query: 25
-    reuse_known_details: true # jobs whose details are already in the DB don't get their detail page opened again, the stored details are reused
+    reuse_known_details: true # jobs whose details are already in the DB don't get their detail page opened again, the stored details are reused (the first-page refresh of stored postings older than the window runs regardless of this)
     title_prefilter:
       enabled: true
       # Jobs whose title contains these words (whole-word match) are kept even if they don't match this query's keywords
