@@ -5,9 +5,9 @@ import { z } from "zod";
  *  - product page https://www.openwebninja.com/api/jsearch (sample job record),
  *  - OpenAPI file https://openwebninja.s3.us-east-1.amazonaws.com/portal/openapi/jsearch.yaml
  *    (`/search-v2` and `/job-details` records, field names, enums),
- *  - the RapidAPI listing `GET https://jsearch.p.rapidapi.com/search` the spec names.
+ *  - the RapidAPI listing `GET https://jsearch.p.rapidapi.com/search-v2`.
  * The OpenAPI file documents `data` of `/search-v2` as `{ jobs: [...], cursor }` and of `/job-details`
- * as an array; the older RapidAPI `/search` returns `data` as an array. The envelope accepts both.
+ * as an array; the removed RapidAPI `/search` returned `data` as an array. The envelope accepts both.
  *
  * Only fields the channel reads are declared; everything else stays in the stored payload untouched
  * (C1). Every field except the id is optional or nullable: the API sends null for what a source does
@@ -59,7 +59,7 @@ export const jobSchema = z.looseObject({
 });
 export type JsearchJob = z.infer<typeof jobSchema>;
 
-/** `GET /search` and `GET /job-details`: `data` is the list of records, or `{ jobs }` for `/search-v2`. */
+/** `GET /search-v2` and `GET /job-details`: `data` is `{ jobs }` or the list of records. */
 export const responseSchema = z.looseObject({
   /** `OK`; anything else is an error answer. */
   status: z.string().nullish(),

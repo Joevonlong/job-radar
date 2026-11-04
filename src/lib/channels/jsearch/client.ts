@@ -25,14 +25,13 @@ function headers(settings: ClientSettings, apiKey: string): Record<string, strin
 export function searchUrl(settings: ClientSettings, request: JsearchRequest): string {
   const params = new URLSearchParams({
     query: request.query,
-    page: "1",
     num_pages: String(settings.pages_per_query),
     country: settings.country ?? "",
     date_posted: request.datePosted,
   });
   if (settings.language !== "") params.set("language", settings.language);
   if (request.remote) params.set("work_from_home", "true");
-  return `${endpoint(settings, "search")}?${params.toString()}`;
+  return `${endpoint(settings, "search-v2")}?${params.toString()}`;
 }
 
 export function detailsUrl(settings: ClientSettings, jobIds: readonly string[]): string {
