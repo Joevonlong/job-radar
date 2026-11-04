@@ -32,13 +32,15 @@ function fileVersion(file: string, cache: VersionCache): number | null {
   }
   const known = cache.get(file);
   if (known !== undefined && known.mtimeMs === stat.mtimeMs && known.size === stat.size) return known.version;
-  let version: number | null = null;
+  let version: number | null;
   try {
     const doc: unknown = parseYaml(fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8"));
     const value = doc !== null && typeof doc === "object" ? (doc as Record<string, unknown>).config_version : undefined;
     version = typeof value === "number" && Number.isInteger(value) ? value : null;
   } catch {
-    // not readable as YAML: reported by the load
+    // Not readable as YAML: reported by the load. Not remembered: a failed read says nothing about the file, which may be fine at the next check with the same stat.
+    cache.delete(file);
+    return null;
   }
   cache.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, version });
   return version;
