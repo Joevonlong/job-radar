@@ -27,7 +27,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { registerBuiltinChannels } from "@/lib/channels/builtin";
 import { defaultRegistry } from "@/lib/channels/registry";
 import { loadConfig, watchConfig } from "@/lib/config";
-import { createVersionStop } from "./version-guard";
+import { createVersionChecks } from "./version-guard";
 import { startControlLanes, processNextControlRequest, aiWorkerRequestKinds } from "@/lib/control";
 import { registerAiControlHandlers } from "@/lib/control/ai-handlers";
 import { expireScrubbedRequests } from "@/lib/control/expire";
@@ -39,7 +39,7 @@ import { loadDatabaseEnv } from "@/lib/env";
 import { createProcessLogger } from "@/lib/logging/process-logger";
 import { aiWorkerLaunchdLabel } from "@/lib/ops/ai-worker-label";
 import { configGuardFindings } from "@/lib/ops/config-guards";
-import { releaseClaimedControlRequest, requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
+import { requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
 import { withTimeout } from "@/lib/ops/timeout";
 import { exitProcess, installShutdown } from "@/lib/ops/shutdown";
 import { createShippedConfigReporter } from "@/lib/ops/shipped-config";
@@ -206,14 +206,8 @@ async function main(): Promise<number> {
   const maxRequeues = (): number => loadConfig("ai").host_worker.requeue_interrupted_max;
   // Config files newer than this code: an upgrade is under way and this worker is the old one. Stop before touching the
   // queue, and check again before and after every claim. Waits like a refused lock, so launchd does not restart it in a tight loop.
-  const stopIfOutdated = createVersionStop({
-    waitSeconds: () => (once ? 0 : loadConfig("ai").host_worker.already_running_wait_seconds),
-    release: (id) => releaseClaimedControlRequest(db, id),
-    log,
-    exit: (code) => process.exit(code),
-  });
-  const versionChecks = { beforeClaim: () => stopIfOutdated(), afterClaim: (request: { id: number }) => stopIfOutdated(request.id) };
-  await stopIfOutdated();
+  const versionChecks = createVersionChecks({ db, once, log, exit: (code) => process.exit(code) });
+  await versionChecks.beforeClaim();
   // Only while holding the instance lock (taken above): another live worker's running requests are never touched.
   const orphans = await requeueInterruptedControlRequests(db, { reason: "ai-worker restarted while the request was running", maxRequeues: maxRequeues(), kinds: kinds() });
   if (orphans.requeued > 0) log(`queued ${orphans.requeued} interrupted request(s) again`);
