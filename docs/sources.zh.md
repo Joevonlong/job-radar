@@ -33,6 +33,8 @@ registry    来源清单页的统计窗口、判定阈值、导入大小上限�
 新块默认停用。自定义级联迁移后若要使用，须同时在 `/settings` 将 `linkedin-monid` 加入级联，并设置
 `linkedin.monid.enabled: true`。
 
+Apify 的远程查询不会被服务方过滤成远程：LinkedIn 的 `f_WT=2` 工作方式过滤经这个 actor 发出没有效果（实测结果与顺序完全相同，actor 也没有远程字段），所以默认的 `remote_input` 为空。远程查询只是在 `remote_locations` 的地点搜索，是否远程由流水线根据岗位本身判断。`remote_input` 的合并机制保留，供有这类字段的 actor 使用。
+
 ## 3. 七种状态怎么判
 
 | 状态 | 意思 |

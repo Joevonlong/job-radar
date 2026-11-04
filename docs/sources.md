@@ -34,6 +34,8 @@ it only into the previous default order; customized orders and subsets stay unch
 To use it after a customized-cascade migration, both add `linkedin-monid` to the cascade in `/settings` and set
 `linkedin.monid.enabled: true`.
 
+Apify remote queries are not filtered to remote by the provider: LinkedIn's `f_WT=2` work-mode filter has no effect through the actor (measured: same results in the same order, and the actor has no remote field), so the default `remote_input` is empty. A remote query is a search at the `remote_locations` place, and the pipeline judges remote from the posting. The `remote_input` merge mechanism stays for actors that do have such a field.
+
 ## 3. How the seven statuses are decided
 
 | Status | Meaning |

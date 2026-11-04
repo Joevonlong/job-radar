@@ -110,10 +110,11 @@ linkedin:
       urlParam:
         - { key: f_TPR, value: "r{posted_within_seconds}" }
       limit: "{limit}"
-    # Keys added on top of the template for remote queries (two key/value lists merge by key): LinkedIn's f_WT=2 is the "remote" work mode
-    remote_input:
-      urlParam:
-        - { key: f_WT, value: "2" }
+    # Keys added on top of the template for remote queries (two key/value lists merge by key). Empty by default: LinkedIn's f_WT=2
+    # ("remote" work mode) has no effect when sent through this actor (same results in the same order; the actor has no remote
+    # field), so Apify remote queries are not filtered to remote by the provider. They are plain searches at the remote
+    # location (remote_locations), and the pipeline judges remote from the posting
+    remote_input: {}
 
   monid:
     # Cascade position 3. Without MONID_API_KEY in .env the channel shows "not configured" and the cascade skips it, with no failure recorded.
