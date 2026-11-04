@@ -51,7 +51,7 @@ JD 先切成片段（句子、列表项、短标题和它下一行），和[签�
 
 ## 标题
 
-有些帖子只在标题里这么说（"AI Talent Pool"、"Open Application"、"Initiativbewerbung (m/w/d)"、"Evergreen - AI Engineer"、"Candidature spontanée"），JD 却像普通岗位。检查会先用市场包的 `ghost.title_patterns` 读**标题**：只用窄的说法，对整条标题匹配（不切句子，不判断否定）。标题匹配 `ghost.title_exclude` 时不算：这些是招聘岗位本身（"Talent Pool Manager"、"Recruiter - Talent Community"、"Head of Talent Community"）。"Open Application" 只有作为整条标题或标题的一段才算，所以 "Open Application Security Engineer"、"AI Application Engineer" 不算。
+有些帖子只在标题里这么说（"AI Talent Pool"、"Open Application"、"Initiativbewerbung (m/w/d)"、"Evergreen - AI Engineer"、"Candidature spontanée"），JD 却像普通岗位。检查会先用市场包的 `ghost.title_patterns` 读**标题**：只用窄的说法，对整条标题匹配（不切句子，不判断否定）。标题匹配 `ghost.title_exclude` 时不算：这些是招聘岗位本身（"Talent Pool Manager"、"Recruiter - Talent Community"、"Head of Talent Community"、"Team Lead - Talent Pool"），名字里带这些词的团队、产品和部门也不算（"Software Engineer, Talent Network"、"Talent Community Platform"、"Director of Future Opportunities"）。"Open Application" 只有作为整条标题或标题的一段才算，所以 "Open Application Security Engineer"、"AI Application Engineer" 不算；复数的 "General Applications" 是业务线，不是开放申请。"Evergreen" 只有出现在标题或标题某一段的开头、后面跟带空格的破折号、冒号或岗位词时才算（"Evergreen - AI Engineer"、"Evergreen Role"），公司名里的不算（"Evergreen Solar"、"Evergreen-Solar Technician"、"Data Engineer at Evergreen"）。
 
 一个岗位只有一条 `evergreen_wording` 原因。标题写明时，这条原因带 `field: "title"`，分数是 `evergreen_wording.title_points`（3，不和 JD 的 2 分相加），引文是标题里围绕该说法的原文。标题没写明才读 JD。标题证据不在 JD 里，所以 JD 里没有标记，也没有 **查看原文**。如果你因为 JD 的证据排除过某个岗位，之后标题命中也算已排除（原因代码相同）。标题变了会重新检查。
 
