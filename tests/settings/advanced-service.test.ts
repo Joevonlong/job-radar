@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { ADVANCED_NAMES, advancedNameOfStem, advancedStem, loadAdvancedFile, loadAdvancedIndex } from "@/lib/settings/advanced/view";
+import { ADVANCED_NAMES, advancedNameOfStem, advancedStem, canResetFile, loadAdvancedFile, loadAdvancedIndex } from "@/lib/settings/advanced/view";
 import { SLOW_PATTERN_MESSAGE } from "@/lib/config/interests-lint";
 import { previewAdvanced, resetAdvanced, saveAdvanced, validateAdvanced } from "@/lib/settings/advanced/service";
 
@@ -150,9 +150,12 @@ describe("restore the default", () => {
   it("removes the user file, whichever it is, and the shipped value answers", async () => {
     const pipeline = opened("pipeline");
     fs.writeFileSync(userFile("pipeline.yaml"), `${pipeline.text}\n# mine\n`);
+    // comments only: nothing to undo yet
+    expect(opened("pipeline").canReset).toBe(false);
+    fs.writeFileSync(userFile("pipeline.yaml"), `${userText("pipeline.yaml")}\nbatch_size: 7\n`);
     let state = opened("pipeline");
     expect(state.canReset).toBe(true);
-    expect(await resetAdvanced({ file: "pipeline", baseHash: state.hash, baseLayer: state.layer })).toMatchObject({ status: "reset", layer: "default", backup: true });
+    expect(await resetAdvanced({ file: "pipeline", baseHash: state.hash, baseLayer: state.layer })).toMatchObject({ status: "reset", layer: "default", canReset: false, backup: true });
     expect(fs.existsSync(userFile("pipeline.yaml"))).toBe(false);
 
     fs.writeFileSync(userFile("notify.yaml"), userText("notify.yaml").replace(/^max_per_cycle: \d+/m, "max_per_cycle: 2"));
@@ -161,6 +164,16 @@ describe("restore the default", () => {
     await resetAdvanced({ file: "notify", baseHash: state.hash, baseLayer: state.layer });
     expect(fs.existsSync(userFile("notify.yaml"))).toBe(false);
     expect(opened("notify").canReset).toBe(false);
+  });
+
+  it("a save that adds an override and one that removes it move canReset with them", async () => {
+    const state = opened("pipeline");
+    expect(state.canReset).toBe(false);
+    const saved = await saveAdvanced({ file: "pipeline", text: `${state.text}\nbatch_size: 7\n`, baseHash: state.hash, baseLayer: state.layer, confirmOverride: false });
+    expect(saved).toMatchObject({ status: "saved", layer: "user", canReset: true });
+    if (saved.status !== "saved") return;
+    const back = await saveAdvanced({ file: "pipeline", text: state.text, baseHash: saved.hash, baseLayer: saved.layer, confirmOverride: false });
+    expect(back).toMatchObject({ status: "saved", layer: "user", canReset: false });
   });
 
   it("refuses when the file changed since it was opened", async () => {
@@ -207,5 +220,28 @@ describe("preview", () => {
     const refused = await saveAdvanced({ file: "sources", text: next.text.replace("proxy.example", "elsewhere.example"), baseHash: next.hash, baseLayer: next.layer, confirmOverride: false });
     expect(refused).toEqual({ status: "proxies_changed" });
     expect(userText("sources.yaml")).toContain("proxy.example:8080");
+  });
+});
+
+describe("canResetFile", () => {
+  const stub = () => opened("pipeline").text;
+  it.each<[string, string, () => void, boolean]>([
+    ["a whole-format file (not an overlay)", "notify", () => {}, true],
+    ["a file that cannot be parsed", "ai", () => fs.writeFileSync(userFile("ai.yaml"), "a: [unclosed\n"), true],
+    ["a user file that cannot be read", "ai", () => {
+      fs.rmSync(userFile("ai.yaml"), { force: true });
+      fs.mkdirSync(userFile("ai.yaml"));
+    }, true],
+    ["setup.yaml", "setup", () => fs.writeFileSync(userFile("setup.yaml"), "config_version: 1\n"), false],
+    ["a file with no shipped counterpart", "pipeline", () => {
+      fs.writeFileSync(userFile("pipeline.yaml"), `${stub()}\nbatch_size: 7\n`);
+      fs.rmSync(path.join(tmp.defaultsDir, "pipeline.yaml"), { force: true });
+    }, false],
+    ["a stub only", "pipeline", () => fs.writeFileSync(userFile("pipeline.yaml"), stub()), false],
+    ["an overlay with an override", "pipeline", () => fs.writeFileSync(userFile("pipeline.yaml"), `${stub()}\nbatch_size: 7\n`), true],
+    ["models.yaml with comments only (no overlay format)", "models", () => fs.writeFileSync(userFile("models.yaml"), "# nothing yet\n"), true],
+  ])("%s", (_label, name, setup, expected) => {
+    setup();
+    expect(canResetFile(name as Parameters<typeof canResetFile>[0])).toBe(expected);
   });
 });

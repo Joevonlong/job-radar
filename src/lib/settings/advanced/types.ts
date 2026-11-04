@@ -38,7 +38,7 @@ export interface AdvancedFileData {
   /** `config_version` the code writes for this file. */
   codeVersion: number;
   maxBytes: number;
-  /** Whether "restore default" has anything to do: there is a user file, and it is not setup.yaml (no file there means the wizard is pending). */
+  /** Whether "restore default" has anything to do: the user file lays at least one override, unset or pin over the shipped file, and it is not setup.yaml (no file there means the wizard is pending). */
   canReset: boolean;
   /** The file's protected key patterns (`providers.*.command`): edited by hand in the file, not here. Empty when none. */
   protectedKeys: string[];
@@ -57,7 +57,7 @@ export interface AdvancedValidation {
 /** Why a save or reset did not happen. `stale`: the file changed since the editor opened it (the latest is attached). */
 export type AdvancedFailure =
   | { status: "invalid"; issues: TextIssue[] }
-  | { status: "stale"; current: { text: string; hash: string; layer: AdvancedLayer } }
+  | { status: "stale"; current: { text: string; hash: string; layer: AdvancedLayer; canReset: boolean } }
   | { status: "too_large" }
   | { status: "proxies_changed" }
   | { status: "needs_confirm" }
@@ -66,8 +66,8 @@ export type AdvancedFailure =
   | { status: "dbUnavailable" }
   | { status: "failed" };
 
-export type AdvancedSaveResult = { status: "saved"; hash: string; layer: AdvancedLayer; text: string; backup: boolean } | AdvancedFailure;
-export type AdvancedResetResult = { status: "reset"; hash: string; layer: AdvancedLayer; text: string; backup: boolean } | AdvancedFailure;
+export type AdvancedSaveResult = { status: "saved"; hash: string; layer: AdvancedLayer; text: string; canReset: boolean; backup: boolean } | AdvancedFailure;
+export type AdvancedResetResult = { status: "reset"; hash: string; layer: AdvancedLayer; text: string; canReset: boolean; backup: boolean } | AdvancedFailure;
 
 /** The diff shown before a save: against what is saved, or against the product default. */
 export type AdvancedPreviewAgainst = "saved" | "default";
@@ -79,5 +79,5 @@ export interface AdvancedPreview {
   /** False = nothing differs ("no changes"). */
   changed: boolean;
   /** The file changed after the editor opened it (the latest text is attached): the diff would show the outside change as the user's own. */
-  stale: { text: string; hash: string; layer: AdvancedLayer } | null;
+  stale: { text: string; hash: string; layer: AdvancedLayer; canReset: boolean } | null;
 }
