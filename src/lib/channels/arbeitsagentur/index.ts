@@ -72,10 +72,11 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
   search: for (const term of query.keywords) {
     const items: BaSearchItem[] = [];
     perTerm.push(items);
-    // company lookups: the exact employer parameter first, free text only when that finds nothing.
-    // The fallback adds at most one (empty) request; pages and results stay bound by the same limits
+    // company lookups: the exact employer parameter first, free text only when it finds no posting of the employer
+    // (a failed request does not fall back). A triggered fallback paginates in full under the same limits; the extra
+    // cost of a lookup that ends up empty is the one exact request
     const params: readonly (CompanyParam | undefined)[] = kind === "company" ? COMPANY_PARAMS : [undefined];
-    for (const companyParam of params) {
+    for (const [paramIndex, companyParam] of params.entries()) {
       for (let page = 1; items.length < query.maxResults && page <= maxPages; page += 1) {
         await pace();
         let response;
@@ -89,7 +90,8 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
         items.push(...(filterRemote ? response.ergebnisliste.filter((item) => item.homeofficemoeglich === true) : response.ergebnisliste));
         if (response.ergebnisliste.length === 0 || page * size >= response.maxErgebnisse) break;
       }
-      if (items.length > 0) break;
+      if (items.some((item) => ctx.employerMatches?.(item.firma) ?? true)) break;
+      if (paramIndex < params.length - 1) items.length = 0; // the next parameter starts clean: the exact hits of other employers do not count against its limits
     }
   }
   const selected = interleave(perTerm, query.maxResults);

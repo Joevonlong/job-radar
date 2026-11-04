@@ -968,6 +968,25 @@ describe("company queries: exact employer parameter first, free text as fallback
     expect(result).toHaveLength((SEARCH_PAGE.ergebnisliste as unknown[]).length);
   });
 
+  it("hits of other employers only do not count as found: the fallback runs", async () => {
+    const { ctx, calls } = makeContext(api(), { fetch_details: false });
+    await arbeitsagenturChannel.collect(companyQuery(), { ...ctx, employerMatches: (name) => name?.trim() === "Nobody GmbH" });
+    expect(calls.filter(isSearch).map((c) => c.url.searchParams.has("arbeitgeber"))).toEqual([true, false]);
+  });
+
+  it("a partial exact hit of the employer gets no fallback", async () => {
+    const { ctx, calls } = makeContext(api(), { fetch_details: false });
+    await arbeitsagenturChannel.collect(companyQuery(), { ...ctx, employerMatches: (name) => name?.trim() === "Sehwerk GmbH" });
+    expect(calls.filter(isSearch)).toHaveLength(1);
+  });
+
+  it("a failed exact request does not fall back", async () => {
+    const { ctx, calls } = makeContext(() => response(500, {}), { fetch_details: false });
+    await expect(arbeitsagenturChannel.collect(companyQuery(), ctx)).rejects.toBeDefined();
+    expect(calls.filter(isSearch)).toHaveLength(1);
+    expect(calls[0]!.url.searchParams.has("arbeitgeber")).toBe(true);
+  });
+
   it("the fallback keeps the result, page and detail limits", async () => {
     const made = makeContext(exactMisses(), { fetch_details: true, max_details_per_query: 1, page_size: 2 });
     await arbeitsagenturChannel.collect(companyQuery({ maxResults: 2 }), made.ctx);
