@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parse, parseDocument } from "yaml";
 import { z } from "zod";
 
-import { hashConfigText, loadConfig, readConfigText, reloadConfig } from "@/lib/config";
+import { layeredConfigFingerprint, loadConfig, readConfigText, reloadConfig } from "@/lib/config";
 import { configToDraft } from "@/lib/settings/draft";
 import { saveSettings } from "@/lib/settings/service";
 
@@ -43,7 +43,7 @@ describe("query rotation configuration compatibility", () => {
     writeCollect({ concurrency: 2, ...(rotation === undefined ? {} : { query_rotation: rotation }) });
     const draft = configToDraft("channels", loadConfig("channels"));
     draft["collect.concurrency"] = "4";
-    const result = await saveSettings({ tab: "channels", draft, baseHash: hashConfigText(readConfigText("channels")) });
+    const result = await saveSettings({ tab: "channels", draft, baseHash: layeredConfigFingerprint("channels") });
     expect(result.status).toBe("saved");
     expect(reloadConfig("channels").collect).toMatchObject({ concurrency: 4, query_rotation: rotation ?? true });
     const saved = parse(readConfigText("channels")) as { collect: Record<string, unknown> };

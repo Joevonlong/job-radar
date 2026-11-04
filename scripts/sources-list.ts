@@ -12,7 +12,7 @@
  */
 import { parseArgs } from "node:util";
 
-import { ConfigError, configSourcePath, displayConfigPath, loadConfig, readConfigText, reloadConfig, type ChannelsConfig } from "../src/lib/config";
+import { ConfigError, configSourcePath, displayConfigPath, loadConfig, reloadConfigWithFingerprint, type ChannelsConfig } from "../src/lib/config";
 import { closeDb, getDb, listSourceRegistryRows } from "../src/lib/db";
 import { buildRegistryEntries } from "../src/lib/sources/registry/entries";
 import { scopeLocale } from "../src/lib/i18n/node";
@@ -51,10 +51,11 @@ const statuses: RegistryStatus[] = (args.status ?? []).map((s) => (isRegistrySta
 
 async function main(): Promise<number> {
   let config: ChannelsConfig;
-  let text: string;
+  let fingerprint: string;
   try {
-    text = readConfigText("channels");
-    config = reloadConfig("channels");
+    const loaded = reloadConfigWithFingerprint("channels");
+    config = loaded.value;
+    fingerprint = loaded.fingerprint;
   } catch (error) {
     if (error instanceof ConfigError) {
       console.error(`sources:list: ${error.message}`);
@@ -74,7 +75,7 @@ async function main(): Promise<number> {
   let dbOk = true;
   try {
     const db = getDb();
-    if (args.sync) await syncSourceRegistry(db, { config, text });
+    if (args.sync) await syncSourceRegistry(db, { config, fingerprint });
     const page = await loadRegistryPage({ syncMirror: false });
     counts = page.view.counts;
     mirror = page.mirror;

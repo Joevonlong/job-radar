@@ -1,16 +1,13 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { parse } from "yaml";
-import fs from "node:fs";
-import path from "node:path";
-
-import { repliesSchema, type RepliesConfig } from "@/lib/config/schemas/replies";
+import { loadConfig } from "@/lib/config";
+import type { RepliesConfig } from "@/lib/config/schemas/replies";
 import { classifyReply, quoteOf } from "@/lib/replies/classify";
 
 import { REPLY_CASES } from "../fixtures/replies/cases";
 
 let config: RepliesConfig;
 beforeAll(() => {
-  config = repliesSchema.parse(parse(fs.readFileSync(path.resolve(import.meta.dirname, "../fixtures/config/defaults/replies.yaml"), "utf8")));
+  config = loadConfig("replies");
 });
 
 describe("classifyReply", () => {

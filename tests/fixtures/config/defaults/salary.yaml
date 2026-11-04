@@ -6,7 +6,7 @@
 #    level and the role's band, with sources. Only the company name, the job title, city, country and seniority are sent,
 #    never your profile or the JD. Costs tokens (and, with the Anthropic API, a fee per search).
 # Takes effect about 5 seconds after saving (runner / ai-worker hot-reload; the web app rereads this file each time a job page opens).
-config_version: 2
+config_version: 3
 
 benchmark:
   # false: the benchmark is no longer rebuilt after each run (the last one stays visible)

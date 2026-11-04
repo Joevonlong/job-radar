@@ -146,8 +146,9 @@ even if details failed or it listed fewer postings than announced; "Last success
 
 ### Import and export
 
-- Export YAML: the effective file in full (the one that is read, your copy or the shipped one, brought up to the current `config_version`, with its comments), file name `sources-20261008-1402.yaml`. Export JSON: the validated values, with `config_version`. Both replace the credentials in URLs under `jobspy.proxies` with `***`, and both import back without a diff, as do exports of earlier versions. When the file is invalid, export YAML gives its text as it is (and there is no JSON).
+- Export YAML: the effective file in full (the shipped file with yours laid over it, as a whole file at the last version before the overlay format, with its comments), file name `sources-20261008-1402.yaml`. Export JSON: the validated values, with that same `config_version`. Both replace the credentials in URLs under `jobspy.proxies` with `***`, and both import back without a diff, as do exports of earlier versions. When the file is invalid, export YAML gives its text as it is (and there is no JSON).
 - Import: upload or paste YAML / JSON, click "Preview" to see the diff (channels enabled / disabled, parameter changes, companies added / removed / modified, other settings), then "Apply". The server re-validates on apply; if the file was changed after the preview it refuses, so preview again.
+- A whole file, an older export or a repair of a broken file can all be imported; your file only gets what differs from the shipped one. `!unset` is refused.
 - Two modes: **replace the whole file** (must be a complete, valid sources.yaml) and **merge ATS companies only** (the file has an `ats_boards` list; adds or updates, never deletes).
 - `jobspy.proxies` always keeps its current value; import cannot change it. An exported JSON can be imported back whole as is, with no diff.
 - Export the current file before importing; if something goes wrong you can import it back.

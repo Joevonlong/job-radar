@@ -115,8 +115,8 @@ describe("watchConfig (polling fallback)", () => {
 
   it("reports a deleted file once and keeps the cached value", async () => {
     // Only when neither layer has it (the user file gone falls back to the default, see the layers suite)
-    fs.rmSync(path.join(tmp.defaultsDir, "ai.yaml"));
     loadConfig("ai");
+    fs.rmSync(path.join(tmp.defaultsDir, "ai.yaml"));
     const { errors, tick } = setupFake({ debounceMs: 20, pollMs: 80 });
     fs.rmSync(path.join(tmp.configDir, "ai.yaml"));
     await tick(500);

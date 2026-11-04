@@ -1,12 +1,12 @@
 /**
  * Render the merged document of a config: the shipped document with the overlay laid over it, node by node, so the
  * shipped comments stay and the user's values keep theirs. It is a document, not the zod output: a key that only the
- * schema's defaults fill in is not written. Used for the full export and, later, for `config:migrate --to-full`.
- * Not used by the loader yet.
+ * schema's defaults fill in is not written. Used for the full export, a new file while whole files are still around
+ * (`new-file-format.ts`) and `config:migrate --to-full`.
  */
 import { isAlias, isMap, isNode, isScalar, visit, type Document, type Node, type Pair, type YAMLMap } from "yaml";
 
-import { CONFIG_VERSION_KEY, currentConfigVersion, stampConfigVersion } from "./migrations/version";
+import { CONFIG_VERSION_KEY, legacyFormatVersion, stampConfigVersion } from "./migrations/version";
 import { replaceRule, type ReplaceAt } from "./overlay-rules";
 import type { ConfigName } from "./registry";
 import { isUnset, stringifyConfigYaml } from "./yaml-options";
@@ -72,7 +72,7 @@ function overlayInto(target: YAMLMap, overlay: YAMLMap, path: string[], replaceA
 
 /**
  * The merged document: a copy of `shipped` (migrated) with `overlay` (migrated, parsed with `unset: "overlay"`; null
- * when there is none) laid over it, stamped with the code's `config_version`. Neither input is changed.
+ * when there is none) laid over it: a whole file, stamped with the whole-file `config_version`. Neither input is changed.
  */
 export function toFull(name: ConfigName, shipped: Document, overlay: Document | null): Document {
   const out = shipped.clone();
@@ -80,7 +80,7 @@ export function toFull(name: ConfigName, shipped: Document, overlay: Document | 
     if (isMap(out.contents)) overlayInto(out.contents, overlay.contents, [], replaceRule(name), overlay, out);
     else out.contents = copyNode(overlay.contents, overlay, out);
   }
-  stampConfigVersion(out, currentConfigVersion(name));
+  stampConfigVersion(out, legacyFormatVersion(name));
   return out;
 }
 

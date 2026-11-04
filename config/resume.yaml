@@ -1,6 +1,8 @@
 # resume-kit integration. "Tailor resume" on the detail page exports the JD as md and shows the command to run /tailor in resume-kit.
 # All paths point to your own files (the master resume lives outside this repo; the system never reads it). Paths must be absolute; ~ is not supported.
 
+config_version: 2
+
 # Local resume-kit directory; the command is `cd <this directory> && claude "/tailor <jd path>"`. null = show only the export path, no command
 resume_kit_path: null
 # Your master resume YAML; only written into the command, never read. null = not mentioned in the command

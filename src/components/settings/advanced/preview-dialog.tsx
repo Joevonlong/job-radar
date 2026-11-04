@@ -19,7 +19,7 @@ interface PreviewDialogProps {
   onOpenChange: (open: boolean) => void;
   stem: string;
   text: string;
-  /** The file is a product default that has no user copy yet: saving creates an override of the whole file (needs a second confirmation). */
+  /** models.yaml without a user file: saving writes a full copy that pins every model in it (needs a second confirmation). */
   firstOverride: boolean;
   hasDefault: boolean;
   saving: boolean;
@@ -113,7 +113,7 @@ function PreviewBody({ stem, text, firstOverride, hasDefault, saving, blocked, o
           <DiffView lines={preview.lines} />
         </div>
       )}
-      {firstOverride ? <OverrideWarning overlay={stem === "models"} confirm={{ checked: understood, onChange: setUnderstood }} /> : null}
+      {firstOverride ? <OverrideWarning confirm={{ checked: understood, onChange: setUnderstood }} /> : null}
       <DialogFooter>
         <Button type="button" variant="default" onClick={onCancel}>
           {t("cancel")}

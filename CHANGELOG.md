@@ -21,6 +21,15 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Your config files now hold only what differs from the shipped ones.** A file in `data/config/` is laid over the shipped
+  file key by key, so keys you did not write follow product updates, and `key: !unset` removes a shipped key. The next deploy
+  converts your files in its write step (originals in `data/config/.backup/<time>/`, the keys dropped and kept in
+  `data/config/conversion-<time>.json`); `pnpm config:migrate --convert-overlays` shows it first. A form save, the advanced
+  editor and the source import never change a file's format, and a file at the older version still works as a whole file.
+  Two limits: a pin equal to the current shipped value is dropped, and an old default that differs from it stays pinned; both
+  are explained in [Your file is an overlay](docs/configuration.md#your-file-is-an-overlay). Restart `pnpm mcp:serve` and other
+  processes you started by hand. **Rollback:** older code refuses an overlay, so run `pnpm config:migrate --to-full --write`
+  first, with web and runner stopped and the database up; see [Rollback](docs/deploy.md#5-rollback).
 - **`sources.stepstone.radius_km` and `max_pages` are removed** (`sources.yaml` config version 9; the config update deletes
   them, and `pnpm config:check` passes on the result). **Rollback:** the update also raises `config_version` of `sources.yaml`, and an older version refuses a file with a
   newer version. Restore the file from `data/config/.backup/<timestamp>/` (the copy from before the update), or add
@@ -572,6 +581,15 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Upgrade notes
 
+- **Your config files now hold only what differs from the shipped ones.** A file in `data/config/` is laid over the shipped
+  file key by key, so keys you did not write follow product updates, and `key: !unset` removes a shipped key. The next deploy
+  converts your files in its write step (originals in `data/config/.backup/<time>/`, the keys dropped and kept in
+  `data/config/conversion-<time>.json`); `pnpm config:migrate --convert-overlays` shows it first. A form save, the advanced
+  editor and the source import never change a file's format, and a file at the older version still works as a whole file.
+  Two limits: a pin equal to the current shipped value is dropped, and an old default that differs from it stays pinned; both
+  are explained in [Your file is an overlay](docs/configuration.md#your-file-is-an-overlay). Restart `pnpm mcp:serve` and other
+  processes you started by hand. **Rollback:** older code refuses an overlay, so run `pnpm config:migrate --to-full --write`
+  first, with web and runner stopped and the database up; see [Rollback](docs/deploy.md#5-rollback).
 - **https users sign in once more.** Over https the session cookie is now `__Host-jr_session`; sessions from before the
   upgrade are not carried over, so every device that comes in through `tailscale serve` (or another https proxy) shows
   the login page once. Plain http sessions stay valid.
@@ -636,6 +654,15 @@ deploy.
 
 ### Upgrade notes
 
+- **Your config files now hold only what differs from the shipped ones.** A file in `data/config/` is laid over the shipped
+  file key by key, so keys you did not write follow product updates, and `key: !unset` removes a shipped key. The next deploy
+  converts your files in its write step (originals in `data/config/.backup/<time>/`, the keys dropped and kept in
+  `data/config/conversion-<time>.json`); `pnpm config:migrate --convert-overlays` shows it first. A form save, the advanced
+  editor and the source import never change a file's format, and a file at the older version still works as a whole file.
+  Two limits: a pin equal to the current shipped value is dropped, and an old default that differs from it stays pinned; both
+  are explained in [Your file is an overlay](docs/configuration.md#your-file-is-an-overlay). Restart `pnpm mcp:serve` and other
+  processes you started by hand. **Rollback:** older code refuses an overlay, so run `pnpm config:migrate --to-full --write`
+  first, with web and runner stopped and the database up; see [Rollback](docs/deploy.md#5-rollback).
 Deploy with `scripts/ops/deploy.sh --ref v2.0.0` (run it with `--dry-run` first). It backs up the database, migrates the
 configuration and the database, and restarts the services. In addition:
 

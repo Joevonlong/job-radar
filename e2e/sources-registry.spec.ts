@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { effectiveConfig } from "./helpers/effective-config";
 import { expect, test, type Page } from "./fixtures";
 import { parse, parseDocument } from "yaml";
 
@@ -106,19 +107,20 @@ test("switching a board off and on changes only its line in sources.yaml", async
   expect(after).toContain("# 熔断：连续失败 failures 次后");
   await row(page, "board:greenhouse:zellwerk").getByTestId("enabled-switch").click();
   await expect(row(page, "board:greenhouse:zellwerk")).toHaveAttribute("data-status", "ok");
-  expect(read()).toBe(before);
+  // back at the shipped value: the list leaves the file, and the shipped file decides again
+  expect(effectiveConfig<{ ats_boards: unknown }>("sources.yaml").ats_boards).toEqual((parse(before) as { ats_boards: unknown }).ats_boards);
 });
 
 test("a channel switch writes its enabled key", async ({ page }) => {
   await open(page, "?type=channel&q=indeed");
   await row(page, "indeed").getByTestId("enabled-switch").click();
   await expect(row(page, "indeed")).toHaveAttribute("data-status", "off");
-  const doc = parse(read()) as { sources: { indeed: { enabled: boolean } } };
+  const doc = effectiveConfig<{ sources: { indeed: { enabled: boolean } } }>("sources.yaml");
   expect(doc.sources.indeed.enabled).toBe(false);
 });
 
 test("switching a scraping channel on asks for the terms-of-service confirmation; cancel leaves it off", async ({ page }) => {
-  const indeedEnabled = () => (parse(read()) as { sources: { indeed: { enabled: boolean } } }).sources.indeed.enabled;
+  const indeedEnabled = () => (effectiveConfig<{ sources: { indeed: { enabled: boolean } } }>("sources.yaml")).sources.indeed.enabled;
   await open(page, "?type=channel&q=indeed");
   const toggle = row(page, "indeed").getByTestId("enabled-switch");
   // off needs no confirmation
@@ -167,7 +169,6 @@ test("add a company (a duplicate is refused under its field), edit it, delete it
   await page.getByTestId("board-delete-confirm").click();
   await expect(row(page, "board:ashby:e2e-newco2")).toHaveCount(0);
   expect(read()).not.toContain("e2e-newco2");
-  expect(read()).toContain("# ATS 公司清单");
 });
 
 test("export YAML is the full effective file; an import that switches indeed off previews, applies and shows in the table; the JSON export re-imports without a diff", async ({ page }) => {
@@ -196,7 +197,7 @@ test("export YAML is the full effective file; an import that switches indeed off
   await dialog.getByTestId("import-apply").click();
   await expect(dialog).toHaveCount(0);
   await expect(row(page, "indeed")).toHaveAttribute("data-status", "off");
-  expect((parse(read()) as { sources: { indeed: { enabled: boolean } } }).sources.indeed.enabled).toBe(false);
+  expect((effectiveConfig<{ sources: { indeed: { enabled: boolean } } }>("sources.yaml")).sources.indeed.enabled).toBe(false);
 });
 
 test("an import with an error lists the path and cannot be applied", async ({ page }) => {
@@ -248,7 +249,7 @@ test("the recommended read is locked while linkedin-session is off, and works wh
   await expect(on.getByTestId("enabled-switch")).toBeEnabled();
   await on.getByTestId("enabled-switch").click();
   await expect(on).toHaveAttribute("data-enabled", "0");
-  expect((parse(read()) as { linkedin: { session: { recommended_daily: boolean } } }).linkedin.session.recommended_daily).toBe(false);
+  expect((effectiveConfig<{ linkedin: { session: { recommended_daily: boolean } } }>("sources.yaml")).linkedin.session.recommended_daily).toBe(false);
   expect(read()).not.toBe(before);
 });
 
@@ -281,7 +282,7 @@ test("at 390px the import dialog fits the screen, with a long preview too", asyn
   await open(page);
   await page.getByTestId("import-open").click();
   const dialog = page.getByTestId("import-dialog");
-  const edited = parse(read()) as { sources: { indeed: { enabled: boolean } }; ats_boards: Array<{ name: string; token: string }> };
+  const edited = effectiveConfig<{ sources: { indeed: { enabled: boolean } }; ats_boards: Array<{ name: string; token: string }> }>("sources.yaml");
   edited.sources.indeed.enabled = false;
   edited.ats_boards = edited.ats_boards.slice(1);
   await dialog.getByTestId("import-text").fill(JSON.stringify(edited));
@@ -304,20 +305,20 @@ for (const locale of ["en", "zh"] as const) {
         await page.context().addCookies([{ name: "NEXT_LOCALE", value: locale, url: `http://127.0.0.1:${process.env.E2E_PORT ?? "3100"}` }]);
         await page.addInitScript((value) => localStorage.setItem("theme", value), theme);
         setKeys({ "sources.arbeitsagentur.company_queries": true });
-        const enabledBefore = parse(read()).sources.arbeitsagentur.enabled;
+        const enabledBefore = effectiveConfig<{ sources: Record<string, Record<string, unknown>> }>("sources.yaml").sources.arbeitsagentur.enabled;
         await page.goto("/sources/registry?type=channel&q=arbeitsagentur");
         const channel = row(page, "arbeitsagentur");
         await channel.getByTestId("row-details-toggle").click();
         const control = channel.getByTestId("company-queries-switch");
         await expect(control).toBeChecked();
         await control.click();
-        await expect.poll(() => parse(read()).sources.arbeitsagentur.company_queries).toBe(false);
+        await expect.poll(() => effectiveConfig<{ sources: Record<string, Record<string, unknown>> }>("sources.yaml").sources.arbeitsagentur.company_queries).toBe(false);
         await page.reload();
         await channel.getByTestId("row-details-toggle").click();
         await expect(control).not.toBeChecked();
-        expect(parse(read()).sources.arbeitsagentur.enabled).toBe(enabledBefore);
+        expect(effectiveConfig<{ sources: Record<string, Record<string, unknown>> }>("sources.yaml").sources.arbeitsagentur.enabled).toBe(enabledBefore);
         await control.click();
-        await expect.poll(() => parse(read()).sources.arbeitsagentur.company_queries).toBe(true);
+        await expect.poll(() => effectiveConfig<{ sources: Record<string, Record<string, unknown>> }>("sources.yaml").sources.arbeitsagentur.company_queries).toBe(true);
         await expect(control).toBeChecked();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
         fs.mkdirSync("/tmp/company-query-shots", { recursive: true });
@@ -329,7 +330,7 @@ for (const locale of ["en", "zh"] as const) {
 
 for (const [id, keys] of [["linkedin-brightdata", "linkedin.brightdata"], ["linkedin-apify", "linkedin.apify"], ["jsearch", "sources.jsearch"], ["stepstone", "sources.stepstone"], ["xing", "sources.xing"]] as const) {
   test(`company-query switch is offered for ${id} and its opt-out keeps the channel switch`, async ({ page }) => {
-    const block = (): { enabled: boolean; company_queries: boolean } => keys.split(".").reduce<unknown>((value, part) => (value as Record<string, unknown>)[part], parse(read())) as { enabled: boolean; company_queries: boolean };
+    const block = (): { enabled: boolean; company_queries: boolean } => keys.split(".").reduce<unknown>((value, part) => (value as Record<string, unknown>)[part], effectiveConfig("sources.yaml")) as { enabled: boolean; company_queries: boolean };
     setKeys({ [`${keys}.company_queries`]: true });
     const enabledBefore = block().enabled;
     await page.goto(`/sources/registry?type=channel&q=${id}`);

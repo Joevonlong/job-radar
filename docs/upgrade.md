@@ -66,7 +66,7 @@ In order, and it stops at the first failing step:
     lock, heartbeat and config report, then checks the gate: web and runner containers run the images this deploy built,
     the worker service points at the target release and its process holds the instance lock (or, with `--no-ai-worker`,
     no worker service is installed and nobody holds it), and no other worker process runs on the host. Then it runs
-    `config:migrate --write`, `config:init`, a re-check with `config:plan --deploy --check` and
+    `config:migrate --write --convert-overlays`, `config:init`, a re-check with `config:plan --deploy --check` and
     `config:migrate --prune-backups`. Skipped for targets without this step.
 12. **Prune**: releases the deploy lock, then cleans the Docker build cache and dangling images (never volumes).
 13. **Doctor**: `pnpm run doctor` reports what needs attention.
@@ -252,6 +252,9 @@ needed for this change. The triggers keep fingerprints correct for source writes
 filter results when an older writer changes a verdict or its reasons. Re-upgrading safely re-evaluates those results.
 
 ## Roll back
+
+**Past the release that made user config files overlays:** older code refuses them. Run `pnpm config:migrate --to-full --write`
+before going back, in the order given in [deploy.md](deploy.md#5-rollback).
 
 Before restoring config from `data/config/.backup/` or restoring a database backup, read the rollback notes in
 [CHANGELOG.md](../CHANGELOG.md) for the version you are leaving.

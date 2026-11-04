@@ -17,9 +17,9 @@ import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 
 import { ConfigError, zodIssues } from "./errors";
-import { readConfigText, parseConfigText, resetConfigCache } from "./load";
+import { readEffectiveConfig, readShippedConfig, resetConfigCache } from "./load";
 import { configBackupDir } from "./migrations/files";
-import { getDefaultConfigPath, getDefaultsDir, getUserConfigPath, resolveConfigPath } from "./paths";
+import { getDefaultsDir, getUserConfigPath } from "./paths";
 import { configRegistry, USER_CONFIG_NAMES, type ConfigName, type ConfigValue } from "./registry";
 import { writeConfig } from "./write";
 import { copyPrivateIfMissing } from "./private-file";
@@ -165,19 +165,13 @@ function changedPaths(before: unknown, after: unknown, at: string, out: string[]
 }
 
 function shippedValue(name: ConfigName): unknown {
-  const file = getDefaultConfigPath(name);
-  if (file === null) return undefined;
-  try {
-    return parseConfigText(name, fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8"), file);
-  } catch {
-    return undefined;
-  }
+  return readShippedConfig(name) ?? undefined;
 }
 
 /** What applying an example would change, file by file. Reads the current files fresh; writes nothing. */
 export function planExample(example: ConfigExample): ConfigExampleChange[] {
   return example.files.map(({ name, path: source, patch }) => {
-    const before = parseConfigText(name, readConfigText(name), resolveConfigPath(name));
+    const before = readEffectiveConfig(name);
     const replaced: string[] = [];
     const merged = mergeExample(before, patch, shippedValue(name), "", replaced);
     const result = configRegistry[name].schema.safeParse(merged);

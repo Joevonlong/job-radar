@@ -11,7 +11,7 @@
  * unknown file); 3 a path is not in the effective value. Nothing is printed on stdout unless every path resolves, so a
  * caller never reads half an answer. Honours JOB_RADAR_DEFAULTS_DIR / JOB_RADAR_CONFIG_DIR / JOB_RADAR_PROFILE_DIR.
  */
-import { CONFIG_NAMES, configRegistry, parseConfigText, readConfigText, type ConfigName } from "../src/lib/config";
+import { CONFIG_NAMES, configRegistry, readEffectiveConfig, type ConfigName } from "../src/lib/config";
 
 function usage(message: string): never {
   console.error(`config-get: ${message}\nusage: config-get.ts <file> <path>...  (for example: config-get.ts schedule.yaml timezone backup.max_age_hours)`);
@@ -39,7 +39,7 @@ const name = configName(fileArg);
 
 let value: unknown;
 try {
-  value = parseConfigText(name, readConfigText(name));
+  value = readEffectiveConfig(name);
 } catch (err) {
   console.error(`config-get: ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);

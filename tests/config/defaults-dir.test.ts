@@ -91,12 +91,12 @@ describe("the config scripts (pnpm config:init / config:migrate / config:check)"
 
     const check = run("config-check.ts");
     expect(check.status, check.out).toBe(0);
-    expect(check.out).toContain(`✓ ${path.join(tmp.configDir, "ai.yaml")} (user)`);
+    expect(check.out).toContain(`✓ ${path.join(tmp.configDir, "ai.yaml")} (user changes on the shipped file)`);
     expect(check.out).toContain(`✓ ${path.join(tmp.defaultsDir, "models.yaml")} (default)`);
     expect(check.out).toContain(`✓ ${path.join(tmp.defaultsDir, "ai.yaml")} (default, not in use)`);
   });
 
-  it("init --from copies the old directory's changes; check lists the override", () => {
+  it("init --from copies the old directory's changes; check lists the file", () => {
     const from = path.join(tmp.root, "live");
     fs.cpSync(tmp.defaultsDir, from, { recursive: true });
     fs.appendFileSync(path.join(from, "pipeline.yaml"), "# tuned\n");
@@ -105,8 +105,7 @@ describe("the config scripts (pnpm config:init / config:migrate / config:check)"
     expect(init.out).toContain("(differs from the shipped default: now an override)");
     const check = run("config-check.ts");
     expect(check.status, check.out).toBe(0);
-    expect(check.out).toContain(`(user override of a shipped file)`);
-    expect(check.out).toContain(`! ${path.join(tmp.configDir, "pipeline.yaml")} replaces the shipped pipeline.yaml`);
+    expect(check.out).toContain(`✓ ${path.join(tmp.configDir, "pipeline.yaml")} (user changes on the shipped file)`);
   });
 
   it("init --from a missing directory is refused; check fails on a broken default even when overridden", () => {
@@ -121,7 +120,7 @@ describe("the config scripts (pnpm config:init / config:migrate / config:check)"
   it("migrate refuses a file from a newer version and writes nothing", () => {
     run("config-init.ts");
     const file = path.join(tmp.configDir, "ui.yaml");
-    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("config_version: 2", "config_version: 7"));
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/^config_version: \d+/m, "config_version: 99"));
     const before = fs.readFileSync(file, "utf8");
     const migrate = run("config-migrate.ts", "--write");
     expect(migrate.status).toBe(1);

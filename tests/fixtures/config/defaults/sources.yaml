@@ -16,7 +16,7 @@
 
 # 所有付费采集通道每月合计花费的上限（美元）；各通道实际花费之和不得超过它，由预算控制执行。
 # （AI 费用另有上限，见 ai.yaml 的 monthly_api_budget_usd。）
-config_version: 9
+config_version: 10
 paid_total_monthly_budget_usd: 15
 
 # 熔断：连续失败 failures 次后，通道标为不可用，冷却 cooldown_hours 小时后再试

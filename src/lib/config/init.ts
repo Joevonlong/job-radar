@@ -1,6 +1,7 @@
 /**
- * Fill the user config directory. `user` files missing there are copied from the defaults directory (or from `from`);
- * existing files are never overwritten, so this is safe to run again. Runs from deploys and `pnpm config:init`, never at
+ * Fill the user config directory. `user` files missing there get a new file (`new-file-format.ts`: an overlay stub, or the
+ * shipped values as a whole file while conversions are pending) or a copy from `from`, which the next deploy's write step
+ * converts; existing files are never overwritten, so this is safe to run again. Runs from deploys and `pnpm config:init`, never at
  * start-up, and each file is committed under the config write lock, so it needs the database when a file is missing.
  *
  * setup.yaml and language.yaml are the setup wizard's: a missing setup.yaml means the wizard is pending, so they are not
@@ -9,19 +10,20 @@
  * default are copied too, and a directory from before the wizard gets its completed setup.yaml (see `backfill`).
  */
 import fs from "node:fs";
-import fsp from "node:fs/promises";
 import path from "node:path";
 
 import { readArchiveSetupSemantics } from "../ops/config-archive";
 import { existingInstallSetupYaml, EXISTING_INSTALL_LANGUAGE_YAML } from "../setup/existing-install";
 
 import { commitConfigFile } from "./atomic";
+import { hasOverlayFormat } from "./migrations/version";
 import { installedConfigFiles } from "./install";
 import { getConfigDir, getDefaultsDir } from "./paths";
+import { newFileFormat } from "./new-file-format";
 import { copyPrivateIfMissing } from "./private-file";
 import { readUserText } from "./read-user-file";
 import { configRegistry, LAYERED_CONFIG_NAMES, type ConfigName } from "./registry";
-import { withFileLock } from "./write";
+import { overlayStubText, wholeFileText, withFileLock } from "./write";
 import { withConfigWriteLock } from "./write-lock";
 
 
@@ -36,14 +38,14 @@ export interface EnsureConfigResult {
   name: ConfigName;
   /** The file in the user directory. */
   path: string;
-  /** Copied now. */
+  /** Written now. */
   created: boolean;
   /**
-   * Why it was copied (or would have been): `user` file, a `shipped` file the source changed (an override), or `backfill`:
+   * Why it was written (or would have been): `user` file, a `shipped` file the source changed (an override), or `backfill`:
    * written because `from` is a directory from before the setup wizard.
    */
   reason: "user" | "override" | "backfill" | null;
-  /** The file it was copied from; null when nothing was copied. */
+  /** The file it was copied from, or the shipped file a new file stands for; null when nothing was written. */
   source: string | null;
   /** A `user` file that neither the user directory nor the source has (config:check reports it). */
   missing: boolean;
@@ -89,7 +91,7 @@ export function plannedConfigFiles(): { name: ConfigName; path: string }[] {
 }
 
 /**
- * Copy the missing `user` files (and, with `from`, the changed `shipped` ones) into the user config directory.
+ * Create the missing `user` files (and, with `from`, copy the changed `shipped` ones) in the user config directory.
  * Never overwrites. Does nothing (and needs neither write access nor the database) when every file is already there.
  */
 export async function ensureConfigFiles(options: EnsureConfigOptions = {}): Promise<EnsureConfigResult[]> {
@@ -100,6 +102,8 @@ export async function ensureConfigFiles(options: EnsureConfigOptions = {}): Prom
   const results: EnsureConfigResult[] = [];
   // decided before anything is copied
   const fromBeforeWizard = switchOver && backfill(from, userDir);
+  // decided once: a file created here must not change what the rest are written as
+  const format = newFileFormat();
 
   // setup.yaml first: a process reading the directory while it fills sees the setup state before the other files
   for (const name of ["setup" as const, ...LAYERED_CONFIG_NAMES.filter((n) => n !== "setup")]) {
@@ -141,7 +145,10 @@ export async function ensureConfigFiles(options: EnsureConfigOptions = {}): Prom
       result.missing = true;
       continue;
     }
-    result.created = await copyPrivateIfMissing(source, target);
+    const copied = switchOver && source === path.join(from, file);
+    if (copied) result.created = await copyPrivateIfMissing(source, target);
+    else if (hasOverlayFormat(name)) result.created = await writeIfMissing(target, format === "overlay" ? overlayStubText(name) : wholeFileText(name));
+    else result.created = await copyPrivateIfMissing(source, target);
     result.reason = "user";
     result.source = source;
   }

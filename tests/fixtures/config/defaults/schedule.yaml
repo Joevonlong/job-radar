@@ -1,5 +1,6 @@
 # 处理轮时间。cron 为 5 段：分 时 日 月 周，按下面的 timezone 解释。
 # runner 热加载本文件：保存后约 5 秒内生效，非法内容会被忽略并记录错误。
+config_version: 2
 timezone: Europe/Berlin
 
 cycles:

@@ -1,4 +1,5 @@
 // @vitest-environment node
+import fs from "node:fs";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -6,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { configPendingCheck } from "@/lib/ops/doctor/checks/config";
 import { runDoctor } from "@/lib/ops/doctor/run";
 import { createRealProbes } from "@/lib/ops/doctor/probes";
-import { DEPLOY_WRITE_PLAN, planConfigWrites, type ConfigWritesPlan } from "@/lib/config";
+import { DEPLOY_WRITE_PLAN, legacyFormatVersion, planConfigWrites, type ConfigWritesPlan } from "@/lib/config";
 
 import { makeTempConfig, type TempConfig } from "../../config/helpers";
 import { makeContext, only } from "./helpers";
@@ -30,6 +31,13 @@ describe("config.pending", () => {
     expect(result.status).toBe("warn");
     expect(result.detail).toBe("2 config file(s) wait for the next deploy: ui (format update), search (new file)");
     expect(result.hint).toContain("pnpm config:migrate --write");
+  });
+
+  it("names a file that only waits for its conversion, and the command that does it", async () => {
+    const result = await check({ writes: [{ kind: "convert", name: "ui", path: "/u/ui.yaml", from: 2, to: 3 }], problems: [] });
+    expect(result.status).toBe("warn");
+    expect(result.detail).toBe("1 config file(s) wait for the next deploy: ui (to the key-by-key format)");
+    expect(result.hint).toContain("--convert-overlays");
   });
 
   it("adds the reason the last deploy skipped the writes, only when there is something pending", async () => {
@@ -73,5 +81,12 @@ describe("config.pending with the real probe", () => {
     tmp = makeTempConfig({ user: "init" });
     const filled = await probes().configWrites();
     expect(filled.writes.filter((write) => write.kind === "create" && write.path.startsWith(tmp.configDir))).toEqual([]);
+  });
+
+  it("counts a whole file with nothing but the conversion left to do", async () => {
+    tmp = makeTempConfig({ user: "init" });
+    const file = path.join(tmp.configDir, "ui.yaml");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/^config_version: \d+/m, `config_version: ${legacyFormatVersion("ui")}`));
+    expect((await probes().configWrites()).writes).toContainEqual(expect.objectContaining({ kind: "convert", name: "ui" }));
   });
 });

@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
-import { configLayer, ensureProfileFiles, hashConfigText, loadConfig, readConfigText, reloadConfig, setOnProfileSaved } from "@/lib/config";
+import { configLayer, ensureProfileFiles, layeredConfigFingerprint, loadConfig, reloadConfig, setOnProfileSaved } from "@/lib/config";
 import { closeDb } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { addWatchedCompany } from "@/lib/interests/service";
@@ -51,7 +51,7 @@ describe("web saves land in the user directory", () => {
 
     const draft = configToDraft("search", loadConfig("search"));
     draft["window_hours.morning"] = "30";
-    expect(await saveSettings({ tab: "search", draft, baseHash: hashConfigText(readConfigText("search")) })).toMatchObject({ status: "saved" });
+    expect(await saveSettings({ tab: "search", draft, baseHash: layeredConfigFingerprint("search") })).toMatchObject({ status: "saved" });
     await ensureProfileFiles();
     expect(await saveProfile("preferences", { ...preferencesConfigToDraft(reloadConfig("preferences")), salary_floor_year: "75000" })).toMatchObject({ status: "saved" });
     expect(await addWatchedCompany({ name: "Layered GmbH" })).toMatchObject({ status: "saved" });
@@ -64,6 +64,5 @@ describe("web saves land in the user directory", () => {
     expect(reloadConfig("interests").watched_companies).toContain("Layered GmbH");
     expect(reloadConfig("channels").sources.indeed.enabled).toBe(false);
     // the files the user saved carry the shipped comments over
-    expect(fs.readFileSync(path.join(temp.configDir, "sources.yaml"), "utf8")).toContain("# 熔断：连续失败 failures 次后");
   });
 });

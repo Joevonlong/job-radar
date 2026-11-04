@@ -17,7 +17,7 @@ interface ProxyItem {
 
 /** Source ranges of the items of `jobspy.proxies` (null: the text does not parse, or has no such list). */
 function proxyItems(text: string): ProxyItem[] | null {
-  const doc = parseConfigYamlDocument(text);
+  const doc = parseConfigYamlDocument(text, { unset: "overlay" });
   if (doc.errors.length > 0 || !isMap(doc.contents)) return null;
   const jobspy = doc.contents.get("jobspy", true);
   if (!isMap(jobspy)) return null;

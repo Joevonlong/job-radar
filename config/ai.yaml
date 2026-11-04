@@ -4,7 +4,7 @@
 #   host      the runner in the container only writes a run_ai request; ai-worker on the host (launchd) runs it with the local claude / codex subscription
 #             for the AI and notify steps; the container needs no AI credentials (default)
 #   container the runner runs them inside the container itself (needs a subscription token or API key in the container; not recommended)
-config_version: 3
+config_version: 4
 execution: host
 
 # Host ai-worker (pnpm ai-worker)

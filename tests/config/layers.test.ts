@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { parse } from "yaml";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -114,7 +115,7 @@ describe("resolution: the user file wins, else the shipped default", () => {
     }
   });
 
-  it("a write goes to the user directory only: the first save starts from the default (its comments) and the defaults never change", async () => {
+  it("a write goes to the user directory only: the first save holds only the change, and the defaults never change", async () => {
     const defaultsBefore = snapshot(dirs().defaultsDir);
     const value = structuredClone(loadConfig("notify"));
     value.push_min_score = 64;
@@ -122,10 +123,7 @@ describe("resolution: the user file wins, else the shipped default", () => {
     expect(snapshot(dirs().defaultsDir)).toEqual(defaultsBefore);
     const written = read(user("notify.yaml"));
     expect(written).toContain("push_min_score: 64");
-    // the shipped file's comments carried over
-    const firstComment = read(shipped("notify.yaml")).split("\n")[0] ?? "";
-    expect(firstComment.startsWith("#")).toBe(true);
-    expect(written).toContain(firstComment);
+    expect(Object.keys(parse(written) as object).sort()).toEqual(["config_version", "push_min_score"]);
     expect(getConfigPath("notify")).toBe(user("notify.yaml"));
     expect(reloadConfig("notify").push_min_score).toBe(64);
   });
@@ -214,7 +212,8 @@ describe("ensureConfigFiles (pnpm config:init)", () => {
     expect(fs.existsSync(user("language.yaml"))).toBe(false);
     expect(fs.existsSync(user("models.yaml"))).toBe(false);
     expect(fs.existsSync(user("pipeline.yaml"))).toBe(false);
-    expect(read(user("sources.yaml"))).toBe(read(shipped("sources.yaml")));
+    // a stub: only the version, so the rest keeps following the shipped file
+    expect(Object.keys(parse(read(user("sources.yaml"))) as object)).toEqual(["config_version"]);
 
     // the user edits a file; init never overwrites it
     fs.writeFileSync(user("ai.yaml"), `${read(user("ai.yaml"))}\n# mine\n`);
@@ -243,8 +242,7 @@ describe("ensureConfigFiles (pnpm config:init)", () => {
     expect(results.find((r) => r.name === "models")).toMatchObject({ created: true, reason: "override" });
     // pipeline.yaml is the same as the default: not copied (it keeps following product updates)
     expect(fs.existsSync(user("pipeline.yaml"))).toBe(false);
-    expect(read(user("insights.yaml"))).toBe(read(shipped("insights.yaml")));
-    expect((await inspectConfigLayers()).overrides).toEqual([]); // models.yaml is an overlay, not a replacement
+    expect(Object.keys(parse(read(user("insights.yaml"))) as object)).toEqual(["config_version"]);
   });
 
   it("--from the defaults directory itself is the same as no --from", async () => {
@@ -326,11 +324,11 @@ describe("inspectConfigLayers (doctor config.layers)", () => {
     tmp = makeTempConfig();
   });
 
-  it("reports the directories, what is not copied yet and the overrides", async () => {
+  it("reports the directories and what is not copied yet", async () => {
     fs.rmSync(user("ui.yaml"));
     fs.copyFileSync(shipped("pipeline.yaml"), user("pipeline.yaml"));
     const state = await inspectConfigLayers();
-    expect(state).toMatchObject({ userDirExists: true, userDirWritable: true, notCopied: ["ui.yaml"], overrides: ["pipeline.yaml"], pendingMigrations: [], problems: [] });
+    expect(state).toMatchObject({ userDirExists: true, userDirWritable: true, notCopied: ["ui.yaml"], pendingMigrations: [], problems: [] });
     expect(state.userDir).toBe(dirs().configDir);
     expect(state.userFiles).toBe(USER_CONFIG_NAMES.length);
   });

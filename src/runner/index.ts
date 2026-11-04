@@ -6,7 +6,7 @@ import { registerBuiltinChannels } from "@/lib/channels/builtin";
 import type { ScheduledCycleKind } from "@/lib/channels/query";
 import { defaultRegistry } from "@/lib/channels/registry";
 import { createDbStateStore } from "@/lib/channels/store";
-import { ensureProfileFilesPlan, plannedConfigFiles, getConfigDir, getProfileDir, loadConfig, readConfigText, watchConfig } from "@/lib/config";
+import { ensureProfileFilesPlan, plannedConfigFiles, getConfigDir, getProfileDir, layeredConfigFingerprint, loadConfig, watchConfig } from "@/lib/config";
 import { syncSourceRegistry } from "@/lib/sources/registry/sync";
 import { closeDb, enqueueAlert, getDb, getLatestHeartbeat, pruneHeartbeats, readAppliedMigrations, writeHeartbeat, type Db } from "@/lib/db";
 import { spanScope, createActivityRecorder, reconcileActivity, startActivityMaintenance } from "@/lib/activity";
@@ -93,7 +93,7 @@ async function syncChannelRows(db: Db): Promise<number> {
 /** Mirror config/sources.yaml into the `source_registry` table (a failure is only logged: collection does not depend on it). */
 async function syncRegistry(db: Db): Promise<void> {
   try {
-    const result = await syncSourceRegistry(db, { config: loadConfig("channels"), text: readConfigText("channels") });
+    const result = await syncSourceRegistry(db, { config: loadConfig("channels"), fingerprint: layeredConfigFingerprint("channels") });
     log(`source registry synced (${result.upserted} entries, ${result.removed} removed from the file)`);
   } catch (error) {
     log(`could not sync the source registry: ${describe(error)}`);
@@ -407,9 +407,9 @@ async function main(): Promise<number> {
     "all",
     (event) => {
       log(`config ${event.name} reloaded`);
-      // Tell the settings page which file text this runner now runs with.
+      // Tell the settings page which state of the config this runner now runs with.
       if (isAckName(event.name)) {
-        recordConfigLoaded(db, event.name, event.text).catch((error: unknown) => log(`could not record config ${event.name} as loaded: ${describe(error)}`));
+        recordConfigLoaded(db, event.name, event.fingerprint).catch((error: unknown) => log(`could not record config ${event.name} as loaded: ${describe(error)}`));
       }
       if (event.name === "schedule") {
         const next = loadConfig("schedule");

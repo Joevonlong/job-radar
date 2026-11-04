@@ -15,18 +15,23 @@ import {
   configErrorKey,
   configSourcePath,
   CONFIG_VERSION_KEY,
-  currentConfigVersion,
-  hashConfigText,
+  documentConfigVersion,
+  getDefaultConfigPath,
+  isOverlayVersion,
+  layeredConfigFingerprint,
+  legacyFormatVersion,
   migrateConfigDocument,
   mutateConfig,
   parseConfigDocument,
   parseConfigText,
-  readConfigText,
+  readConfigLayers,
   reloadConfig,
   writeConfig,
+  writeConfigRepair,
   type ChannelsConfig,
   type ConfigWriteErrorKey,
 } from "@/lib/config";
+import { shippedEffective } from "@/lib/config/load";
 import { consentKind, type ConsentKind } from "@/lib/channels/access";
 import { channelSupportsCompanyQueries } from "@/lib/channels/registry";
 import { getDb } from "@/lib/db";
@@ -65,7 +70,7 @@ const fail = (error: RegistryErrorKey, fieldErrors?: FieldError[]): RegistryActi
 /** Mirror the file into the database after a write. A failure does not undo the write: the next page load or runner reload catches up. */
 async function mirror(config: ChannelsConfig): Promise<void> {
   try {
-    await syncSourceRegistry(getDb(), { config, text: readConfigText("channels") });
+    await syncSourceRegistry(getDb(), { config, fingerprint: layeredConfigFingerprint("channels") });
   } catch (error) {
     logActionFailure("mirror", error);
     // the page shows "mirror out of sync" until the next sync
@@ -275,13 +280,16 @@ type Planned =
 
 function plan(input: z.infer<typeof importRequest>): Planned {
   let baseText: string;
+  let baseHash: string;
   try {
-    baseText = readConfigText("channels");
+    const layers = readConfigLayers("channels");
+    if (layers.overlay === null && layers.shipped === null) throw new ConfigError({ configName: "channels", filePath: configSourcePath("channels"), kind: "missing" });
+    baseText = layers.overlay ?? layers.shipped ?? "";
+    baseHash = layers.fingerprint;
   } catch (error) {
     logActionFailure("plan", error);
     return { ok: false, state: { status: "error", error: "config_invalid", issues: [{ path: "", code: "missing_file", message: "sources.yaml is missing" }] } };
   }
-  const baseHash = hashConfigText(baseText);
   let current: ChannelsConfig | null = null;
   try {
     current = reloadConfig("channels");
@@ -341,8 +349,9 @@ export async function applySourcesImport(raw: unknown): Promise<RegistryActionSt
   // an import must not switch on a scraping or account channel without the acknowledgement the switch itself asks for
   if (consentChannelsOf(planned.plan.changes).length > 0 && request.data.acknowledged !== true) return fail("consent_required");
   try {
-    // Planning also supports repairing invalid YAML; the preview hash fences that read under the write locks.
-    await writeConfig("channels", planned.next, { baseHash: request.data.baseHash });
+    // A repair has no current value to compare with; the preview's fingerprint fences what it read under the write locks.
+    if (planned.repair) await writeConfigRepair("channels", planned.next, { previewFingerprint: request.data.baseHash });
+    else await writeConfig("channels", planned.next, { baseHash: request.data.baseHash });
     await mirror(planned.next);
     return { status: "done", outcome: "imported" };
   } catch (error) {
@@ -361,15 +370,18 @@ function stamp(now: Date, timeZone: string): string {
 
 /**
  * The effective config, credentials in proxy URLs masked, both formats with `config_version`: as YAML the file that is
- * read (the user's, else the shipped one) migrated to the current version and rendered in full with its comments
- * (`toFull`), as JSON the validated values. An invalid file has no effective config: no JSON, and the YAML is the file's
- * own text (masked), so it can still be saved and fixed elsewhere.
+ * read (the shipped one with the user's overlay over it) migrated and rendered in full with its comments
+ * (`toFull`), as JSON the validated values: both whole files, at the whole-file version. An invalid file has no effective
+ * config: no JSON, and the YAML is the file's own text (masked), so it can still be saved and fixed elsewhere.
  */
 export function exportSources(format: "yaml" | "json", options: { now: Date; timeZone: string }): { body: string; contentType: string; filename: string } | { error: "config_invalid" | "missing" } {
   const base = `sources-${stamp(options.now, options.timeZone)}`;
   let text: string;
+  let layers: ReturnType<typeof readConfigLayers>;
   try {
-    text = readConfigText("channels");
+    layers = readConfigLayers("channels");
+    if (layers.overlay === null && layers.shipped === null) throw new ConfigError({ configName: "channels", filePath: configSourcePath("channels"), kind: "missing" });
+    text = layers.overlay ?? layers.shipped ?? "";
   } catch (error) {
     logActionFailure("exportSources", error);
     return { error: "missing" };
@@ -380,13 +392,14 @@ export function exportSources(format: "yaml" | "json", options: { now: Date; tim
     const config = parseConfigText("channels", text, file);
     const doc = parseConfigDocument("channels", text, file);
     migrateConfigDocument("channels", doc, file);
-    effective = { config, yaml: stringifyConfigYaml(toFull("channels", doc, null)) };
+    const shipped = layers.overlay !== null && isOverlayVersion("channels", documentConfigVersion(doc)) && layers.shipped !== null ? shippedEffective("channels", layers.shipped, getDefaultConfigPath("channels") ?? file).doc : null;
+    effective = { config, yaml: stringifyConfigYaml(shipped === null ? toFull("channels", doc, null) : toFull("channels", shipped, doc)) };
   } catch (error) {
     logActionFailure("exportSources", error);
     if (format === "yaml") return { body: maskCredentialsInText(text), contentType: "application/yaml; charset=utf-8", filename: `${base}.yaml` };
     return { error: "config_invalid" };
   }
   if (format === "yaml") return { body: maskCredentialsInText(effective.yaml), contentType: "application/yaml; charset=utf-8", filename: `${base}.yaml` };
-  const body = { [CONFIG_VERSION_KEY]: currentConfigVersion("channels"), ...maskProxyCredentials(effective.config) };
+  const body = { [CONFIG_VERSION_KEY]: legacyFormatVersion("channels"), ...maskProxyCredentials(effective.config) };
   return { body: `${JSON.stringify(body, null, 2)}\n`, contentType: "application/json; charset=utf-8", filename: `${base}.json` };
 }

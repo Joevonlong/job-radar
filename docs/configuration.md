@@ -20,24 +20,73 @@ source needs which key: [installation.md](installation.md#2-optional-create-env)
 
 ## Which copy is read
 
-- If the user directory **has** the file, it is read; if not, the one in the defaults directory is read. The layers are not merged: a file in the user directory takes effect as a whole.
-- Saving in the web app always writes to the user directory; the first time a file that only exists in the defaults directory is saved, it is generated from the default file as a base (the default file's comments are carried over). The defaults directory is never written. A save also leaves out keys the file does not have yet when the value is just what the schema defaults to (it would pin a default that a later product update may change); keys the file already has are kept, and a value that differs from the default is written.
-- Hot reload watches both layers: a user file appearing, being deleted (falling back to the default), or a default file changing (when you have no copy of your own) all take effect within about 5 seconds. In the containers the defaults are in the image and only change with a new image (a deploy); outside Docker (`pnpm dev`, the host ai-worker) a changed file in `config/` is picked up like this. The runner and the ai-worker watch every config file, `me.yaml` and `preferences.yaml` included, and also re-read them at the start of each cycle and each request, so a change (for example the market saved in the setup wizard or on `/me`) applies to the next cycle even when it starts right away, without a restart.
+- The value of a file is the **shipped file with your file laid over it**, key by key. Your file holds only what differs: a key you do not write follows the product, including its later updates. A file you do not have at all is the shipped file. See [Your file is an overlay](#your-file-is-an-overlay).
+- Saving in the web app always writes to the user directory, and only what changes: a changed value goes in, a value set back to what the shipped file holds comes out, and comments on the rest stay. A file that does not exist yet starts as a short stub. The defaults directory is never written. A value the schema only fills in is not written either, so a later change of that default still reaches you.
+- Hot reload watches both layers: a user file appearing, being deleted (falling back to the default), or a default file changing (for every key your file does not hold) all take effect within about 5 seconds. In the containers the defaults are in the image and only change with a new image (a deploy); outside Docker (`pnpm dev`, the host ai-worker) a changed file in `config/` is picked up like this. The runner and the ai-worker watch every config file, `me.yaml` and `preferences.yaml` included, and also re-read them at the start of each cycle and each request, so a change (for example the market saved in the setup wizard or on `/me`) applies to the next cycle even when it starts right away, without a restart.
 - The web app and the MCP server have no watcher, so they check the files themselves: a read of a config more than 5 seconds after the last check first re-reads every config it has loaded, so a file you edit by hand (or that another process changed) shows up on the next page load without a restart. An invalid file is ignored (the last valid values stay) and reported once in the log. `JOB_RADAR_CONFIG_POLL_MS` (default `5000`, in milliseconds; set it in the environment of the process) is this interval and also the watchers' polling interval; `0` turns off this check and the watchers' polling (a watcher still reacts to file events).
-- `pnpm config:check` prints which layer each file is read from: `(user)`, `(default)`, `(user override of a shipped file)`.
+- `pnpm config:check` prints which layer each file is read from: `(user changes on the shipped file)`, `(user, whole file)` for a file not converted yet, `(default)`.
+
+## Your file is an overlay
+
+A file in `data/config/` holds only what differs from the shipped file:
+
+```yaml
+config_version: 3     # the shipped file's version: this is what makes the file an overlay
+push_min_score: 64    # replaces the shipped value
+quiet_hours:
+  start: "23:00"      # maps merge key by key: quiet_hours.end still comes from the shipped file
+targets: [Data Engineer]   # a list replaces the shipped list as a whole
+backup:
+  max_age_hours: !unset    # removes the shipped key: the schema's default answers, or the file is invalid if the key is required
+```
+
+- **Maps** merge key by key, **lists** are one value, and some maps whose keys are entries of their own (for example the
+  sources of a channel list) replace an entry as a whole. Migrations carry both layers forward.
+- **`!unset`** only means something in an overlay. It stands on a key of a mapping with nothing after it; never in a list,
+  on `config_version`, or in a file of the older format, where it is an error on its line that says which version to write.
+- **A file without `config_version`, or with a lower one, is a whole file**: it is the older format, read by itself, and the
+  shipped file does not fill it in. Saving it keeps it whole (at the last version before the overlay format); a form save, the
+  advanced editor and the source import never change a file's format. The deploy's write step converts it. A whole file
+  without a version gets a warning in the log, once, and in `pnpm config:check` and the doctor.
+- **New files**: `pnpm config:init`, the wizard and a first save write a stub with the version and a comment. While any file
+  in the directory is still whole, a conversion is pending, so a new file is written whole too and converted with the others.
+- **The conversion** (`pnpm config:migrate --convert-overlays`, a preview; a deploy runs it with `--write`) keeps a key when it
+  differs from the shipped file. The originals go to `data/config/.backup/<time>/`, and the keys dropped and kept, never
+  their values, go to `data/config/conversion-<time>.json`. `config:check --effective` gives the same hashes before and after.
+
+Two limits you accept with the conversion:
+
+1. **A pin equal to the shipped value is dropped.** A key you wrote on purpose that equals today's shipped value leaves
+   your file and follows the product from then on. The record of the conversion lists it: to keep it pinned, write it back.
+2. **An old default stays pinned.** A value that came from an earlier shipped default and differs from today's looks like
+   your own choice, so it stays. Remove it from your file to follow the product again.
+
+Conversion removes the comments on dropped keys: after that they exist only in `data/config/.backup/<time>/`
+(`schedule.yaml config_writes.backups_keep` keeps the latest 5 by default) and in earlier config archives (`….config.tgz`),
+and a comment can end up sitting above a neighbouring key. An entry map you emptied, such as `glossary: {}` under
+`translation` in `ai.yaml`, becomes one `!unset` per shipped term, so terms shipped later will appear.
+
+Back to whole files for older code: `pnpm config:migrate --to-full --write`, see
+[Rollback](deploy.md#5-rollback). Downgrading and upgrading again converts once more: a value that the older version's
+shipped file held and that you kept is compared with the new shipped file, so limit 1 applies again. Values you saved while
+on the older version stay yours. Keeping the files of a backup instead, for example if a conversion was wrong:
+`pnpm config:migrate --restore <time> --accept-loss`; saves made since then are lost, what stood there is archived first.
+
+Restart `pnpm mcp:serve`, `pnpm dev` and other processes you started by hand after a deploy that converts: they would run the
+older code, which refuses a file of the overlay format.
 
 ## Two kinds of files
 
 | Kind | Files | First-time setup | On product upgrade |
 |---|---|---|---|
-| `user` | schedule, search, sources, ai, notify, interests, ui, breakdown, resume, insights, language, setup, salary ([salary.md](salary.md)), mcp ([mcp.md](mcp.md)), writer ([application-writer.md](application-writer.md)) | Read from the defaults directory until `pnpm config:init` (the deploy runs it) or a save copies it to the user directory, yours from then on | Your files are never changed automatically; format changes are carried over by migrations (`config_version`) |
+| `user` | schedule, search, sources, ai, notify, interests, ui, breakdown, resume, insights, language, setup, salary ([salary.md](salary.md)), mcp ([mcp.md](mcp.md)), writer ([application-writer.md](application-writer.md)) | `pnpm config:init` (the deploy runs it) or a save creates your file in the user directory; it holds only what you change, and the rest follows the shipped file | Your files are never changed automatically; format changes are carried over by migrations (`config_version`) |
 | `shipped` | models (model catalog and prices), pipeline (parsing rules, city and skill tables), pipeline-board (board layout and card display), job-search (job query parsing and matching settings), job-archive (seen-again rules), signal-presets (the presets of the "Add category" dialog on `/interests`, see [signals.md](signals.md#add-your-own-interest-point)) | Not copied; always read from the defaults directory | Follows product updates |
 
 Nothing writes these files at start-up: web and runner only log how many user files are missing and read the
-defaults instead. A `user` file that a product upgrade introduces is copied by the next deploy (step 11) or by
+defaults instead. A `user` file that a product upgrade introduces is created by the next deploy (step 11) or by
 `pnpm config:init`. `setup.yaml` and `language.yaml` belong to the setup wizard and are not created that way (see below).
 
-To change a `shipped` file, copy it into the user directory and edit it there (the whole file overrides). The cost is that later product updates to that file no longer take effect: `pnpm config:check` and the doctor's `config.layers` will keep saying "you override pipeline.yaml" (or whichever file). To follow the product again, delete your copy in the user directory. `models.yaml` is the exception: your `data/config/models.yaml` is laid over the shipped one model by model (see [AI providers](ai-providers.md#checklist-for-a-new-model-release)), so it never hides product updates of the models you do not list.
+To change a `shipped` file, write only the keys you want to change into a file of that name in the user directory, with the file's `config_version` (the advanced editor opens it that way). Everything else keeps following the product. To follow the product completely again, delete your file. `models.yaml` works differently: your `data/config/models.yaml` is laid over the shipped one model by model (see [AI providers](ai-providers.md#checklist-for-a-new-model-release)), so it never hides product updates of the models you do not list.
 
 Market packs (`config/packs/<id>/`: countries, cities, local-language rules) are `shipped` the same way: a copy in `data/config/packs/<id>/` replaces the shipped pack as a whole. See [market-packs.md](market-packs.md).
 
@@ -50,9 +99,8 @@ watcher still distinguish a missing user profile from a saved one; templates do 
 
 ## Seen again (`job-archive.yaml`)
 
-`config/job-archive.yaml` is a shipped file. To override it, copy the whole file to
-`data/config/job-archive.yaml`, keeping `config_version: 1`, and edit that copy. The user file replaces the shipped
-file as a whole; remove it to follow future shipped updates again. Both keys are required, and unknown keys or
+`config/job-archive.yaml` is a shipped file. To change a key, write it into `data/config/job-archive.yaml` with the
+shipped file's `config_version`; the rest follows the shipped file. Remove the key to follow it again. Both keys are required, and unknown keys or
 out-of-range values are rejected.
 
 | Key | Shipped value | Meaning |
@@ -72,7 +120,7 @@ one cycle, then restore your chosen value. `pnpm reprocess` replays stored posti
 ## Application board (`pipeline-board.yaml`)
 
 This shipped file has `config_version: 1`. Existing installations read it from the defaults directory without a migration.
-To customise it, copy the whole file into the user config directory; that copy replaces future shipped updates.
+To customise it, write the keys you change into a file of that name in the user config directory ([overlay](#your-file-is-an-overlay)); the rest follows shipped updates.
 All six keys are required. Unknown keys, invalid densities and values outside the ranges below are rejected with the field path.
 
 | Key | Shipped value | Allowed | Purpose |
@@ -119,7 +167,7 @@ unless a sort was explicitly chosen; relevance ignores `dir`. The other sort def
 Case-insensitive matching of non-ASCII letters (`ü`/`Ü`, `é`/`É`) depends on the database locale. The Docker stack's
 database uses `en_US.utf8` and folds them; a database created with the `C` locale folds ASCII letters only.
 
-To override these settings, copy the complete file into the user config directory. The copy replaces future shipped updates.
+To change these settings, write the keys you change into a file of that name in the user config directory ([overlay](#your-file-is-an-overlay)); the rest follows shipped updates.
 
 ## Commands
 
@@ -179,7 +227,7 @@ See [Monid](monid.md) for wallet setup, accounting, smoke and stops.
 
 ### Paid delivery ledger (`delivery-audit.yaml`)
 
-This shipped file controls the [paid delivery ledger](sources.md#paid-delivery-ledger). To change it, copy the whole file to `data/config/delivery-audit.yaml`; your copy replaces the shipped file as a whole.
+This shipped file controls the [paid delivery ledger](sources.md#paid-delivery-ledger). To change it, write the keys you change into `data/config/delivery-audit.yaml` ([overlay](#your-file-is-an-overlay)).
 
 | Key | Shipped value | Meaning |
 |---|---|---|
@@ -197,7 +245,7 @@ The threshold never skips new items or deletes unexpired ones. Database backups 
 
 ### Activity log (`activity-log.yaml`)
 
-This shipped tuning file controls the [activity log](sources.md#activity-log). Copy the whole file to `data/config/activity-log.yaml` to change it; the user copy replaces the shipped file as a whole. See the shipped `config/activity-log.yaml` for defaults and individual keys.
+This shipped tuning file controls the [activity log](sources.md#activity-log). To change it, write the keys you change into `data/config/activity-log.yaml` ([overlay](#your-file-is-an-overlay)). See the shipped `config/activity-log.yaml` for defaults and individual keys.
 
 | Key | Meaning |
 |---|---|
@@ -238,7 +286,7 @@ pnpm config:example ai-engineering-europe --dry-run  # show which settings would
 pnpm config:example ai-engineering-europe            # apply: back up the files that change to data/config/.backup/<timestamp>/, then write
 ```
 
-Applying merges each file into your copy in `data/config/` (comments kept): maps key by key, lists replaced, except
+Applying merges each file into your file in `data/config/` (comments kept): maps key by key, lists replaced, except
 `ats_boards`, where the boards you do not have yet are added; `keyword_groups` is replaced only while it is still the
 shipped placeholder, otherwise the example's groups are added next to yours. A list that replaces entries you have is named in a warning (also with --dry-run). Applying twice changes nothing.
 
@@ -422,6 +470,7 @@ backups, `ui.yaml: config_editor.backups_keep` copies per file).
 - Each config can carry a top-level `config_version: <integer>`; omitted = 1.
 - The code has a current version for each file (the `to` of the last migration step in `src/lib/config/migrations/<file>/NNN-*.ts`).
 - A file **older than the code**: it is migrated in memory before validation and works as usual; the doctor suggests running `pnpm config:migrate --write` to write the migration back (comments are kept, the original goes to `.backup/`).
+- The last step of each file's chain (`overlay-format`) only changes the format: it is made by the deploy's write step, never in memory. `models.yaml` and the profile files do not have it.
 - A file **newer than the code** (the code was rolled back): an explicit error (`ConfigError`, doctor shows a red failure), no guessing. Upgrade the code, or take the pre-migration file back from `data/config/.backup/<timestamp>/`.
 - Files in the defaults directory ship with the product and are always at the current version (checked by `config:check`).
 
@@ -438,8 +487,8 @@ the error (file and field, never the contents) and the command exits 1. `--json`
 
 A tag the parser does not know (`!foo`, a misspelt `!unset`, `!!int x`) is an error naming its line, in every reader
 of config files: the loader, the settings page and the advanced editor, migrations, examples and the sources import.
-Earlier versions only warned and read the value as a string. The tag `!unset` is reserved for a later version and is
-refused with "not supported by this version".
+Earlier versions only warned and read the value as a string. The one tag of our own is `!unset`
+([Your file is an overlay](#your-file-is-an-overlay)); everywhere it means nothing, it is refused with its reason.
 
 Writing a migration (for developers): in `src/lib/config/migrations/<file name>/NNN-slug.ts`, export a `{ from, to, description?, migrate(doc) }` (`to = from + 1`; `migrate` edits the yaml `Document` in place, keeps comments, and does no I/O), register it in order in `CONFIG_MIGRATIONS` in `migrations/index.ts`, and change the default-directory copy of the file to the new format with the new `config_version`. The contract is in `src/lib/config/migrations/types.ts`.
 
@@ -674,9 +723,9 @@ diagnostic records: AI provider checks, a provider the router skipped, HTTP retr
 | `JOB_RADAR_LOG_LEVEL` in `.env` | `debug`, `info`, `warn`, `error` (case does not matter) | Wins over the config. Empty = not set. Any other value counts as not set (the config applies) and is reported once in the log, without the value |
 | `schedule.yaml` `logging.level` | same, default `info` | Used when the variable is not set. Not in the shipped file: the default applies until you add it |
 
-- **Add it to your existing `data/config/schedule.yaml`**, for example `logging:` with `level: debug` under it. A user
-  file replaces the shipped one as a whole (see "Which copy is read"), so a `schedule.yaml` holding only a `logging`
-  block is invalid.
+- **Add it to your existing `data/config/schedule.yaml`**, for example `logging:` with `level: debug` under it. Your file
+  holds what differs from the shipped one, so a `schedule.yaml` at its current `config_version` holding only a `logging`
+  block is fine. In a whole file of the older format the rest of the file has to stay.
 - **A change to the file needs no restart.** The runner and the ai-worker follow it through their watcher (on Docker bind
   mounts file events are unreliable; the polling picks it up instead); the web app checks on demand, at most once per
   `JOB_RADAR_CONFIG_POLL_MS`. With `JOB_RADAR_CONFIG_POLL_MS=0` the web app does not check on demand: it takes a change
@@ -732,7 +781,7 @@ unknown: remove it before rolling back. See [upgrade.md](upgrade.md#settings-dur
 
 ## Current display scores (`current-scores.yaml`)
 
-This shipped file controls the rebuildable display-score projection. A user override replaces the whole file.
+This shipped file controls the rebuildable display-score projection. A file of that name in the user directory is laid over it key by key.
 `backfill.lock_timeout_ms` limits the migration's wait for the SHARE lock (100–60000 ms), and
 `backfill.statement_timeout_ms` limits the backfill statement itself (1000–600000 ms). They are separate per-statement
 limits, not a total migration timeout. `refresh.lateral_max_jobs` chooses indexed LATERAL lookups for small refreshes;

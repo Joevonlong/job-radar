@@ -4,6 +4,8 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { parse as parseYaml } from "yaml";
+
 import { ensureConfigFiles, parseConfigText, setupSchema } from "@/lib/config";
 import { existingInstallSetupYaml } from "@/lib/setup/existing-install";
 import { completeSetup, ensurePendingSetupFile, markStep, readSetupState, resetSetupStateCache } from "@/lib/setup/state";
@@ -119,8 +121,8 @@ describe("markStep / completeSetup", () => {
     expect((await completeSetup("wizard", NOW)).ok).toBe(true);
     status = readSetupState();
     expect(status).toMatchObject({ pending: false, state: { completed_at: NOW.toISOString(), completed_by: "wizard" } });
-    // the shipped comments survive (the file is written like every other config)
-    expect(fs.readFileSync(user("setup.yaml"), "utf8")).toContain("# First-run setup");
+    // the file holds what differs from the shipped one, like every other config
+    expect(parseYaml(fs.readFileSync(user("setup.yaml"), "utf8"))).toMatchObject({ completed_by: "wizard" });
   });
 
   it("a second completion keeps the first time and how", async () => {

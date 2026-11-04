@@ -6,7 +6,7 @@
 # Takes effect about 5 seconds after saving (runner / ai-worker hot-reload; the web app rereads this file each time a page opens).
 
 # Version of this file's structure; don't edit by hand (a migration script upgrades it when the structure changes)
-config_version: 1
+config_version: 2
 
 # Master switch. false: no scanning, no cleaning of text sent to AI, nothing shown on pages; findings already stored are kept
 enabled: true

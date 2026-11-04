@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { ConfigError, type ConfigErrorLayer } from "./errors";
+import { readUserText } from "./read-user-file";
 import { configRegistry, type ConfigName } from "./registry";
 
 /**
@@ -121,6 +123,27 @@ export function resolveConfigReadPath(name: ConfigName): string {
     if (fs.existsSync(/*turbopackIgnore: true*/ template)) return template;
   }
   return file;
+}
+
+function readLayerText(name: ConfigName, file: string, layer: ConfigErrorLayer): string | null {
+  try {
+    return readUserText(file);
+  } catch (err) {
+    const code = err instanceof Error && "code" in err ? String(err.code) : "";
+    if (code === "ENOENT") return null;
+    throw new ConfigError({ configName: name, filePath: file, kind: "read", detail: code || "read error", layer });
+  }
+}
+
+/** The text of the user's file (an overlay, or a whole file not converted yet); null when there is none. Throws ConfigError(read). */
+export function readOverlayText(name: ConfigName): string | null {
+  return readLayerText(name, getUserConfigPath(name), "user");
+}
+
+/** The text of the shipped default (for a profile file: its template); null when there is none. Throws ConfigError(read). */
+export function readShippedText(name: ConfigName): string | null {
+  const file = getDefaultConfigPath(name) ?? path.join(getProfileExampleDir(), configRegistry[name].file);
+  return readLayerText(name, file, "shipped");
 }
 
 /** Relative inside the app root (`data/config/ai.yaml`), except explicitly absolute directory overrides stay absolute. */

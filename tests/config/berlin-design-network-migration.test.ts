@@ -8,7 +8,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse, parseDocument } from "yaml";
 
-import { migrateConfigDocument, parseConfigDocument, validateConfigValue } from "@/lib/config";
+import { legacyFormatVersion, migrateConfigDocument, parseConfigDocument, validateConfigValue } from "@/lib/config";
 import { sources006 } from "@/lib/config/migrations/sources/006-berlin-design-network";
 
 import { FIXTURE_DEFAULTS_DIR } from "./helpers";
@@ -41,7 +41,7 @@ describe("sources.yaml 5 -> 6", () => {
     expect(steps).toBe(4); // 6 -> 7 (Berlin Startup Jobs), 7 -> 8 (Apify exact window) and 8 -> 9 (StepStone) follow
     expect(text).toMatch(/^config_version: 9$/m);
     const shipped = parse(fs.readFileSync(path.join(FIXTURE_DEFAULTS_DIR, "sources.yaml"), "utf8")) as Record<string, unknown>;
-    expect(parse(text)).toEqual(shipped);
+    expect(parse(text)).toEqual({ ...shipped, config_version: legacyFormatVersion("channels") });
     expect(validateConfigValue("channels", parse(text), "sources.yaml").sources.berlin_design_network).toMatchObject({
       enabled: false,
       markets: ["DE"],

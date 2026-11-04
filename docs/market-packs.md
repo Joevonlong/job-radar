@@ -48,7 +48,9 @@ After changing the market, new postings follow it right away. Jobs already store
 ## Pack layout
 
 A pack is a directory `config/packs/<id>/` (shipped). A copy in `data/config/packs/<id>/` replaces the shipped pack as a
-whole (product updates of that pack then no longer apply; `pnpm run doctor` reminds you). Only `pack.yaml` is required.
+whole (product updates of that pack then no longer apply; `pnpm run doctor` reminds you). Packs are not
+[overlays](configuration.md#your-file-is-an-overlay): this is the one place where a copy still replaces. Only `pack.yaml` is
+required. A list in your `data/config/pipeline.yaml` replaces the shipped `pipeline.yaml` list, and the result is then united with the packs.
 
 | File | Contents |
 |---|---|

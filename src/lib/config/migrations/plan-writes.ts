@@ -10,21 +10,21 @@ import type { ConfigName } from "../registry";
 import { planConfigMigrations, type FileMigrationProblem } from "./files";
 
 export interface PlanWritesOptions {
-  /** Overlay conversion. No conversion exists in this version. */
+  /** Also count the whole files that would turn into overlays. */
   convertOverlays: boolean;
   /** Include the files `config:init` would create. */
   init: boolean;
 }
 
 /** What the deploy's write step does; read by `config:plan --deploy` and doctor only. `config:migrate` goes by its own flags. */
-export const DEPLOY_WRITE_PLAN: PlanWritesOptions = { convertOverlays: false, init: true };
+export const DEPLOY_WRITE_PLAN: PlanWritesOptions = { convertOverlays: true, init: true };
 
 export interface PlannedConfigWrite {
-  /** `migrate`: a structural migration. `create`: a file `config:init` creates. */
-  kind: "migrate" | "create";
+  /** `migrate`: a structural migration. `convert`: a whole file turns into an overlay. `create`: a file `config:init` creates. */
+  kind: "migrate" | "convert" | "create";
   name: ConfigName;
   path: string;
-  /** `migrate` only: config_version from -> to. */
+  /** `migrate` and `convert`: config_version from -> to. */
   from?: number;
   to?: number;
 }
@@ -35,8 +35,8 @@ export interface ConfigWritesPlan {
 }
 
 export function planConfigWrites(options: PlanWritesOptions): ConfigWritesPlan {
-  const migrations = planConfigMigrations();
-  const writes: PlannedConfigWrite[] = migrations.pending.map((item) => ({ kind: "migrate", name: item.name, path: item.path, from: item.from, to: item.to }));
+  const migrations = planConfigMigrations(undefined, { convertOverlays: options.convertOverlays });
+  const writes: PlannedConfigWrite[] = migrations.pending.map((item) => ({ kind: item.conversion ? "convert" : "migrate", name: item.name, path: item.path, from: item.from, to: item.to }));
   if (options.init) {
     for (const file of plannedConfigFiles()) writes.push({ kind: "create", name: file.name, path: file.path });
     for (const name of ensureProfileFilesPlan()) writes.push({ kind: "create", name, path: getConfigPath(name) });

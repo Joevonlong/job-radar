@@ -51,7 +51,7 @@
 
 ## `traps.yaml`
 
-`traps.yaml` 随产品发布（默认配置目录 `config/`），升级时自动更新，不复制到你的配置目录。想用自己的规则，把整份文件复制到 `data/config/traps.yaml` 再改：之后它整份替换默认文件，产品升级带来的新模式不再生效（`pnpm run doctor` 会提示）。见 [configuration.zh.md](configuration.zh.md)。
+`traps.yaml` 随产品发布（默认配置目录 `config/`），升级时自动更新，不复制到你的配置目录。想用自己的规则，把要改的键写进 `data/config/traps.yaml`（[叠加层](configuration.zh.md#你的文件是一个叠加层)）。你写的列表替换出厂列表，这个列表不再得到产品的新模式；其他键继续跟随产品。见 [configuration.zh.md](configuration.zh.md)。
 
 | 键 | 含义 |
 |---|---|

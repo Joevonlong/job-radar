@@ -1,5 +1,5 @@
 # Search criteria. Each keyword group is OR-joined into one query, which then runs once per city.
-config_version: 2
+config_version: 3
 # Replace them with the job titles you are looking for (the setup wizard does this from your target roles).
 keyword_groups:
   targets:

@@ -3,7 +3,7 @@
 # Privacy: the experience library stays on this machine; nothing of it is sent to an AI provider while `enabled` is false.
 
 # Version of this file's structure; don't edit by hand (a migration script upgrades it when the structure changes)
-config_version: 1
+config_version: 2
 
 # Master switch of the AI writing features. false (the default): nothing of the writer is sent to an AI provider, and the
 # "Write answers" page only says how to switch it on. When true, the material you select for a question (JD points,

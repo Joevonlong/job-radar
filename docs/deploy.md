@@ -109,7 +109,8 @@ directory stays; the next deploy removes it once it holds the lock.
 
 ### Config writes during deployment
 
-A deploy writes no user config file (`data/config/`, `data/profile/`) before step 11. Steps 1 to 10 only read them, so the
+A deploy writes no user config file (`data/config/`, `data/profile/`) before step 11. Step 11 is also the only place where a
+whole file becomes an overlay (`config:migrate --write --convert-overlays`; [Your file is an overlay](configuration.md#your-file-is-an-overlay)). Steps 1 to 10 only read them, so the
 running web, runner and ai-worker keep working with the files as they are. Step 11 writes only after its gate passes: the
 new containers and the new ai-worker run, and no other worker could still read the old format. Stop manually started
 `pnpm ai-worker` processes before deploying. `--no-ai-worker` and `--settle 0` check the instance-lock holder, host
@@ -345,6 +346,36 @@ short note. It keeps that target's dependency behaviour: an unhealthy sidecar ma
 - An upgrade that changes a config format previews it in step 4 and writes it in step 11 `config-write`, with originals in `data/config/.backup/<timestamp>/` (the newest `config_writes.backups_keep` are kept). `pnpm config:migrate` shows the diff; nothing is written before old consumers are excluded.
 
 ## 5. Rollback
+
+**Rolling back past the release that made user files overlays.** Older code only reads whole files and refuses an overlay as
+"newer than this version". The order matters, because the old code cannot read what the new code wrote:
+
+1. In production with `deploy-prod.sh`: revert the PR on `main` and wait until CI is green.
+2. Stop `web` and `runner`. The database stays up: `--to-full --write` takes the config write lock there.
+3. `pnpm config:migrate --to-full --write` with the new code. It writes every overlay as a whole file at the last version
+   before the overlay format, with the same value; originals go to `data/config/.backup/<time>/`. `--to-full` alone is a preview.
+4. `deploy-prod.sh`. Restart `mcp:serve` and other processes you started by hand.
+
+If you deploy from a pull (no `deploy-prod.sh`): do steps 2 and 3 before `git switch --detach <commit>`, then
+`scripts/ops/deploy.sh --skip-pull`. Check with the older version's `pnpm config:check`. Upgrading later converts the files
+again: see [Your file is an overlay](configuration.md#your-file-is-an-overlay).
+
+**If you deployed the older commit without `--to-full`.** The deploy stops at step 4 ("config") with the old code's
+`config_version … is newer than this version of Job Radar supports`. The checkout has already moved and step 3 installed
+the old dependencies, so `--to-full` is not available: the old command does not know the flag. The services have not been
+restarted and still run the newer version. Recover like this:
+
+1. Switch back to the previous commit, the one on the left of `<before> -> <after>` in the deploy's "pull" step:
+   `git switch --detach <previous commit>`, then `pnpm install --frozen-lockfile`.
+2. Stop `web` and `runner`, then run `pnpm config:migrate --to-full --write`.
+3. Deploy again: `git switch main` and `deploy-prod.sh`, or from a pull `git switch --detach <older commit>` and
+   `scripts/ops/deploy.sh --skip-pull`.
+
+`--to-full --write` needs the database, and so does `--restore`: without it they stop with "Config writes need the
+database". While the database cannot be started, the only way is to copy the files by hand:
+`cp data/config/.backup/<time>/* data/config/`, with the `<time>` of the `data/config/conversion-<time>.json` record. This
+puts back the files as they were before the conversion, so changes saved since then are lost. A file created after the
+conversion has no copy there and stays an overlay: the older version's `pnpm config:check` names it.
 
 Before restoring config from `data/config/.backup/` or restoring a database backup, read the rollback notes in
 [CHANGELOG.md](../CHANGELOG.md) for the version you are leaving.

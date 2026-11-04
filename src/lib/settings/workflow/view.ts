@@ -1,5 +1,5 @@
 /** Data for the workflow panel of /settings (server only). */
-import { ConfigError, displayConfigPathForWeb, firstConfigProblem, getUserConfigPath, hashConfigText, readConfigText, reloadConfig } from "@/lib/config";
+import { ConfigError, displayConfigPathForWeb, firstConfigProblem, getUserConfigPath, hashConfigText, layeredConfigFingerprint, reloadConfig } from "@/lib/config";
 import { getDb } from "@/lib/db";
 import { countApplicationsByStatus } from "@/lib/db/repos/applications";
 
@@ -7,7 +7,7 @@ import type { WorkflowDraft, WorkflowFile, WorkflowView } from "./types";
 
 function fileHash(name: WorkflowFile): string {
   try {
-    return hashConfigText(readConfigText(name));
+    return layeredConfigFingerprint(name);
   } catch {
     return "";
   }

@@ -50,7 +50,8 @@ describe("sources.yaml 8 -> 9", () => {
     expect(steps).toBe(1);
     expect(text).toMatch(/^config_version: 9$/m);
     const shipped = parse(fs.readFileSync(path.join(FIXTURE_DEFAULTS_DIR, "sources.yaml"), "utf8")) as Record<string, unknown>;
-    expect(parse(text)).toEqual(shipped);
+    // the shipped file has moved on to the overlay format, which changes nothing but its version
+    expect(parse(text)).toEqual({ ...shipped, config_version: 9 });
     const config = validateConfigValue("channels", parse(text), "sources.yaml");
     expect(config.sources.stepstone).not.toHaveProperty("radius_km");
     expect(config.sources.stepstone).not.toHaveProperty("max_pages");

@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { effectiveConfig } from "./helpers/effective-config";
 import { expect, test, type Page } from "./fixtures";
-import { parse } from "yaml";
 
 /**
  * The application workflow tab. Hiding a status changes the board, the menus and the /jobs filter; the timeouts are
@@ -13,7 +13,7 @@ import { parse } from "yaml";
 const CONFIG_DIR = process.env.E2E_CONFIG_DIR ?? "";
 const DEFAULTS_DIR = process.env.E2E_DEFAULTS_DIR ?? path.resolve("tests/fixtures/config/defaults");
 const file = (name: string) => path.join(CONFIG_DIR, `${name}.yaml`);
-const yamlOf = (name: string) => parse(fs.readFileSync(file(name), "utf8")) as Record<string, unknown>;
+const yamlOf = (name: string) => effectiveConfig(`${name}.yaml`);
 
 test.describe.configure({ mode: "serial" });
 

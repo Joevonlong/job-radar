@@ -14,11 +14,10 @@ import {
   salarySchema,
   channelsSchema,
   checkAiAgainstCatalog,
-  hashConfigText,
   insightsSchema,
   languageSchema,
   notifySchema,
-  readConfigText,
+  layeredConfigFingerprint,
   reloadConfig,
   resumeSchema,
   scheduleSchema,
@@ -44,7 +43,7 @@ const requestSchema = z.strictObject({
 
 function currentHash(tab: SettingsForm): string {
   try {
-    return hashConfigText(readConfigText(tab));
+    return layeredConfigFingerprint(tab);
   } catch (error) {
     logActionFailure("currentHash", error);
     return "";

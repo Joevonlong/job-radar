@@ -1,12 +1,10 @@
 /**
- * Server side of the protected keys (`protected-keys.ts`): compares a value about to be written with the file on disk and
- * the shipped default. Used by `writeConfig` / `writeConfigText` (every write) and the advanced editor's validation.
+ * Server side of the protected keys (`protected-keys.ts`): compares a value about to be written with the effective value
+ * on disk and the shipped value. Used by `writeConfig` / `writeConfigText` (every write) and the advanced editor's validation.
  */
-import fs from "node:fs";
-
 import { ConfigError } from "./errors";
-import { configSourcePath, parseConfigText, readConfigText } from "./load";
-import { getDefaultConfigPath, getUserConfigPath } from "./paths";
+import { readEffectiveConfig, readShippedConfig } from "./load";
+import { getUserConfigPath } from "./paths";
 import { changedProtectedPaths, protectedEditAllowed, protectedPatterns } from "./protected-keys";
 import type { ConfigName } from "./registry";
 
@@ -15,17 +13,7 @@ export const PROTECTED_KEY_MESSAGE = "protected_key";
 
 function currentValue(name: ConfigName): unknown {
   try {
-    return parseConfigText(name, readConfigText(name), configSourcePath(name));
-  } catch {
-    return null;
-  }
-}
-
-function shippedValue(name: ConfigName): unknown {
-  const file = getDefaultConfigPath(name);
-  if (file === null) return null;
-  try {
-    return parseConfigText(name, fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8"), file);
+    return readEffectiveConfig(name);
   } catch {
     return null;
   }
@@ -37,7 +25,7 @@ function shippedValue(name: ConfigName): unknown {
  */
 export function protectedChanges(name: ConfigName, next: unknown): string[][] {
   if (protectedPatterns(name).length === 0 || protectedEditAllowed()) return [];
-  return changedProtectedPaths(name, next, currentValue(name), shippedValue(name));
+  return changedProtectedPaths(name, next, currentValue(name), readShippedConfig(name));
 }
 
 /** Throws `ConfigError` (kind `protected`, one issue per key) when `next` changes a protected key. */

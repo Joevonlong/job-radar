@@ -35,6 +35,7 @@ export function trapSettings(edit: (raw: Record<string, unknown>) => void = () =
   raw.ai_check = { ...(raw.ai_check as Record<string, unknown>), mode: "flagged", per_cycle_limit: 10, jd_max_chars: 12000 };
   raw.ai_input = { hidden_marker: "[hidden text removed by Job Radar]", instruction_marker: "[instruction to AI removed by Job Radar]" };
   edit(raw);
+  delete raw.config_version; // the loader takes it off before the schema
   return configRegistry.traps.schema.parse(raw);
 }
 

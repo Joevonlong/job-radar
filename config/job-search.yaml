@@ -1,4 +1,5 @@
 # Job search matching, country recognition and relevance settings.
+config_version: 2
 query: # Limits applied before matching.
   max_chars: 200 # Maximum query length before normalization.
   max_terms: 12 # Maximum distinct terms kept.

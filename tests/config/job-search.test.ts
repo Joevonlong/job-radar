@@ -9,6 +9,8 @@ import { ZodError } from "zod";
 import { configErrorDigest, configFileFromDigest } from "@/lib/config/error-digest";
 import { jobSearchSchema, SEARCH_QUERY_MAX_CHARS } from "@/lib/config/schemas/job-search";
 
+import { withoutConfigVersion } from "@/lib/config/migrations/version";
+
 import { REPO_DEFAULTS_DIR } from "./helpers";
 
 const fixture = () => ({
@@ -21,7 +23,7 @@ const fixture = () => ({
 
 describe("job search config", () => {
   it("accepts the shipped YAML without depending on its values", () => {
-    const input: unknown = parse(fs.readFileSync(path.join(REPO_DEFAULTS_DIR, "job-search.yaml"), "utf8"));
+    const input: unknown = withoutConfigVersion(parse(fs.readFileSync(path.join(REPO_DEFAULTS_DIR, "job-search.yaml"), "utf8")));
     expect(jobSearchSchema.safeParse(input).success).toBe(true);
     expect(configFileFromDigest(configErrorDigest("jobSearch"))).toBe("job-search.yaml");
   });

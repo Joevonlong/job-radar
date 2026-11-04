@@ -69,7 +69,7 @@ describe("planConfigWrites", () => {
 
   it("becomes empty once the writes were made", async () => {
     putOldNotify();
-    await applyConfigMigrations(planConfigMigrations());
+    await applyConfigMigrations(planConfigMigrations(undefined, { convertOverlays: true }), new Date(), { convertOverlays: true });
     await ensureConfigFiles();
     await ensureProfileFiles();
     expect(planConfigWrites(DEPLOY_WRITE_PLAN)).toEqual({ writes: [], problems: [] });
@@ -77,7 +77,7 @@ describe("planConfigWrites", () => {
 });
 
 describe("DEPLOY_WRITE_PLAN", () => {
-  it("is what the deploy's write step does: creates files, no overlay conversion yet", () => {
-    expect(DEPLOY_WRITE_PLAN).toEqual({ convertOverlays: false, init: true });
+  it("is what the deploy's write step does: creates files and converts to overlays", () => {
+    expect(DEPLOY_WRITE_PLAN).toEqual({ convertOverlays: true, init: true });
   });
 });

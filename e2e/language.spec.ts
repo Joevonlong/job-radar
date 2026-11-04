@@ -40,8 +40,8 @@ test("the settings language block changes the interface language of a browser wi
   await select.selectOption("en");
   await card.getByRole("button", { name: "保存", exact: true }).click();
   await expect.poll(readLanguage).toContain("default_locale: en");
-  // the comments of the file survive the save
-  expect(readLanguage()).toContain("# Test fixture");
+  // only the changed key is in the file
+  expect(readLanguage()).toContain("# Your changes to the shipped language.yaml");
 
   const fresh = await browser.newContext();
   const other = await fresh.newPage();

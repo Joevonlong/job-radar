@@ -152,6 +152,8 @@ pnpm config:migrate --write && pnpm config:check      # 备份来自旧版本时
 docker compose restart web runner                     # runner 也会在 5 秒内热加载
 ```
 
+叠加层格式之前的备份里是整份文件：它们可以照常使用，下一次部署会转换。`--with-config` 和手动步骤也会还原 `data/config/conversion-*.json`；它只是记录，没有东西读它。
+
 每份配置归档都带一个标记 `data/config/.archive-meta.yaml`（不是配置文件；手动解包会把它留在原处，无害）。它告诉恢复流程：缺少 `setup.yaml` 表示设置向导待完成。`--with-config` 对没有标记的旧归档应用这条规则：归档里有配置文件却没有 `setup.yaml` 时，补一份已完成的 `setup.yaml`（缺 `language.yaml` 时也补），向导就不会打开。手动解包这种旧归档会打开向导：完成或跳过它，或运行 `pnpm run setup --complete`。
 
 只想要某一个文件：`tar -xzf <文件>.config.tgz -C /tmp/cfg data/config/ai.yaml`，再自己比对着拷。`config:migrate --write` 每次改文件前也会把原文件放进 `data/config/.backup/<时间>/`，误迁移时从那里拿回。

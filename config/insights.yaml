@@ -1,7 +1,7 @@
 # /insights stats page: time ranges, cities listed separately, histogram buckets. Only affects the stats page, not collection.
 # The web app does not hot-reload config: this file is reread each time the page opens.
 
-config_version: 2
+config_version: 3
 
 # Time range options (days, short to long). "Today" follows the timezone in schedule.yaml; ranges include today
 ranges_days: [7, 30, 90]

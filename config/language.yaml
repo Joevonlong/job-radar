@@ -1,7 +1,7 @@
 # Languages (docs/settings.md, Settings → Display → Language). Language codes are BCP 47: en, zh, de, fr, pt-BR …
 # Interface languages are the files in messages/ (en, zh, plus any you add); the AI and the translator accept any language.
 
-config_version: 1
+config_version: 2
 
 ui:
   # Interface language of a browser that never picked one (the language menu remembers a choice per browser)

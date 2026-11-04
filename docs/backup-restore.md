@@ -156,6 +156,8 @@ pnpm config:migrate --write && pnpm config:check      # if the backup is from an
 docker compose restart web runner                     # the runner also hot-reloads within 5 seconds
 ```
 
+A backup from before the overlay format holds whole files: they work as they are, and the next deploy converts them. `--with-config` and the manual steps restore `data/config/conversion-*.json` too; it is a record, nothing reads it.
+
 Every config archive carries a marker, `data/config/.archive-meta.yaml` (not a config file; unpacking by hand leaves it there, harmless). It tells a restore that a missing `setup.yaml` means the setup wizard is pending. `--with-config` applies the rule to an older archive without the marker that holds config files but no `setup.yaml`: it adds a completed `setup.yaml` (and a `language.yaml` if missing) so the wizard does not open. A hand-unpacked archive of that kind opens the wizard: finish or skip it, or run `pnpm run setup --complete`.
 
 If you want just one file: `tar -xzf <file>.config.tgz -C /tmp/cfg data/config/ai.yaml`, then compare and copy by hand. Before changing any file, `config:migrate --write` also puts the original into `data/config/.backup/<timestamp>/`; if a migration was a mistake, take it back from there.

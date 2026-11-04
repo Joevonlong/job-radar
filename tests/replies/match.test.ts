@@ -1,14 +1,10 @@
-import fs from "node:fs";
-import path from "node:path";
-
 import { describe, expect, it } from "vitest";
-import { parse } from "yaml";
 
-import { repliesSchema } from "@/lib/config/schemas/replies";
+import { loadConfig } from "@/lib/config";
 import { domainOfAddress, matchReply, type ReplyEvidence } from "@/lib/replies/match";
 import type { MatchCandidate } from "@/lib/replies/types";
 
-const config = repliesSchema.parse(parse(fs.readFileSync(path.resolve(import.meta.dirname, "../fixtures/config/defaults/replies.yaml"), "utf8")));
+const config = loadConfig("replies");
 const SUFFIXES = ["gmbh", "ag", "inc"];
 const SINCE = new Date("2026-09-01T00:00:00Z");
 const RECEIVED = new Date("2026-10-01T00:00:00Z");

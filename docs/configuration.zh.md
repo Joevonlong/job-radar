@@ -19,23 +19,54 @@ Job Radar 的所有设置都是 YAML，分两层：
 
 ## 读哪一份
 
-- 用户目录里**有**这个文件就读它，**没有**就读默认目录的。两层不合并：用户目录里的文件是整份生效的。
-- 网页保存永远写用户目录；第一次保存一个只在默认目录里的文件时，以默认文件为底稿生成（默认文件的注释会带过去）。默认目录从不被写。保存时，文件里还没有的键如果取值就是 schema 的默认值，也不会写进去（否则会把默认值固定住，以后产品更新改了默认值你也拿不到）；文件里已有的键会保留，与默认值不同的取值才会写入。
-- 热加载同时盯两层：用户文件新出现、被删除（退回默认）、默认文件变了（你没有自己那份时）都在约 5 秒内生效。容器里的默认配置在镜像里，只随新镜像（部署）改变；Docker 之外（`pnpm dev`、宿主机的 ai-worker）`config/` 里的文件改了会这样生效。runner 和 ai-worker 盯所有配置文件（包括 `me.yaml`、`preferences.yaml`），并在每轮周期和每个请求开始时再读一遍，所以改动（比如在设置向导或 `/me` 里保存的市场）在下一轮周期就生效，即使它紧接着就开始，也不用重启。
+- 一个文件的值是**出厂文件上面叠你的文件**，按键合并。你的文件只放不同的部分：没写的键跟随产品，包括以后的更新。完全没有这个文件时，用的就是出厂文件。见[你的文件是一个叠加层](#你的文件是一个叠加层)。
+- 网页保存永远写用户目录，而且只写有变化的部分：改过的值写进去，改回出厂值的键移出去，其余部分的注释不动。还不存在的文件从一个很短的存根开始。默认目录从不被写。只由 schema 补上的值也不写进去，所以这个默认值以后变了，你仍然能拿到。
+- 热加载同时盯两层：用户文件新出现、被删除（退回默认）、默认文件变了（你的文件没写的键）都在约 5 秒内生效。容器里的默认配置在镜像里，只随新镜像（部署）改变；Docker 之外（`pnpm dev`、宿主机的 ai-worker）`config/` 里的文件改了会这样生效。runner 和 ai-worker 盯所有配置文件（包括 `me.yaml`、`preferences.yaml`），并在每轮周期和每个请求开始时再读一遍，所以改动（比如在设置向导或 `/me` 里保存的市场）在下一轮周期就生效，即使它紧接着就开始，也不用重启。
 - web 和 MCP server 没有 watcher，所以自己检查文件：读取某个配置时，如果距上次检查已超过 5 秒，会先把它已加载的所有配置重新读一遍，所以手工改的文件（或别的进程改的）下一次打开页面就能看到，不用重启。文件无效时被忽略（保留上一份有效值），日志里只报告一次。`JOB_RADAR_CONFIG_POLL_MS`（默认 `5000`，单位毫秒，设在该进程的环境变量里）就是这个间隔，也是 watcher 的轮询间隔；设为 `0` 会关闭这项检查和 watcher 的轮询（watcher 仍会响应文件事件）。
-- `pnpm config:check` 逐个文件写出读的是哪一层：`(user)`、`(default)`、`(user override of a shipped file)`。
+- `pnpm config:check` 逐个文件写出读的是哪一层：`(user changes on the shipped file)`、还没转换的 `(user, whole file)`、`(default)`。
+
+## 你的文件是一个叠加层
+
+`data/config/` 里的文件只放和出厂文件不同的部分：
+
+```yaml
+config_version: 3     # 出厂文件的版本：有了它，这个文件才是叠加层
+push_min_score: 64    # 替换出厂值
+quiet_hours:
+  start: "23:00"      # map 按键合并：quiet_hours.end 仍然来自出厂文件
+targets: [Data Engineer]   # 列表整个替换出厂列表
+backup:
+  max_age_hours: !unset    # 删除出厂的键：由 schema 的默认值回答；键是必填的话，文件无效
+```
+
+- **map** 按键合并，**列表**是一个值；有些 map 的键本身就是条目（比如通道清单里的来源），整条替换。迁移会带着两层一起往前走。
+- **`!unset`** 只在叠加层里有意义。它写在 map 的键上，后面不跟任何内容；不能写在列表里、`config_version` 上，也不能写在旧格式文件里，那里是一个错误，指向所在行，并说明该写哪个版本。
+- **没有 `config_version` 或版本更低的文件是整份文件**：它是旧格式，单独读取，出厂文件不会补上缺的键。保存时它保持整份（写的是叠加层格式之前的最后一个版本）；表单保存、高级编辑器、来源导入都不改文件的格式，由部署的写入步骤转换。没有版本的整份文件会在日志里警告一次，`pnpm config:check` 和 doctor 也会提示。
+- **新文件**：`pnpm config:init`、向导和第一次保存写的是一个存根，只有版本和一条注释。目录里只要还有整份文件，就说明转换还没做，新文件也写成整份，之后和其他文件一起转换。
+- **转换**（`pnpm config:migrate --convert-overlays` 是预览；部署时带 `--write` 运行）保留和出厂文件不同的键。原文件进 `data/config/.backup/<时间>/`，去掉和保留的键（不含值）写进 `data/config/conversion-<时间>.json`。转换前后 `config:check --effective` 的哈希相同。
+
+转换带来两个已接受的限制：
+
+1. **等于出厂值的钉住会被去掉。** 你特意写下、但等于当前出厂值的键会离开你的文件，以后跟随产品。转换记录里列着这些键：要继续钉住，把它写回去。
+2. **旧默认值继续钉住。** 来自更早出厂默认值、又和现在不同的值，看起来就像你自己的选择，所以会留下。要跟随产品，把它从文件里删掉。
+
+转换会去掉被丢弃的键上的注释：此后它们只留在 `data/config/.backup/<时间>/`（`schedule.yaml` 的 `config_writes.backups_keep` 默认保留最近 5 份）和更早的配置归档（`….config.tgz`）里，而且注释可能落到相邻的键上方。你清空的条目映射（例如 `ai.yaml` 里 `translation` 下的 `glossary: {}`）会变成每个出厂术语一个 `!unset`，所以之后新出厂的术语会出现。
+
+给旧代码用的整份文件：`pnpm config:migrate --to-full --write`，见[回滚](deploy.zh.md#5-回滚)。降级再升级会再转换一次：旧版本出厂文件里的值如果留下了，会和新的出厂文件比较，所以限制 1 会再次适用。在旧版本上保存的值仍然是你的。要拿回某次备份的文件（比如转换有误）：`pnpm config:migrate --restore <时间> --accept-loss`；之后的保存会丢失，当前的文件先归档。
+
+部署完成转换后，要重启你手动启动的 `pnpm mcp:serve`、`pnpm dev` 等进程：它们还在跑旧代码，旧代码拒绝叠加层格式的文件。
 
 ## 两类文件
 
 | 类 | 文件 | 首次初始化 | 产品升级时 |
 |---|---|---|---|
-| `user` | schedule、search、sources、ai、notify、interests、ui、breakdown、resume、insights、language、setup、salary（[salary.zh.md](salary.zh.md)）、mcp（[mcp.zh.md](mcp.zh.md)）、writer（[application-writer.zh.md](application-writer.zh.md)） | 在 `pnpm config:init`（部署会运行它）或一次保存把它复制到用户目录之前，一直读默认目录的；之后归你 | 不会自动改你的文件；格式变化由迁移（`config_version`）带过去 |
+| `user` | schedule、search、sources、ai、notify、interests、ui、breakdown、resume、insights、language、setup、salary（[salary.zh.md](salary.zh.md)）、mcp（[mcp.zh.md](mcp.zh.md)）、writer（[application-writer.zh.md](application-writer.zh.md)） | `pnpm config:init`（部署会运行它）或一次保存在用户目录里建立你的文件；它只放你改的内容，其余跟随出厂文件 | 不会自动改你的文件；格式变化由迁移（`config_version`）带过去 |
 | `shipped` | models（模型目录和价格）、pipeline（解析规则、城市和技能表）、pipeline-board（看板布局和卡片显示）、job-search（岗位查询解析与匹配设置）、job-archive（再次出现规则）、signal-presets（`/interests`“新增类别”对话框的预设，见 [signals.zh.md](signals.zh.md#添加你自己的兴趣点)） | 不复制，一直读默认目录的 | 跟着产品更新 |
 
 启动时不会写任何文件：web 和 runner 只记一条日志，说有多少个用户文件缺失、改读默认值。产品升级新增的 `user` 文件由下一次部署（第 11 步）或
-`pnpm config:init` 复制。`setup.yaml` 和 `language.yaml` 归设置向导，不这样创建（见下文）。
+`pnpm config:init` 创建。`setup.yaml` 和 `language.yaml` 归设置向导，不这样创建（见下文）。
 
-想改 `shipped` 文件：把它复制到用户目录再改（整份覆盖）。代价是产品以后对这个文件的更新不再生效：`pnpm config:check` 和 doctor 的 `config.layers` 会一直提示"你覆盖了 pipeline.yaml"（或别的文件）。想重新跟随产品：删掉用户目录里那份。`models.yaml` 是例外：你的 `data/config/models.yaml` 是按模型叠加在发布的那份之上的（见 [AI providers](ai-providers.zh.md#新模型上线清单)），不会挡住你没列出的模型的产品更新。
+想改 `shipped` 文件：在用户目录里建一个同名文件，只写要改的键，并带上这个文件的 `config_version`（高级编辑器就是这样打开的）。其余部分继续跟随产品。要完全跟随产品，删掉你的文件。`models.yaml` 的方式不同：你的 `data/config/models.yaml` 是按模型叠加在发布的那份之上的（见 [AI providers](ai-providers.zh.md#新模型上线清单)），不会挡住你没列出的模型的产品更新。
 
 市场包（`config/packs/<id>/`：国家、城市、本地语言规则）也按 `shipped` 处理：`data/config/packs/<id>/` 里的副本整包替换发布的那份。见 [market-packs.zh.md](market-packs.zh.md)。
 
@@ -46,8 +77,8 @@ Job Radar 的所有设置都是 YAML，分两层：
 
 ## 再次出现（`job-archive.yaml`）
 
-`config/job-archive.yaml` 是出厂文件。要覆盖，整份复制到 `data/config/job-archive.yaml`，保留
-`config_version: 1`，再修改用户副本。用户文件整份替换出厂文件；删除用户副本即可重新跟随产品更新。
+`config/job-archive.yaml` 是出厂文件。要改某个键，把它写进 `data/config/job-archive.yaml`，带上出厂文件的
+`config_version`；其余部分跟随出厂文件。删掉这个键就重新跟随。
 两个键都必填，未知键或越界值都会被拒绝。
 
 | 键 | 出厂值 | 含义 |
@@ -66,7 +97,7 @@ maintenance 连续 `relist.min_gap_days` 天或更久没有运行、而采集一
 ## 申请看板（`pipeline-board.yaml`）
 
 这是 `config_version: 1` 的 shipped 文件。现有安装直接读取默认目录，无需迁移。
-需要自定义时，将整份文件复制到用户配置目录；该副本会覆盖以后随产品发布的更新。
+需要自定义时，在用户配置目录的同名文件里写要改的键（[叠加层](#你的文件是一个叠加层)）；其余部分跟随产品更新。
 六个键全部必填；未知键、无效密度和超出下列范围的值会被拒绝，错误包含字段路径。
 
 | 键 | 出厂值 | 允许值 | 用途 |
@@ -99,7 +130,7 @@ maintenance 连续 `relist.min_gap_days` 天或更久没有运行、而采集一
   `match: false` 的国家不参与自由文本识别。
 - `palette`：`min_chars`（整数 1–10）、`limit`（整数 1–50），用于快速打开搜索接口。
 
-需要自定义时，将整份文件复制到用户配置目录；该副本会覆盖以后随产品发布的更新。
+需要自定义时，在用户配置目录的同名文件里写要改的键（[叠加层](#你的文件是一个叠加层)）；其余部分跟随产品更新。
 
 搜索默认匹配标题、公司显示名与别名、每个地点的 city/label，以及识别出的国家。
 `/jobs?searchIn=all` 还搜索原始职位说明和来源哈希有效的译文，译文标记不参与匹配。
@@ -156,7 +187,7 @@ pnpm config:example               # 列出示例配置；`pnpm config:example <i
 
 ### 付费交付账本（`delivery-audit.yaml`）
 
-这个随产品发布的文件控制[付费交付账本](sources.zh.md#付费交付账本)。要修改时，将整个文件复制到 `data/config/delivery-audit.yaml`；用户副本会整体替代出厂文件。
+这个随产品发布的文件控制[付费交付账本](sources.zh.md#付费交付账本)。要修改时，把要改的键写进 `data/config/delivery-audit.yaml`（[叠加层](#你的文件是一个叠加层)）。
 
 | 键 | 出厂值 | 含义 |
 |---|---|---|
@@ -174,7 +205,7 @@ pnpm config:example               # 列出示例配置；`pnpm config:example <i
 
 ### 操作日志（`activity-log.yaml`）
 
-这个随产品发布的调优文件控制[操作日志](sources.zh.md#操作日志)。修改时将整份文件复制到 `data/config/activity-log.yaml`；用户副本会整体替代出厂文件。各项默认值和具体键见随产品提供的 `config/activity-log.yaml`。
+这个随产品发布的调优文件控制[操作日志](sources.zh.md#操作日志)。修改时把要改的键写进 `data/config/activity-log.yaml`（[叠加层](#你的文件是一个叠加层)）。各项默认值和具体键见随产品提供的 `config/activity-log.yaml`。
 
 | 键 | 含义 |
 |---|---|
@@ -331,7 +362,7 @@ web 和 runner 以 `0600`（仅属主）写配置文件：`data/config/*.yaml` �
 
 ### YAML 标签
 
-解析器不认识的标签（`!foo`、拼错的 `!unset`、`!!int x`）在所有读配置文件的地方都是错误，并指出行号：加载器、设置页和高级编辑器、迁移、示例配置、来源导入。以前的版本只警告，并把值当字符串读。`!unset` 标签留给以后的版本，现在会被拒绝，提示“not supported by this version”。
+解析器不认识的标签（`!foo`、拼错的 `!unset`、`!!int x`）在所有读配置文件的地方都是错误，并指出行号：加载器、设置页和高级编辑器、迁移、示例配置、来源导入。以前的版本只警告，并把值当字符串读。我们自己的标签只有 `!unset`（见[你的文件是一个叠加层](#你的文件是一个叠加层)）；在它没有意义的地方，会被拒绝并说明原因。
 
 写迁移（开发者）：在 `src/lib/config/migrations/<文件名>/NNN-slug.ts` 导出一个 `{ from, to, description?, migrate(doc) }`（`to = from + 1`，`migrate` 原地改 yaml 的 `Document`，保留注释，不做 I/O），在 `migrations/index.ts` 的 `CONFIG_MIGRATIONS` 里按顺序登记，同时把默认目录里那份文件改成新格式并写上新的 `config_version`。契约见 `src/lib/config/migrations/types.ts`。
 
@@ -515,7 +546,7 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 | `.env` 里的 `JOB_RADAR_LOG_LEVEL` | `debug`、`info`、`warn`、`error`（不分大小写） | 优先于配置。空值 = 没设。其他值当作没设（用配置里的级别），并在日志里提示一次，不显示这个值 |
 | `schedule.yaml` 的 `logging.level` | 同上，默认 `info` | 环境变量没设时使用。出厂文件里没有这个键：不加就用默认值 |
 
-- **加到你现有的 `data/config/schedule.yaml` 里**，例如 `logging:` 下面写 `level: debug`。用户文件整份替换出厂文件（见“读哪一份”），只有一个 `logging` 段的 `schedule.yaml` 是非法的。
+- **加到你现有的 `data/config/schedule.yaml` 里**，例如 `logging:` 下面写 `level: debug`。你的文件只放和出厂不同的部分，所以当前 `config_version` 下只有一个 `logging` 段的 `schedule.yaml` 是可以的；旧格式的整份文件里，其余内容要留着。
 - **改配置文件不需要重启。** runner 和 ai-worker 经监视器跟随（Docker 绑定挂载上文件事件不可靠，由轮询接手）；网页按需检查，最多每个 `JOB_RADAR_CONFIG_POLL_MS` 一次。`JOB_RADAR_CONFIG_POLL_MS=0` 时网页不做按需检查：外部的改动要等重启，或者网页自己写这个文件（在设置页保存）后才生效。每个进程最多每个间隔重新取一次级别（间隔为 `0` 时按 5 秒），所以重新加载后几秒内生效。
 - **`schedule.yaml` 改坏了**：沿用上一份合法的级别，直到进程重启（加载器保留上一份合法的文件）。进程启动时文件就是坏的：按 `info` 记日志，提示一次，文件改好后立即采用。
 - **改了 `.env`**：容器要重建，`docker compose up -d`（`restart` 沿用旧的环境变量），ai-worker 要重启（它启动时读 `.env`）。只在 shell 里设的变量到不了容器。
@@ -540,7 +571,7 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 
 ## 当前展示分数（`current-scores.yaml`）
 
-此出厂文件控制可重建的分数投影，用户同名文件整体覆盖出厂配置。
+此出厂文件控制可重建的分数投影，用户目录里的同名文件按键叠加在它上面。
 `backfill.lock_timeout_ms` 限制迁移等待 SHARE 锁的时间（100–60000 毫秒），
 `backfill.statement_timeout_ms` 限制回填语句的执行时间（1000–600000 毫秒）。两者分别按语句生效，不是整次迁移的总超时。
 `refresh.lateral_max_jobs` 决定小批刷新使用索引 LATERAL 查询，较大批次使用按岗位限定的 CTE（1–100000 个岗位）。

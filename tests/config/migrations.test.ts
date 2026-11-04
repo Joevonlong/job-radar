@@ -54,7 +54,7 @@ beforeEach(() => {
   // its own test migration (mocked below), so ui.yaml starts from the unstamped version-1 text, as it was when the layered config was written.
   for (const dir of [tmp.defaultsDir, tmp.configDir]) {
     const ui = path.join(dir, "ui.yaml");
-    fs.writeFileSync(ui, fs.readFileSync(ui, "utf8").replace("config_version: 2\n\n", ""));
+    fs.writeFileSync(ui, fs.readFileSync(ui, "utf8").replace(/^config_version: \d+\n\n?/m, ""));
   }
 });
 afterEach(() => tmp.cleanup());
@@ -76,8 +76,8 @@ function stampDefaults(): void {
 describe("versions and the registry", () => {
   it("the current version is the last step's `to`, 1 without steps", () => {
     expect(currentConfigVersion("ui")).toBe(2);
-    expect(currentConfigVersion("breakdown")).toBe(1);
-    expect(configMigrations("breakdown")).toEqual([]);
+    expect(currentConfigVersion("me")).toBe(1);
+    expect(configMigrations("me")).toEqual([]);
   });
 
   it("a chain must run 1 → 2 → 3 without gaps", () => {
@@ -97,7 +97,7 @@ describe("in memory on load", () => {
   });
 
   it("accepts config_version (missing = 1) without the schemas knowing the key", () => {
-    fs.writeFileSync(file("breakdown.yaml"), `config_version: 1\n${read("breakdown.yaml")}`);
+    fs.writeFileSync(file("breakdown.yaml"), read("breakdown.yaml").replace(/^config_version: \d+/m, "config_version: 1"));
     expect(reloadConfig("breakdown").jd_max_chars).toBe(12000);
     stampDefaults();
     fs.writeFileSync(file("ui.yaml"), `config_version: 2\n${fs.readFileSync(path.join(tmp.defaultsDir, "ui.yaml"), "utf8").replace("config_version: 2\n", "")}`);
@@ -156,7 +156,7 @@ describe("pnpm config:migrate", () => {
     const again = planConfigMigrations();
     expect(again.pending).toEqual([]);
     expect(again.current.find((c) => c.name === "ui")?.version).toBe(2);
-    expect(await applyConfigMigrations(again)).toEqual({ backupDir: null, written: [] });
+    expect(await applyConfigMigrations(again)).toEqual({ backupDir: null, written: [], conversionRecord: null });
   });
 
   it("only looks at the user's files: a file read from the defaults is not migrated", () => {
@@ -205,12 +205,10 @@ describe("writeConfig and versions", () => {
     expect(read("ui.yaml").match(/config_version: 2/g)).toHaveLength(1);
   });
 
-  it("keeps an explicit config_version and never adds one at version 1", async () => {
-    await writeConfig("breakdown", structuredClone(loadConfig("breakdown")));
-    expect(read("breakdown.yaml")).not.toContain("config_version");
-    fs.writeFileSync(file("breakdown.yaml"), `config_version: 1\n${read("breakdown.yaml")}`);
+  it("keeps an older file at its whole-file format and migrates it up to there", async () => {
+    fs.writeFileSync(file("breakdown.yaml"), read("breakdown.yaml").replace(/^config_version: \d+/m, "config_version: 1"));
     await writeConfig("breakdown", { ...structuredClone(reloadConfig("breakdown")), jd_max_chars: 9000 });
-    expect(read("breakdown.yaml")).toMatch(/^config_version: 1\n/);
+    expect(read("breakdown.yaml")).toMatch(/^config_version: 1$/m);
     expect(reloadConfig("breakdown").jd_max_chars).toBe(9000);
   });
 

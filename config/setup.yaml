@@ -2,7 +2,7 @@
 # While completed_at is null, every page opens the wizard and the runner holds back its scheduled cycles.
 # Restoring an archive from before the wizard writes completed_by: existing_install.
 # The wizard adds `steps`: per step {status: done | skipped, at: <ISO time>}; a step that is not listed was not reached yet.
-config_version: 1
+config_version: 2
 
 # When the setup was finished or skipped (ISO time); null = not yet
 completed_at: null

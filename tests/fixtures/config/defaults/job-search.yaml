@@ -1,4 +1,5 @@
 # Independent config fixture; tests must not depend on product defaults.
+config_version: 2
 query: {max_chars: 160, max_terms: 9, cjk_min_chars: 3, all_scope_timeout_ms: 6000}
 matching: {prefix_min_chars: 5}
 ranking:

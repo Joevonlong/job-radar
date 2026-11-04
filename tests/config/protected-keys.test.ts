@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CONFIG_NAMES, ConfigError, configRegistry, loadConfig, readConfigText, reloadConfig, writeConfig, writeConfigText, hashConfigText, validateConfigText, type ConfigName } from "@/lib/config";
+import { CONFIG_NAMES, ConfigError, configRegistry, loadConfig, reloadConfig, writeConfig, writeConfigText, hashConfigText, layeredConfigFingerprint, validateConfigText, type ConfigName } from "@/lib/config";
 import { changedProtectedPaths, isProtectedPath, protectedEditAllowed, protectedValues, PROTECTED_KEYS } from "@/lib/config/protected-keys";
 import { loadAdvancedFile } from "@/lib/settings/advanced/view";
 import { saveAdvanced, validateAdvanced } from "@/lib/settings/advanced/service";
@@ -264,7 +264,7 @@ describe("writes", () => {
   });
 
   it("a settings form save that changes a protected key is refused with its own message", async () => {
-    const state = await saveSettings({ tab: "resume", draft: { claude_command: "evil" }, baseHash: hashConfigText(readConfigText("resume")) });
+    const state = await saveSettings({ tab: "resume", draft: { claude_command: "evil" }, baseHash: layeredConfigFingerprint("resume") });
     expect(state).toMatchObject({ status: "error", formError: "protectedKeys" });
   });
 });

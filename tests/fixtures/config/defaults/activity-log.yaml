@@ -1,5 +1,5 @@
 # Configuration format version.
-config_version: 1
+config_version: 2
 # User setting: stop new spans/events when false; existing spans still finish.
 enabled: true
 retention:

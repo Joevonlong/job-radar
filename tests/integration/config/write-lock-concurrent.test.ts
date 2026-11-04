@@ -6,7 +6,7 @@ import type { Sql } from "postgres";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 import { parse } from "yaml";
 
-import { currentConfigVersion, hashConfigText, loadConfig, resetConfigCache } from "@/lib/config";
+import { legacyFormatVersion, loadConfig, resetConfigCache } from "@/lib/config";
 import { getTranslator } from "@/lib/i18n/node";
 
 import { makeTempConfig, type TempConfig } from "../../config/helpers";
@@ -68,7 +68,7 @@ describe("two writers", { timeout: 60_000 }, () => {
     pause.go();
     expect(await migrator.exited).toBe(0);
     expect(await resultOf(save)).toMatchObject({ status: "error", kind: "stale" });
-    expect(versionOf(notifyText())).toBe(currentConfigVersion("notify"));
+    expect(versionOf(notifyText())).toBe(legacyFormatVersion("notify"));
     expect(baseUrlOf(notifyText())).toBe(baseUrlOf(NOTIFY_V1));
   });
 
@@ -93,18 +93,18 @@ describe("two writers", { timeout: 60_000 }, () => {
     const pause = makePause(temp.root, "after-hash-check");
     const migrator = startScript("config-migrate.ts", ["--write"], env(pause.env));
     await pause.waitReached(migrator);
-    const editor = startWriter({ op: "edit", name: "notify", text: v1With(URL_A), baseHash: hashConfigText(NOTIFY_V1), baseLayer: "user" }, env());
+    const editor = startWriter({ op: "edit", name: "notify", text: v1With(URL_A), baseHash: textHash(temp, "notify.yaml"), baseLayer: "user" }, env());
     await waitForWaiter(sql, editor);
     pause.go();
     expect(await migrator.exited).toBe(0);
     expect(await resultOf(editor)).toMatchObject({ status: "error", kind: "stale" });
     expect(baseUrlOf(notifyText())).toBe(baseUrlOf(NOTIFY_V1));
-    expect(versionOf(notifyText())).toBe(currentConfigVersion("notify"));
+    expect(versionOf(notifyText())).toBe(legacyFormatVersion("notify"));
   });
 
   it("editor first, then the migrator: the migrator's new plan in the lock includes the editor's change", async () => {
     const pause = makePause(temp.root, "after-hash-check");
-    const editor = startWriter({ op: "edit", name: "notify", text: v1With(URL_A), baseHash: hashConfigText(NOTIFY_V1), baseLayer: "user" }, env(pause.env));
+    const editor = startWriter({ op: "edit", name: "notify", text: v1With(URL_A), baseHash: textHash(temp, "notify.yaml"), baseLayer: "user" }, env(pause.env));
     await pause.waitReached(editor);
     const migrator = startScript("config-migrate.ts", ["--write"], env());
     await waitForWaiter(sql, migrator);
@@ -112,7 +112,7 @@ describe("two writers", { timeout: 60_000 }, () => {
     expect(await resultOf(editor)).toEqual({ status: "saved" });
     expect(await migrator.exited).toBe(0);
     expect(baseUrlOf(notifyText())).toBe(URL_A);
-    expect(versionOf(notifyText())).toBe(currentConfigVersion("notify"));
+    expect(versionOf(notifyText())).toBe(legacyFormatVersion("notify"));
     resetConfigCache();
     expect(loadConfig("notify").public_base_url).toBe(URL_A);
     // the backup holds the editor's text: what the migrator really replaced
@@ -130,7 +130,7 @@ describe("two writers", { timeout: 60_000 }, () => {
     pause.go();
     expect(await first.exited).toBe(0);
     const migrated = notifyText();
-    expect(versionOf(migrated)).toBe(currentConfigVersion("notify"));
+    expect(versionOf(migrated)).toBe(legacyFormatVersion("notify"));
     expect(await second.exited).toBe(0);
     expect(second.output()).toContain("left alone");
     expect(notifyText()).toBe(migrated);
@@ -170,7 +170,7 @@ describe("waiting longer than lock_wait_seconds", { timeout: 60_000 }, () => {
 
   it("a form save, the editor and the commands report busy and name the holder; the files stay as they were", async () => {
     const pause = makePause(temp.root, "after-hash-check");
-    const holder = startWriter({ op: "edit", name: "notify", text: v1With(URL_A), baseHash: hashConfigText(NOTIFY_V1), baseLayer: "user" }, env(pause.env));
+    const holder = startWriter({ op: "edit", name: "notify", text: v1With(URL_A), baseHash: textHash(temp, "notify.yaml"), baseLayer: "user" }, env(pause.env));
     await pause.waitReached(holder);
     const named = `job-radar config-write pid=${holder.pid} host=`;
     expect(await lockHolder(sql)).toBe((await lockSessionsOf(sql, holder.pid))[0]);
@@ -180,7 +180,7 @@ describe("waiting longer than lock_wait_seconds", { timeout: 60_000 }, () => {
     const started = Date.now();
     const [save, editor, migrate, init] = [
       startWriter({ op: "save", name: "search", patch: { locations: ["Lock Town"] } }, env()),
-      startWriter({ op: "edit", name: "search", text: `${searchBefore}\n# edited\n`, baseHash: hashConfigText(searchBefore), baseLayer: "user" }, env()),
+      startWriter({ op: "edit", name: "search", text: `${searchBefore}\n# edited\n`, baseHash: textHash(temp, "search.yaml"), baseLayer: "user" }, env()),
       startScript("config-migrate.ts", ["--write"], env()),
       startScript("config-init.ts", [], env()),
     ];
@@ -224,19 +224,20 @@ describe("config:init and a save that creates the same missing file", { timeout:
     const pause = makePause(temp.root, "after-hash-check");
     const init = startScript("config-init.ts", [], env(pause.env));
     await pause.waitReached(init);
-    const editor = startWriter({ op: "edit", name: "notify", text: `${shippedText()}\n# edited\n`, baseHash: hashConfigText(shippedText()), baseLayer: "default" }, env());
+    const editor = startWriter({ op: "edit", name: "notify", text: `${shippedText()}\n# edited\n`, baseHash: textHash(temp, "notify.yaml"), baseLayer: "default" }, env());
     await waitForWaiter(sql, editor);
     expect(fs.existsSync(notify())).toBe(false);
     pause.go();
     expect(await init.exited).toBe(0);
     expect(await resultOf(editor)).toMatchObject({ status: "error", kind: "stale" });
-    expect(notifyText()).toBe(shippedText());
+    expect(notifyText()).not.toContain("# edited");
+    expect(loadConfig("notify")).toBeDefined();
   });
 
   it("the save first: init waits and does not overwrite what the save wrote", async () => {
     const text = `${shippedText()}\n# edited\n`;
     const pause = makePause(temp.root, "after-hash-check");
-    const editor = startWriter({ op: "edit", name: "notify", text, baseHash: hashConfigText(shippedText()), baseLayer: "default" }, env(pause.env));
+    const editor = startWriter({ op: "edit", name: "notify", text, baseHash: textHash(temp, "notify.yaml"), baseLayer: "default" }, env(pause.env));
     await pause.waitReached(editor);
     const init = startScript("config-init.ts", [], env());
     await waitForWaiter(sql, init);

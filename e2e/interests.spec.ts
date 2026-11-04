@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { parse, stringify } from "yaml";
 
+import { effectiveConfig } from "./helpers/effective-config";
 import { expect, test, type Page } from "./fixtures";
 import { listRows } from "./list-rows";
 
@@ -135,7 +136,7 @@ test("a default view is applied on Today without parameters, also after a reload
   await renamed.getByTestId("view-delete").click();
   await renamed.getByTestId("view-delete-confirm").click();
   await expect(page.getByTestId("views-empty")).toBeVisible();
-  await expect.poll(read).toMatch(/views: \[\]/);
+  await expect.poll(() => effectiveConfig<{ views: unknown[] }>("interests.yaml").views).toEqual([]);
 
   // The view switch is always there (built-in quick views with their counts); no saved view is left in it
   await open(page, "/");
@@ -348,7 +349,7 @@ test("watched companies: autocomplete from the companies table, add and remove",
   await page.getByRole("button", { name: "移除 Zukunft GmbH" }).click();
   await page.getByRole("button", { name: "移除 Orbitrail AG" }).click();
   await expect(page.getByTestId("watched-empty")).toBeVisible();
-  await expect.poll(read).toMatch(/watched_companies: \[\]/);
+  await expect.poll(() => effectiveConfig<{ watched_companies: unknown[] }>("interests.yaml").watched_companies).toEqual([]);
 });
 
 test("English UI, dark theme and a 390 px screen: no horizontal scroll on /interests, /jobs and Today with tabs", async ({ page, context, baseURL }) => {

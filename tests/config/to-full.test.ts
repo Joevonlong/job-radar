@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseConfigText } from "@/lib/config";
 import { mergeLayers } from "@/lib/config/merge";
-import { currentConfigVersion } from "@/lib/config/migrations/version";
+import { legacyFormatVersion } from "@/lib/config/migrations/version";
 import { replaceRule } from "@/lib/config/overlay-rules";
 import { toFull, toFullText } from "@/lib/config/to-full";
 
@@ -19,14 +19,14 @@ describe("toFull", () => {
     expect(parseConfigText("ai", full)).toEqual(expected);
   });
 
-  it("keeps the shipped comments and the overlay's comments, and stamps the code's config_version", () => {
+  it("keeps the shipped comments and the overlay's comments, and stamps the last whole-file version", () => {
     const shipped = migratedDocument("schedule", "# head\ntimezone: UTC # shipped zone\nbackup:\n  # how many\n  keep_daily: 14\n");
     const full = toFullText("schedule", shipped, overlayDocument("backup:\n  keep_daily: 3 # mine\n"));
     expect(full).toContain("# head");
     expect(full).toContain("timezone: UTC # shipped zone");
     expect(full).toContain("# how many");
     expect(full).toContain("keep_daily: 3 # mine");
-    expect(full).toMatch(new RegExp(`^# head\\nconfig_version: ${currentConfigVersion("schedule")}\\n`));
+    expect(full).toMatch(new RegExp(`^# head\\nconfig_version: ${legacyFormatVersion("schedule")}\\n`));
   });
 
   it("does not write keys that only the schema's defaults fill in", () => {

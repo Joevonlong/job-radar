@@ -195,12 +195,12 @@ describe("every config reader uses the shared options", () => {
     expect(maskConfigText("channels", "jobspy:\n  proxies: [!foo http://u:p@h]\n")).not.toContain("u:p@");
   });
 
-  it("the migration plan reports a !unset in a user file as not supported; a save does not carry a bad tag over", async () => {
+  it("the migration plan reports a !unset in a file without the overlay version; a save does not carry a bad tag over", async () => {
     temp = makeTempConfig();
     const file = path.join(temp.configDir, "schedule.yaml");
     fs.writeFileSync(file, "timezone: UTC\nbackup:\n  keep_daily: !unset\n");
     const plan = planConfigMigrations(["schedule"]);
-    expect(plan.problems).toEqual([expect.objectContaining({ name: "schedule", message: expect.stringContaining(UNSET_NOT_SUPPORTED) as unknown as string })]);
+    expect(plan.problems).toEqual([expect.objectContaining({ name: "schedule", message: expect.stringContaining("!unset needs the overlay format") as unknown as string })]);
     // a save over a file the reader refuses starts from a fresh document: the bad tag is not carried over
     const shipped = fs.readFileSync(path.join(temp.defaultsDir, "schedule.yaml"), "utf8");
     fs.writeFileSync(file, `${shipped}\nextra: !foo 1\n`);

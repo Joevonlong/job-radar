@@ -34,10 +34,10 @@ import { writerSchema } from "./schemas/writer";
 /**
  * Every config file. `location`: `config` = the layered config directories, `profile` = the profile directory.
  * `kind` decides how the layers treat a `config` file:
- * - `user`: copied from the defaults directory into the user directory on first start (`pnpm config:init`), then owned
- *   by the user; product upgrades never change it (a migration may, see `migrations/`).
- * - `shipped`: not copied; read from the defaults directory and upgraded with the product. A same-named file in the
- *   user directory replaces it as a whole (the doctor warns: product updates of that file no longer apply).
+ * - `user`: `pnpm config:init` creates a user file for it (without the wizard's two): an overlay stub. Product upgrades
+ *   reach every key the file does not set.
+ * - `shipped`: no user file is created; a same-named file in the user directory is an overlay all the same.
+ * The effective value is the shipped file with the user's file merged over it, key by key (`load.ts`).
  * Profile files are `user` too; their templates live in `<defaults>/profile.example`.
  */
 export const configRegistry = {
@@ -61,13 +61,13 @@ export const configRegistry = {
   language: { file: "language.yaml", location: "config", kind: "user", schema: languageSchema },
   /** The state of the first-run setup (wizard / `pnpm run setup`); an existing install gets it marked complete on its first start. */
   setup: { file: "setup.yaml", location: "config", kind: "user", schema: setupSchema },
-  /** Shipped rule data (patterns, thresholds); a user who wants other rules overrides the whole file. */
+  /** Shipped rule data (patterns, thresholds). */
   traps: { file: "traps.yaml", location: "config", kind: "shipped", schema: trapsSchema },
   /** Salary benchmark (role families, window), deep links and the on-demand AI salary lookup. */
   salary: { file: "salary.yaml", location: "config", kind: "user", schema: salarySchema },
   /** The company background on the job page (AI with web search, off by default). */
   research: { file: "research.yaml", location: "config", kind: "user", schema: researchSchema },
-  /** Starting points of the "add a category" dialog on /interests (shipped: a user copy replaces it as a whole). */
+  /** Starting points of the "add a category" dialog on /interests (shipped). */
   signalPresets: { file: "signal-presets.yaml", location: "config", kind: "shipped", schema: signalPresetsSchema },
   deliveryAudit: { file: "delivery-audit.yaml", location: "config", kind: "shipped", schema: deliveryAuditSchema },
   /** The optional read-only MCP server (`pnpm mcp:serve`); off by default, every key has a default. */
@@ -99,8 +99,8 @@ export function isProfileName(name: ConfigName): name is ProfileName {
 
 /** Config files in the layered config directories (everything except the profile files). */
 export const LAYERED_CONFIG_NAMES = CONFIG_NAMES.filter((name) => configRegistry[name].location === "config");
-/** `user` files are copied into the user directory by `pnpm config:init`; `shipped` ones stay in the defaults directory. */
+/** `user` files get a user file from `pnpm config:init`; `shipped` ones do not. */
 export const USER_CONFIG_NAMES = LAYERED_CONFIG_NAMES.filter((name) => configRegistry[name].kind === "user");
 export const SHIPPED_CONFIG_NAMES = LAYERED_CONFIG_NAMES.filter((name) => configRegistry[name].kind === "shipped");
-/** `shipped` files whose user file is an overlay merged over the shipped one, not a replacement of it (models.yaml). */
+/** Files with their own by-id overlay instead of the key-by-key one (models.yaml). */
 export const OVERLAID_CONFIG_NAMES = ["models"] as const satisfies readonly ConfigName[];

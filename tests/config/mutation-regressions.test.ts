@@ -4,7 +4,7 @@ import fs from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseDocument } from "yaml";
 
-import { ensureProfileFiles, getUserConfigPath, hashConfigText, readConfigText, reloadConfig } from "@/lib/config";
+import { ensureProfileFiles, getUserConfigPath, layeredConfigFingerprint, readConfigText, reloadConfig } from "@/lib/config";
 import { withFileLock } from "@/lib/config/write";
 import { setConfigWriteLockProviderForTests } from "@/lib/config/write-lock";
 import { addWatchedCompany } from "@/lib/interests/service";
@@ -142,7 +142,7 @@ describe("config mutations keep another writer's changes", () => {
 
   it("refuses a salary form made stale by a queued writer", async () => {
     const file = getUserConfigPath("salary");
-    const request = { tab: "salary", draft: configToDraft("salary", reloadConfig("salary")), baseHash: hashConfigText(readConfigText("salary")) };
+    const request = { tab: "salary", draft: configToDraft("salary", reloadConfig("salary")), baseHash: layeredConfigFingerprint("salary") };
     expect(await behindWriter(file, () => saveSettings(request), () => fs.appendFileSync(file, "\n# saved elsewhere\n"))).toMatchObject({ status: "error", formError: "stale" });
     expect(fs.readFileSync(file, "utf8")).toContain("# saved elsewhere");
   });

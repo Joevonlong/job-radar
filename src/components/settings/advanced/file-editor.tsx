@@ -46,7 +46,7 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
   const t = useTranslations("settings.advanced");
   const baseId = useId();
   const editorRef = useRef<YamlTextareaHandle>(null);
-  const { stem, file, group } = data.entry;
+  const { stem, file } = data.entry;
   const [base, setBase] = useState<Base>({ hash: data.hash, layer: data.layer, text: data.text });
   const [text, setText] = useState(data.text);
   const [issues, setIssues] = useState<TextIssue[]>([]);
@@ -62,9 +62,9 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
   const requestNo = useRef(0);
 
   const dirty = text !== base.text;
-  const kind = group;
-  const firstOverride = kind === "shipped" && base.layer !== "user";
-  const canReset = data.defaultText !== null && base.layer === "user" && (kind === "shipped" || base.text !== data.defaultText);
+  // models.yaml keeps its own overlay by model id: the first save of the full catalog pins every model in it
+  const firstOverride = stem === "models" && base.layer !== "user";
+  const canReset = data.defaultText !== null && base.layer === "user" && stem !== "setup";
 
   useEffect(() => {
     if (!dirty) return undefined;
@@ -141,7 +141,7 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
       setResetOpen(false);
       if (result.status === "reset") {
         adopt({ hash: result.hash, layer: result.layer, text: result.text });
-        toastTone("success", t(kind === "shipped" ? "resetToastShipped" : "resetToastUser", { file }));
+        toastTone("success", t("resetToast", { file }));
         onChanged();
       } else if (result.status === "stale") setConflict(result.current);
       else if (result.status !== "invalid") setFailure(result);
@@ -168,7 +168,7 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
         </span>
         <span className="ml-auto">{ack}</span>
       </div>
-      {kind === "shipped" ? <OverrideWarning overlay={stem === "models"} /> : null}
+      {stem === "models" ? <OverrideWarning /> : null}
       <p className="text-ink-2 text-body-sm" data-testid="secrets-note">
         {t("secretsNote")}
       </p>
@@ -181,7 +181,7 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
       ) : null}
       {data.entry.versionBehind ? (
         <p className="text-ink-2 text-body-sm" data-testid="version-note">
-          {t("versionNote", { version: data.codeVersion })}
+          {t("versionNote")}
         </p>
       ) : null}
 
@@ -232,6 +232,13 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
         ) : null}
       </div>
 
+      {data.defaultText !== null ? (
+        <details className="border-border bg-card rounded-card border-bw" data-testid="shipped-reference">
+          <summary className="cursor-pointer px-3 py-2 text-body-sm font-bold">{t("shippedReference")}</summary>
+          <pre className="text-data-sm max-h-96 overflow-auto px-3 pb-3 font-mono whitespace-pre-wrap [overflow-wrap:anywhere]">{data.defaultText}</pre>
+        </details>
+      ) : null}
+
       <PreviewDialog
         open={previewOpen}
         onOpenChange={setPreviewOpen}
@@ -249,7 +256,7 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
           setConflict(current);
         }}
       />
-      {data.defaultText !== null ? <ResetDialog open={resetOpen} onOpenChange={setResetOpen} shipped={kind === "shipped"} current={base.text} defaultText={data.defaultText} pending={busy} onConfirm={() => void restoreDefault()} /> : null}
+      {data.defaultText !== null ? <ResetDialog open={resetOpen} onOpenChange={setResetOpen} current={base.text} pending={busy} onConfirm={() => void restoreDefault()} /> : null}
     </div>
   );
 }

@@ -1,12 +1,12 @@
 /**
  * "Hot reload confirmed". The runner already reloads config files on change; to let the
- * settings page see that, the runner writes the hash of the file text it loaded into
- * `runtime_state` (`config_loaded:<name>`), and the page compares it with the hash of the file on
+ * settings page see that, the runner writes the layered fingerprint (user file and shipped file) of what it validated into
+ * `runtime_state` (`config_loaded:<name>`), and the page compares it with the fingerprint on
  * disk: equal = the runner runs with exactly what is saved. No new table per feature, no ports.
  */
 import { z } from "zod";
 
-import { hashConfigText, readConfigText } from "@/lib/config";
+import { layeredConfigFingerprint, reloadConfigWithFingerprint } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
 import { listRuntimeState, setRuntimeState } from "@/lib/db/repos/runtime-state";
 
@@ -21,22 +21,22 @@ export interface ConfigAck {
   loadedAt: Date;
 }
 
-/** Runner side: remember that `text` of config `name` is what it runs with now. */
-export async function recordConfigLoaded(db: Db, name: AckName, text: string, now: Date = new Date()): Promise<void> {
-  await setRuntimeState(db, `${KEY_PREFIX}${name}`, { hash: hashConfigText(text), loadedAt: now.toISOString() });
+/** Runner side: remember that the validated state with this fingerprint of config `name` is what it runs with now. */
+export async function recordConfigLoaded(db: Db, name: AckName, fingerprint: string, now: Date = new Date()): Promise<void> {
+  await setRuntimeState(db, `${KEY_PREFIX}${name}`, { hash: fingerprint, loadedAt: now.toISOString() });
 }
 
-/** Runner side, at start-up: acknowledge the files as they are on disk. A file that cannot be read is skipped. */
+/** Runner side, at start-up: acknowledge the configs as they are on disk. One that does not validate is skipped: the runner does not run with it. */
 export async function recordAllConfigLoaded(db: Db, now: Date = new Date()): Promise<AckName[]> {
   const recorded: AckName[] = [];
   for (const name of ACK_NAMES) {
-    let text: string;
+    let fingerprint: string;
     try {
-      text = readConfigText(name);
+      fingerprint = reloadConfigWithFingerprint(name).fingerprint;
     } catch {
       continue;
     }
-    await recordConfigLoaded(db, name, text, now);
+    await recordConfigLoaded(db, name, fingerprint, now);
     recorded.push(name);
   }
   return recorded;
@@ -55,7 +55,7 @@ export async function readConfigAcks(db: Db): Promise<Record<AckName, ConfigAck 
 }
 
 export type AckState =
-  /** The runner reported exactly the text that is on disk. */
+  /** The runner reported exactly what is on disk. */
   | "loaded"
   /** The runner reported something else (not reloaded yet, or the saved file is invalid). */
   | "waiting"
@@ -67,10 +67,10 @@ export function ackState(diskHash: string | null, ack: ConfigAck | null): AckSta
   return diskHash !== null && diskHash === ack.hash ? "loaded" : "waiting";
 }
 
-/** Hash of the file as it is on disk right now, or null when it cannot be read. */
+/** Fingerprint of the config as it is on disk right now, or null when it cannot be read. */
 export function diskConfigHash(name: AckName): string | null {
   try {
-    return hashConfigText(readConfigText(name));
+    return layeredConfigFingerprint(name);
   } catch {
     return null;
   }

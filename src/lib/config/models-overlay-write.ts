@@ -138,7 +138,7 @@ export async function writeModelsOverlay(provider: AiProviderIdChoice, entries: 
       const text = restoreFlowPadding(userText, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
       if (userText !== null && userText !== text) await backupConfigText("models", userText, backupsKeep());
       await atomicWrite(filePath, text);
-      primeConfigCache("models", checked.data, text);
+      primeConfigCache("models", checked.data);
       return { written: entries.map((entry) => entry.id) };
     }),
   );
@@ -189,7 +189,7 @@ export async function writeFullModels(file: string = getUserConfigPath("models")
       const old = await readIfExists(userFile);
       const backup = old !== null && old !== text ? await backupConfigText("models", old, backupsKeep()) : null;
       await atomicWrite(userFile, text);
-      primeConfigCache("models", effective, text);
+      primeConfigCache("models", effective);
       return { file, backup };
     }, userFile),
   );

@@ -7,7 +7,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { parseDocument } from "yaml";
 
-import { parseConfigText } from "@/lib/config";
+import { legacyFormatVersion, parseConfigText } from "@/lib/config";
 
 import { FIXTURE_DEFAULTS_DIR } from "../config/helpers";
 import { pathWithoutNode, REAL_CONFIG_LIB } from "./config-reader";
@@ -17,6 +17,8 @@ import { pathWithoutNode, REAL_CONFIG_LIB } from "./config-reader";
  * and shipped directories are temporary; no node runs the real loader here except through `parseConfigText` in-process.
  */
 const SHIPPED_TEXT = fs.readFileSync(path.join(FIXTURE_DEFAULTS_DIR, "schedule.yaml"), "utf8");
+/** The shipped fixture as a whole user file: the last version before the overlay format. */
+const WHOLE_TEXT = SHIPPED_TEXT.replace(/^config_version: \d+/m, `config_version: ${legacyFormatVersion("schedule")}`);
 const NO_ZONEINFO = "/nonexistent-zoneinfo-dir";
 const HAS_ZONEINFO = fs.existsSync("/usr/share/zoneinfo/Europe/Berlin");
 
@@ -34,7 +36,7 @@ interface Files {
   shipped?: string;
 }
 interface Options {
-  /** Fill the overlay format table for schedule.yaml (empty in this version). */
+  /** Replace the overlay format table's entry for schedule.yaml. */
   overlayFrom?: number;
   zoneinfo?: string;
   env?: Record<string, string>;
@@ -71,7 +73,7 @@ const timezone = (files: Files, options: Options = {}) => identity("timezone", "
 const composeProject = (files: Files, options: Options = {}) => identity("doctor.compose_project", "compose_project", "job-radar", files, options);
 
 /** The shipped fixture with edits made through the YAML document (block style kept). */
-function edited(change: (doc: ReturnType<typeof parseDocument>) => void, text = SHIPPED_TEXT): string {
+function edited(change: (doc: ReturnType<typeof parseDocument>) => void, text = WHOLE_TEXT): string {
   const doc = parseDocument(text);
   change(doc);
   return doc.toString();
@@ -116,7 +118,7 @@ describe("cfg_identity: which file it reads", () => {
     expect(composeProject({ user, shipped })).toMatchObject({ status: 0, stdout: "user-name" });
   });
 
-  it("refuses !unset in a whole-file user file (every file in this version)", () => {
+  it("refuses !unset in a whole-file user file", () => {
     expect(composeProject({ user: `${withoutDoctor}doctor: !unset\n`, shipped }).status).toBe(2);
   });
 

@@ -36,6 +36,7 @@ beforeAll(() => {
   // the shipped schedule says one zone, the user's another: the user's wins
   write(path.join(app, "config/schedule.yaml"), "timezone: Etc/GMT+12\n");
   write(path.join(app, "data/config/schedule.yaml"), "timezone: Pacific/Kiritimati\n");
+  write(path.join(app, "data/config/conversion-2026-10-09T10-00-00Z.json"), "{}\n");
   write(path.join(app, "data/config/.backup/2026-10-09T10-00-00Z/schedule.yaml"), "old\n");
   write(path.join(app, "data/config/.upgrade-freeze"), "marker");
   write(path.join(app, "data/config/.write.lock.guard.pending-fixture/owner"), "owner");
@@ -132,6 +133,7 @@ describe("scripts/ops/backup.sh", () => {
     const listing = spawnSync("tar", ["-tzf", path.join(out, archive ?? "")], { encoding: "utf8" }).stdout;
     expect(listing).toContain("data/config/schedule.yaml");
     expect(listing).toContain("data/profile/me.yaml");
+    expect(listing).toContain("data/config/conversion-2026-10-09T10-00-00Z.json"); // the record of what a conversion kept
     expect(listing).not.toContain(".backup");
     expect(listing).not.toContain(".upgrade-freeze");
     expect(listing).not.toContain(".write.lock");

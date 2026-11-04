@@ -4,6 +4,8 @@
 # 用哪个 AI、按什么顺序试：ai.yaml 的 tasks.breakdown（不写就沿用全局顺序），也可以在 /settings 的 AI 标签"任务覆盖"里改。
 # 保存后约 5 秒生效（runner / ai-worker 热加载；网页每次打开详情页时重读本文件）。
 
+config_version: 2
+
 # 总开关。false：详情页不提供拆解按钮、也不自动拆解；已经拆好的结果仍然显示（只读）
 enabled: false
 

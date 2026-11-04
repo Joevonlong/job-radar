@@ -1,5 +1,5 @@
 # In-scope channels retain every delivered record they do not store as a raw posting.
-config_version: 1
+config_version: 2
 scope:
   channel_kinds: [paid] # Channel kinds covered by the ledger.
   exclude_channels: [] # Channel ids excluded from this scope.

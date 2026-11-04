@@ -54,7 +54,7 @@ describe("deploy.sh points the write step at the database", () => {
     const writes = lines.filter((line, index) => (index < legacyStart || index > legacyEnd) && /\bpnpm config:(migrate --write|init|migrate --prune-backups)\b/.test(line) && !/^\s*(#|echo|say)/.test(line));
     // the step-4 `--env-only` run writes only .env and the data folders, not user config files
     const gated = writes.filter((line) => !line.includes("--env-only"));
-    expect(gated.length).toBe(3);
+    expect(gated.length).toBe(4); // two forms of migrate --write: with the conversion, and for a target without it
     for (const line of gated) expect(line.trim(), line).toMatch(/^config_write_run pnpm /);
   });
 });

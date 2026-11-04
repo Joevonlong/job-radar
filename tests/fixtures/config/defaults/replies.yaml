@@ -2,7 +2,7 @@
 # application and suggests a status change on /pipeline. You confirm every suggestion: nothing is applied on its own.
 # No AI reads these emails and no mail content leaves this machine; Telegram only gets a number in the daily reminder.
 # Takes effect on the next cycle.
-config_version: 1
+config_version: 2
 
 # Master switch. Off by default: while off the mailbox is not opened. Needs GMAIL_USER / GMAIL_APP_PASSWORD in .env
 # (the server settings come from sources.yaml sources.gmail). Try `pnpm replies:check` first: it only prints counts.

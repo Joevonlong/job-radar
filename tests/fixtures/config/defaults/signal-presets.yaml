@@ -3,7 +3,7 @@
 # every field before saving. Keywords and patterns are listed per language; the dialog takes English plus the local language
 # of your market (German for the Germany pack). The AI definition is English and decides what the AI review looks for.
 # Shipped with the app: a copy in your config directory replaces this file as a whole (product updates then no longer apply).
-config_version: 1
+config_version: 2
 
 presets:
   - id: ai_tools_budget

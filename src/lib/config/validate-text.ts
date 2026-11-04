@@ -1,24 +1,26 @@
 /**
  * Validate the raw text of a config file the way the loader would read it, and say where each problem is.
- * Pure: no cache, no disk access except the other file of a cross-file check (injectable, see `ValidateOptions`).
+ * No cache; the disk is read for the shipped file an overlay merges with and for the other file of a cross-file check (injectable, see `ValidateOptions`).
  * Messages hold paths and reasons only, never the file's contents (C4).
  *
- * Order: YAML syntax -> `config_version` (written down, not newer than the code) -> migrated in memory -> zod schema ->
- * cross-file checks (ai.yaml against the models.yaml catalog, both directions), all on the migrated value. A text that
- * passes can be read by `loadConfig`. An older file stays valid: writes can be pending after a deploy, and it must stay
- * editable meanwhile. A problem on a path only the migration creates is reported on line 1 with the path.
+ * Order: YAML syntax -> `config_version` (written down, not newer than the code) -> by format: an overlay is merged over
+ * the shipped value, a whole file is migrated in memory without crossing the overlay format -> zod schema -> cross-file
+ * checks (ai.yaml against the models.yaml catalog, both directions), all on that value. A text that passes can be read by
+ * `loadConfig`. An older file stays valid: writes can be pending after a deploy, and it must stay editable meanwhile. A
+ * problem on a path the text does not hold (a migration created it, or it comes from the shipped file) is reported on line
+ * 1 with the path.
  */
-import { isMap, isNode, isScalar, LineCounter, type Document } from "yaml";
+import { isMap, isNode, isPair, isScalar, LineCounter, visit, type Document } from "yaml";
 import type { ZodError } from "zod";
 
-import { configDocumentValue, parseConfigText, readConfigText, resolveConfigDocument } from "./load";
+import { readEffectiveConfig, resolveConfigDocument } from "./load";
 import { interestsRawWarnings, interestsWarnings, SLOW_PATTERN_MESSAGE, slowInterestPatterns } from "./interests-lint";
 import { checkAiAgainstCatalog } from "./model-catalog";
 import { ConfigError } from "./errors";
-import { documentConfigVersion, currentConfigVersion, CONFIG_VERSION_KEY, migrateConfigDocument, withoutConfigVersion } from "./migrations/version";
+import { documentConfigVersion, currentConfigVersion, CONFIG_VERSION_KEY, hasOverlayFormat, isOverlayVersion, legacyFormatVersion, migrateConfigDocument, overlayFormatVersion, withoutConfigVersion } from "./migrations/version";
 import { PROTECTED_KEY_MESSAGE, protectedChanges } from "./protected-check";
 import { configRegistry, type ConfigName, type ConfigValue } from "./registry";
-import { parseConfigYamlDocument } from "./yaml-options";
+import { containsUnset, parseConfigYamlDocument, UNSET_TAG } from "./yaml-options";
 
 /** `protected`: the text changes a protected key (`protected-keys.ts`); only with `checkProtected`. */
 export type IssueSource = "yaml" | "version" | "schema" | "catalog" | "protected";
@@ -58,7 +60,7 @@ export const MAX_TEXT_ISSUES = 50;
 
 function defaultReadOther<M extends ConfigName>(name: M): ConfigValue<M> | null {
   try {
-    return parseConfigText(name, readConfigText(name));
+    return readEffectiveConfig(name);
   } catch {
     return null;
   }
@@ -134,9 +136,24 @@ function yamlReason(message: string): string {
   return (message.split("\n")[0] ?? "invalid YAML").replace(/\s+at line \d+, column \d+:?\s*$/, "").trim();
 }
 
+/** Where the `!unset` markers of a document stand. */
+function unsetLines(doc: Document, lineCounter: LineCounter): { path: string; line: number; col: number }[] {
+  const found: { path: string; line: number; col: number }[] = [];
+  visit(doc, {
+    Scalar(_key, node, ancestors) {
+      if (node.tag !== UNSET_TAG) return;
+      const where = lineCounter.linePos(node.range?.[0] ?? 0);
+      const keys = ancestors.filter(isPair).map((pair) => (isScalar(pair.key) ? String(pair.key.value) : ""));
+      found.push({ path: keys.join("."), line: where.line, col: where.col });
+    },
+  });
+  return found.slice(0, MAX_TEXT_ISSUES);
+}
+
 export function validateConfigText<N extends ConfigName>(name: N, text: string, options: ValidateOptions = {}): ValidateResult<N> {
   const lineCounter = new LineCounter();
-  const doc = parseConfigYamlDocument(text, { lineCounter });
+  const unset = hasOverlayFormat(name) ? ("overlay" as const) : ("reject" as const);
+  const doc = parseConfigYamlDocument(text, { lineCounter, unset });
   const issues: TextIssue[] = [];
 
   if (doc.errors.length > 0) {
@@ -159,9 +176,13 @@ export function validateConfigText<N extends ConfigName>(name: N, text: string, 
     issues.push(issueAt(doc, lineCounter, "version", [], `config_version is missing; write the file's version (this version of Job Radar reads up to ${current})`));
   }
   if (issues.length > 0) return { ok: false, issues };
+  const overlay = isOverlayVersion(name, version);
+  if (!overlay && containsUnset(doc.toJS())) {
+    return { ok: false, issues: unsetLines(doc, lineCounter).map((position) => ({ path: position.path, message: `${UNSET_TAG} needs the overlay format: add ${CONFIG_VERSION_KEY}: ${overlayFormatVersion(name) ?? ""}`, line: position.line, col: position.col, exact: true, source: "version" as const })) };
+  }
 
   // Validate a migrated copy; `doc` keeps pointing at the lines the user wrote.
-  const migrated = parseConfigYamlDocument(text);
+  const migrated = parseConfigYamlDocument(text, { unset });
   try {
     migrateConfigDocument(name, migrated, "");
   } catch (error) {
@@ -170,12 +191,19 @@ export function validateConfigText<N extends ConfigName>(name: N, text: string, 
   }
   const place = (source: IssueSource, path: ReadonlyArray<string | number>, message: string, unknownKey = false): TextIssue => {
     const issue = issueAt(doc, lineCounter, source, path, message, unknownKey);
-    if (issue.exact || version === current) return issue;
+    // a missing key points into the text only where the text is the whole file at its last whole-file version
+    if (issue.exact || version === legacyFormatVersion(name)) return issue;
     return { ...issue, line: 1, col: 1, message: `${issue.path}: ${message}` };
   };
 
   // models.yaml is an overlay: clashes inside it are reported at the user's own paths, before the merged catalog is judged
-  const resolved = resolveConfigDocument(name, migrated);
+  let resolved: ReturnType<typeof resolveConfigDocument>;
+  try {
+    resolved = resolveConfigDocument(name, migrated);
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    return { ok: false, issues: [{ path: "", message: error.message.split("\n")[0] ?? error.kind, line: 1, col: 1, exact: false, source: "schema" }] };
+  }
   if (resolved.errors.length > 0) {
     for (const error of resolved.errors.slice(0, MAX_TEXT_ISSUES)) issues.push(place("schema", error.path, error.message, error.message === "unknown key"));
     return { ok: false, issues };
@@ -213,7 +241,7 @@ export function validateConfigText<N extends ConfigName>(name: N, text: string, 
     }
   }
   if (name === "interests") {
-    for (const warning of [...interestsWarnings(value as ConfigValue<"interests">), ...interestsRawWarnings(withoutConfigVersion(configDocumentValue(name, migrated)))]) crossIssues.push({ path: joinPath(warning.path), message: warning.message, severity: "warning", file: null, where: warning.path });
+    for (const warning of [...interestsWarnings(value as ConfigValue<"interests">), ...interestsRawWarnings(withoutConfigVersion(resolved.value))]) crossIssues.push({ path: joinPath(warning.path), message: warning.message, severity: "warning", file: null, where: warning.path });
   }
   for (const cross of crossIssues) {
     const located: TextIssue =

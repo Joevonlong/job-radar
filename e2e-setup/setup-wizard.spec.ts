@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { expect, test, type BrowserContext, type Page } from "../e2e/fixtures";
+import { layeredConfig } from "../e2e/helpers/effective-config";
 import postgres from "postgres";
 import { parse } from "yaml";
 
@@ -26,12 +27,12 @@ const DEFAULTS_DIR = process.env.E2E_SETUP_DEFAULTS_DIR ?? "";
 
 const configFile = (name: string): string => path.join(CONFIG_DIR, name);
 const yaml = (file: string): Record<string, unknown> => parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
-const config = (name: string) => yaml(configFile(`${name}.yaml`));
+// What a file amounts to: the shipped file with the user's laid over it.
+const config = (name: string) => layeredConfig(DEFAULTS_DIR, CONFIG_DIR, `${name}.yaml`);
 const profile = (name: string) => yaml(path.join(PROFILE_DIR, `${name}.yaml`));
 const shipped = (file: string): Record<string, unknown> => yaml(path.join(DEFAULTS_DIR, file));
 const examplePreferences = () => shipped("profile.example/preferences.yaml") as { market: { pack: string; country: string; currency: string }; locations: string[] };
-// What a file says now, for one no step has written yet: the user's file, else the shipped one.
-const effective = (name: string) => (fs.existsSync(configFile(`${name}.yaml`)) ? config(name) : shipped(`${name}.yaml`));
+const effective = config;
 const setup = () => config("setup") as { completed_at: string | null; completed_by: string | null; steps?: Record<string, { status: string }> };
 
 async function query<T extends Record<string, unknown>>(text: string): Promise<T[]> {

@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parse, parseDocument } from "yaml";
 
-import { currentConfigVersion, loadConfig, parseConfigText, resetConfigCache } from "@/lib/config";
+import { legacyFormatVersion, loadConfig, parseConfigText, resetConfigCache } from "@/lib/config";
 import { applySourcesImport, enableMarketChannels, exportSources, previewSourcesImport, removeAtsBoard, saveAtsBoard, setSourceEnabled, setSourceCompanyQueries } from "@/lib/sources/registry/service";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
@@ -53,7 +53,10 @@ describe("setSourceEnabled", () => {
     expect(sync.syncSourceRegistry).toHaveBeenCalledTimes(1);
     expect(await setSourceEnabled({ id: "indeed", enabled: true })).toEqual({ status: "error", error: "consent_required" });
     expect(await setSourceEnabled({ id: "indeed", enabled: true, acknowledged: true })).toEqual({ status: "done", outcome: "enabled" });
-    expect(text()).toBe(before);
+    // back at the shipped value: the key leaves the file, so the shipped file decides again
+    expect(loadConfig("channels").sources.indeed.enabled).toBe(true);
+    expect(parse(text()).sources.indeed.enabled).toBeUndefined();
+    expect(text()).toContain("# 熔断：连续失败 failures 次后");
   });
 
   it("writes linkedin.session.recommended_daily for the recommended channel and leaves the session alone", async () => {
@@ -142,7 +145,7 @@ describe("boards", () => {
     expect(loadConfig("channels").ats_boards.at(-1)).toMatchObject({ name: "Newco AI", token: "newco2", enabled: false });
     expect(await removeAtsBoard({ ats: "ashby", token: "newco2" })).toEqual({ status: "done", outcome: "board_removed" });
     expect(loadConfig("channels").ats_boards).toHaveLength(count);
-    expect(text()).toContain("# ATS 公司清单");
+    expect(text()).toContain("# 熔断：连续失败 failures 次后"); // comments on the rest of the file stay
     expect(sync.syncSourceRegistry).toHaveBeenCalledTimes(3);
   });
 
@@ -266,8 +269,8 @@ describe("export", () => {
     expect(await previewSourcesImport({ text: json.body, format: "json", mode: "replace" })).toMatchObject({ status: "preview", noChanges: true });
   });
 
-  it("both formats are the effective config with the current config_version, and read back to the same values", () => {
-    const current = currentConfigVersion("channels");
+  it("both formats are the effective config as a whole file, at the version before the overlay format, and read back to the same values", () => {
+    const current = legacyFormatVersion("channels");
     const yaml = exportSources("yaml", options);
     const json = exportSources("json", options);
     if ("error" in yaml || "error" in json) throw new Error("export failed");
@@ -286,7 +289,7 @@ describe("export", () => {
     const yaml = exportSources("yaml", options);
     if ("error" in yaml) throw new Error(yaml.error);
     expect(parseConfigText("channels", yaml.body, "export.yaml")).toEqual(loadConfig("channels"));
-    expect(parseDocument(yaml.body).get("config_version")).toBe(currentConfigVersion("channels"));
+    expect(parseDocument(yaml.body).get("config_version")).toBe(legacyFormatVersion("channels"));
   });
 
   it.each([

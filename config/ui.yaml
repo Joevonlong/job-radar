@@ -1,7 +1,7 @@
 # UI (docs/settings.md): scales and "how many runs" for graphical widgets. Only affects display, not collection or scoring.
 # The web app does not hot-reload config: this file is reread each time the page opens.
 
-config_version: 2
+config_version: 3
 
 # Salary axis (thousands of the market base currency per year): ends and tick interval. Stated ranges that don't fit are clipped at the ends; same for the red line (salary floor) and the dashed line (median)
 salary_axis:

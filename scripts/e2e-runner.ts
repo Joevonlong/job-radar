@@ -17,7 +17,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { createLogger } from "../src/lib/channels/logger";
-import { loadConfig, readConfigText, watchConfig } from "../src/lib/config";
+import { layeredConfigFingerprint, loadConfig, watchConfig } from "../src/lib/config";
 import { syncSourceRegistry } from "../src/lib/sources/registry/sync";
 import { registerControlHandler, runControlPoller } from "../src/lib/control";
 import { closeDb, getDb, writeHeartbeat } from "../src/lib/db";
@@ -327,14 +327,14 @@ registerControlHandler(
 );
 
 await recordAllConfigLoaded(db);
-await syncSourceRegistry(db, { config: loadConfig("channels"), text: readConfigText("channels") }).catch(() => {});
+await syncSourceRegistry(db, { config: loadConfig("channels"), fingerprint: layeredConfigFingerprint("channels") }).catch(() => {});
 const stopWatching = watchConfig(
   [...ACK_NAMES],
   (event) => {
     log(`config ${event.name} reloaded`);
-    if (isAckName(event.name)) void recordConfigLoaded(db, event.name, event.text);
+    if (isAckName(event.name)) void recordConfigLoaded(db, event.name, event.fingerprint);
     // A hand-edited sources.yaml reaches the registry mirror here, like in the real runner
-    if (event.name === "channels") void syncSourceRegistry(db, { config: loadConfig("channels"), text: readConfigText("channels") }).catch(() => {});
+    if (event.name === "channels") void syncSourceRegistry(db, { config: loadConfig("channels"), fingerprint: layeredConfigFingerprint("channels") }).catch(() => {});
   },
   { pollMs: 300, debounceMs: 50 },
 );

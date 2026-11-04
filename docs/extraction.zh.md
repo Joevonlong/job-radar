@@ -1,6 +1,6 @@
 # 岗位信息提取规则
 
-处理流水线（`pipeline` 步骤）从 JD 文字里读出几个事实。词表和阈值都在 `pipeline.yaml`（随产品发布的文件：把 `config/pipeline.yaml` 复制到 `data/config/pipeline.yaml` 再改你的副本），改了之后用 `pnpm reprocess` 让已入库的岗位按新规则重读（采集到的原文不动）。原则不变：JD 没写的就是 `unknown`，不推测。
+处理流水线（`pipeline` 步骤）从 JD 文字里读出几个事实。词表和阈值都在 `pipeline.yaml`（随产品发布的文件：把要改的键写进 `data/config/pipeline.yaml`，见[叠加层](configuration.zh.md#你的文件是一个叠加层)），改了之后用 `pnpm reprocess` 让已入库的岗位按新规则重读（采集到的原文不动）。原则不变：JD 没写的就是 `unknown`，不推测。
 
 ## 办公方式（`workplace`）
 

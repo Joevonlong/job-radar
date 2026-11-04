@@ -4,6 +4,8 @@
 # Which AI to use and in what order: tasks.breakdown in ai.yaml (unset = global order); also editable under "Task overrides" in the AI tab of /settings.
 # Takes effect about 5 seconds after saving (runner / ai-worker hot-reload; the web app rereads this file each time a detail page opens).
 
+config_version: 2
+
 # Master switch. false: the detail page has no breakdown button and nothing is broken down automatically; existing results still show (read-only)
 enabled: false
 

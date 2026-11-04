@@ -4,6 +4,7 @@ import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
 import { parseConfigText } from "@/lib/config";
+import { withoutConfigVersion } from "@/lib/config/migrations/version";
 import { configRegistry } from "@/lib/config/registry";
 import { jobArchiveSchema } from "@/lib/config/schemas/job-archive";
 
@@ -13,7 +14,7 @@ describe("job archive configuration", () => {
   it("accepts shipped and fixture YAML without asserting their values", () => {
     for (const file of ["config/job-archive.yaml", "tests/fixtures/config/defaults/job-archive.yaml"]) {
       const text = fs.readFileSync(file, "utf8");
-      expect(jobArchiveSchema.safeParse(parse(text)).success).toBe(true);
+      expect(jobArchiveSchema.safeParse(withoutConfigVersion(parse(text))).success).toBe(true);
       expect(() => parseConfigText("jobArchive", text)).not.toThrow();
     }
     expect(configRegistry.jobArchive).toMatchObject({ kind: "shipped", location: "config" });

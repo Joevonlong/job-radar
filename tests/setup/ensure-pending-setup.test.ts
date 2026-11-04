@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { parseConfigText } from "@/lib/config";
+import { newFileText, parseConfigText } from "@/lib/config";
 import { setConfigWriteLockProviderForTests } from "@/lib/config/write-lock";
 import { ensurePendingSetupFile, readSetupState, resetSetupStateCache } from "@/lib/setup/state";
 
@@ -32,8 +32,8 @@ describe("ensurePendingSetupFile", () => {
   it("creates setup.yaml from the shipped default, pending, and says it did not exist", async () => {
     expect(readSetupState().pending).toBe(true);
     expect(await ensurePendingSetupFile()).toEqual({ ok: true, existed: false });
-    expect(fs.readFileSync(setupFile(), "utf8")).toBe(fs.readFileSync(path.join(tmp.defaultsDir, "setup.yaml"), "utf8"));
-    expect(parseConfigText("setup", fs.readFileSync(setupFile(), "utf8")).completed_at).toBeNull();
+    expect(fs.readFileSync(setupFile(), "utf8")).toBe(newFileText("setup"));
+    expect(readSetupState().state?.completed_at).toBeNull();
     expect(readSetupState()).toMatchObject({ pending: true, source: "user" });
     expect(fs.statSync(setupFile()).mode & 0o777).toBe(0o600);
     expect(temps()).toEqual([]);
@@ -57,7 +57,7 @@ describe("ensurePendingSetupFile", () => {
     expect(results.every((result) => result.ok)).toBe(true);
     expect(results.filter((result) => result.ok && !result.existed)).toHaveLength(1);
     expect(results.filter((result) => result.ok && result.existed)).toHaveLength(1);
-    expect(fs.readFileSync(setupFile(), "utf8")).toBe(fs.readFileSync(path.join(tmp.defaultsDir, "setup.yaml"), "utf8"));
+    expect(fs.readFileSync(setupFile(), "utf8")).toBe(newFileText("setup"));
     expect(temps()).toEqual([]);
   });
 

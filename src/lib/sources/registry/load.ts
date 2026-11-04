@@ -5,9 +5,7 @@ import {
   ConfigError,
   configSourcePath,
   displayConfigPathForWeb,
-  hashConfigText,
-  readConfigText,
-  reloadConfig,
+  reloadConfigWithFingerprint,
   type ChannelsConfig,
   type ConfigIssue,
 } from "@/lib/config";
@@ -51,14 +49,13 @@ function describeInvalid(error: ConfigError): ConfigIssue[] {
   return [{ path: "", message: error.message.split("\n")[0]?.replace(/^Config "[^"]*"[^:(]*\([^)]*\):?\s*/, "") || "unreadable" }];
 }
 
-/** Sync the mirror when the file's hash differs from the last recorded sync. Returns whether the mirror matches the file afterwards. */
-async function ensureMirror(db: Db, config: ChannelsConfig, text: string, sync: boolean): Promise<{ inSync: boolean; syncedAt: string | null }> {
-  const hash = hashConfigText(text);
+/** Sync the mirror when the config's fingerprint differs from the last recorded sync. Returns whether the mirror matches the file afterwards. */
+async function ensureMirror(db: Db, config: ChannelsConfig, hash: string, sync: boolean): Promise<{ inSync: boolean; syncedAt: string | null }> {
   try {
     const state = await readRegistrySyncState(db);
     if (state?.hash === hash) return { inSync: true, syncedAt: state.at };
     if (!sync) return { inSync: false, syncedAt: state?.at ?? null };
-    await syncSourceRegistry(db, { config, text });
+    await syncSourceRegistry(db, { config, fingerprint: hash });
     return { inSync: true, syncedAt: new Date().toISOString() };
   } catch {
     return { inSync: false, syncedAt: (await readRegistrySyncState(db).catch(() => null))?.at ?? null };
@@ -72,10 +69,11 @@ export async function loadRegistryPage(options: { syncMirror?: boolean } = {}): 
   const mode = fs.existsSync(/*turbopackIgnore: true*/ configSourcePath("channels")) ? "current" : "missing";
   let config: ChannelsConfig | null = null;
   let invalid: ConfigIssue[] | null = null;
-  let text = "";
+  let fingerprint = "";
   try {
-    text = readConfigText("channels");
-    config = reloadConfig("channels");
+    const loaded = reloadConfigWithFingerprint("channels");
+    config = loaded.value;
+    fingerprint = loaded.fingerprint;
   } catch (error) {
     if (!(error instanceof ConfigError)) throw error;
     invalid = describeInvalid(error);
@@ -109,7 +107,7 @@ export async function loadRegistryPage(options: { syncMirror?: boolean } = {}): 
     getChannelWindowStats(db, { since }),
     listBoardHealth(db),
     getBoardSeenCounts(db, { since, atsIds: ATS_KINDS }),
-    ensureMirror(db, config, text, options.syncMirror ?? true),
+    ensureMirror(db, config, fingerprint, options.syncMirror ?? true),
   ]);
   return {
     view: buildRegistryView({ now, config, cards: sources.cards, channelStats, boardHealth, boardSeen }),
