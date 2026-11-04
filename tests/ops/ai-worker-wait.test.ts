@@ -365,6 +365,32 @@ describe("ai_worker_service_pid temporary file", () => {
   // A signal to the group can stop `mktemp -u` between the create and the unlink (macOS), and can miss a child forked just
   // before it, which then opens the file by name after the trap removed it. Both left a file behind, rarely, under a stress
   // run; these two tests pin the causes without the timing.
+  it.each([
+    ["a symlink to /dev/null", (file: string) => fs.symlinkSync("/dev/null", file)],
+    ["a symlink to a regular file", (file: string) => { fs.writeFileSync(`${file}.target`, "kept"); fs.symlinkSync(`${file}.target`, file); }],
+    ["a dangling symlink", (file: string) => fs.symlinkSync(`${file}.missing`, file)],
+    ["a regular file", (file: string) => fs.writeFileSync(file, "kept")],
+  ] as const)("refuses a name that is already %s", (_name, prepare) => {
+    const file = path.join(tmp, "taken");
+    prepare(file);
+
+    const r = spawnSync("/bin/bash", ["-c", `source "${lib}"; ai_worker_new_temp "$1"`, "_", file], { encoding: "utf8", timeout: 30_000 });
+
+    expect(r.status).toBe(1);
+    if (fs.existsSync(`${file}.target`)) expect(fs.readFileSync(`${file}.target`, "utf8")).toBe("kept");
+  });
+
+  it("creates a new private regular file", () => {
+    const file = path.join(tmp, "fresh");
+
+    const r = spawnSync("/bin/bash", ["-c", `source "${lib}"; ai_worker_new_temp "$1"`, "_", file], { encoding: "utf8", timeout: 30_000 });
+
+    expect(r.status).toBe(0);
+    const stat = fs.lstatSync(file);
+    expect(stat.isFile()).toBe(true);
+    expect(stat.mode & 0o777).toBe(0o600);
+  });
+
   it("does not fork mktemp for the name", () => {
     write(path.join(bin, "mktemp"), "#!/bin/bash\nexit 99\n", 0o755);
     fs.writeFileSync(path.join(state, "loaded"), "");

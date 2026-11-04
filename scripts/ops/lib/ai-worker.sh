@@ -144,6 +144,15 @@ ai_worker_identity() {
   return 0
 }
 
+# ai_worker_new_temp <file>: creates <file>, private to this user, in this shell (no child process). Fails when something
+# already has that name: noclobber refuses a regular file, but it opens a symlink to a non-regular file such as /dev/null.
+ai_worker_new_temp() {
+  local rc=0
+  { set -C; umask 077; : > "$1"; } 2>/dev/null || rc=$?
+  set +C
+  (( rc == 0 )) && [[ -f "$1" && ! -L "$1" ]]
+}
+
 # ai_worker_service_pid <platform> <label-or-unit> [timeout s]: the PID the service manager reports, or nothing. With a
 # timeout, the launchctl / systemctl call is given at most that long (ai_worker_run_bounded). A call that fails or is cut
 # off reports nothing, whatever it printed before; its output goes to a temp file, not a pipe, so that nothing left behind
@@ -159,8 +168,7 @@ ai_worker_service_pid() {
     # either (on macOS it creates and unlinks a file, and leaves it when the signal stops it in between).
     for n in 1 2 3 4 5; do
       f="${TMPDIR:-/tmp}/ai-worker-pid.$RANDOM$RANDOM$RANDOM"
-      if { set -C; umask 077; : > "$f"; } 2>/dev/null; then set +C; break; fi
-      set +C
+      if ai_worker_new_temp "$f"; then break; fi
       f=""
     done
     [[ -n "$f" ]] || exit 0
