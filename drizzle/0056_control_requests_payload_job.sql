@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "control_requests_payload_job_id_idx" ON "control_requests" USING btree (("payload" ->> 'jobId'),"id");
