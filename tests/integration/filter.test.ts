@@ -214,6 +214,28 @@ describe("filter step", () => {
     expect(cards.jobs.find((j) => j.id === job.id)?.rank?.filterResult).toBe("filtered_out");
   });
 
+  it("older text that means the same as the current version does not switch versions", async () => {
+    const db = getDb();
+    const file = getConfigPath("preferences");
+    const job = await addJob();
+    await runStep();
+    const original = fs.readFileSync(file, "utf8");
+    const firstId = (await currentPreferences(db)).snapshot.id;
+    await setFloor(50_000);
+    fs.writeFileSync(file, `${original}\n# the same values with a comment\n`);
+    resetConfigCache();
+    const current = (await currentPreferences(db)).snapshot;
+    expect(current.id).not.toBe(firstId);
+    await runStep();
+    await withRebuiltCurrentScores(db, db.update(schema.scores).set({ score: 77, stale: false }).where(and(eq(schema.scores.jobId, job.id), eq(schema.scores.profileSnapshotId, current.id))));
+
+    fs.writeFileSync(file, original);
+    resetConfigCache();
+    expect((await currentPreferences(db)).snapshot.id).toBe(current.id);
+    expect((await listProfileSnapshots(db, "preferences", 1))[0]?.id).toBe(current.id);
+    expect((await rowsOf(job.id)).find((row) => row.profileSnapshotId === current.id)).toMatchObject({ score: 77, stale: false });
+  });
+
   it("the step moves rows of the current version ahead of newer rows of another version", async () => {
     const db = getDb();
     const job = await addJob();
