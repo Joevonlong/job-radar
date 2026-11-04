@@ -12,7 +12,7 @@ import { ensureProfileFiles, getConfigPath, loadConfig, reloadConfig, resetConfi
 import { registerBuiltinCycleSteps } from "@/lib/cycle/builtin-steps";
 import { runCycle } from "@/lib/cycle/run-cycle";
 import { resetCycleSteps } from "@/lib/cycle/steps";
-import { clearFilterOverride, closeDb, getDb, getFilterOverride, listJobs, listProfileSnapshots, listTodayJobs, schema, setFilterOverride } from "@/lib/db";
+import { clearFilterOverride, closeDb, createConnection, getDb, getFilterOverride, listJobs, listProfileSnapshots, listTodayJobs, schema, setFilterOverride } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { currentWatchedCompanies, filterStep, refilterJob, runFilter, currentPreferences, type FilterRunResult } from "@/lib/filter";
 import { buildWatchedCompanyKeys } from "@/lib/companies/marks";
@@ -20,6 +20,8 @@ import { listPushCandidates } from "@/lib/db";
 import { selectForPush } from "@/lib/notify/select";
 import { preferencesConfigToDraft } from "@/lib/profile/draft";
 import { saveProfile } from "@/lib/profile/service";
+import { recordProfileSnapshot } from "@/lib/profile/snapshots";
+import { databaseTestSupport } from "@/lib/db/test-support";
 
 import { config } from "../cycle/helpers";
 import { makeTempConfig, type TempConfig } from "../config/helpers";
@@ -234,6 +236,43 @@ describe("filter step", () => {
     expect((await currentPreferences(db)).snapshot.id).toBe(current.id);
     expect((await listProfileSnapshots(db, "preferences", 1))[0]?.id).toBe(current.id);
     expect((await rowsOf(job.id)).find((row) => row.profileSnapshotId === current.id)).toMatchObject({ score: 77, stale: false });
+  });
+
+  it("a rollback while the step runs is not undone by the step", async () => {
+    const db = getDb();
+    const file = getConfigPath("preferences");
+    const job = await addJob({ salaryJson: salaryJson(60_000) });
+    await runStep();
+    const older = fs.readFileSync(file, "utf8");
+    await setFloor(50_000);
+    await runStep();
+    expect((await rowsOf(job.id)).at(-1)).toMatchObject({ filterResult: "passed" });
+    await addJob(); // the write the step waits on, under the version about to be left
+
+    const support = databaseTestSupport(db);
+    await support.installFilterWriteGate();
+    const blocker = createConnection(inject("testDatabaseUrl"), { max: 1 });
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const ready = new Promise<void>((resolve) => { entered = resolve; });
+    const held = databaseTestSupport(blocker.db).holdFilterWrites(entered, gate);
+    try {
+      await ready;
+      const step = runStep();
+      await vi.waitFor(async () => expect(await support.blockedFilterWrites()).toBe(1), { timeout: 15_000 });
+      fs.writeFileSync(file, older);
+      resetConfigCache();
+      await recordProfileSnapshot(db, "preferences", older);
+      release();
+      await step;
+    } finally {
+      release();
+      await held;
+      await blocker.sql.end({ timeout: 5 });
+      await support.removeFilterWriteGate();
+    }
+    const cards = await listJobs(db, { filters: { includeFiltered: true }, sort: "first_seen", page: 1, pageSize: 20, timezone: "Europe/Berlin" });
+    expect(cards.jobs.find((j) => j.id === job.id)?.rank?.filterResult).toBe("filtered_out");
   });
 
   it("the step moves rows of the current version ahead of newer rows of another version", async () => {
