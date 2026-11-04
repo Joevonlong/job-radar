@@ -15,6 +15,7 @@ import { INK_LINK } from "@/components/ui/ink-link";
 import { callAction, withActionFeedback } from "@/lib/actions/client";
 import { controlQueueViewSchema, type ControlQueueView } from "@/lib/control/request-view-schema";
 import { formatClock } from "@/lib/format/clock";
+import { displayDomain } from "@/lib/research/display-domain";
 import type { CompanyResearchContext } from "@/lib/research/view";
 import { toastTone } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -221,7 +222,7 @@ export function CompanyBackgroundPanel({ jobId, company, context, timeZone }: { 
                 {meta}
               </p>
               <p className="text-ink-2 text-body-sm mt-1" data-testid="company-research-sent">
-                {latest.domainUsed !== null ? t("sentWithDomain", { domain: latest.domainUsed }) : t("sentNameOnly")}
+                {latest.domainUsed !== null ? t("sentWithDomain", { domain: displayDomain(latest.domainUsed) }) : t("sentNameOnly")}
               </p>
             </div>
           </div>
