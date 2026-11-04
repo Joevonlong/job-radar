@@ -120,4 +120,21 @@ describe("models:export --full", () => {
     await expect(writeFullModels(out)).rejects.toThrow(/config or profile directory/);
     expect(fs.existsSync(out) ? fs.readFileSync(out, "utf8") : null).toBe(before);
   });
+
+  it("refuses a path that reaches the config directory through a symbolic link, also for a file that does not exist yet", async () => {
+    const links = fs.realpathSync(fs.mkdtempSync(path.join(tmp.root, "links-")));
+    fs.mkdirSync(tmp.configDir, { recursive: true });
+    fs.symlinkSync(tmp.configDir, path.join(links, "config-link"));
+    fs.symlinkSync(path.join(tmp.configDir, "later.yaml"), path.join(links, "later.yaml"));
+    for (const out of [path.join(links, "config-link", "ui.yaml"), path.join(links, "config-link", "sub", "new.yaml"), path.join(links, "later.yaml")]) {
+      await expect(writeFullModels(out), out).rejects.toThrow(/config or profile directory/);
+    }
+    expect(fs.existsSync(path.join(tmp.configDir, "later.yaml"))).toBe(false);
+    expect(fs.existsSync(path.join(tmp.configDir, "sub"))).toBe(false);
+    // a link to a place outside is no problem
+    const outside = fs.realpathSync(fs.mkdtempSync(path.join(tmp.root, "outside-")));
+    fs.symlinkSync(outside, path.join(links, "outside-link"));
+    await writeFullModels(path.join(links, "outside-link", "full.yaml"));
+    expect(fs.existsSync(path.join(outside, "full.yaml"))).toBe(true);
+  });
 });
