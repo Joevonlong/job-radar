@@ -91,7 +91,7 @@ async function pgErrorCode(promise: Promise<unknown>): Promise<string | undefine
 }
 
 describe("migrations", () => {
-  it("creates every table from plan §11 plus runner_heartbeats", async () => {
+  it("creates every expected table", async () => {
     const rows = await getDb().execute<{ table_name: string }>(
       sql`select table_name from information_schema.tables where table_schema = 'public' order by table_name`,
     );

@@ -22,8 +22,8 @@ export interface HeaderTagsProps {
 /**
  * Tags under the title (design `.tags`): one coloured tag per keyword category (category order), the tags of the tag categories
  * with a `+`, and the gates and facts a row of the list also carries: German required, agency, contract kind, "salary not
- * disclosed" (dashed, never read as none). The amount category is no tag here: it is the salary axis next to the title ("T1 不做标签，
- * 它就是薪资轴", docs/design/tokens.md), whose block already says below the floor / another region's pay.
+ * disclosed" (dashed, never read as none). The amount category is no tag here: it is the salary axis next to the title,
+ * whose block already says below the floor / another region's pay.
  */
 export function HeaderTags({ signals, categories, salaryDisclosed, germanLevelRequired, isAgency, contract, languageName = null }: HeaderTagsProps) {
   const t = useTranslations("dashboard");

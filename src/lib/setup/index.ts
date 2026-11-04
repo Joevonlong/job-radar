@@ -1,4 +1,4 @@
-/** The first-run setup (see `docs/setup.md` and `docs/architecture.md`). Server / Node only; the browser imports the plain modules directly. */
+/** The first-run setup (see `docs/setup.md`). Server / Node only; the browser imports the plain modules directly. */
 export * from "./steps";
 export * from "./types";
 export { readSetupState, resetSetupStateCache, markStep, completeSetup, type SetupStatus, type SetupSource, type SetupWriteResult } from "./state";

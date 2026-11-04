@@ -17,7 +17,7 @@ import {
   UNKNOWN,
 } from "@/lib/format/numbers";
 
-/** Every example of docs/design/tokens.md "数字格式" (the "写成" column), plus the edge cases around it. */
+/** The number formats, plus the edge cases around them. */
 describe("formatInteger", () => {
   it.each([
     [1284, "1,284"],

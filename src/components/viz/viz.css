@@ -1,7 +1,6 @@
 /*
- * Data-visualisation components. Ported from docs/design/design-system.html "数据可视化" and
- * "数字与百分比"; colours, type sizes, radii, shadows and motion come only from the v3 tokens
- * (docs/design/tokens.css). Geometry (cell sizes) is local to each component below.
+ * Data-visualisation components. Colours, type sizes, radii, shadows and motion come only from the v3 tokens.
+ * Geometry (cell sizes) is local to each component below.
  *
  * Animation contract: an animated component's root carries data-played="false" until it scrolls into view
  * (usePlayOnView), then "true". Before: the start state (empty cells, zero-length bars). After: a one-shot

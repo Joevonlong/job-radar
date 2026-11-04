@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 type PillVariant = "status" | "status-on" | "status-good" | "status-warn";
 
-/** Pill look per application status (tokens.md: the colours follow the board columns). */
+/** Pill look per application status (the colours follow the board columns). */
 const PILL_VARIANT: Record<ApplicationStatus, PillVariant> = {
   new: "status",
   interested: "status-on",

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils"
 import { Slot } from "radix-ui"
 
 /*
- * Badge base styles (design system v3, tokens.md "标签与徽标"). Business meaning (which tier, which status) is
+ * Badge base styles (design system v3). Business meaning (which tier, which status) is
  * decided by the caller; this file only owns the look.
  *   signal-t1..t4  amber / teal / coral / blue block with ink border (use <SignalTag> for the two-part "[code | name]" form of a signal category)
  *   gate-bad / gate-note / gate-out / gate-warn   hard gate, watch item (dashed), filtered (strikethrough), timeout
@@ -132,7 +132,7 @@ function Kbd({ className, ...props }: React.ComponentProps<"kbd">) {
   )
 }
 
-/** Count pill. Values above 99 render as "99+" (tokens.md). Pass `highlight` for the gold variant. */
+/** Count pill. Values above 99 render as "99+". Pass `highlight` for the gold variant. */
 function CountBadge({
   value,
   highlight = false,

@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-/** Colour roles the data-viz components accept. Mapped to CSS custom properties of docs/design/tokens.css. */
+/** Colour roles the data-viz components accept. Mapped to CSS custom properties of globals.css. */
 export type VizTone = "ink" | "meter" | "hi" | "good" | "warn" | "bad" | "t1" | "t2" | "t3" | "t4" | "violet" | "olive" | "pink" | "slate";
 
 const TONE_VAR: Record<VizTone, string> = {
@@ -58,7 +58,7 @@ export function pctStyle(value: number): string {
 
 // ---------------------------------------------------------------- steps() utility (bars grow in whole steps, like a terminal refresh)
 
-/** Step counts of the grow animations (docs/design/tokens.md: steps(6-8)). viz.css uses the same numbers. */
+/** Step counts of the grow animations (steps(6-8)). viz.css uses the same numbers. */
 export const STEPS = { bar: 8, column: 6 } as const;
 
 /** `style` for cell number `index`: viz.css delays its light-up by `index * var(--step)`. */

@@ -1,7 +1,7 @@
 import { cva } from "class-variance-authority"
 
 /*
- * Button (design system v3, tokens.md "按钮"): 2px ink border, hard shadow, press = move by --press-d while the
+ * Button (design system v3): 2px ink border, hard shadow, press = move by --press-d while the
  * shadow collapses. Variants primary / ink / default / ghost / danger / link; sizes sm / md / lg / icon.
  * Legacy names stay valid for existing callers: outline -> default, secondary -> default, destructive -> danger,
  * size "default" -> md, "xs" / "icon-xs" are compact legacy sizes, "icon-sm" / "icon-lg" are the icon sizes.

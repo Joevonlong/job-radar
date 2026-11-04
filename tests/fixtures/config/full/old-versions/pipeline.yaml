@@ -5,7 +5,7 @@
 batch_size: 200
 
 dedupe:
-  # 同一公司的两条岗位，JD 正文的 64 位 SimHash 海明距离 ≤ 该值就归并（2026-10 用 621 条真实岗位复核，维持 3，依据见 dev-notes/research/simhash-threshold-2026-10.md；复核命令 pnpm simhash:analyze）
+  # 同一公司的两条岗位，JD 正文的 64 位 SimHash 海明距离 ≤ 该值就归并（2026-10 用 621 条真实岗位复核，维持 3；复核命令 pnpm simhash:analyze）
   simhash_max_distance: 3
   # 公司名不同但相关（一个名字是另一个的词前缀，或首词相同："SIV.AG" / "SIV.AG - Service für …"、"Allianz in Deutschland" / "Allianz Kunde und Markt GmbH"）、标题相同时，海明距离 ≤ 该值也归并（同一 JD 在不同渠道的样板文字不同，所以比同公司宽）
   cross_company_simhash_max_distance: 14

@@ -1,5 +1,5 @@
 /**
- * Motion of the board (docs/design/tokens.md "看板卡片"): a lifted card tilts 3 degrees and a dropped one settles with
+ * Motion of the board: a lifted card tilts 3 degrees and a dropped one settles with
  * the spring curve. Reduced motion: no tilt, no spring, no travel.
  */
 

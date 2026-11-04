@@ -33,7 +33,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
-      // 3.2 s life (tokens.md); the amber drain bar in globals.css reads --toast-life
+      // 3.2 s life; the amber drain bar in globals.css reads --toast-life
       duration={TOAST_LIFE_MS}
       toastOptions={{
         classNames: {

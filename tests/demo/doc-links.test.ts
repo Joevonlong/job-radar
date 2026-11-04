@@ -47,6 +47,50 @@ describe("docs:check images", () => {
   });
 });
 
+describe("docs:check references", () => {
+  it.each([
+    ["a comment in source", { "src/a.ts": "// the default actor is in research/actors.md\nexport const a = 1;\n" }, "src/a.ts:1: research/actors.md"],
+    ["a block comment in source", { "src/a.css": "/*\n * Values from docs/design/tokens.css.\n */\n" }, "src/a.css:2: docs/design/tokens.css"],
+    ["a string in source", { "src/a.ts": 'export const help = "see spec/guides/x.md";\n' }, "src/a.ts:1: spec/guides/x.md"],
+    ["a YAML comment", { "config/a.yaml": "enabled: false # see dev-notes/notes.md\n" }, "config/a.yaml:1: dev-notes/notes.md"],
+    ["a YAML comment in a fixture", { "tests/fixtures/a.yaml": "# plan: docs/plan.md\n" }, "tests/fixtures/a.yaml:1: docs/plan.md"],
+    ["a comment in a test", { "tests/a.test.ts": "// from tracking/BUGS.md\n" }, "tests/a.test.ts:1: tracking/BUGS.md"],
+    ["prose in Markdown", { "README.md": "Details are in `planning/roadmap.md`.\n" }, "README.md:1: planning/roadmap.md"],
+    ["a bare Markdown name in a comment", { "src/a.ts": '// the rule of tokens.md "toast"\n' }, "src/a.ts:1: tokens.md"],
+  ])("fails on %s", (_name, files, expected) => {
+    const result = run(files);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(expected);
+  });
+
+  it("passes on paths that exist, other projects' paths, URLs and test data", () => {
+    const result = run({
+      "docs/mcp.md": "x",
+      "docs/images/a.png": "x",
+      "src/lib/research/001-format.ts": "x",
+      "src/lib/index.ts": [
+        'import { a } from "./research/001-format";',
+        "// see docs/mcp.md, docs/mcp and docs/images/*.png",
+        "// https://example.com/docs/missing.md and node_modules/next/dist/docs/missing.md",
+        "// the skill's SKILL.md and mcp.md",
+        "",
+      ].join("\n"),
+      ".github/workflows/ci.yml": "paths: ['docs/**', 'docs/*.zh.md']\n",
+      "tests/a.test.ts": 'it("is data", () => write("docs/missing.md", "research/missing.md"));\n',
+      "tests/fixtures/page.html": '<a href="docs/missing.html">x</a>\n',
+      "tests/fixtures/data.json": '{ "path": "docs/missing.md" }\n',
+    });
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+  });
+
+  it("does not look into hidden or generated directories", () => {
+    const result = run({ ".next/a.js": 'const a = "docs/missing.md";\n', "drizzle/a.ts": "// docs/missing.md\n" });
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+  });
+});
+
 describe("README and features pictures", () => {
   const images = (file: string, prefix: string) =>
     [...fs.readFileSync(path.join(ROOT, file), "utf8").matchAll(new RegExp(`(?:src|srcset)="(${prefix}images/[^"\\s]+)"`, "g"))].map((m) =>

@@ -14,7 +14,7 @@ export interface NumberRollProps {
   /** Null / NaN: renders `—` (unknown is never 0). */
   value: number | null | undefined;
   /**
-   * `integer` 1,284 · `decimal` one decimal · `percent` percentage points with the rule of tokens.md (>= 10 whole,
+   * `integer` 1,284 · `decimal` one decimal · `percent` percentage points (>= 10 whole,
    * < 10 one decimal, below 0.1 `<0.1%`) · or any `Intl.NumberFormat` options.
    */
   format?: NumberRollFormat;

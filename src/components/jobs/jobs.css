@@ -1,6 +1,6 @@
 /*
- * Job table / card layout of Today and /jobs. Ported from docs/design/design-system.html ".jobs", ".mc" and ".kpi";
- * colours, type sizes, radii, shadows and motion durations are the v3 tokens. Column widths are local geometry.
+ * Job table / card layout of Today and /jobs.
+ * Colours, type sizes, radii, shadows and motion durations are the v3 tokens. Column widths are local geometry.
  *
  * The list is a container: from `--jb-table-min` of its own width the rows are table rows (7 columns under a sticky head), below
  * that they are cards (score + salary side by side, then tags, skill overlap + freshness). The phone (<= 768px) is always cards.

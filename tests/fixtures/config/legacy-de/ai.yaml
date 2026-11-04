@@ -1,4 +1,4 @@
-# AI provider 层（docs/plan.md §6）。密钥只放在 .env，不要写在这里。
+# AI provider 层。密钥只放在 .env，不要写在这里。
 
 # AI 在哪里执行：
 #   host      容器里的 runner 只写一个 run_ai 请求，由宿主机上的 ai-worker（launchd）用本机 claude / codex 订阅执行

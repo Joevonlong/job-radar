@@ -1,7 +1,7 @@
 import { cva } from "class-variance-authority"
 
 /*
- * Shared look of text inputs, textareas and selects (design system v3, tokens.md "输入"):
+ * Shared look of text inputs, textareas and selects (design system v3):
  * 2px ink border, hover soft fill, focus = hard shadow (the global 3px t4 outline stays), invalid = red border + red
  * shadow, disabled = dashed + soft fill, read-only = dotted + transparent.
  */

@@ -1,5 +1,5 @@
 /**
- * Time formatting of docs/design/tokens.md "数字格式": relative time for lists, a full time for the
+ * Time formatting: relative time for lists, a full time for the
  * tooltip, durations. Pure: `now` is always passed in, so server and browser render the same text.
  *
  * Relative time: < 1 min "just now" · < 1 h "N min ago" · < 24 h "N h ago" · yesterday · earlier a date (Oct 5). The words

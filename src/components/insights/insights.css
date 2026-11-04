@@ -1,5 +1,5 @@
 /*
- * /insights. Ported from docs/design/design-system.html (.vbars, .hb, .kpi): HTML columns and bars instead of
+ * /insights: HTML columns and bars instead of
  * one SVG, so every column is a link, a tooltip and screen-reader text, and the page needs no horizontal scroll at 390px.
  * Colours, sizes, radii and motion come from the v3 tokens only; the grow animations are the shared ones of viz.css
  * (`jr-growy` / `jr-grow`, started by the `data-played` ancestor).

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Motion foundation of the data-viz library (docs/design/tokens.md "动效"). Everything that touches the
+ * Motion foundation of the data-viz library. Everything that touches the
  * `motion` package lives in this one file, so the library can be swapped without touching a component.
  *
  * - `useReducedMotion`: the user's prefers-reduced-motion setting (false on the server).
@@ -159,8 +159,8 @@ export function useIsPresent(): boolean {
 export { motion };
 
 /**
- * Transition of a sliding indicator (Segmented, tabs): the `--dur-base` time with the `--ease-spring` curve of
- * docs/design/tokens.md. With reduced motion the indicator jumps (no slide).
+ * Transition of a sliding indicator (Segmented, tabs): the `--dur-base` time with the `--ease-spring` curve.
+ * With reduced motion the indicator jumps (no slide).
  */
 export function slideTransition(reduced: boolean): { duration: number; ease: [number, number, number, number] } {
   return { duration: reduced ? 0 : 0.22, ease: [0.34, 1.56, 0.64, 1] };

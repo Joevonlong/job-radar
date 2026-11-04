@@ -1,5 +1,5 @@
 /**
- * Number formatting rules of docs/design/tokens.md "数字格式". Pure functions, no I/O: components, pages
+ * Number formatting rules. Pure functions, no I/O: components, pages
  * and tests share them, so a rule lives in exactly one place. Unknown values (null / undefined / NaN) never
  * become 0 (C3): every function answers with `UNKNOWN` ("—") for them, and the caller says "未披露" next to it
  * where that is the right word.

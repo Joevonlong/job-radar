@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * v3 banner (tokens.md "反馈"): stays until the problem is solved. Yellow = warning (always with the hatch stripe, colour
+ * v3 banner: stays until the problem is solved. Yellow = warning (always with the hatch stripe, colour
  * is never the only cue), red = failure. The caller supplies the text; `role="alert"` makes it announce itself.
  */
 export function Banner({ tone, testId, children, ...data }: { tone: "warn" | "bad"; testId?: string; children: ReactNode } & Record<`data-${string}`, string | undefined>) {

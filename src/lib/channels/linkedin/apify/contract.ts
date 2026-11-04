@@ -13,7 +13,7 @@ import { postedWithinSeconds } from "../date-window";
  * `POST /v2/acts/{actor}/run-sync-get-dataset-items` answers 201 with the dataset items (the actor must finish within
  * Apify's 300 s limit, else 408). The actor, its input template, the prices and the limits all live in sources.yaml
  * (`linkedin.apify`): switching actors is a config change. The default actor is documented in
- * `research/linkedin-apify-actors-2026-10.md`.
+ * `docs/apify.md`.
  */
 
 /** Environment variable holding the Apify API token (read at collect time, never logged). */

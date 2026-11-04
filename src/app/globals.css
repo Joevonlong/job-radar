@@ -5,7 +5,6 @@
 
 /*
  * Design system v3: "paper" light theme (default) and "terminal" dark theme.
- * Token values come from docs/design/tokens.css; spec in docs/design/tokens.md.
  * Theme switching uses next-themes with attribute="class": `light` (default) and `dark`.
  *
  * Tailwind utilities mapped from the tokens (use these in components, never raw hex / px / ms):
@@ -121,7 +120,7 @@
   --lift-d: 1px; /* button hover: the box rises by this much (up-left) while the shadow grows one step */
   --radius: 0.625rem; /* 10px cards; tags 7px; buttons 8px */
 
-  /* type scale: size / line-height (see tokens.md "字号与用法") */
+  /* type scale: size / line-height */
   --num-xxl: 72px;
   --num-xxl-lh: 0.9; /* detail score, max 1 per page */
   --num-xl: 44px;
@@ -707,7 +706,7 @@
 @utility border-l-bw {
   border-left-width: var(--bw);
 }
-/* Table-head / summary-label look (tokens.md "表头"). Combine with text-cap. */
+/* Table-head / summary-label look. Combine with text-cap. */
 @utility text-cap-style {
   font-family: var(--font-mono);
   font-weight: 600;
@@ -715,7 +714,7 @@
   text-transform: uppercase;
 }
 /*
- * Hover lift (tokens.md "悬停浮起"): the box rises by --lift-d up-left and the hard shadow grows one step (the variant sets
+ * Hover lift: the box rises by --lift-d up-left and the hard shadow grows one step (the variant sets
  * --lift-shadow, e.g. e2 -> e3, so the shadow tip stays put). Not while disabled / busy / toggled on / pressed (:active belongs
  * to `press`, which collapses the shadow); reduced motion keeps the shadow step but does not move the box.
  */
@@ -727,7 +726,7 @@
     }
   }
 }
-/* Press gesture: the box moves by --press-d while the hard shadow collapses (tokens.md "按钮"). */
+/* Press gesture: the box moves by --press-d while the hard shadow collapses. */
 @utility press {
   transition-property: translate, box-shadow, background-color, color, border-color;
   transition-duration: var(--dur-press), var(--dur-press), var(--dur-fast), var(--dur-fast),

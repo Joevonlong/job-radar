@@ -39,6 +39,9 @@ installation: [docs/development.md](docs/development.md#checks) has the commands
 - User-visible change? Add one line under `## [Unreleased]` in `CHANGELOG.md` (see [RELEASING.md](RELEASING.md)).
 - Commit messages: English, Conventional Commits (`feat(scope): ...`, `fix(scope): ...`, `docs: ...`).
 - Documentation is English first; a Chinese counterpart (`*.zh.md`) is welcome but not required for a PR.
+- Keep code comments few: only a reason or constraint the code cannot say itself. Comments, docs and pull request text must
+  not cite files, documents or ids that are missing from this repository or that readers cannot open; write the fact itself.
+  `pnpm docs:check` (part of `scripts/validate.sh`) catches unresolved paths.
 
 ## Scraping channels
 

@@ -1,6 +1,6 @@
 import { toast, type ExternalToast } from "sonner";
 
-/** How long a toast stays (tokens.md "toast": 3.2 s). The amber countdown bar in globals.css drains over the same time (`--toast-life`). */
+/** How long a toast stays. The amber countdown bar in globals.css drains over the same time (`--toast-life`). */
 export const TOAST_LIFE_MS = 3200;
 
 export type ToastTone = "success" | "info" | "warn" | "error";
