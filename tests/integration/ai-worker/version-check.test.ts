@@ -9,7 +9,7 @@ import { parseDocument } from "yaml";
 import { currentConfigVersion, getUserConfigPath, type ConfigName } from "@/lib/config";
 import type { ChannelLogger } from "@/lib/channels/types";
 import { processNextControlRequest } from "@/lib/control";
-import { createCycle, finishCycle, getControlRequest, insertControlRequest, releaseClaimedControlRequest } from "@/lib/db";
+import { claimNextControlRequest, createCycle, finishCycle, getControlRequest, insertControlRequest, releaseClaimedControlRequest } from "@/lib/db";
 import { createConnection } from "@/lib/db/client";
 
 import { createVersionChecks } from "../../../src/ai-worker/version-guard";
@@ -188,11 +188,51 @@ describe("the worker and a config file newer than its code", () => {
     const id = await interruptedRunAi();
     await conn.db.execute(sql`update control_requests set status = 'failed', finished_at = now(), result = '{"error":"expired"}'::jsonb where id = ${id}`);
     const before = await getControlRequest(conn.db, id);
+    if (before === null) throw new Error("the request is gone");
 
-    await releaseClaimedControlRequest(conn.db, id);
+    await releaseClaimedControlRequest(conn.db, before);
 
     expect(await getControlRequest(conn.db, id)).toEqual(before);
-    expect(before?.status).toBe("failed");
+    expect(before.status).toBe("failed");
+  });
+
+  it("putting a claim back leaves a request that was queued again and claimed by someone else as it is", async () => {
+    const pending = await pendingRunAi();
+    const mine = await claimNextControlRequest(conn.db, ["run_ai"]);
+    if (mine === null) throw new Error("nothing claimed");
+    expect(mine.id).toBe(pending);
+    await conn.db.execute(sql`update control_requests set status = 'pending', started_at = null where id = ${pending}`);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const theirs = await claimNextControlRequest(conn.db, ["run_ai"]);
+    expect(theirs?.id).toBe(pending);
+
+    await releaseClaimedControlRequest(conn.db, mine);
+
+    expect(await statusOf(pending)).toBe("running");
+
+    await releaseClaimedControlRequest(conn.db, theirs ?? mine);
+
+    expect(await statusOf(pending)).toBe("pending");
+  });
+
+  it("an afterClaim that throws: the request goes back unrun, not counted as an interruption, and the error reaches the caller", async () => {
+    const pending = await pendingRunAi();
+
+    const run = processNextControlRequest({
+      db: conn.db,
+      signal: new AbortController().signal,
+      logger: quiet,
+      kinds: () => ["run_ai"],
+      afterClaim: async () => {
+        throw new Stopped();
+      },
+    });
+
+    await expect(run).rejects.toBeInstanceOf(Stopped);
+    const request = await getControlRequest(conn.db, pending);
+    expect(request?.status).toBe("pending");
+    expect(request?.startedAt).toBeNull();
+    expect(request?.result).toBeNull();
   });
 
   it("files at this code's version: it puts back what was interrupted and handles the queue, exit 0", async () => {

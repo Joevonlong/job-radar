@@ -14,6 +14,7 @@ import {
   CONTROL_REQUEST_KINDS,
   finishControlRequest,
   getControlRequest,
+  releaseClaimedControlRequest,
   requeueInterruptedControlRequests,
   type ControlRequest,
   type ControlRequestKind,
@@ -45,7 +46,8 @@ export interface ControlPollOptions {
   /**
    * Runs after a claim, before the handler; the ai-worker checks again here. `beforeClaim` alone leaves a window: a file
    * can turn newer and a request can be queued between that check and the claim. Whatever was written before the claim is
-   * seen here, so a request queued after a file turned newer never runs.
+   * seen here, so a request queued after a file turned newer never runs. If it throws, the request goes back to the queue
+   * and the error reaches the caller.
    */
   afterClaim?: (request: ControlRequest) => Promise<void>;
   /**
@@ -91,7 +93,15 @@ export async function processNextControlRequest(options: ControlPollOptions): Pr
   await options.beforeClaim?.();
   const request = await claimNextControlRequest(db, claimableKinds(options.kinds?.()), { lane: options.lane });
   if (!request) return null;
-  await options.afterClaim?.(request);
+  try {
+    await options.afterClaim?.(request);
+  } catch (error) {
+    // The handler never ran: back in the queue, instead of `running` until the next start.
+    await releaseClaimedControlRequest(db, request).catch((releaseError: unknown) => {
+      logger.warn("could not put a claimed control request back", { controlRequest: request.id, error: describe(releaseError) });
+    });
+    throw error;
+  }
   const recorder = options.activity ?? noopRecorder;
   const cycle = z.object({ cycleId: z.number().int().positive() }).safeParse(request.payload);
   const job = z.object({ jobId: z.number().int().positive() }).safeParse(request.payload);

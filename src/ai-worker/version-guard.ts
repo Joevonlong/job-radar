@@ -10,7 +10,7 @@ import { parse as parseYaml } from "yaml";
 
 import { CONFIG_NAMES, currentConfigVersion, getUserConfigPath, loadConfig, type ConfigName } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
-import { releaseClaimedControlRequest } from "@/lib/db/repos/control-requests";
+import { releaseClaimedControlRequest, type ControlRequest } from "@/lib/db/repos/control-requests";
 
 export interface NewerConfigFile {
   name: ConfigName;
@@ -60,14 +60,14 @@ export interface VersionChecksOptions {
  * request it was given back in the queue first, for the upgraded worker. A failed release still stops: the next start
  * queues a request left `running` again, or fails it when its kind is not requeued.
  */
-export function createVersionChecks(options: VersionChecksOptions): { beforeClaim: () => Promise<void>; afterClaim: (request: { id: number }) => Promise<void> } {
+export function createVersionChecks(options: VersionChecksOptions): { beforeClaim: () => Promise<void>; afterClaim: (request: Pick<ControlRequest, "id" | "startedAt">) => Promise<void> } {
   const versions: VersionCache = new Map();
-  const stopIfOutdated = async (claimedRequestId?: number): Promise<void> => {
+  const stopIfOutdated = async (claim?: Pick<ControlRequest, "id" | "startedAt">): Promise<void> => {
     const newer = newerConfigFiles(versions);
     if (newer.length === 0) return;
-    if (claimedRequestId !== undefined) {
-      await releaseClaimedControlRequest(options.db, claimedRequestId).catch((error: unknown) => {
-        options.log(`could not put request #${claimedRequestId} back: ${error instanceof Error ? error.message : "unknown error"}`);
+    if (claim !== undefined) {
+      await releaseClaimedControlRequest(options.db, claim).catch((error: unknown) => {
+        options.log(`could not put request #${claim.id} back: ${error instanceof Error ? error.message : "unknown error"}`);
       });
     }
     const waitSeconds = options.once ? 0 : loadConfig("ai").host_worker.already_running_wait_seconds;
@@ -75,7 +75,7 @@ export function createVersionChecks(options: VersionChecksOptions): { beforeClai
     if (waitSeconds > 0) await sleep(waitSeconds * 1000);
     options.exit(1);
   };
-  return { beforeClaim: () => stopIfOutdated(), afterClaim: (request) => stopIfOutdated(request.id) };
+  return { beforeClaim: () => stopIfOutdated(), afterClaim: (request) => stopIfOutdated(request) };
 }
 
 /** The user's config and profile files whose `config_version` is newer than this code reads. */

@@ -249,10 +249,15 @@ export async function claimNextControlRequest(db: Db, kinds?: readonly ControlRe
 
 /**
  * Undo a claim whose handler never ran: the exact inverse of `claimNextControlRequest`, so the request is not counted as
- * interrupted. A request that has moved on since (not `running`) stays as it is.
+ * interrupted. A request that has moved on since stays as it is: one that is not `running`, or that a later claim runs now
+ * (the claim's `started_at` tells them apart, without a column for the owner; a `Date` holds milliseconds, the column more).
  */
-export async function releaseClaimedControlRequest(db: Db, id: number): Promise<void> {
-  await db.execute(sql`update control_requests set status = 'pending', started_at = null where id = ${id} and status = 'running'`);
+export async function releaseClaimedControlRequest(db: Db, claim: Pick<ControlRequest, "id" | "startedAt">): Promise<void> {
+  if (claim.startedAt === null) return;
+  await db.execute(sql`
+    update control_requests set status = 'pending', started_at = null
+    where id = ${claim.id} and status = 'running' and date_trunc('milliseconds', started_at) = ${claim.startedAt.toISOString()}::timestamptz
+  `);
 }
 
 /** Where one request stands in the queue of the process that claims it (see `describeControlQueue`). */
