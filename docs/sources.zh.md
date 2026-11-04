@@ -466,7 +466,7 @@ Berlin Design Network（`berlin_design_network`）发现公司 board，不采集
 **StepStone 与它的 robots.txt。** StepStone 的 `robots.txt`（2026-11-03 核对）禁止 `/jobs/*?*`，只放行带单个 `q=` 参数的搜索 URL。
 因此通道只发一种形式：`/jobs/<关键词>/in-<城市>?q=<关键词>`（远程和公司查询不带城市，全国范围），不再带 `sort`、`ag`（回看窗口）、
 `radius`、`wfh`、`page` 任何参数。后果：每个关键词、每个城市一次请求，返回约 25 条，顺序由 StepStone 决定（相关度，不是最新优先），
-不能翻页，回看窗口改为事后按每条岗位的发布时间过滤，所以窗口只有一天时，这 25 条里只有少数能留下。半径用 StepStone 对该城市的默认值；
+不能翻页，回看窗口改为事后按每条岗位的发布时间过滤，所以窗口只有一天时，这 25 条里只有少数能留下。超出窗口的新岗位不入库；已经入库、并且又出现在这一页的岗位会免费刷新"最近看到"（沿用已存的版本，不多发请求），所以只有 StepStone 列出的岗位不会仅因为掉出窗口就被标为"可能已关闭"。标题预筛仍然适用。刷新的岗位在 `max_results` 之外另算，运行的 `fetched` 和当月记录数都包含它们；数量只受首页限制（每个关键词约 25 条），所以不另设上限。刷新与 `reuse_known_details` 无关，也不区分链接检查已判定下线的岗位。某次查询一条都没入库时，日志会写明窗口丢掉了多少条（`stepstone query done` 和 `stepstone query stored nothing` 里的 `outsideWindow`）。半径用 StepStone 对该城市的默认值；
 远程查询在全国范围搜索，保留提到居家办公（"可居家办公"或"仅居家办公"）的岗位。`sources.stepstone` 的 `radius_km` 和 `max_pages` 不再存在
 （配置升级会删掉它们；XING 仍保留自己的）。覆盖面比以前小，StepStone 最好和 Arbeitsagentur 以及公司看板一起用。岗位详情页的请求不变（不带查询参数）。
 如果 StepStone 改了 `robots.txt`，规则集中在 `src/lib/channels/stepstone/client.ts` 的一个常量里。

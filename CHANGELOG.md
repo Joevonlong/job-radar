@@ -23,6 +23,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
   and place (about 25 results in StepStone's own order, no paging, no newest-first sort), and the look-back window is applied
   afterwards, so StepStone finds fewer postings than before. See [Sources](docs/sources.md#scraping).
 
+### Fixed
+
+- **StepStone keeps already stored jobs fresh.** A job that is already stored and appears on the first result page is now marked as seen even when it is older than the look-back window (no extra request), so jobs only StepStone lists no longer drift to "possibly closed". New jobs older than the window are still not stored. Refreshed jobs count in a run's `fetched` and the monthly record count, on top of `max_results`. A query that stores nothing logs how many listed answers the window dropped.
+
 ### Upgrade notes
 
 - **Your config files now hold only what differs from the shipped ones.** A file in `data/config/` is laid over the shipped
