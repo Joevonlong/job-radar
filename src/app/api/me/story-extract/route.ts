@@ -4,6 +4,7 @@ import { ConfigError, reloadConfig, type WriterConfig } from "@/lib/config";
 import { profileSourceText, requestStoryExtract } from "@/lib/control/story-extract-request";
 import { getDb } from "@/lib/db";
 import { logActionFailure } from "@/lib/logging/action-failure";
+import { enterUpload } from "@/lib/stories/upload-gate";
 import { formatOfName, textOfUpload } from "@/lib/stories/upload-text";
 import { STORY_EXTRACT_ORIGINS, type StoryExtractOrigin } from "@/lib/stories/extract";
 import type { StoryExtractResponse } from "@/lib/stories/extract-response";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 /** What a multipart form adds around the file: its boundary and field names. */
 const FORM_OVERHEAD_BYTES = 16 * 1024;
 
-const STATUS = { invalid: 400, too_large: 413, bad_type: 415, unreadable: 422, too_complex: 422, no_text: 422, disabled: 409, busy: 409, config_error: 500, unavailable: 503 } as const;
+const STATUS = { invalid: 400, too_large: 413, bad_type: 415, unreadable: 422, too_complex: 422, no_text: 422, disabled: 409, busy: 409, too_many: 429, config_error: 500, unavailable: 503 } as const;
 type RouteError = keyof typeof STATUS;
 
 function reply(body: StoryExtractResponse, status = 200): NextResponse {
@@ -68,6 +69,17 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   if (!writer.enabled) return refuse("disabled");
 
+  const limits = writer.import;
+  const release = enterUpload(limits.max_concurrent_uploads);
+  if (release === null) return refuse("too_many");
+  try {
+    return await handle(request, writer);
+  } finally {
+    release();
+  }
+}
+
+async function handle(request: Request, writer: WriterConfig): Promise<NextResponse> {
   const limits = writer.import;
   const body = await readBody(request, limits.max_file_bytes + FORM_OVERHEAD_BYTES);
   if (body === null) return refuse("too_large");

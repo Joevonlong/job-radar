@@ -83,6 +83,8 @@ import:
   # JavaScript heap (buffers), so it does not cap the process; the time limit is what stops a crafted file
   pdf_timeout_seconds: 15
   pdf_max_memory_mb: 256
+  # Most uploads read at the same time; another is refused until one ends (each holds its file in memory and may start a PDF thread)
+  max_concurrent_uploads: 2
   # Days a draft waits for review; older ones are deleted, reviewed or not
   draft_ttl_days: 14
 

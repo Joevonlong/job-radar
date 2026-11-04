@@ -270,6 +270,7 @@ it says when it may be outdated (a newer search or a changed story). The materia
 | `import.max_drafts` | `12` | Most drafts one extraction may return |
 | `import.pdf_timeout_seconds` | `15` | Longest a PDF may take to read; it is then stopped and you are asked to paste the text |
 | `import.pdf_max_memory_mb` | `256` | Heap limit of the thread reading a PDF, in MB. Memory outside the JavaScript heap is not counted, so the time limit (`pdf_timeout_seconds`) is what stops a crafted file |
+| `import.max_concurrent_uploads` | `2` | Most résumé uploads read at the same time; another is refused with "too many files" until one ends |
 | `import.draft_ttl_days` | `14` | Days a draft waits for review; older ones are deleted, reviewed or not |
 | `questions.max_per_job` | `12` | Most questions per job |
 | `questions.text_max_chars` | `1000` | Longest question text |

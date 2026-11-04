@@ -283,6 +283,18 @@ describe("the upload route", () => {
     expect(row.payload).toMatchObject({ origin: "profile" });
   });
 
+  it("reads only import.max_concurrent_uploads files at once and turns the rest away, then reads again", async () => {
+    writerFile("enabled: true\nimport:\n  max_concurrent_uploads: 1\n");
+    const file = () => upload({ origin: "resume", file: new File([`# CV\n${SOURCE}`], "cv.md") });
+    const [first, second] = await Promise.all([POST(file()), POST(file())]);
+    expect([first.status, second.status]).toEqual([200, 429]);
+    expect(await second.json()).toEqual({ ok: false, error: "too_many" });
+    // the slot is back once the first is done, also after a refusal
+    expect((await POST(file())).status).toBe(200);
+    writerFile("enabled: true\n");
+    await db().delete(schema.controlRequests);
+  });
+
   it("refuses too large, wrong types, scans and damaged files, without leaving a request", async () => {
     writerFile("enabled: true\nimport:\n  max_file_bytes: 10000\n");
     const refused = async (fields: Record<string, string | File>) => {

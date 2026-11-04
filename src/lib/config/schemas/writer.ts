@@ -128,6 +128,8 @@ export const writerSchema = z.strictObject({
       pdf_timeout_seconds: z.number().positive().max(120).default(15),
       /** Heap limit of the PDF reading thread, in MB. Memory outside the JavaScript heap (buffers) is not counted, so this does not cap the process; the time limit is what stops a crafted file. */
       pdf_max_memory_mb: z.number().int().min(32).max(2048).default(256),
+      /** Most uploads read at the same time; another is refused until one ends (each holds its file in memory and may start a PDF thread). */
+      max_concurrent_uploads: z.number().int().min(1).max(10).default(2),
       /** Days a draft waits for review; older ones are deleted, reviewed or not. */
       draft_ttl_days: z.number().int().min(1).max(365).default(14),
     })
