@@ -4,5 +4,7 @@
   "parameters": {
     "query": "AI Engineer in Berlin"
   },
-  "data": []
+  "data": {
+    "jobs": []
+  }
 }

@@ -348,7 +348,7 @@ sources:
     monthly_budget_usd: 0 # counts only spend beyond monthly_request_limit (overage_cost_per_request_usd × requests)
     throttle: { min_delay_ms: 500, max_delay_ms: 1500 }
     max_results: 50
-    api_base_url: "https://jsearch.p.rapidapi.com" # GET /search (jobs), /job-details; the domain is also used as X-RapidAPI-Host
+    api_base_url: "https://jsearch.p.rapidapi.com" # GET /search-v2 (jobs), /job-details; the domain is also used as X-RapidAPI-Host
     country: "" # country= param (lowercase ISO country code); empty = the market's country
     language: "" # language= param (lowercase ISO 639-1); empty = the country's main language
     pages_per_query: 1 # num_pages: pages read per query (10 results per page, each page is one request)

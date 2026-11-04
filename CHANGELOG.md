@@ -33,6 +33,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **JSearch collects again.** RapidAPI removed `GET /search` (it answers 404, "Endpoint '/search' does not exist"); the channel now calls `GET /search-v2`.
 - **StepStone keeps already stored jobs fresh.** A job that is already stored and appears on the first result page is now marked as seen even when it is older than the look-back window (no extra request), so jobs only StepStone lists no longer drift to "possibly closed". New jobs older than the window are still not stored. Refreshed jobs count in a run's `fetched` and the monthly record count, on top of `max_results`. A query that stores nothing logs how many listed answers the window dropped.
 - **A rollback of your preferences now shows the score of that version.** After a rollback, the job page, lists, Today, pushes, search through MCP and the automatic follow-ups kept reading the score and filter result of the version you left, even after re-scoring. Every one of them now reads the version you rolled back to, marked out of date until it is re-scored. A preferences or profile file edited back by hand to older text with different values now counts as the same rollback: it marks the other versions' scores out of date, so those jobs are scored again. The first cycle after the upgrade corrects rows left over from earlier rollbacks.
 

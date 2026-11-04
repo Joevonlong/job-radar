@@ -143,16 +143,16 @@ export const SEARCH_PAGE = fixture("search-page.json");
 export const SEARCH_EMPTY = fixture("search-empty.json");
 export const DETAILS = fixture("job-details.json");
 export const SEARCH_V2 = fixture("search-v2-sample.json");
-export const RECORDS = SEARCH_PAGE.data as Array<Record<string, unknown>>;
+export const RECORDS = (SEARCH_PAGE.data as { jobs: Array<Record<string, unknown>> }).jobs;
 export const ID_DIRECT = String(RECORDS[0]?.job_id);
 export const ID_AGGREGATOR = String(RECORDS[1]?.job_id);
 export const ID_NO_DESCRIPTION = String(RECORDS[2]?.job_id);
 export const ID_BROKEN = String(RECORDS[3]?.job_id);
 
-/** Routes `/search` to `page` and `/job-details` to the details fixture. */
+/** Routes `/search-v2` to `page` and `/job-details` to the details fixture. */
 export function api(options: { page?: unknown; details?: unknown } = {}): Handler {
   return ({ url }) => {
-    if (url.pathname === "/search") return response(200, options.page ?? SEARCH_PAGE);
+    if (url.pathname === "/search-v2") return response(200, options.page ?? SEARCH_PAGE);
     if (url.pathname === "/job-details") return response(200, options.details ?? DETAILS);
     return response(404, { message: "no such endpoint" });
   };
