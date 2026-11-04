@@ -6,7 +6,8 @@ import path from "node:path";
 import type { Sql } from "postgres";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
-import { loadConfig, resetConfigCache } from "@/lib/config";
+import { loadConfig, overlayFormatVersion, resetConfigCache } from "@/lib/config";
+import { parseConfigYaml } from "@/lib/config/yaml-options";
 import { CONFIG_WRITE_LOCK_KEY } from "@/lib/db/config-write-lock";
 import { readSetupState, resetSetupStateCache } from "@/lib/setup";
 
@@ -171,6 +172,21 @@ describe("the prepare scripts on a database that does not exist yet", () => {
     expect(loadConfig("salary").lookup.enabled).toBe(true);
     expect(loadConfig("salary").benchmark.min_sample).toBe(2);
     expect(await lockDatabases()).toEqual([]);
+  }, 120_000);
+
+  it("e2e-prepare: the files it changes hold an overlay with only the changed keys", async () => {
+    const run = runScript("e2e-prepare.ts", [], e2eEnv());
+    expect(await run.exited, run.output()).toBe(0);
+    const overlay = (name: "breakdown" | "writer" | "research" | "salary"): Record<string, unknown> =>
+      parseConfigYaml(fs.readFileSync(path.join(configDir, `${name}.yaml`), "utf8"), { unset: "overlay" }) as Record<string, unknown>;
+    for (const name of ["breakdown", "writer", "research", "salary"] as const) expect(overlay(name).config_version, name).toBe(overlayFormatVersion(name));
+    expect(overlay("breakdown")).toEqual({ config_version: overlayFormatVersion("breakdown"), enabled: true });
+    expect(overlay("writer")).toEqual({ config_version: overlayFormatVersion("writer"), enabled: true });
+    expect(overlay("salary")).toEqual({ config_version: overlayFormatVersion("salary"), lookup: { enabled: true }, benchmark: { min_sample: 2 } });
+    // research: its enabled switch and the trigger; the shipped trigger may already be "manual", in which case only the switch is written
+    const research = overlay("research");
+    expect(Object.keys(research).sort().filter((key) => key !== "auto")).toEqual(["config_version", "enabled"]);
+    expect(Object.keys((research.auto ?? {}) as object).filter((key) => key !== "trigger")).toEqual([]);
   }, 120_000);
 
   it("e2e-prepare --fresh: creates and migrates it, leaves both directories there and empty, setup pending, no lock session ever", async () => {
