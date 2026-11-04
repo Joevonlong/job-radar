@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseDocument } from "yaml";
 
-import { legacyFormatVersion } from "@/lib/config";
+import { legacyFormatVersion, overlayFormatVersion } from "@/lib/config";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 import { runConfigScript } from "../config/run-script";
@@ -91,5 +91,42 @@ describe("config-get", () => {
   it("an unknown file or no path: exit 2", () => {
     expect(get("nope.yaml", "x").status).toBe(2);
     expect(get("schedule.yaml").status).toBe(2);
+  });
+  describe("overlay format (a stub plus changed keys over the shipped file)", () => {
+    const stub = (body = "") => `config_version: ${overlayFormatVersion("schedule")}\n${body}`;
+
+    it("a stub alone prints the shipped values", () => {
+      writeUser(stub());
+      const shippedDoc = parseDocument(shipped());
+      const r = get("schedule.yaml", "timezone", "backup.max_age_hours");
+      expect(r.status, r.out).toBe(0);
+      expect(r.out).toBe(`${String(shippedDoc.get("timezone"))}\n${String(shippedDoc.getIn(["backup", "max_age_hours"]))}\n`);
+    });
+
+    it("an overlay value overrides the shipped one and leaves the other keys shipped", () => {
+      writeUser(stub("timezone: Pacific/Kiritimati\n"));
+      const shippedDoc = parseDocument(shipped());
+      const r = get("schedule.yaml", "timezone", "backup.max_age_hours");
+      expect(r.status, r.out).toBe(0);
+      expect(r.out).toBe(`Pacific/Kiritimati\n${String(shippedDoc.getIn(["backup", "max_age_hours"]))}\n`);
+    });
+
+    it("!unset removes a shipped key: a key with a zod default reads that default", () => {
+      fs.writeFileSync(path.join(tmp.defaultsDir, "schedule.yaml"), shippedWith((doc) => {
+        doc.setIn(["backup", "keep_old_databases"], 4);
+        doc.set("config_version", overlayFormatVersion("schedule")); // the shipped file is current
+      }));
+      writeUser(stub("backup:\n  keep_old_databases: !unset\n"));
+      const r = get("schedule.yaml", "backup.keep_old_databases");
+      expect(r).toMatchObject({ status: 0, out: "1\n" });
+    });
+
+    it("!unset of a required key is an error that names the file and the path, nothing on stdout", () => {
+      writeUser(stub("timezone: !unset\n"));
+      const r = get("schedule.yaml", "timezone");
+      expect(r.status).toBe(1);
+      expect(r.out).toContain("schedule.yaml");
+      expect(r.out).toContain("timezone");
+    });
   });
 });

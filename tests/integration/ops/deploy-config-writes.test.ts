@@ -69,6 +69,13 @@ hook_and_exit() {
 }
 `;
 
+const RELEASES_LOGGER = `
+eval "$(declare -f releases_lock_acquire | sed '1s/^releases_lock_acquire/test_real_releases_lock_acquire/')"
+releases_lock_acquire() { local rc=0; test_real_releases_lock_acquire "$@" || rc=$?; echo "# acquire rc=$rc mine=$RELEASES_LOCK_MINE" >> "\${DEPLOY_TEST_LOG:-/dev/null}"; return "$rc"; }
+eval "$(declare -f releases_lock_release | sed '1s/^releases_lock_release/test_real_releases_lock_release/')"
+releases_lock_release() { echo "# release mine=$RELEASES_LOCK_MINE" >> "\${DEPLOY_TEST_LOG:-/dev/null}"; test_real_releases_lock_release "$@"; }
+`;
+
 const DOCKER_STUB = `#!/usr/bin/env bash
 source "$STUB_LIB"
 record "docker $*"
@@ -81,7 +88,7 @@ case "$*" in
     id="\${*: -1}"; var="STUB_INSPECT_\${id//-/_}"
     if [[ -n "\${!var+x}" ]]; then echo "\${!var}"; else echo "true sha256:built-\${id#cid-}"; fi
     exit 0 ;;
-  "builder prune"*|"image prune"*) echo "Total:	0B"; exit 0 ;;
+  "builder prune"*|"image prune"*) note "prune $1 lock=$([[ -d "$LOCK" ]] && echo 1 || echo 0)"; echo "Total:	0B"; exit 0 ;;
 esac
 case "$*" in
   *" config --images "*) printf 'postgres:17\\nimg-%s\\n' "\${*: -1}"; exit 0 ;;
@@ -370,6 +377,9 @@ beforeAll(() => {
   fs.symlinkSync(path.join(REPO, "node_modules"), path.join(work, "node_modules"));
   write(path.join(work, ".gitignore"), "/node_modules\n/data/\n/.env\n");
 
+  // test only: log the ownership flag after taking the lock and before releasing it (it is not exported, so no stub sees it)
+  fs.appendFileSync(path.join(work, "scripts/ops/lib/releases.sh"), RELEASES_LOGGER);
+
   write(path.join(stubs, "stub-lib.sh"), STUB_LIB);
   write(path.join(stubs, "docker"), DOCKER_STUB, 0o755);
   write(path.join(stubs, "pnpm"), pnpmStub(), 0o755);
@@ -483,6 +493,22 @@ describe("scripts/ops/deploy.sh: real config writes", { timeout: 300_000 }, () =
       expect(again.calls.filter((c) => WRITES.includes(c))).toEqual(WRITES);
       expect(new Set(again.sums).size).toBe(1);
       expect(userBytes()).toBe(settled);
+    });
+
+    it("the lock is released between the last write and the prune; the ownership flag is the same from taking to releasing, and the lock is gone when the prune runs", async () => {
+      existingInstall();
+      const r = await deploy();
+      expect(r.status, r.out).toBe(0);
+      // taken once (the only acquire is the preflight's), owned; released once with the flag still 1, not touched by the write commands in between
+      expect(r.notes.filter((n) => n.startsWith("acquire "))).toEqual(["acquire rc=0 mine=1"]);
+      expect(r.notes.filter((n) => n.startsWith("release "))).toEqual(["release mine=1"]);
+      for (const command of WRITES) expect(r.notes.find((n) => n.startsWith(`at ${command} token=`))).toContain("lock=1");
+      // the release note comes after the last write command's note and before the prune's
+      expect(r.notes.indexOf("release mine=1")).toBeGreaterThan(r.notes.findIndex((n) => n.startsWith("at pnpm config:migrate --prune-backups")));
+      expect(r.notes.indexOf("release mine=1")).toBeLessThan(r.notes.indexOf("prune builder lock=0"));
+      expect(r.notes).toContain("prune builder lock=0");
+      expect(r.notes).toContain("prune image lock=0");
+      expect(fs.existsSync(lockDir)).toBe(false);
     });
 
     it("deploy.sh takes the lock in one place, the preflight, and nothing writes user files before the build", () => {

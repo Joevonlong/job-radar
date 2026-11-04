@@ -2,9 +2,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ensureConfigFiles, installedConfigFiles, parseConfigText } from "@/lib/config";
+import { ensureConfigFiles, installedConfigFiles, loadConfig, parseConfigText, resetConfigCache } from "@/lib/config";
 import { ARCHIVE_META_YAML } from "@/lib/ops/config-archive";
 import { setConfigWriteLockProviderForTests, type ConfigWriteLockProvider } from "@/lib/config/write-lock";
 import { readSetupState, resetSetupStateCache } from "@/lib/setup/state";
@@ -25,6 +25,7 @@ beforeEach(() => {
   resetSetupStateCache();
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   setConfigWriteLockProviderForTests(inProcessConfigWriteLock);
   tmp.cleanup();
 });
@@ -70,6 +71,32 @@ describe("a step whose first commit fails", () => {
     expect(readSetupState().pending).toBe(true);
   });
 
+  it("fails writing language.yaml itself: the pending setup.yaml is there, language.yaml is not, and the deploy's config:init changes neither", async () => {
+    const publish = (real: (...args: never[]) => unknown) => (from: unknown, to: unknown) => {
+      if (path.basename(String(to)) === "language.yaml") throw Object.assign(new Error("EIO: i/o error, write"), { code: "EIO" });
+      return real(from as never, to as never);
+    };
+    // a first file is published with a link, a replacement with a rename: either fails for language.yaml
+    const [realLink, realRename] = [fs.linkSync.bind(fs), fs.renameSync.bind(fs)];
+    vi.spyOn(fs, "linkSync").mockImplementation(publish(realLink) as typeof fs.linkSync);
+    vi.spyOn(fs, "renameSync").mockImplementation(publish(realRename) as typeof fs.renameSync);
+    const result = await saveLanguageStep({ ui_locale: "en", ai_output: "de" });
+    expect(result).toMatchObject({ status: "error", step: "language" });
+    vi.restoreAllMocks();
+    resetSetupStateCache();
+    expect(parseConfigText("setup", fs.readFileSync(user("setup.yaml"), "utf8"))).toMatchObject({ completed_at: null, steps: {} });
+    expect(fs.existsSync(user("language.yaml"))).toBe(false);
+    expect(readSetupState().pending).toBe(true);
+
+    const setupBytes = fs.readFileSync(user("setup.yaml"));
+    const run = runConfigScript(tmp, "config-init.ts");
+    expect(run.status, run.out).toBe(0);
+    expect(fs.readFileSync(user("setup.yaml")).equals(setupBytes)).toBe(true);
+    expect(fs.existsSync(user("language.yaml"))).toBe(false);
+    resetSetupStateCache();
+    expect(readSetupState().pending).toBe(true);
+  });
+
   it("is `setupUnreadable` when there is no shipped setup.yaml to start from", async () => {
     fs.rmSync(path.join(tmp.defaultsDir, "setup.yaml"));
     resetSetupStateCache();
@@ -111,6 +138,20 @@ describe("config:init and the wizard's files", () => {
     for (const file of WIZARD) expect(fs.existsSync(user(file))).toBe(false);
     expect(results.filter((result) => WIZARD.includes(path.basename(result.path))).every((result) => !result.created && result.reason === null)).toBe(true);
     expect(readSetupState().pending).toBe(true);
+  });
+
+  it("a language.yaml the user deleted (restore defaults) stays deleted after the deploy's write step, and the loader reads the shipped values", async () => {
+    await saveLanguageStep({ ui_locale: "zh", ai_output: "de" });
+    expect(loadConfig("language").ai.output).toBe("de");
+    fs.rmSync(user("language.yaml"));
+    const setupBytes = fs.readFileSync(user("setup.yaml"));
+    const run = runConfigScript(tmp, "config-init.ts");
+    expect(run.status, run.out).toBe(0);
+    expect(fs.existsSync(user("language.yaml"))).toBe(false);
+    expect(fs.readFileSync(user("setup.yaml")).equals(setupBytes)).toBe(true);
+    const shipped = parseConfigText("language", fs.readFileSync(path.join(tmp.defaultsDir, "language.yaml"), "utf8"));
+    resetConfigCache();
+    expect(loadConfig("language")).toEqual(shipped);
   });
 
   it("the command does the same, and leaves a wizard file that exists alone", () => {
