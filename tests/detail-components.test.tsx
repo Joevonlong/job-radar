@@ -11,6 +11,9 @@ import { LanguageTag } from "@/components/jobs/detail/language-tag";
 import { HiddenStatusesProvider } from "@/components/applications/visibility-context";
 import { MarkAppliedButton } from "@/components/jobs/detail/mark-applied";
 import { MobileActionBar } from "@/components/jobs/detail/mobile-action-bar";
+import { WriteAnswersLink } from "@/components/jobs/detail/write-answers-link";
+import { writerEntryHref } from "@/lib/writer/entry";
+import { createTranslator } from "next-intl";
 import { NotesForm } from "@/components/jobs/detail/status-panel";
 import { SourceIcon } from "@/components/jobs/source-icons";
 import { findQuoteTerm } from "@/lib/signals/rules";
@@ -159,6 +162,34 @@ describe("findQuoteTerm", () => {
   it("is null for benefit tags and when nothing in the quote hits", () => {
     expect(findQuoteTerm("30 days of vacation", "tag", interests)).toBeNull();
     expect(findQuoteTerm("Nothing here", "T2", interests)).toBeNull();
+  });
+});
+
+describe("WriteAnswersLink", () => {
+  const entry = (locale: "en" | "zh", input: { enabled: boolean; final: number; questions: number }) => {
+    const t = createTranslator({ locale, messages: locale === "en" ? en : zh, namespace: "dashboard.detail" });
+    return <WriteAnswersLink href={writerEntryHref({ jobId: 7, enabled: input.enabled, questions: input.questions })} enabled={input.enabled} label={t("actions.write")} countLabel={input.questions > 0 ? t("actions.writeCount", { final: input.final, total: input.questions }) : null} />;
+  };
+
+  it("links the writer on to the workbench with the count of final answers beside it", () => {
+    render(entry("en", { enabled: true, final: 1, questions: 3 }));
+    expect(screen.getByTestId("action-write")).toHaveAttribute("href", "/jobs/7/apply");
+    expect(screen.getByTestId("action-write")).toHaveAttribute("data-enabled", "true");
+    expect(screen.getByTestId("action-write")).toHaveTextContent("Write answers");
+    expect(screen.getByTestId("action-write-count")).toHaveTextContent("1/3");
+  });
+
+  it("has no count while there are no questions, and leads to the setting while the writer is off and nothing was written", () => {
+    render(entry("zh", { enabled: false, final: 0, questions: 0 }));
+    expect(screen.getByTestId("action-write")).toHaveAttribute("href", "/settings?tab=workflow");
+    expect(screen.getByTestId("action-write")).toHaveAttribute("data-enabled", "false");
+    expect(screen.queryByTestId("action-write-count")).toBeNull();
+  });
+
+  it("keeps the workbench link, with its count, after the writer is switched off", () => {
+    render(entry("en", { enabled: false, final: 0, questions: 2 }));
+    expect(screen.getByTestId("action-write")).toHaveAttribute("href", "/jobs/7/apply");
+    expect(screen.getByTestId("action-write-count")).toHaveTextContent("0/2");
   });
 });
 

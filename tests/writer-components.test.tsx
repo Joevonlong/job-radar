@@ -370,4 +370,34 @@ describe("the workbench entry, the evidence notice and the quota pause", () => {
     expect(text).not.toContain("{");
     expect(text).toMatch(locale === "en" ? /Available again after/ : /后可用/);
   });
+  const withSentences = (...sentences: Array<{ text: string; status: string }>): WorkbenchQuestion => {
+    const base = question(1, "Why us?", "x");
+    const version = { ...base.versions[0]!, mode: "draft", sentences: sentences.map((s) => ({ text: s.text, newParagraph: false, about: "user", status: s.status, evidence: [], missing: [], needsCheck: [] })) };
+    return { ...base, versions: [version] } as unknown as WorkbenchQuestion;
+  };
+
+  it.each(["en", "zh"] as const)("opening a sentence with evidence gives the whole hint that this is not proof, and a web-only sentence is called unverified (%s)", async (locale) => {
+    const user = userEvent.setup();
+    const messages = locale === "en" ? en : zh;
+    render(panel(withSentences({ text: "I built the service.", status: "supported" }, { text: "Acme grows fast.", status: "web_unverified" }), locale));
+    const [supported, web] = screen.getAllByTestId("writer-sentence");
+    await user.click(supported!);
+    const detail = screen.getByTestId("writer-sentence-detail");
+    expect(detail).toHaveAttribute("data-status", "supported");
+    expect(detail.textContent).toContain(messages.writer.status.label.supported);
+    expect(detail.textContent).toContain(messages.writer.status.explain.supported);
+    expect(detail.textContent).toContain(locale === "en" ? "That is not proof it is true." : "不等于");
+    await user.click(web!);
+    expect(screen.getByTestId("writer-sentence-detail").textContent).toContain(messages.writer.status.explain.web_unverified);
+    expect(screen.getByTestId("writer-sentence-detail").textContent).toContain(messages.writer.status.label.web_unverified);
+  });
+
+  it.each(["en", "zh"] as const)("a usage-cap pause without a known resume time says it continues by itself (%s)", (locale) => {
+    const q = { ...question(1, "Why us?", null), initialRequest: { state: "failed", error: "quota_guard", detail: null, resumeAt: null } } as unknown as WorkbenchQuestion;
+    render(panel(q, locale));
+    const text = screen.getByTestId("writer-error").textContent ?? "";
+    expect(text).not.toContain("{");
+    expect(text).not.toMatch(/Available again after|后可用/);
+    expect(text).toMatch(locale === "en" ? /continues by itself later/ : /自动继续/);
+  });
 });
