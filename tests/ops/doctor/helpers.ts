@@ -303,6 +303,7 @@ export function configLayersState(edit: Partial<ConfigLayersState> = {}): Config
     userDirWritable: true,
     userFiles: 10,
     notCopied: [],
+    overlays: [],
     missingVersion: [],
     pendingMigrations: [],
     problems: [],

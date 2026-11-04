@@ -72,7 +72,8 @@ export { installedConfigFiles } from "./install";
 export { commitConfigFile, publishNoReplace, sha256 } from "./atomic";
 export { configWriteSettings, withConfigWriteLock } from "./write-lock";
 export { inspectModelsOverlay, mergeModelsOverlay, type OverlayInspection } from "./models-overlay";
-export { inspectConfigLayers, type ConfigLayersState } from "./layers";
+export { inspectConfigLayers, inspectOverlayFiles, type ConfigFileOverlay, type ConfigLayersState } from "./layers";
+export { changedDefaults, countOverlayEntries, overlayEntries, shownValue, type ChangedDefault, type OverlayCounts, type OverlayEntry } from "./overlay-report";
 export { CONFIG_MIGRATIONS, type ConfigMigration } from "./migrations/index";
 export {
   assertMigrationChain,
