@@ -7,6 +7,13 @@ import type { DoctorCheck, DoctorContext } from "../types";
 
 const spec = { id: "config.layers", group: "data" } as const;
 
+const LIST_LIMIT = 5;
+
+/** The first few items of a list for a one-line report; `…` when there are more. */
+function listSome(ctx: DoctorContext, items: readonly string[]): string {
+  return joinList(ctx, items.slice(0, LIST_LIMIT)) + (items.length > LIST_LIMIT ? "…" : "");
+}
+
 export const configLayersCheck: DoctorCheck = {
   ...spec,
   async run(ctx) {
@@ -39,9 +46,26 @@ export const configLayersCheck: DoctorCheck = {
     if (state.notCopied.length > 0) {
       pieces.push({ status: "warn", detail: t("checks.config.layers.notCopied", { files: joinList(ctx, state.notCopied) }), hint: t("checks.config.layers.notCopiedHint") });
     }
-    const summary = t("checks.config.layers.summary", { userDir: state.userDir, count: state.userFiles, defaultsDir: state.defaultsDir });
-    if (pieces.length === 0) return ok(spec, summary);
-    return merge(ctx, spec, [...pieces, { status: "ok", detail: summary }]);
+    const overlays = state.overlays.filter((file) => file.format === "overlay");
+    const invalid = overlays.flatMap((file) => file.entries.filter((entry) => entry.invalid).map((entry) => `${file.file} ${entry.path}`));
+    if (invalid.length > 0) {
+      pieces.push({ status: "warn", detail: t("checks.config.layers.invalidUnsets", { count: invalid.length, keys: listSome(ctx, invalid) }), hint: t("checks.config.layers.invalidUnsetsHint") });
+    }
+    const summary =
+      overlays.length === 0
+        ? t("checks.config.layers.summary", { userDir: state.userDir, count: state.userFiles, defaultsDir: state.defaultsDir })
+        : t("checks.config.layers.summaryOverlay", {
+            userDir: state.userDir,
+            count: state.userFiles,
+            overrides: overlays.reduce((sum, file) => sum + file.overrides, 0),
+            unsets: overlays.reduce((sum, file) => sum + file.unsets, 0),
+            defaultsDir: state.defaultsDir,
+          });
+    // A pin equal to the shipped value is a choice, not a problem: it is said, never warned about.
+    const pins = overlays.flatMap((file) => file.entries.filter((entry) => entry.pin).map((entry) => `${file.file} ${entry.path}`));
+    const info: Piece[] = pins.length > 0 ? [{ status: "ok", detail: t("checks.config.layers.pins", { keys: listSome(ctx, pins) }) }] : [];
+    if (pieces.length === 0) return info.length === 0 ? ok(spec, summary) : merge(ctx, spec, [{ status: "ok", detail: summary }, ...info]);
+    return merge(ctx, spec, [...pieces, { status: "ok", detail: summary }, ...info]);
   },
 };
 

@@ -75,6 +75,25 @@ on the older version stay yours. Keeping the files of a backup instead, for exam
 Restart `pnpm mcp:serve`, `pnpm dev` and other processes you started by hand after a deploy that converts: they would run the
 older code, which refuses a file of the overlay format.
 
+## What your files change
+
+`pnpm config:check` prints one line per overlay file with the number of keys it overrides and unsets, for example
+`data/config/schedule.yaml  3 overrides, 1 unset`. A healthy install after the conversion has small numbers: only what you changed.
+Two kinds of line need a look, neither is a failure:
+
+- **a pin equal to the shipped value**: you wrote a key whose value is the shipped one. It stays (a save never removes it) but stops
+  following product updates. Remove the line to follow the product, or keep it on purpose;
+- **an `!unset` of a key the shipped file does not have**: the line does nothing (a typo, or the key was removed from the product).
+  Remove it.
+
+`pnpm config:check --overrides` lists every key of every overlay file (`--json` for a machine-readable list). A protected key
+(the program to run, an API host, a credential file; see the settings guide) is listed without its value, and the
+credentials of URLs in other values are masked. The doctor's `config.layers` shows the same totals in its summary line and
+lists pins as information; it warns only about an unset that does nothing. These commands only read.
+
+For maintainers, `pnpm release:changed-defaults <from-ref> <to-ref>` lists the shipped defaults that differ between two git
+refs (the values every install without an override receives), with the protected keys in a section of their own and no values.
+
 ## Two kinds of files
 
 | Kind | Files | First-time setup | On product upgrade |
@@ -182,6 +201,7 @@ pnpm config:migrate --write       # migrate: first back up the original files to
 pnpm config:migrate --prune-backups  # delete all but the newest schedule.yaml: config_writes.backups_keep (5) of those backup folders
 pnpm config:plan [--deploy] [--check]  # list the writes that are waiting, write nothing; --deploy adds the files config:init would create; --check exits 2 while any is pending (0 none, 1 a file cannot be migrated)
 pnpm config:check                 # validate both layers (default-directory files must be valid even when overridden), print which layer each file is read from and the shipped config identity
+pnpm config:check --overrides     # every key each overlay file overrides or unsets; a protected key shows no value, other values are shortened and have URL credentials masked (`--json` available; see "What your files change")
 pnpm config:check --effective     # per file: the layer it is read from and a hash of its effective value (`--json` for a machine-readable list; see below)
 pnpm config:example               # list the example setups; `pnpm config:example <id> [--dry-run]` applies one (see below)
 ```
