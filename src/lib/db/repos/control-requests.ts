@@ -249,10 +249,15 @@ export async function claimNextControlRequest(db: Db, kinds?: readonly ControlRe
 
 /**
  * Undo a claim whose handler never ran: the exact inverse of `claimNextControlRequest`, so the request is not counted as
- * interrupted. A request that has moved on since (not `running`) stays as it is.
+ * interrupted. A request that has moved on since stays as it is: one that is not `running`, or that a later claim runs now
+ * (the claim's `started_at` tells them apart, without a column for the owner; a `Date` holds milliseconds, the column more).
  */
-export async function releaseClaimedControlRequest(db: Db, id: number): Promise<void> {
-  await db.execute(sql`update control_requests set status = 'pending', started_at = null where id = ${id} and status = 'running'`);
+export async function releaseClaimedControlRequest(db: Db, claim: Pick<ControlRequest, "id" | "startedAt">): Promise<void> {
+  if (claim.startedAt === null) return;
+  await db.execute(sql`
+    update control_requests set status = 'pending', started_at = null
+    where id = ${claim.id} and status = 'running' and date_trunc('milliseconds', started_at) = ${claim.startedAt.toISOString()}::timestamptz
+  `);
 }
 
 /** Where one request stands in the queue of the process that claims it (see `describeControlQueue`). */
@@ -492,10 +497,15 @@ export async function findOpenWriterRequest(db: Executor, input: { jobId: number
 
 /** The newest `story_extract` request (what the stories card resumes after a reload), or null. There is one owner, so there is one at a time. */
 export async function findLatestStoryExtractRequest(db: Db): Promise<ControlRequest | null> {
+  // Compared as the enum, so `control_requests_job_id_idx` finds the few rows of this kind: as text, no index can hold it and
+  // the newest-first scan reads the whole table. A worker of a newer release can get here before the web has migrated, and
+  // naming a kind the enum does not have yet is an error; without the kind there are no such requests.
+  const known = await db.execute(sql`select 1 from pg_enum where enumtypid = 'control_request_kind'::regtype and enumlabel = 'story_extract'`);
+  if (known.length === 0) return null;
   const [row] = await db
     .select()
     .from(controlRequests)
-    .where(sql`${controlRequests.kind}::text = 'story_extract'`)
+    .where(eq(controlRequests.kind, "story_extract"))
     .orderBy(desc(controlRequests.id))
     .limit(1);
   return row ?? null;

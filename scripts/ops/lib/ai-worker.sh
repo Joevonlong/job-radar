@@ -144,6 +144,15 @@ ai_worker_identity() {
   return 0
 }
 
+# ai_worker_new_temp <file>: creates <file>, private to this user, in this shell (no child process). Fails when something
+# already has that name: noclobber refuses a regular file, but it opens a symlink to a non-regular file such as /dev/null.
+ai_worker_new_temp() {
+  local rc=0
+  { set -C; umask 077; : > "$1"; } 2>/dev/null || rc=$?
+  set +C
+  (( rc == 0 )) && [[ -f "$1" && ! -L "$1" ]]
+}
+
 # ai_worker_service_pid <platform> <label-or-unit> [timeout s]: the PID the service manager reports, or nothing. With a
 # timeout, the launchctl / systemctl call is given at most that long (ai_worker_run_bounded). A call that fails or is cut
 # off reports nothing, whatever it printed before; its output goes to a temp file, not a pipe, so that nothing left behind
@@ -154,10 +163,12 @@ ai_worker_service_pid() {
   (
     local platform="$1" target="$2" secs="${3:-}" out="" f="" rc=0 n
     trap 'rm -f "$f"; exit 143' TERM HUP INT
-    # a fresh name first, then the file created under it with noclobber: the trap knows the name before the file exists
+    # A fresh name first, then the file created under it with noclobber: the trap knows the name before the file exists.
+    # All in this shell: a child that the signal missed could create the file after the trap removed it. So no `mktemp -u`
+    # either (on macOS it creates and unlinks a file, and leaves it when the signal stops it in between).
     for n in 1 2 3 4 5; do
-      f="$(mktemp -u "${TMPDIR:-/tmp}/ai-worker-pid.XXXXXX")" || exit 0
-      if ( set -C; umask 077; : > "$f" ) 2>/dev/null; then break; fi
+      f="${TMPDIR:-/tmp}/ai-worker-pid.$RANDOM$RANDOM$RANDOM"
+      if ai_worker_new_temp "$f"; then break; fi
       f=""
     done
     [[ -n "$f" ]] || exit 0
@@ -167,7 +178,7 @@ ai_worker_service_pid() {
       *) rm -f "$f"; exit 0 ;;
     esac
     if [[ -n "$secs" ]]; then
-      ai_worker_run_bounded "$secs" ai_worker_exec_to "$f" "$@" || rc=$?
+      ai_worker_run_bounded "$secs" ai_worker_exec_to "$@" 9>"$f" || rc=$?
     else
       "$@" > "$f" 2>/dev/null || rc=$?
     fi
@@ -206,8 +217,9 @@ ai_worker_run_bounded() {
   return "$rc"
 }
 
-# ai_worker_exec_to <file> <command…>: execs the command with stdout to <file> and stderr discarded.
-ai_worker_exec_to() { local f="$1"; shift; exec "$@" > "$f" 2>/dev/null; }
+# ai_worker_exec_to <command…>: execs the command with stdout to the file the caller opened as fd 9 and stderr discarded.
+# The caller opens it, so that a child forked just before a signal cannot create the file again after a trap removed it.
+ai_worker_exec_to() { exec "$@" >&9 9>&- 2>/dev/null; }
 
 # ai_worker_evidence_probe <pid> <host> <since> [mode]: worker-heartbeat.ts --<mode> (default evidence), from this checkout (its tsconfig and
 # tsx), with the caller's DATABASE_URL; exec, so that ai_worker_run_bounded can kill it.
@@ -329,7 +341,7 @@ ai_worker_probe() {
   local secs="$1" f="$2"
   shift 2
   : > "$f" 2>/dev/null || return 1
-  ai_worker_run_bounded "$secs" ai_worker_exec_to "$f" "$@"
+  ai_worker_run_bounded "$secs" ai_worker_exec_to "$@" 9>"$f"
 }
 
 # ai_worker_interrupted: 0 when the caller asked the waits to give up on a signal (AI_WORKER_STOP_CHECK=1, a shell

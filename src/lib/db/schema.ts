@@ -1317,6 +1317,8 @@ export const controlRequests = pgTable(
   (t) => [
     index("control_requests_status_idx").on(t.status, t.id),
     index("control_requests_job_id_idx").on(t.kind, sql`(${t.payload} ->> 'jobId')`, t.id),
+    // No kind in it: the queries that must also run before the web migrated compare `kind::text`, which an index cannot hold (enum output is not immutable).
+    index("control_requests_payload_job_id_idx").on(sql`(${t.payload} ->> 'jobId')`, t.id),
   ],
 );
 

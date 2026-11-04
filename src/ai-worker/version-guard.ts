@@ -8,9 +8,9 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { parse as parseYaml } from "yaml";
 
-import { CONFIG_NAMES, currentConfigVersion, getUserConfigPath, loadConfig, type ConfigName } from "@/lib/config";
+import { CONFIG_NAMES, currentConfigVersion, getUserConfigPath, loadConfig, readShippedConfig, type ConfigName, type ConfigValue } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
-import { releaseClaimedControlRequest } from "@/lib/db/repos/control-requests";
+import { releaseClaimedControlRequest, type ControlRequest } from "@/lib/db/repos/control-requests";
 
 export interface NewerConfigFile {
   name: ConfigName;
@@ -32,16 +32,32 @@ function fileVersion(file: string, cache: VersionCache): number | null {
   }
   const known = cache.get(file);
   if (known !== undefined && known.mtimeMs === stat.mtimeMs && known.size === stat.size) return known.version;
-  let version: number | null = null;
+  let version: number | null;
   try {
     const doc: unknown = parseYaml(fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8"));
     const value = doc !== null && typeof doc === "object" ? (doc as Record<string, unknown>).config_version : undefined;
     version = typeof value === "number" && Number.isInteger(value) ? value : null;
   } catch {
-    // not readable as YAML: reported by the load
+    // Not readable as YAML: reported by the load. Not remembered: a failed read says nothing about the file, which may be fine at the next check with the same stat.
+    cache.delete(file);
+    return null;
   }
   cache.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, version });
   return version;
+}
+
+/**
+ * `ai.yaml: host_worker` for the paths that end the process. The user's file may be the one this code cannot read, and a stop
+ * must still wait and shut down in bounds: then the shipped values apply.
+ */
+export function hostWorkerSettings(): ConfigValue<"ai">["host_worker"] {
+  try {
+    return loadConfig("ai").host_worker;
+  } catch (error) {
+    const shipped = readShippedConfig("ai");
+    if (shipped === null) throw error;
+    return shipped.host_worker;
+  }
 }
 
 export interface VersionChecksOptions {
@@ -49,6 +65,8 @@ export interface VersionChecksOptions {
   /** `--once` exits at once; a running worker first waits `host_worker.already_running_wait_seconds`. */
   once: boolean;
   log: (message: string) => void;
+  /** Aborted by the shutdown: ends that wait at once. */
+  signal: AbortSignal;
   /** Ends the process. */
   exit: (code: number) => void;
 }
@@ -58,22 +76,26 @@ export interface VersionChecksOptions {
  * request it was given back in the queue first, for the upgraded worker. A failed release still stops: the next start
  * queues a request left `running` again, or fails it when its kind is not requeued.
  */
-export function createVersionChecks(options: VersionChecksOptions): { beforeClaim: () => Promise<void>; afterClaim: (request: { id: number }) => Promise<void> } {
+export function createVersionChecks(options: VersionChecksOptions): { beforeClaim: () => Promise<void>; afterClaim: (request: Pick<ControlRequest, "id" | "startedAt">) => Promise<void> } {
   const versions: VersionCache = new Map();
-  const stopIfOutdated = async (claimedRequestId?: number): Promise<void> => {
+  const stopIfOutdated = async (claim?: Pick<ControlRequest, "id" | "startedAt">): Promise<void> => {
     const newer = newerConfigFiles(versions);
     if (newer.length === 0) return;
-    if (claimedRequestId !== undefined) {
-      await releaseClaimedControlRequest(options.db, claimedRequestId).catch((error: unknown) => {
-        options.log(`could not put request #${claimedRequestId} back: ${error instanceof Error ? error.message : "unknown error"}`);
+    if (claim !== undefined) {
+      await releaseClaimedControlRequest(options.db, claim).catch((error: unknown) => {
+        options.log(`could not put request #${claim.id} back: ${error instanceof Error ? error.message : "unknown error"}`);
       });
     }
-    const waitSeconds = options.once ? 0 : loadConfig("ai").host_worker.already_running_wait_seconds;
+    const waitSeconds = options.once ? 0 : hostWorkerSettings().already_running_wait_seconds;
     options.log(`config files newer than this code: ${newer.map((file) => `${file.name} v${file.version} (reads up to v${file.supported})`).join(", ")}. Exiting${waitSeconds > 0 ? ` in ${waitSeconds}s` : ""}; the upgraded worker takes over`);
-    if (waitSeconds > 0) await sleep(waitSeconds * 1000);
+    if (waitSeconds > 0) {
+      await sleep(waitSeconds * 1000, undefined, { signal: options.signal }).catch(() => {
+        // aborted: the service manager is stopping us, so it needs no protection from a tight restart loop
+      });
+    }
     options.exit(1);
   };
-  return { beforeClaim: () => stopIfOutdated(), afterClaim: (request) => stopIfOutdated(request.id) };
+  return { beforeClaim: () => stopIfOutdated(), afterClaim: (request) => stopIfOutdated(request) };
 }
 
 /** The user's config and profile files whose `config_version` is newer than this code reads. */

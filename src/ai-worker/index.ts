@@ -27,7 +27,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { registerBuiltinChannels } from "@/lib/channels/builtin";
 import { defaultRegistry } from "@/lib/channels/registry";
 import { loadConfig, watchConfig } from "@/lib/config";
-import { createVersionChecks } from "./version-guard";
+import { createVersionChecks, hostWorkerSettings } from "./version-guard";
 import { startControlLanes, processNextControlRequest, aiWorkerRequestKinds } from "@/lib/control";
 import { registerAiControlHandlers } from "@/lib/control/ai-handlers";
 import { expireScrubbedRequests } from "@/lib/control/expire";
@@ -67,7 +67,7 @@ async function takeInstanceLock(once: boolean): Promise<InstanceLock | null> {
   const env = loadDatabaseEnv();
   const result = await acquireInstanceLock(env.DATABASE_URL, { name: "ai-worker", connectTimeoutSeconds: env.DB_CONNECT_TIMEOUT_SECONDS });
   if (result.acquired) return result.lock;
-  const waitSeconds = once ? 0 : loadConfig("ai").host_worker.already_running_wait_seconds;
+  const waitSeconds = once ? 0 : hostWorkerSettings().already_running_wait_seconds;
   let serviceHint = "";
   if (process.platform === "darwin") {
     let label = "<label>";
@@ -164,11 +164,16 @@ async function main(): Promise<number> {
   const shutdown = installShutdown({
     log,
     abort,
-    graceMs: () => loadConfig("ai").host_worker.shutdown_grace_seconds * 1000,
+    graceMs: () => hostWorkerSettings().shutdown_grace_seconds * 1000,
     exit: exitProcess,
   });
 
   const db = getDb();
+  // Config files newer than this code: an upgrade is under way and this worker is the old one. Stop before touching the
+  // queue, and before reading ai.yaml, which can be one of them; check again before and after every claim. Waits like a
+  // refused lock, so launchd does not restart it in a tight loop.
+  const versionChecks = createVersionChecks({ db, once, log, signal: abort.signal, exit: (code) => process.exit(code) });
+  await versionChecks.beforeClaim();
   const activity = createActivityRecorder({ db, process: "ai-worker" });
   activity.systemRoot("system.startup").finish("ok");
   void closeStaleActivity(activity);
@@ -204,10 +209,6 @@ async function main(): Promise<number> {
   // Requests still `running` belong to a worker that died (only this worker's kinds, never the runner's). They go back
   // to the queue and run again (a deploy that restarted us must not lose a `run_ai`), up to host_worker.requeue_interrupted_max times.
   const maxRequeues = (): number => loadConfig("ai").host_worker.requeue_interrupted_max;
-  // Config files newer than this code: an upgrade is under way and this worker is the old one. Stop before touching the
-  // queue, and check again before and after every claim. Waits like a refused lock, so launchd does not restart it in a tight loop.
-  const versionChecks = createVersionChecks({ db, once, log, exit: (code) => process.exit(code) });
-  await versionChecks.beforeClaim();
   // Only while holding the instance lock (taken above): another live worker's running requests are never touched.
   const orphans = await requeueInterruptedControlRequests(db, { reason: "ai-worker restarted while the request was running", maxRequeues: maxRequeues(), kinds: kinds() });
   if (orphans.requeued > 0) log(`queued ${orphans.requeued} interrupted request(s) again`);

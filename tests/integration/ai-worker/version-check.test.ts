@@ -9,7 +9,7 @@ import { parseDocument } from "yaml";
 import { currentConfigVersion, getUserConfigPath, type ConfigName } from "@/lib/config";
 import type { ChannelLogger } from "@/lib/channels/types";
 import { processNextControlRequest } from "@/lib/control";
-import { createCycle, finishCycle, getControlRequest, insertControlRequest, releaseClaimedControlRequest } from "@/lib/db";
+import { claimNextControlRequest, createCycle, finishCycle, getControlRequest, insertControlRequest, releaseClaimedControlRequest } from "@/lib/db";
 import { createConnection } from "@/lib/db/client";
 
 import { createVersionChecks } from "../../../src/ai-worker/version-guard";
@@ -86,6 +86,25 @@ function makeNewer(name: ConfigName): void {
   fs.writeFileSync(file, `${text.replace(/^config_version:.*\n/m, "")}\nconfig_version: ${version}\n`);
 }
 
+/** Values of the shipped ai.yaml, the only layer left when the user's file is newer than the code. */
+function setShippedHostWorker(values: Record<string, number>): void {
+  const file = path.join(temp.defaultsDir, "ai.yaml");
+  const doc = parseDocument(fs.readFileSync(file, "utf8"));
+  for (const [key, value] of Object.entries(values)) doc.setIn(["host_worker", key], value);
+  fs.writeFileSync(file, doc.toString());
+}
+
+/**
+ * How long the worker's activity recorder may take to close. Past it `exitProcess` kills the process (work was abandoned), which
+ * `spawnSync` reports as status null; on a loaded machine the default is too short for a test that asserts the exit code.
+ */
+function setActivityFlushMs(ms: number): void {
+  const file = path.join(temp.defaultsDir, "activity-log.yaml");
+  const doc = parseDocument(fs.readFileSync(file, "utf8"));
+  doc.setIn(["writer", "shutdown_flush_ms"], ms);
+  fs.writeFileSync(file, doc.toString());
+}
+
 async function pendingRunAi(): Promise<number> {
   const cycle = await createCycle(conn.db, { kind: "manual" });
   await finishCycle(conn.db, cycle.id, { status: "succeeded", summary: { steps: [] } });
@@ -106,7 +125,7 @@ const quiet: ChannelLogger = { debug() {}, info() {}, warn() {}, error() {}, chi
 const statusOf = async (id: number): Promise<string | undefined> => (await getControlRequest(conn.db, id))?.status;
 
 describe("the worker and a config file newer than its code", () => {
-  it.each(["notify", "ui", "me"] as const)("%s newer at start-up: exit 1, nothing put back, nothing claimed", async (name) => {
+  it.each(["notify", "ui", "me", "ai"] as const)("%s newer at start-up: exit 1, nothing put back, nothing claimed", async (name) => {
     const running = await interruptedRunAi();
     const pending = await pendingRunAi();
     makeNewer(name);
@@ -118,6 +137,49 @@ describe("the worker and a config file newer than its code", () => {
     expect(output).toContain(`${name} v${currentConfigVersion(name) + 1}`);
     expect(await statusOf(running)).toBe("running");
     expect(await statusOf(pending)).toBe("pending");
+  }, 90_000);
+
+  it("ai.yaml newer at start-up without --once: it says so and waits the shipped time, so the service manager does not restart it in a tight loop", async () => {
+    setShippedHostWorker({ already_running_wait_seconds: 2 });
+    const running = await interruptedRunAi();
+    makeNewer("ai");
+
+    const started = Date.now();
+    const r = spawnSync(process.execPath, ["--import", LOADER, WORKER], { cwd: REPO, env: workerEnv(), encoding: "utf8", timeout: 60_000 });
+    const output = `${r.stdout}${r.stderr}`;
+
+    expect(r.status, output).toBe(1);
+    expect(output).toContain("Exiting in 2s");
+    expect(Date.now() - started).toBeGreaterThanOrEqual(2000);
+    expect(await statusOf(running)).toBe("running");
+  }, 90_000);
+
+  it("a signal during that wait ends it at once, without using up the grace period", async () => {
+    setShippedHostWorker({ already_running_wait_seconds: 120, shutdown_grace_seconds: 60 });
+    makeNewer("ai");
+
+    const child = spawn(process.execPath, ["--import", LOADER, WORKER], { cwd: REPO, env: workerEnv(), stdio: ["ignore", "pipe", "pipe"] });
+    let output = "";
+    child.stdout.on("data", (d: Buffer) => (output += d.toString()));
+    child.stderr.on("data", (d: Buffer) => (output += d.toString()));
+    const exited = new Promise<number | null>((resolve) => child.on("exit", (code) => resolve(code)));
+    try {
+      const until = Date.now() + 45_000;
+      while (!output.includes("config files newer than this code")) {
+        if (child.exitCode !== null) throw new Error(`the worker exited early: ${output}`);
+        if (Date.now() > until) throw new Error(`the worker did not reach the wait: ${output}`);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      const signalled = Date.now();
+      child.kill("SIGTERM");
+      expect(await exited, output).toBe(1);
+      expect(Date.now() - signalled).toBeLessThan(30_000);
+      expect(output).toContain("received SIGTERM");
+      expect(output).not.toContain("shutdown did not finish");
+      expect(output).not.toContain("uncaught exception");
+    } finally {
+      if (child.exitCode === null) child.kill("SIGKILL");
+    }
   }, 90_000);
 
   it("newer while it runs: it exits before the next claim, and the queued request stays queued", async () => {
@@ -157,6 +219,7 @@ describe("the worker and a config file newer than its code", () => {
       db: conn.db,
       once: true,
       log: (message) => messages.push(message),
+      signal: new AbortController().signal,
       exit: () => {
         throw new Stopped();
       },
@@ -188,14 +251,55 @@ describe("the worker and a config file newer than its code", () => {
     const id = await interruptedRunAi();
     await conn.db.execute(sql`update control_requests set status = 'failed', finished_at = now(), result = '{"error":"expired"}'::jsonb where id = ${id}`);
     const before = await getControlRequest(conn.db, id);
+    if (before === null) throw new Error("the request is gone");
 
-    await releaseClaimedControlRequest(conn.db, id);
+    await releaseClaimedControlRequest(conn.db, before);
 
     expect(await getControlRequest(conn.db, id)).toEqual(before);
-    expect(before?.status).toBe("failed");
+    expect(before.status).toBe("failed");
+  });
+
+  it("putting a claim back leaves a request that was queued again and claimed by someone else as it is", async () => {
+    const pending = await pendingRunAi();
+    const mine = await claimNextControlRequest(conn.db, ["run_ai"]);
+    if (mine === null) throw new Error("nothing claimed");
+    expect(mine.id).toBe(pending);
+    await conn.db.execute(sql`update control_requests set status = 'pending', started_at = null where id = ${pending}`);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const theirs = await claimNextControlRequest(conn.db, ["run_ai"]);
+    expect(theirs?.id).toBe(pending);
+
+    await releaseClaimedControlRequest(conn.db, mine);
+
+    expect(await statusOf(pending)).toBe("running");
+
+    await releaseClaimedControlRequest(conn.db, theirs ?? mine);
+
+    expect(await statusOf(pending)).toBe("pending");
+  });
+
+  it("an afterClaim that throws: the request goes back unrun, not counted as an interruption, and the error reaches the caller", async () => {
+    const pending = await pendingRunAi();
+
+    const run = processNextControlRequest({
+      db: conn.db,
+      signal: new AbortController().signal,
+      logger: quiet,
+      kinds: () => ["run_ai"],
+      afterClaim: async () => {
+        throw new Stopped();
+      },
+    });
+
+    await expect(run).rejects.toBeInstanceOf(Stopped);
+    const request = await getControlRequest(conn.db, pending);
+    expect(request?.status).toBe("pending");
+    expect(request?.startedAt).toBeNull();
+    expect(request?.result).toBeNull();
   });
 
   it("files at this code's version: it puts back what was interrupted and handles the queue, exit 0", async () => {
+    setActivityFlushMs(30_000);
     const running = await interruptedRunAi();
     const pending = await pendingRunAi();
 
@@ -209,6 +313,7 @@ describe("the worker and a config file newer than its code", () => {
   }, 90_000);
 
   it("a file with an older version does not stop it", async () => {
+    setActivityFlushMs(30_000);
     const pending = await pendingRunAi();
     const file = getUserConfigPath("notify");
     fs.writeFileSync(file, fs.readFileSync(path.join(REPO, "tests/fixtures/config/notify.v1.yaml"), "utf8").replace(/^(?!config_version)/, "config_version: 1\n"));
