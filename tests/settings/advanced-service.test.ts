@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { ADVANCED_NAMES, advancedNameOfStem, advancedStem, loadAdvancedFile, loadAdvancedIndex } from "@/lib/settings/advanced/view";
+import { ADVANCED_NAMES, advancedNameOfStem, advancedStem, canResetFile, loadAdvancedFile, loadAdvancedIndex } from "@/lib/settings/advanced/view";
 import { SLOW_PATTERN_MESSAGE } from "@/lib/config/interests-lint";
 import { previewAdvanced, resetAdvanced, saveAdvanced, validateAdvanced } from "@/lib/settings/advanced/service";
 
@@ -220,5 +220,28 @@ describe("preview", () => {
     const refused = await saveAdvanced({ file: "sources", text: next.text.replace("proxy.example", "elsewhere.example"), baseHash: next.hash, baseLayer: next.layer, confirmOverride: false });
     expect(refused).toEqual({ status: "proxies_changed" });
     expect(userText("sources.yaml")).toContain("proxy.example:8080");
+  });
+});
+
+describe("canResetFile", () => {
+  const stub = () => opened("pipeline").text;
+  it.each<[string, string, () => void, boolean]>([
+    ["a whole-format file (not an overlay)", "notify", () => {}, true],
+    ["a file that cannot be parsed", "ai", () => fs.writeFileSync(userFile("ai.yaml"), "a: [unclosed\n"), true],
+    ["a user file that cannot be read", "ai", () => {
+      fs.rmSync(userFile("ai.yaml"), { force: true });
+      fs.mkdirSync(userFile("ai.yaml"));
+    }, true],
+    ["setup.yaml", "setup", () => fs.writeFileSync(userFile("setup.yaml"), "config_version: 1\n"), false],
+    ["a file with no shipped counterpart", "pipeline", () => {
+      fs.writeFileSync(userFile("pipeline.yaml"), `${stub()}\nbatch_size: 7\n`);
+      fs.rmSync(path.join(tmp.defaultsDir, "pipeline.yaml"), { force: true });
+    }, false],
+    ["a stub only", "pipeline", () => fs.writeFileSync(userFile("pipeline.yaml"), stub()), false],
+    ["an overlay with an override", "pipeline", () => fs.writeFileSync(userFile("pipeline.yaml"), `${stub()}\nbatch_size: 7\n`), true],
+    ["models.yaml with comments only (no overlay format)", "models", () => fs.writeFileSync(userFile("models.yaml"), "# nothing yet\n"), true],
+  ])("%s", (_label, name, setup, expected) => {
+    setup();
+    expect(canResetFile(name as Parameters<typeof canResetFile>[0])).toBe(expected);
   });
 });
