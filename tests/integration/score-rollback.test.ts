@@ -5,6 +5,7 @@ import { closeDb, getDb, type Db } from "@/lib/db/client";
 import { getNavCounts } from "@/lib/db/queries/nav-counts";
 import { getJobDetail } from "@/lib/db/queries/job-detail";
 import { listJobs } from "@/lib/db/queries/jobs";
+import { listRegressFactRows } from "@/lib/db/queries/market-regress";
 import { listTodayJobs } from "@/lib/db/queries/today";
 import { listBreakdownCandidates } from "@/lib/db/repos/breakdowns";
 import { scoreTransaction } from "@/lib/db/repos/current-scores";
@@ -75,6 +76,8 @@ describe("rolling the preferences back", () => {
     expect(await listTranslationCandidates(db, { lang: "zh", minRank: 80, limit: 10 })).toEqual([]);
     expect(await listBreakdownCandidates(db, { minRank: 80, limit: 10 })).toEqual([]);
     expect(await listHighScoreResearchCandidates(db, { minRank: 80, maxAgeDays: 365, limit: 10, now, isExcludedCompany: () => false })).toEqual([]);
+    // the market regression snapshot reads the same row
+    expect((await listRegressFactRows(db)).find((row) => Number(row.id) === job.id)).toMatchObject({ german_level: "b1" });
   });
 
   it("shows the old version's score, marked stale, until it is rescored", async () => {

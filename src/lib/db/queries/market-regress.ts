@@ -28,6 +28,6 @@ export async function listRegressFactRows(db: Db): Promise<FactRow[]> {
            (select array_agg(g.tier::text order by g.tier) from signals g where g.job_id = j.id) as tiers,
            (select jsonb_agg(g.value_json order by g.id) from signals g where g.job_id = j.id and g.tier = 'T1') as t1
       from jobs j
-      left join lateral (select * from scores x where x.job_id = j.id order by x.id desc limit 1) s on true
+      left join lateral (select * from scores x where x.job_id = j.id order by x.created_at desc, x.id desc limit 1) s on true
   `);
 }
