@@ -35,7 +35,7 @@ import { signalPatternIsFast } from "@/lib/signals/pattern-guard";
 import { logActionFailure } from "@/lib/logging/action-failure";
 
 import type { AdvancedFailure, AdvancedLayer, AdvancedPreview, AdvancedResetResult, AdvancedSaveResult, AdvancedValidation } from "./types";
-import { advancedNameOfStem, editorLimits, editorText } from "./view";
+import { advancedNameOfStem, canResetFile, editorLimits, editorText } from "./view";
 
 /** Hard ceiling for the text field whatever ui.yaml says (the real limit, `config_editor.max_bytes`, is checked after it). */
 const MAX_TEXT_CHARS = 4_000_000;
@@ -72,14 +72,14 @@ function fingerprint(name: ConfigName): string {
   }
 }
 
-function currentState(name: ConfigName): { text: string; hash: string; layer: AdvancedLayer } {
+function currentState(name: ConfigName): { text: string; hash: string; layer: AdvancedLayer; canReset: boolean } {
   let text = "";
   try {
     text = editorText(name);
   } catch {
     // no layer to read: the editor starts empty
   }
-  return { text: maskConfigText(name, text), hash: fingerprint(name), layer: configLayer(name) };
+  return { text: maskConfigText(name, text), hash: fingerprint(name), layer: configLayer(name), canReset: canResetFile(name) };
 }
 
 /**
@@ -201,11 +201,11 @@ export async function saveAdvanced(rawRequest: unknown): Promise<AdvancedSaveRes
     if (checked.ok && needsRepair(name, text.text)) {
       await writeConfigRepair(name, checked.value, { previewFingerprint: baseHash });
       const state = currentState(name);
-      return { status: "saved", hash: state.hash, layer: "user", text: state.text, backup: baseLayer === "user" };
+      return { status: "saved", hash: state.hash, layer: "user", text: state.text, canReset: state.canReset, backup: baseLayer === "user" };
     }
     const written = await writeConfigText(name, text.text, { baseHash, baseLayer, maxBytes: limits.maxBytes, backupsKeep: limits.backupsKeep });
     const state = currentState(name);
-    return { status: "saved", hash: state.hash, layer: written.layer, text: state.text, backup: written.backup !== null };
+    return { status: "saved", hash: state.hash, layer: written.layer, text: state.text, canReset: state.canReset, backup: written.backup !== null };
   } catch (error) {
     logActionFailure("saveAdvanced", error);
     return failureOf(name, error);
@@ -219,7 +219,7 @@ export async function resetAdvanced(rawRequest: unknown): Promise<AdvancedResetR
   try {
     const result = await resetConfigToDefault(name, { baseHash: request.data.baseHash, baseLayer: request.data.baseLayer, backupsKeep: editorLimits().backupsKeep });
     const state = currentState(name);
-    return { status: "reset", hash: state.hash, layer: result.layer, text: state.text, backup: result.backup !== null };
+    return { status: "reset", hash: state.hash, layer: result.layer, text: state.text, canReset: state.canReset, backup: result.backup !== null };
   } catch (error) {
     logActionFailure("resetAdvanced", error);
     return failureOf(name, error);
