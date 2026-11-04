@@ -6,7 +6,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseDocument } from "yaml";
 
-import { ConfigError, currentConfigVersion, resetConfigCache } from "@/lib/config";
+import { ConfigError, overlayFormatVersion, currentConfigVersion, resetConfigCache } from "@/lib/config";
 import { buildEffectivePipeline, loadMarket, loadPack, loadPipeline, MarketUnresolvedError, marketSettingsProblems, resetPackCache, resolveMarket } from "@/lib/market";
 import type { Pack } from "@/lib/market/load";
 import { emptyGhostPack, emptyVisaPack, ghostPackSchema, visaPackSchema } from "@/lib/market/schema";
@@ -221,3 +221,37 @@ describe("a user pipeline.yaml laid over the shipped one, united with the pack",
     expect(countries.length).toBeGreaterThan(1); // the pack's entries
   });
 });
+
+describe("!unset in a user pipeline.yaml and the packs", () => {
+  const pipelineFile = (dir: string) => path.join(dir, "pipeline.yaml");
+
+  it("removes the file's own list entries, never the pack's", () => {
+    const shipped = parseDocument(fs.readFileSync(pipelineFile(tmp.defaultsDir), "utf8"));
+    shipped.setIn(["company", "legal_suffixes"], shipped.createNode(["zzfile"]));
+    fs.writeFileSync(pipelineFile(tmp.defaultsDir), String(shipped));
+    resetConfigCache();
+    const packList = [...loadPack(loadMarket().packId).rules.company.legal_suffixes];
+    expect(packList.length).toBeGreaterThan(0);
+    expect(loadPipeline().company.legal_suffixes).toEqual(expect.arrayContaining(["zzfile", ...packList]));
+
+    fs.writeFileSync(pipelineFile(tmp.configDir), `config_version: ${overlayFormatVersion("pipeline")}\ncompany:\n  legal_suffixes: !unset\n`);
+    resetConfigCache();
+    const after = loadPipeline().company.legal_suffixes;
+    expect(after).not.toContain("zzfile");
+    expect(after).toEqual(expect.arrayContaining(packList));
+  });
+
+  it("a user pack copy replaces the shipped pack's whole directory: a file it lacks is empty, never read from the shipped pack", () => {
+    const shippedRules = loadPack("de").rules;
+    expect(shippedRules.contract.student.length).toBeGreaterThan(0);
+    const dir = copyPack("de");
+    fs.rmSync(path.join(dir, "rules.yaml"));
+    const copy = loadPack("de");
+    expect(copy.layer).toBe("user");
+    expect(copy.dir).toBe(dir);
+    expect(copy.rules.contract.student).toEqual([]);
+    // the other files of the copy are its own
+    expect(copy.meta.id).toBe("de");
+  });
+});
+
