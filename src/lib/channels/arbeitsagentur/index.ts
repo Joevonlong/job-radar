@@ -5,7 +5,7 @@ import { ChannelError, settlePostings } from "../errors";
 import { loadKnownDetails, storedDetailOf } from "../known";
 import { searchKind } from "../query";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
-import { fetchDetail, fetchSearchPage } from "./client";
+import { COMPANY_PARAMS, fetchDetail, fetchSearchPage, type CompanyParam } from "./client";
 import { JOB_PAGE_URL, parseArbeitsagenturPayload, toDate } from "./parse";
 import { redactContacts } from "./redact";
 import { payloadSchema, type BaDetail, type BaPayload, type BaSearchItem } from "./schema";
@@ -72,18 +72,24 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
   search: for (const term of query.keywords) {
     const items: BaSearchItem[] = [];
     perTerm.push(items);
-    for (let page = 1; items.length < query.maxResults && page <= maxPages; page += 1) {
-      await pace();
-      let response;
-      try {
-        response = await fetchSearchPage(ctx, settings, { term, kind, location, windowHours: query.windowHours, page, size });
-      } catch (error) {
-        if (!(error instanceof ChannelError)) throw error;
-        interrupted = error;
-        break search;
+    // company lookups: the exact employer parameter first, free text only when that finds nothing.
+    // The fallback adds at most one (empty) request; pages and results stay bound by the same limits
+    const params: readonly (CompanyParam | undefined)[] = kind === "company" ? COMPANY_PARAMS : [undefined];
+    for (const companyParam of params) {
+      for (let page = 1; items.length < query.maxResults && page <= maxPages; page += 1) {
+        await pace();
+        let response;
+        try {
+          response = await fetchSearchPage(ctx, settings, { term, kind, location, windowHours: query.windowHours, page, size, ...(companyParam ? { companyParam } : {}) });
+        } catch (error) {
+          if (!(error instanceof ChannelError)) throw error;
+          interrupted = error;
+          break search;
+        }
+        items.push(...(filterRemote ? response.ergebnisliste.filter((item) => item.homeofficemoeglich === true) : response.ergebnisliste));
+        if (response.ergebnisliste.length === 0 || page * size >= response.maxErgebnisse) break;
       }
-      items.push(...(filterRemote ? response.ergebnisliste.filter((item) => item.homeofficemoeglich === true) : response.ergebnisliste));
-      if (response.ergebnisliste.length === 0 || page * size >= response.maxErgebnisse) break;
+      if (items.length > 0) break;
     }
   }
   const selected = interleave(perTerm, query.maxResults);

@@ -16,8 +16,16 @@ export const DETAIL_PATH = "pc/v4/jobdetails";
 /** The API accepts 1..100 days for `veroeffentlichtseit`; 0 returns nothing. */
 export const MIN_PUBLISHED_DAYS = 1;
 export const MAX_PUBLISHED_DAYS = 100;
-/** The employer-name parameter returned no hits in a live comparison; use free text and post-filtering. */
-export const COMPANY_PARAM: "arbeitgeber" | "was" = "was";
+/**
+ * Company lookups ask the employer-name parameter `arbeitgeber` first. Live comparison (veroeffentlichtseit=100, size=50):
+ * it matches the employer name exactly, so `Siemens AG` gives 334 hits that all come from that employer and `SAP` gives 45
+ * (`SAP SE` only 1), but a short form such as `Siemens`, `Deutsche Bahn` or `DB Fernverkehr AG` gives 0. The free-text
+ * parameter `was` finds those too and is noisy (`Siemens`: 7779 hits, the first page mostly staffing agencies, 4 of 50 from
+ * Siemens AG), so it is the fallback, used only when `arbeitgeber` has no hit, and its results are narrowed afterwards
+ * (see `employerMatches` in the channel).
+ */
+export type CompanyParam = "arbeitgeber" | "was";
+export const COMPANY_PARAMS: readonly CompanyParam[] = ["arbeitgeber", "was"];
 
 type ClientSettings = Pick<ArbeitsagenturSettings, "base_url" | "api_key" | "radius_km">;
 
@@ -32,6 +40,8 @@ export interface SearchParams {
   page: number;
   size: number;
   kind?: "city" | "remote" | "company";
+  /** Which parameter carries the term of a company lookup; default `arbeitgeber`. Other kinds always use `was`. */
+  companyParam?: CompanyParam;
 }
 
 /** `veroeffentlichtseit` for a look-back window: whole days, rounded up, within what the API accepts. */
@@ -48,7 +58,7 @@ function headers(settings: ClientSettings): Record<string, string> {
 }
 
 export function searchUrl(settings: ClientSettings, params: SearchParams): string {
-  const query = new URLSearchParams({ [params.kind === "company" ? COMPANY_PARAM : "was"]: params.term });
+  const query = new URLSearchParams({ [params.kind === "company" ? (params.companyParam ?? "arbeitgeber") : "was"]: params.term });
   if (params.kind !== "company" && params.location !== null) {
     query.set("wo", params.location);
     query.set("umkreis", String(settings.radius_km));

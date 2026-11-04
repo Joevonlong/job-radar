@@ -889,7 +889,8 @@ it("company searches are nationwide and keep onsite results even with home-offic
   const { ctx, calls } = makeContext(api({ pages: [SEARCH_REMOTE] }), { fetch_details: false, remote_requires_home_office: true });
   const result = await arbeitsagenturChannel.collect(query({ company: { name: "Acme", key: "acme" }, keywords: ["Acme"], location: null, remote: false }), ctx);
   expect(result).toHaveLength((SEARCH_REMOTE.ergebnisliste as unknown[]).length);
-  expect(calls[0]!.url.searchParams.get("was")).toBe("Acme");
+  expect(calls[0]!.url.searchParams.get("arbeitgeber")).toBe("Acme");
+  expect(calls[0]!.url.searchParams.has("was")).toBe(false);
   for (const key of ["wo", "umkreis", "homeoffice"]) expect(calls[0]!.url.searchParams.has(key)).toBe(false);
   expect(arbeitsagenturChannel.supportsCompanyQueries).toBe(true);
 });
@@ -927,5 +928,60 @@ describe("company queries: employer check before the detail requests", () => {
     const again = makeContext(api(), { fetch_details: true }, { records: plain });
     await arbeitsagenturChannel.collect(query(), again.ctx);
     expect(plain.find((r) => r.message === "arbeitsagentur query done")?.fields).not.toHaveProperty("otherEmployerDetailsSkipped");
+  });
+});
+
+describe("company queries: exact employer parameter first, free text as fallback", () => {
+  const isDetail = (c: Call) => c.url.pathname.includes("/pc/v4/jobdetails/");
+  const companyQuery = (overrides: Partial<SearchQuery> = {}) =>
+    query({ company: { name: "Praxissoft Nord", key: "praxissoft-nord" }, keywords: ["Praxissoft Nord"], location: null, remote: false, ...overrides });
+  /** `arbeitgeber` finds nothing; `was` returns SEARCH_PAGE (like the live API for a short employer name). */
+  const exactMisses = (): Handler => {
+    const inner = api();
+    return (call, n) => (call.url.searchParams.has("arbeitgeber") && isSearch(call) ? response(200, SEARCH_EMPTY) : inner(call, n));
+  };
+
+  it("an exact hit uses no fallback", async () => {
+    const { ctx, calls } = makeContext(api(), { fetch_details: false });
+    const result = await arbeitsagenturChannel.collect(companyQuery(), ctx);
+    expect(result).toHaveLength((SEARCH_PAGE.ergebnisliste as unknown[]).length);
+    expect(calls.filter(isSearch)).toHaveLength(1);
+    expect(calls[0]!.url.searchParams.get("arbeitgeber")).toBe("Praxissoft Nord");
+    expect(calls.some((c) => c.url.searchParams.has("was"))).toBe(false);
+  });
+
+  it("zero exact hits fall back to the free-text parameter", async () => {
+    const { ctx, calls } = makeContext(exactMisses(), { fetch_details: false });
+    const result = await arbeitsagenturChannel.collect(companyQuery(), ctx);
+    expect(result).toHaveLength((SEARCH_PAGE.ergebnisliste as unknown[]).length);
+    const searches = calls.filter(isSearch);
+    expect(searches.map((c) => [c.url.searchParams.has("arbeitgeber"), c.url.searchParams.get("was")])).toEqual([[true, null], [false, "Praxissoft Nord"]]);
+    for (const key of ["wo", "umkreis"]) expect(searches[1]!.url.searchParams.has(key)).toBe(false);
+  });
+
+  it("the fallback still checks the employer before any detail request", async () => {
+    const made = makeContext(exactMisses(), { fetch_details: true });
+    const ctx: ChannelContext = { ...made.ctx, employerMatches: (name) => name?.trim() === "Sehwerk GmbH" };
+    const result = await arbeitsagenturChannel.collect(companyQuery(), ctx);
+    const detailRefs = made.calls.filter(isDetail).map((c) => Buffer.from(c.url.pathname.split("/").pop() ?? "", "base64").toString("utf8"));
+    expect(detailRefs).toEqual([REF_SALARY]);
+    expect(result).toHaveLength((SEARCH_PAGE.ergebnisliste as unknown[]).length);
+  });
+
+  it("the fallback keeps the result, page and detail limits", async () => {
+    const made = makeContext(exactMisses(), { fetch_details: true, max_details_per_query: 1, page_size: 2 });
+    await arbeitsagenturChannel.collect(companyQuery({ maxResults: 2 }), made.ctx);
+    const searches = made.calls.filter(isSearch);
+    // one empty exact request, then a single free-text page of at most maxResults
+    expect(searches).toHaveLength(2);
+    expect(searches[1]!.url.searchParams.get("size")).toBe("2");
+    expect(made.calls.filter(isDetail).length).toBeLessThanOrEqual(1);
+  });
+
+  it("keyword queries are unchanged: free text only", async () => {
+    const { ctx, calls } = makeContext(api(), { fetch_details: false });
+    await arbeitsagenturChannel.collect(query(), ctx);
+    expect(calls.every((c) => !c.url.searchParams.has("arbeitgeber"))).toBe(true);
+    expect(calls[0]!.url.searchParams.get("was")).toBe("KI Engineer");
   });
 });

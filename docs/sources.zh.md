@@ -493,7 +493,7 @@ Job Radar 是独立项目，与它能读取或连接的任何招聘网站、雇�
 
 入库前，仅保留雇主归一 key 命中本查询或其他关注公司的结果；解析失败的原始记录仍保留供流水线诊断。`runs.fetched` 是后过滤前的返回数，新增数只计实际保留的岗位。日志计 `company_mismatch` 并列出至多三个雇主名。法律实体、子公司和品牌不会自动合并：分别关注或在 `pipeline.yaml: company.aliases` 添加别名，见[提取](extraction.zh.md)。常见短名容易让别家的结果占满上限，能配 ATS 看板时优先用看板。Arbeitsagentur 采用 `was` 自由文本备用查询，再校验雇主。
 
-各通道的查询方式：LinkedIn 的 Bright Data、Apify 和 session 通道用公司名加本国名搜索，不加远程过滤；JSearch 发一次请求 `<公司> in <本国>`，不带 `work_from_home`；StepStone 和 XING 按名字全国搜索，不带城市、半径、居家办公或远程过滤（StepStone 只发 `?q=`，见上文），也不做标题预筛（岗位标题里不会有公司名）。
+各通道的查询方式：LinkedIn 的 Bright Data、Apify 和 session 通道用公司名加本国名搜索，不加远程过滤；JSearch 发一次请求 `<公司> in <本国>`，不带 `work_from_home`；StepStone 和 XING 按名字全国搜索，不带城市、半径、居家办公或远程过滤（StepStone 只发 `?q=`，见上文），也不做标题预筛（岗位标题里不会有公司名）。Arbeitsagentur 先按雇主全名（`arbeitgeber`）精确查询（要写成 `Siemens AG`，写 `Siemens` 查不到），没有结果才退回自由文本搜索，其结果之后再按雇主过滤。
 
 **其他雇主的详情页不打开。**结果列表里已有雇主名的通道（Arbeitsagentur、LinkedIn session、JSearch、StepStone、XING），公司查询只在雇主是被搜的公司或另一家关注公司时才打开该条的详情页。其余的只保留列表数据，随后被上面的雇主校验丢弃，因此不占页面、详情请求、每日页面上限，也不占 `max_details_per_query`。没写雇主名的条目照旧打开。这条规则不覆盖 jobspy 通道，它的描述由 sidecar 自己抓取。
 
