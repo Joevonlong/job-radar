@@ -4,7 +4,7 @@
  * docs/ (and the top-level *.md files) must point to an existing file; `#anchors` and absolute URLs are not followed.
  * Also checks the references in code, config and prose: a path under one of REFERENCE_ROOTS, and in a comment a Markdown
  * file name without a directory, must exist in the repository, because a reader cannot open anything else. Under the test
- * directories only comments count (test data holds made-up paths).
+ * directories only comments count (test data holds made-up paths), and saved pages and JSON there are skipped.
  * Plain Node, no dependencies. Run with `pnpm docs:check [root]` (default: the repository); exit code 1 lists the broken
  * links and references.
  */
@@ -147,7 +147,6 @@ for (const file of referenceFiles) {
   const isTest = TEST_FILE.test(relative);
   const isProse = PROSE_FILE.test(file);
   if (!SCANNED_FILE.test(file) || REFERENCE_SKIP_FILES.has(path.basename(file))) continue;
-  // Saved pages and JSON under the test directories are data, and JSON has no comments.
   if (isTest && (file.endsWith(".html") || file.endsWith(".json"))) continue;
   const text = fs.readFileSync(file, "utf8");
   const comments = isProse || file.endsWith(".json") ? [] : commentLines(text, HASH_COMMENT_FILE.test(file));
