@@ -362,6 +362,36 @@ describe("ai_worker_wait_fresh", () => {
 });
 
 describe("ai_worker_service_pid temporary file", () => {
+  // A signal to the group can stop `mktemp -u` between the create and the unlink (macOS), and can miss a child forked just
+  // before it, which then opens the file by name after the trap removed it. Both left a file behind, rarely, under a stress
+  // run; these two tests pin the causes without the timing.
+  it("does not fork mktemp for the name", () => {
+    write(path.join(bin, "mktemp"), "#!/bin/bash\nexit 99\n", 0o755);
+    fs.writeFileSync(path.join(state, "loaded"), "");
+    const tmpdir = path.join(tmp, "tmpdir");
+    fs.mkdirSync(tmpdir, { recursive: true });
+    const vars = Object.entries({ PATH: `${bin}:/usr/bin:/bin`, HOME: tmp, TMPDIR: tmpdir }).map(([k, v]) => `${k}=${v}`);
+
+    const r = spawnSync("/usr/bin/env", ["-i", ...vars, "/bin/bash", "-c", `source "${lib}"; ai_worker_service_pid launchd ${LABEL} 30`], { encoding: "utf8", timeout: 30_000 });
+
+    expect(r.stdout.trim()).toBe("4242");
+    expect(fs.readdirSync(tmpdir)).toEqual([]);
+  });
+
+  it("the bounded call does not create the file again after it was removed", () => {
+    fs.writeFileSync(path.join(state, "loaded"), "");
+    const tmpdir = path.join(tmp, "tmpdir");
+    fs.mkdirSync(tmpdir, { recursive: true });
+    const vars = Object.entries({ PATH: `${bin}:/usr/bin:/bin`, HOME: tmp, TMPDIR: tmpdir }).map(([k, v]) => `${k}=${v}`);
+    // what the trap does while the child has yet to open its output: the file goes first, then the child runs
+    const removedFirst = 'ai_worker_run_bounded() { shift; rm -f "$f"; ( "$@" ); [[ ! -e "$f" ]] || echo recreated; return 1; }';
+
+    const r = spawnSync("/usr/bin/env", ["-i", ...vars, "/bin/bash", "-c", `source "${lib}"; ${removedFirst}; ai_worker_service_pid launchd ${LABEL} 30`], { encoding: "utf8", timeout: 30_000 });
+
+    expect(r.stdout).not.toContain("recreated");
+    expect(fs.readdirSync(tmpdir)).toEqual([]);
+  });
+
   it.each(["SIGTERM", "SIGHUP"] as const)("is removed when the subshell running it gets %s mid-call", async (sig) => {
     const tmpdir = path.join(tmp, "tmpdir");
     fs.mkdirSync(tmpdir, { recursive: true });
