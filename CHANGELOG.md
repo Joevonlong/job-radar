@@ -23,10 +23,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
   and place (about 25 results in StepStone's own order, no paging, no newest-first sort), and the look-back window is applied
   afterwards, so StepStone finds fewer postings than before. See [Sources](docs/sources.md#scraping).
 
-- **A rollback of your preferences now shows the score of that version.** After a rollback, the job page, lists, Today, pushes, search through MCP and the automatic follow-ups kept reading the score and filter result of the version you left, even after re-scoring. Every one of them now reads the version you rolled back to, marked out of date until it is re-scored. A preferences or profile file edited back to older text by hand now counts as the same rollback: it marks the other versions' scores out of date, so those jobs are scored again. The first cycle after the upgrade corrects rows left over from earlier rollbacks.
 ### Fixed
 
 - **StepStone keeps already stored jobs fresh.** A job that is already stored and appears on the first result page is now marked as seen even when it is older than the look-back window (no extra request), so jobs only StepStone lists no longer drift to "possibly closed". New jobs older than the window are still not stored. Refreshed jobs count in a run's `fetched` and the monthly record count, on top of `max_results`. A query that stores nothing logs how many listed answers the window dropped.
+- **A rollback of your preferences now shows the score of that version.** After a rollback, the job page, lists, Today, pushes, search through MCP and the automatic follow-ups kept reading the score and filter result of the version you left, even after re-scoring. Every one of them now reads the version you rolled back to, marked out of date until it is re-scored. A preferences or profile file edited back by hand to older text with different values now counts as the same rollback: it marks the other versions' scores out of date, so those jobs are scored again. The first cycle after the upgrade corrects rows left over from earlier rollbacks.
 
 ### Upgrade notes
 
