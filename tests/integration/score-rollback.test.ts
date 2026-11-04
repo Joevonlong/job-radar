@@ -11,11 +11,13 @@ import { listBreakdownCandidates } from "@/lib/db/repos/breakdowns";
 import { scoreTransaction } from "@/lib/db/repos/current-scores";
 import { insertFilterResults } from "@/lib/db/repos/filter-results";
 import { getPushCandidate } from "@/lib/db/repos/notifications";
+import { getLatestProfileSnapshot } from "@/lib/db/repos/profile-snapshots";
 import { listHighScoreResearchCandidates } from "@/lib/db/repos/research-auto-runs";
 import { promoteSnapshotScores, saveScore } from "@/lib/db/repos/scores";
 import { listTranslationCandidates } from "@/lib/db/repos/translations";
 import { jobCurrentScores, jobs, profileSnapshots } from "@/lib/db/schema";
-import { recordProfileSnapshot } from "@/lib/profile/snapshots";
+import { recordProfileSnapshot, snapshotForProfileText } from "@/lib/profile/snapshots";
+import { currentPreferencesSnapshotId } from "@/lib/scoring/profile";
 
 import { expectNoDrift, fixture, scoreRow, scores } from "./current-scores-support";
 
@@ -131,6 +133,31 @@ describe("rolling the preferences back", () => {
     await recordProfileSnapshot(db, "me", "me: 2\n");
     await recordProfileSnapshot(db, "me", "me: 1\n");
     expect((await getJobDetail(db, job.id))?.score).toMatchObject({ score: 90 });
+  });
+});
+
+describe("a preferences file edited back to old text by hand", () => {
+  it("makes the old version the current one for scoring and reconciliation alike", async () => {
+    const db = getDb();
+    const { job, older, newer } = await scoredTwice(db);
+    expect((await getLatestProfileSnapshot(db, "preferences"))?.id).toBe(newer.id);
+
+    const snapshotId = await currentPreferencesSnapshotId(db, { meYaml: "me: 1\n", preferencesYaml: OLD_TEXT });
+    expect(snapshotId).toBe(older.id);
+    expect((await getLatestProfileSnapshot(db, "preferences"))?.id).toBe(older.id);
+    // like a rollback in the app: the other version goes stale, and the page shows the version in the file
+    const rows = await db.select().from(scores).where(eq(scores.profileSnapshotId, newer.id));
+    expect(rows).toMatchObject([{ stale: true }]);
+    expect((await getJobDetail(db, job.id))?.score).toMatchObject({ score: 60 });
+    await expectNoDrift(db);
+  });
+
+  it("changes nothing when the text is the current version already", async () => {
+    const db = getDb();
+    const { newer } = await scoredTwice(db);
+    const before = await db.select().from(scores).orderBy(scores.id);
+    expect((await snapshotForProfileText(db, "preferences", NEW_TEXT)).savedAt).toEqual(newer.savedAt);
+    expect(await db.select().from(scores).orderBy(scores.id)).toEqual(before);
   });
 });
 

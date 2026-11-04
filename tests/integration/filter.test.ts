@@ -196,6 +196,24 @@ describe("filter step", () => {
     expect((await currentPreferences(getDb())).snapshot.id).toBe(snapshot.id);
   });
 
+  it("a file edited back to an older version's text makes that version current again", async () => {
+    const db = getDb();
+    const file = getConfigPath("preferences");
+    const job = await addJob({ salaryJson: salaryJson(60_000) });
+    await runStep();
+    const older = fs.readFileSync(file, "utf8");
+    const olderId = (await currentPreferences(db)).snapshot.id;
+    await setFloor(50_000);
+    await runStep();
+    expect((await rowsOf(job.id)).at(-1)).toMatchObject({ filterResult: "passed" });
+    fs.writeFileSync(file, older);
+    resetConfigCache();
+    expect((await currentPreferences(db)).snapshot.id).toBe(olderId);
+    expect((await listProfileSnapshots(db, "preferences", 1))[0]?.id).toBe(olderId);
+    const cards = await listJobs(db, { filters: { includeFiltered: true }, sort: "first_seen", page: 1, pageSize: 20, timezone: "Europe/Berlin" });
+    expect(cards.jobs.find((j) => j.id === job.id)?.rank?.filterResult).toBe("filtered_out");
+  });
+
   it("the step moves rows of the current version ahead of newer rows of another version", async () => {
     const db = getDb();
     const job = await addJob();
