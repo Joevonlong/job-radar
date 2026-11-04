@@ -560,7 +560,7 @@ about 25 results in StepStone's own order (relevance, not newest first), there i
 applied afterwards from each posting's date, so a window of one day keeps only the few of those 25 that are that new.
 A new posting older than the window is not stored. A posting that is already stored and is listed again on that page is
 refreshed as seen at no extra request (it keeps its stored version), so jobs that only StepStone lists do not age into
-"possibly closed" just because they fell out of the window. The title prefilter still applies to these. When a query stores nothing,
+"possibly closed" just because they fell out of the window. The title prefilter still applies to these. Refreshed postings come on top of `max_results`, and a run's `fetched` figure and the monthly record count include them. They are bounded by the first page alone (about 25 listed answers per keyword), so no separate limit is needed. The refresh runs whatever `reuse_known_details` says, and it also applies to jobs a link check has already found gone (they are not told apart). When a query stores nothing,
 the log says how many listed answers the window dropped (`outsideWindow` on `stepstone query done` and `stepstone query stored nothing`).
 The radius is StepStone's default for the city, and a remote query searches nationwide and keeps postings that mention
 home office ("home office possible" or "only"). The `radius_km` and `max_pages` settings of `sources.stepstone` no longer

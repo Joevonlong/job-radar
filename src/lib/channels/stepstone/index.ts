@@ -193,6 +193,7 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
     postings.push(...refreshed);
     if (interrupted && postings.length === 0) throw interrupted;
     if (postings.length === 0 && stats.outsideWindow > 0) {
+      // a run that stores nothing says why: outsideWindow is the number of listed answers the look-back window dropped
       ctx.logger.info("stepstone query stored nothing: listed answers are older than the look-back window", {
         query: query.id,
         listed: stats.results,
@@ -200,7 +201,6 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
         windowHours: query.windowHours,
       });
     }
-    // a run that stores nothing says why: outsideWindow is the number of listed answers the look-back window dropped
     ctx.logger.info("stepstone query done", {
       query: query.id,
       ...stats,

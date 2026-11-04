@@ -394,6 +394,31 @@ describe("collect: older postings already stored", () => {
     expect(postings.map((p) => p.externalId)).not.toContain(target.externalId);
   });
 
+  it("refreshes stored postings of a company query too, without the title prefilter", async () => {
+    const { old } = await stored();
+    const company = { ...searchQuery({ keywords: ["Acme Robotics GmbH"], location: null }), keywordGroup: "company:acme-robotics-gmbh", company: { name: "Acme Robotics GmbH", key: "acme-robotics-gmbh" } };
+    const known = new Map(old.map((p) => [p.externalId, p.payload]));
+    const made = makeContext(site(), extra({ fetch_details: false }), { known: { payloads: async (ids) => new Map([...known].filter(([id]) => ids.includes(id))) } });
+    const postings = await createStepstoneChannel({ now: () => NOW }).collect(company, made.ctx);
+    for (const o of old) expect(postings.map((p) => p.externalId)).toContain(o.externalId);
+    expect(made.calls).toHaveLength(1);
+  });
+
+  it("keeps the refreshed postings when a later search of the query is blocked", async () => {
+    const { old } = await stored();
+    const known = new Map(old.map((p) => [p.externalId, p.payload]));
+    const handler: Handler = (call, index) => (index === 0 ? site()(call, index) : htmlResponse(403, fixtureHtml("stepstone", "blocked-403.html")));
+    const made = makeContext(handler, extra({ fetch_details: false }), { known: { payloads: async (ids) => new Map([...known].filter(([id]) => ids.includes(id))) } });
+    const query = searchQuery({ keywords: ["AI Engineer", "ML Engineer"] });
+    const error = await createStepstoneChannel({ now: () => NOW }).collect(query, made.ctx).then(() => null, (e: unknown) => e);
+    expect(error).toBeInstanceOf(PartialCollectError);
+    const partial = error as PartialCollectError;
+    expect(partial.cause.code).toBe("blocked");
+    expect(partial.postings.map((p) => p.externalId).sort()).toEqual(
+      [...old.map((o) => o.externalId), ...(await collectAll({ fetch_details: false }, searchQuery({ keywords: ["AI Engineer"] }))).postings.map((p) => p.externalId)].sort(),
+    );
+  });
+
   it("says in the log how many listed answers the window dropped when nothing is stored", async () => {
     const run = await collectAll({}, searchQuery({ windowHours: 1 }), site());
     expect(run.postings).toHaveLength(0);
