@@ -51,6 +51,9 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
     // A failing request ends the search; what earlier keywords returned is kept and handed on with the failure.
     const perKeyword: StepstoneListItem[][] = [];
     const stats = { pages: 0, results: 0, outsideSections: 0, notHomeOffice: 0, outsideWindow: 0, titleRejected: 0, availablePages: 0 };
+    // listed answers older than the window that pass the other filters: a new one is not stored, but one that is already stored
+    // is delivered again as it was stored, which moves its last-seen time (no further request)
+    const older = new Map<string, StepstoneListItem>();
     let interrupted: ChannelError | null = null;
     search: for (const keyword of query.keywords) {
       const kept: StepstoneListItem[] = [];
@@ -85,6 +88,7 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
         const posted = parseDate(item.datePosted);
         if (!isWithinWindow(posted, cutoff)) {
           stats.outsideWindow += 1;
+          if (keepTitle(item.title)) older.set(String(item.id), item);
           continue;
         }
         if (!keepTitle(item.title)) {
@@ -95,7 +99,20 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
       }
     }
     const selected = interleave(perKeyword, query.maxResults, (item) => String(item.id));
-    if (interrupted && selected.length === 0) throw interrupted;
+    const selectedIds = new Set(selected.map((item) => String(item.id)));
+    const refreshCandidates = [...older.values()].filter((item) => !selectedIds.has(String(item.id)));
+    const storedOlder = await loadKnownDetails<unknown>(ctx, {
+      enabled: true,
+      externalIds: refreshCandidates.map((item) => String(item.id)),
+      detailOf: (payload) => (payloadSchema.safeParse(payload).success ? payload : null),
+    });
+    const refreshed = refreshCandidates.flatMap((item): RawPostingInput[] => {
+      const stored = storedOlder.get(String(item.id));
+      const url = postingUrl(settings, item);
+      if (stored === undefined || url === null) return [];
+      return [{ externalId: String(item.id), url, payload: stored, postedAt: parseDate(item.datePosted) }];
+    });
+    if (interrupted && selected.length === 0 && refreshed.length === 0) throw interrupted;
 
     // ---- details: the job description lives only on the posting page
     const cache = detailsOfCycle(ctx.signal);
@@ -173,11 +190,22 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
       const payload: StepstonePayload = { url, list: item, detail: details.get(item.id) ?? null };
       return [{ externalId: String(item.id), url, payload, postedAt: parseDate(item.datePosted) }];
     });
+    postings.push(...refreshed);
     if (interrupted && postings.length === 0) throw interrupted;
+    if (postings.length === 0 && stats.outsideWindow > 0) {
+      // a run that stores nothing says why: outsideWindow is the number of listed answers the look-back window dropped
+      ctx.logger.info("stepstone query stored nothing: listed answers are older than the look-back window", {
+        query: query.id,
+        listed: stats.results,
+        outsideWindow: stats.outsideWindow,
+        windowHours: query.windowHours,
+      });
+    }
     ctx.logger.info("stepstone query done", {
       query: query.id,
       ...stats,
       postings: postings.length,
+      refreshedStored: refreshed.length,
       details: details.size,
       reusedDetails: reused,
       ...(employerSkipped > 0 ? { otherEmployerDetailsSkipped: employerSkipped } : {}),
