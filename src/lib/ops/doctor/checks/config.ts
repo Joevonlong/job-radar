@@ -47,9 +47,11 @@ export const configLayersCheck: DoctorCheck = {
       pieces.push({ status: "warn", detail: t("checks.config.layers.notCopied", { files: joinList(ctx, state.notCopied) }), hint: t("checks.config.layers.notCopiedHint") });
     }
     const overlays = state.overlays.filter((file) => file.format === "overlay");
+    const info: Piece[] = [];
     const invalid = overlays.flatMap((file) => file.entries.filter((entry) => entry.invalid).map((entry) => `${file.file} ${entry.path}`));
     if (invalid.length > 0) {
-      pieces.push({ status: "warn", detail: t("checks.config.layers.invalidUnsets", { count: invalid.length, keys: listSome(ctx, invalid) }), hint: t("checks.config.layers.invalidUnsetsHint") });
+      // harmless (a typo, or a key a product update removed): said, never a warning
+      info.push({ status: "ok", detail: t("checks.config.layers.invalidUnsets", { count: invalid.length, keys: listSome(ctx, invalid) }) });
     }
     const summary =
       overlays.length === 0
@@ -63,7 +65,7 @@ export const configLayersCheck: DoctorCheck = {
           });
     // A pin equal to the shipped value is a choice, not a problem: it is said, never warned about.
     const pins = overlays.flatMap((file) => file.entries.filter((entry) => entry.pin).map((entry) => `${file.file} ${entry.path}`));
-    const info: Piece[] = pins.length > 0 ? [{ status: "ok", detail: t("checks.config.layers.pins", { keys: listSome(ctx, pins) }) }] : [];
+    if (pins.length > 0) info.push({ status: "ok", detail: t("checks.config.layers.pins", { keys: listSome(ctx, pins) }) });
     if (pieces.length === 0) return info.length === 0 ? ok(spec, summary) : merge(ctx, spec, [{ status: "ok", detail: summary }, ...info]);
     return merge(ctx, spec, [...pieces, { status: "ok", detail: summary }, ...info]);
   },

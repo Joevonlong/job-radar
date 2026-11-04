@@ -80,15 +80,15 @@ describe("config.layers", () => {
       expect(result.hint).toBeUndefined();
     });
 
-    it("warns about an unset of a key the shipped file lacks, in both languages", async () => {
+    it("mentions an unset of a key the shipped file lacks as information, in both languages", async () => {
       const overlays = [overlayFile("data/config/ui.yaml", [entry("old_key", { kind: "unset", invalid: true, shown: null })])];
       const zh = await check({ overlays });
-      expect(zh.status).toBe("warn");
+      expect(zh.status).toBe("ok");
       expect(zh.detail).toContain("data/config/ui.yaml old_key");
-      expect(zh.hint).toContain("config:check --overrides");
+      expect(zh.hint).toBeUndefined();
       const en = await only(configLayersCheck, makeContext({ locale: "en", probes: { configLayers: async () => configLayersState({ overlays }) } }));
-      expect(en.status).toBe("warn");
-      expect(en.detail).toContain("1 unset names a key the shipped file does not have, so it does nothing");
+      expect(en.status).toBe("ok");
+      expect(en.detail).toContain("1 unset names a key the shipped file does not have");
     });
 
     it("lists at most five keys", async () => {

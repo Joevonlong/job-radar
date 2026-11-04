@@ -51,6 +51,7 @@ describe("pnpm config:check overlay report", () => {
 
   it("--overrides --json gives the same entries with counts", () => {
     const run = runConfigScript(tmp, "config-check.ts", ["--overrides", "--json"]);
+    expect(run.out).not.toMatch(/private-bin|user:pass|api\.example\.com/);
     const report = JSON.parse(run.out) as { files: { file: string; overrides: number; unsets: number; pins: number; invalidUnsets: number }[] };
     expect(report.files.map((f) => [path.basename(f.file), f.overrides, f.unsets, f.pins, f.invalidUnsets])).toEqual([
       ["schedule.yaml", 1, 2, 0, 1],
@@ -66,7 +67,7 @@ describe("pnpm config:check overlay report", () => {
     expect(lines).toMatchInlineSnapshot(`
       [
         "· <user>/schedule.yaml  1 override, 2 unsets",
-        "! <user>/schedule.yaml unsets 1 key(s) the shipped file does not have (backup.keep_typo): the line does nothing; remove it",
+        "! <user>/schedule.yaml unsets 1 key(s) the shipped file does not have (backup.keep_typo): a typo, or a key a product update removed; the line does nothing, remove it",
         "· <user>/ai.yaml  4 overrides, 0 unsets",
         "· <user>/ui.yaml  2 overrides, 0 unsets",
         "! <user>/ui.yaml pins 2 key(s) at the shipped value (trend_cycles, config_editor.backups_keep): they stop following product updates; remove one to follow the product, or keep it on purpose",

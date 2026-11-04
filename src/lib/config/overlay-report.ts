@@ -6,14 +6,12 @@
  * - an unset is `key: !unset`; it is invalid when the shipped layer has no such key (it does nothing);
  * - a pin is an override whose value equals the shipped one: harmless, kept on purpose, and it stops following the product.
  *
- * A value is never kept unmasked here: a protected key (`protected-keys.ts`) has no value at all, any other value is the
- * text of its JSON with URL credentials masked (`maskCredentialsInText`).
+ * What is shown of an override is never its contents: a protected key (`protected-keys.ts`), or a value that holds one, has
+ * nothing; numbers, booleans and short plain strings show; anything else shows its shape (`shownValue`).
  */
-import { maskCredentialsInText } from "@/lib/sources/registry/import";
-
 import { isPlainMap, mergesAt, plainEqual, withoutMarkers } from "./merge";
 import { replaceRule, formatKeyPath, type ReplaceAt } from "./overlay-rules";
-import { isProtectedPath } from "./protected-keys";
+import { isProtectedPath, protectedValues } from "./protected-keys";
 import type { ConfigName } from "./registry";
 import { isUnset } from "./yaml-options";
 
@@ -37,12 +35,28 @@ export interface OverlayCounts {
   invalidUnsets: number;
 }
 
-const SHOWN_LIMIT = 100;
+const SHORT_STRING_MAX = 40;
+/** A string that looks like a token: a known key prefix anywhere in it, or 20 or more characters without a break. */
+const TOKEN_SHAPE = /sk-|ghp_|AKIA|xox|[A-Za-z0-9+/=_-]{20,}/i;
 
-/** A value as one masked, shortened line (JSON, credentials of URLs replaced). */
+/**
+ * An override's value for people. Only numbers, booleans, null and short plain strings are shown; a string with `://` or the
+ * shape of a token, and every list or mapping, shows its shape (`(string, 48 chars)`, `(list, 3 items)`, `(map, 2 keys)`).
+ */
 export function shownValue(value: unknown): string {
-  const text = maskCredentialsInText(JSON.stringify(value) ?? String(value));
-  return text.length > SHOWN_LIMIT ? `${text.slice(0, SHOWN_LIMIT - 1)}…` : text;
+  if (typeof value === "number" || typeof value === "boolean" || value === null) return JSON.stringify(value);
+  if (typeof value === "string") return value.length <= SHORT_STRING_MAX && !value.includes("://") && !TOKEN_SHAPE.test(value) ? JSON.stringify(value) : `(string, ${value.length} chars)`;
+  if (Array.isArray(value)) return `(list, ${value.length} item${value.length === 1 ? "" : "s"})`;
+  if (isPlainMap(value)) return `(map, ${Object.keys(value).length} key${Object.keys(value).length === 1 ? "" : "s"})`;
+  return "(value)";
+}
+
+/** Does the value at `path` hold a protected key, or sit inside a protected value? Then its contents are never shown. */
+function holdsProtected(name: ConfigName, path: readonly string[], value: unknown): boolean {
+  if (isProtectedPath(name, path.join("."))) return true;
+  let wrapped: unknown = value;
+  for (let i = path.length - 1; i >= 0; i--) wrapped = { [path[i] ?? ""]: wrapped };
+  return protectedValues(name, wrapped).size > 0;
 }
 
 function walk(name: ConfigName, shipped: unknown, overlay: Record<string, unknown>, path: string[], replaceAt: ReplaceAt, out: OverlayEntry[]): void {
@@ -50,8 +64,8 @@ function walk(name: ConfigName, shipped: unknown, overlay: Record<string, unknow
     const at = [...path, key];
     const shippedChild = isPlainMap(shipped) && Object.hasOwn(shipped, key) ? shipped[key] : undefined;
     const label = formatKeyPath(at);
-    const isProtected = isProtectedPath(name, at.join("."));
     if (isUnset(child)) {
+      const isProtected = isProtectedPath(name, at.join("."));
       out.push({ path: label, kind: "unset", pin: false, invalid: shippedChild === undefined, protected: isProtected, shown: null });
       continue;
     }
@@ -60,6 +74,7 @@ function walk(name: ConfigName, shipped: unknown, overlay: Record<string, unknow
       continue;
     }
     const value = withoutMarkers(child);
+    const isProtected = holdsProtected(name, at, value);
     out.push({
       path: label,
       kind: "override",
@@ -91,9 +106,33 @@ export interface ChangedDefault {
   path: string;
   change: "added" | "removed" | "changed";
   protected: boolean;
-  /** Masked values for people; null where there is none (the other side of an add or a removal) and for a protected key. */
-  before: string | null;
-  after: string | null;
+  /** The real shipped values (public defaults); null where there is none (the other side of an add or a removal) and for a protected key. */
+  before: unknown;
+  after: unknown;
+  /** For a list or a mapping that changed: the items or keys added, removed and changed, as one line. */
+  summary: string | null;
+}
+
+const json = (value: unknown): string => JSON.stringify(value) ?? String(value);
+
+/** What differs between two lists or two mappings, as one line; null for any other pair of values. */
+function summarise(was: unknown, now: unknown): string | null {
+  if (Array.isArray(was) && Array.isArray(now)) {
+    const removed = was.filter((item) => !now.some((other) => plainEqual(item, other)));
+    const added = now.filter((item) => !was.some((other) => plainEqual(item, other)));
+    const parts = [...(added.length > 0 ? [`added ${json(added)}`] : []), ...(removed.length > 0 ? [`removed ${json(removed)}`] : [])];
+    return parts.length > 0 ? parts.join("; ") : "same items, other order";
+  }
+  if (isPlainMap(was) && isPlainMap(now)) {
+    const keys = [...new Set([...Object.keys(was), ...Object.keys(now)])];
+    const parts = keys.flatMap((key) => {
+      if (!Object.hasOwn(was, key)) return [`+${key}=${json(now[key])}`];
+      if (!Object.hasOwn(now, key)) return [`-${key}`];
+      return plainEqual(was[key], now[key]) ? [] : [`~${key}: ${json(was[key])} -> ${json(now[key])}`];
+    });
+    return parts.join("; ");
+  }
+  return null;
 }
 
 function leaves(value: unknown, path: string[], replaceAt: ReplaceAt, out: Map<string, unknown>): void {
@@ -118,13 +157,14 @@ export function changedDefaults(name: ConfigName, before: unknown, after: unknow
     const hasIt = now.has(key);
     if (hadIt && hasIt && plainEqual(was.get(key), now.get(key))) continue;
     const path = JSON.parse(key) as string[];
-    const isProtected = isProtectedPath(name, path.join("."));
+    const isProtected = holdsProtected(name, path, was.get(key)) || holdsProtected(name, path, now.get(key));
     out.push({
       path: formatKeyPath(path),
       change: !hadIt ? "added" : !hasIt ? "removed" : "changed",
       protected: isProtected,
-      before: hadIt && !isProtected ? shownValue(was.get(key)) : null,
-      after: hasIt && !isProtected ? shownValue(now.get(key)) : null,
+      before: hadIt && !isProtected ? was.get(key) : null,
+      after: hasIt && !isProtected ? now.get(key) : null,
+      summary: isProtected || !hadIt || !hasIt ? null : summarise(was.get(key), now.get(key)),
     });
   }
   return out.sort((a, b) => a.path.localeCompare(b.path));

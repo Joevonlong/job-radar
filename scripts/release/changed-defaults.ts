@@ -27,19 +27,23 @@ if (from === undefined || to === undefined || args.length !== 2) {
 
 for (const ref of [from, to]) {
   try {
-    execFileSync("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], { stdio: "ignore" });
+    execFileSync("git", ["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`], { stdio: "ignore" });
   } catch {
     console.error(`Not a git commit: ${ref}`);
     process.exit(2);
   }
 }
 
-/** The text of `config/<file>` at a ref; null when the ref has no such file. */
+/** The text of `config/<file>` at a ref; null when the ref has no such path. Any other `git show` failure is thrown. */
 function fileAt(ref: string, file: string): string | null {
+  const spec = `${ref}:config/${file}`;
   try {
-    return execFileSync("git", ["show", `${ref}:config/${file}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024 });
-  } catch {
-    return null;
+    // the ref was verified above and is passed after --end-of-options, so it can never be read as an option
+    return execFileSync("git", ["show", "--end-of-options", spec], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  } catch (err) {
+    const stderr = String((err as { stderr?: unknown }).stderr ?? "");
+    if (/exists on disk, but not in|does not exist in|path .* does not exist|Not a valid object name .*:config/i.test(stderr)) return null;
+    throw new Error(`git show ${spec} failed: ${stderr.split("\n")[0] || (err instanceof Error ? err.message : String(err))}`);
   }
 }
 
@@ -77,8 +81,13 @@ if (asJson) {
   process.exit(0);
 }
 
-const show = (change: ChangedDefault): string =>
-  change.change === "added" ? `+ ${change.path} = ${change.after}` : change.change === "removed" ? `- ${change.path} (was ${change.before})` : `~ ${change.path}: ${change.before} -> ${change.after}`;
+const text = (value: unknown): string => JSON.stringify(value) ?? String(value);
+const show = (change: ChangedDefault): string => {
+  if (change.summary !== null && change.change === "changed") return `~ ${change.path}: ${change.summary}`;
+  if (change.change === "added") return `+ ${change.path} = ${text(change.after)}`;
+  if (change.change === "removed") return `- ${change.path} (was ${text(change.before)})`;
+  return `~ ${change.path}: ${text(change.before)} -> ${text(change.after)}`;
+};
 
 console.log(`Shipped default changes ${from} -> ${to}\n`);
 const plain = results.map((file) => ({ ...file, changes: file.changes.filter((change) => !change.protected) })).filter((file) => file.changes.length > 0 || file.fileChange !== null);

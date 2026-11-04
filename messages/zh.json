@@ -6071,8 +6071,7 @@
           "summary": "用户配置 {userDir}（{count} 个文件），默认配置 {defaultsDir}",
           "summaryOverlay": "用户配置 {userDir}（{count} 个文件；覆盖 {overrides} 个键，取消 {unsets} 个键），默认配置 {defaultsDir}",
           "pins": "钉在出厂值上，不再跟随产品更新（仅供参考）：{keys}",
-          "invalidUnsets": "{count} 个 unset 指向出厂文件里没有的键，不起作用：{keys}",
-          "invalidUnsetsHint": "把这一行从文件里删掉；pnpm config:check --overrides 列出全部覆盖和取消"
+          "invalidUnsets": "{count} 个 unset 指向出厂文件里没有的键（拼错了，或产品更新已经删掉了它），不起作用（仅供参考）：{keys}"
         },
         "market": {
           "title": "市场（市场包、本国、基准货币、本地语言）",

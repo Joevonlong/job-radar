@@ -61,9 +61,9 @@ backup:
 `pnpm config:check` 为每个叠加层文件打印一行：它覆盖了几个键、取消了几个键，例如 `data/config/schedule.yaml  3 overrides, 1 unset`。转换之后正常的安装数字都很小：只有你改过的。下面两种提示需要看一眼，都不是失败：
 
 - **等于出厂值的钉住**：你写下的键，值正好是出厂值。它会保留（保存不会删它），但不再跟随产品更新。想跟随就删掉这一行；有意钉住就留着；
-- **取消了出厂文件里没有的键**：这一行不起作用（可能是拼错了，或产品已经删掉了这个键）。把它删掉。
+- **取消了出厂文件里没有的键**：这一行不起作用（可能是拼错了，或产品更新已经删掉了这个键）。把它删掉；doctor 只会提一下。
 
-`pnpm config:check --overrides` 列出每个叠加层文件的全部键（`--json` 输出机器可读的列表）。受保护的键（要运行的程序、API 主机、凭据文件，见设置指南）只列键名、不显示值；其余的值里 URL 的凭据会被遮住。doctor 的 `config.layers` 在摘要行里给出同样的总数，把钉住当作信息列出；只有不起作用的 unset 会警告。这些命令只读，不写任何文件。
+`pnpm config:check --overrides` 列出每个叠加层文件的全部键（`--json` 输出机器可读的列表）。受保护的键（要运行的程序、API 主机、凭据文件，见设置指南）只列键名、不显示值；其余的值只有数字、布尔值和短的普通字符串才会显示（不显示 URL 或像令牌的文本），列表和映射只显示大小。doctor 的 `config.layers` 在摘要行里给出同样的总数，把钉住和不起作用的 unset 当作信息列出，不会警告。这些命令只读，不写任何文件。
 
 给维护者：`pnpm release:changed-defaults <起点 ref> <终点 ref>` 列出两个 git ref 之间出厂默认值的差异（没有覆盖的安装都会收到这些值），受保护的键单独一节、不显示值。
 
@@ -166,7 +166,7 @@ pnpm config:migrate --write       # 迁移：先把要改的原文件备份到 d
 pnpm config:migrate --prune-backups  # 只保留最新的 schedule.yaml: config_writes.backups_keep（5）个备份文件夹，删掉更旧的
 pnpm config:plan [--deploy] [--check]  # 列出待写的内容，不写；--deploy 加上 config:init 会创建的文件；--check 有待写就退出 2（0 没有，1 有文件无法迁移）
 pnpm config:check                 # 校验两层（默认目录的文件即使被覆盖也要合法），写出每个文件读的是哪层和出厂配置标识
-pnpm config:check --overrides     # 每个叠加层文件覆盖和取消的全部键；受保护的键不显示值，其余的值会截短并遮住 URL 里的凭据（有 `--json`；见“你的文件改了什么”）
+pnpm config:check --overrides     # 每个叠加层文件覆盖和取消的全部键；受保护的键不显示值，只显示数字、布尔值和短的普通字符串，其余只显示形状，如 `(list, 3 items)`（有 `--json`；见“你的文件改了什么”）
 pnpm config:check --effective     # 逐个文件：读的是哪层，以及生效值的哈希（`--json` 输出机器可读的列表；见下）
 pnpm config:example               # 列出示例配置；`pnpm config:example <id> [--dry-run]` 套用其中一个（见下文）
 ```

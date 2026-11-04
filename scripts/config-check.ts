@@ -27,7 +27,7 @@
  * the hashes before and after an upgrade: equal hashes mean the same effective config. Exits 1 when a file is invalid.
  *
  * `pnpm config:check --overrides [--json]` lists every key each overlay file overrides or unsets. A protected key never
- * shows a value; the other values are shortened and have the credentials of URLs masked. Reads only.
+ * shows a value; other values show only numbers, booleans and short plain strings; anything else shows its shape (`(list, 3 items)`). Reads only.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -221,7 +221,7 @@ for (const file of inspectOverlayFiles()) {
   const pins = file.entries.filter((entry) => entry.pin).map((entry) => entry.path);
   if (pins.length > 0) console.log(`! ${file.file} pins ${pins.length} key(s) at the shipped value (${pins.join(", ")}): they stop following product updates; remove one to follow the product, or keep it on purpose`);
   const invalid = file.entries.filter((entry) => entry.invalid).map((entry) => entry.path);
-  if (invalid.length > 0) console.log(`! ${file.file} unsets ${invalid.length} key(s) the shipped file does not have (${invalid.join(", ")}): the line does nothing; remove it`);
+  if (invalid.length > 0) console.log(`! ${file.file} unsets ${invalid.length} key(s) the shipped file does not have (${invalid.join(", ")}): a typo, or a key a product update removed; the line does nothing, remove it`);
 }
 
 // models.yaml is an overlay: the user's file lists only what it adds or changes
