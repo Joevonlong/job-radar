@@ -10,6 +10,7 @@ import {
   markScoresStaleExcept,
   rebaseProfileSnapshot,
   saveProfileSnapshot,
+  switchScoresToSnapshot,
   type Db,
   type ProfileSnapshot,
 } from "@/lib/db";
@@ -38,7 +39,9 @@ export async function recordProfileSnapshot(db: Db, kind: ScoredProfileName, yam
       return { snapshot: await rebaseProfileSnapshot(tx, previous.id, yamlText), staleMarked: 0 };
     }
     const snapshot = await saveProfileSnapshot(tx, kind, yamlText);
-    const staleMarked = previous?.id === snapshot.id ? 0 : await markScoresStaleExcept(tx, snapshot.id);
+    if (previous?.id === snapshot.id) return { snapshot, staleMarked: 0 };
+    // scores are filed under preferences snapshots, so only those have rows to bring forward
+    const staleMarked = kind === "preferences" ? await switchScoresToSnapshot(tx, snapshot.id) : await markScoresStaleExcept(tx, snapshot.id);
     return { snapshot, staleMarked };
   });
 }

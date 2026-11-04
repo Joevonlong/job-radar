@@ -50,7 +50,7 @@ const scoredColumns = () => ({
   outputLang: scores.outputLang,
 });
 
-/** "Newest" for a job's `scores` rows: the latest created, the higher id on a tie. */
+/** "Newest" for a job's `scores` rows: the latest `created_at` (it moves when a version becomes current again, `promoteSnapshotScores`), the higher id on a tie. */
 const newestFirst = () => [desc(scores.createdAt), desc(scores.id)] as const;
 
 /** What a job shows as its score, from its newest row and its newest scored row (see `latestScoreCte`). */

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, expect, inject, it } from "vitest";
 
 import { closeDb, getDb, type Db } from "@/lib/db/client";
 import { scoreTransaction } from "@/lib/db/repos/current-scores";
-import { markScoresStaleByPromptVersion, markScoresStaleExcept } from "@/lib/db/repos/scores";
+import { markScoresStaleByPromptVersion, markScoresStaleExcept, switchScoresToSnapshot } from "@/lib/db/repos/scores";
 import { setScoreBonuses } from "@/lib/db/repos/signals";
 import { companies, jobs, profileSnapshots, scores } from "@/lib/db/schema";
 import { runFilter } from "@/lib/filter";
@@ -97,5 +97,19 @@ it.each([1, 2, 3])("a bonus reconcile in descending score order and a prompt sta
   expectNoDeadlock(results);
   const [counts] = await db.execute<{ stale: number; bonus: number }>(sql`select count(*) filter (where stale)::int as stale, count(*) filter (where signal_bonus = 1)::int as bonus from scores`);
   expect(counts).toEqual({ stale: ROWS, bonus: ROWS });
+  await expectNoDrift(db);
+});
+
+it.each([1, 2, 3])("a rollback, which stale-marks high ids and moves low ones, and a prompt stale-mark finish without a deadlock (round %i)", async () => {
+  const db = getDb();
+  const { snapshotId, rows } = await reversedFixture(db);
+  // every job also has a newer row of the version left behind: higher ids than the rows of the version rolled back to
+  const [left] = await db.insert(profileSnapshots).values({ kind: "preferences", hash: `lock-order-left-${Date.now()}`, contentYaml: "fixture" }).returning();
+  await db.insert(scores).values(rows.map((row) => ({ jobId: row.jobId, profileSnapshotId: left!.id, filterResult: "passed" as const, score: 80, rankValue: 80, signalBonus: 0, promptVersion: "old", summaries: { en: "Summary" }, outputLang: "en" })));
+  const results = await race(db, rows[0]!.id,
+    () => scoreTransaction(db, (tx) => markScoresStaleByPromptVersion(tx, "new")),
+    () => scoreTransaction(db, (tx) => switchScoresToSnapshot(tx, snapshotId)));
+  expectNoDeadlock(results);
+  await scoreTransaction(db, async (tx) => { tx.touch(rows.map((row) => row.jobId)); });
   await expectNoDrift(db);
 });

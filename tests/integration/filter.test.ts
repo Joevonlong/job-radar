@@ -196,6 +196,18 @@ describe("filter step", () => {
     expect((await currentPreferences(getDb())).snapshot.id).toBe(snapshot.id);
   });
 
+  it("the step moves rows of the current version ahead of newer rows of another version", async () => {
+    const db = getDb();
+    const job = await addJob();
+    await runStep();
+    const [other] = await db.insert(schema.profileSnapshots).values({ kind: "preferences", hash: "abandoned", contentYaml: "abandoned", savedAt: new Date(0) }).returning();
+    await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: job.id, profileSnapshotId: other!.id, filterResult: "filtered_out", filterReasons: ["abandoned"] }));
+    const listed = async () => (await listJobs(db, { filters: { includeFiltered: true }, sort: "first_seen", page: 1, pageSize: 20, timezone: "Europe/Berlin" })).jobs.find((j) => j.id === job.id)?.rank?.filterResult;
+    expect(await listed()).toBe("filtered_out");
+    await runStep();
+    expect(await listed()).toBe("passed");
+  });
+
   it("updates a result in place when the job itself changed", async () => {
     const job = await addJob({ salaryJson: salaryJson(60_000) });
     const first = await runStep();
