@@ -29,6 +29,9 @@ import {
 } from "@/lib/config";
 
 import { ARCHIVE_META_YAML } from "@/lib/ops/config-archive";
+import { configLayersCheck } from "@/lib/ops/doctor/checks/config";
+
+import { makeContext, only } from "../ops/doctor/helpers";
 
 import { makeTempConfig, type TempConfig } from "./helpers";
 
@@ -336,5 +339,41 @@ describe("inspectConfigLayers (doctor config.layers)", () => {
   it("says when the user directory does not exist", async () => {
     fs.rmSync(dirs().configDir, { recursive: true });
     expect(await inspectConfigLayers()).toMatchObject({ userDirExists: false, userDirWritable: null, userFiles: 0 });
+  });
+});
+
+describe("a manually unpacked .archive-meta.yaml in the user directory", () => {
+  beforeEach(() => {
+    tmp = makeTempConfig();
+    fs.writeFileSync(user(".archive-meta.yaml"), ARCHIVE_META_YAML);
+  });
+
+  it("the loader reads every config as before and does not take the marker for one", () => {
+    for (const name of USER_CONFIG_NAMES) expect(() => loadConfig(name), name).not.toThrow();
+    expect(installedConfigFiles()).not.toContain(".archive-meta.yaml");
+  });
+
+  it("doctor counts and checks the same files and stays ok", async () => {
+    const state = await inspectConfigLayers();
+    expect(state).toMatchObject({ userFiles: USER_CONFIG_NAMES.length, notCopied: [], missingVersion: [], pendingMigrations: [], problems: [] });
+    const result = await only(configLayersCheck, makeContext({ probes: { configLayers: async () => state } }));
+    expect(result.status).toBe("ok");
+  });
+
+  it("the watcher reports nothing for it, whether polling or told of it by a directory event", async () => {
+    vi.useFakeTimers();
+    for (const name of USER_CONFIG_NAMES) loadConfig(name);
+    const events: ConfigChangeEvent[] = [];
+    const errors: unknown[] = [];
+    let fire: (filename: string | null) => void = () => {};
+    stops.push(watchConfig("all", (event) => events.push(event), {
+      debounceMs: 20, pollMs: 80, fsWatch: true,
+      watchDirectory: (dir, onChange) => { if (dir === dirs().configDir) fire = onChange; return { close: () => {} }; },
+      onError: (e) => errors.push(e),
+    }));
+    fire(".archive-meta.yaml");
+    fs.writeFileSync(user(".archive-meta.yaml"), `${ARCHIVE_META_YAML}# touched\n`);
+    await vi.advanceTimersByTimeAsync(500);
+    expect({ events, errors }).toEqual({ events: [], errors: [] });
   });
 });

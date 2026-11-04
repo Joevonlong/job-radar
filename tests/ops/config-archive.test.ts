@@ -67,6 +67,16 @@ describe("writeConfigArchive", () => {
     expect(readArchiveSetupSemantics(path.join(target, "data/config"))).toBe(ARCHIVE_SETUP_SEMANTICS);
   });
 
+  it("carries the record of an overlay conversion, listed and in the written archive", async () => {
+    const record = "conversion-20261104-120000.json";
+    put(path.join(dirs.config, record), '{"files":[]}\n');
+    expect(await listArchiveMembers(dirs)).toContain(`data/config/${record}`);
+    const destination = path.join(dir, "jobradar-20261104-120000.config.tgz");
+    await writeConfigArchive({ dirs, destination });
+    const listed = spawnSync("tar", ["-tzf", destination], { encoding: "utf8" });
+    expect(listed.stdout.split("\n")).toContain(`data/config/${record}`);
+  });
+
   it("works when the profile directory does not exist yet", async () => {
     fs.rmSync(dirs.profile, { recursive: true, force: true });
     const result = await writeConfigArchive({ dirs, destination: path.join(dir, "x.config.tgz") });

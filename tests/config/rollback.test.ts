@@ -4,7 +4,10 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { currentConfigVersion, legacyFormatVersion, loadConfig, newFileFormat, reloadConfig, resetConfigCache, writeConfig } from "@/lib/config";
+import { currentConfigVersion, ensureConfigFiles, hasOverlayFormat, legacyFormatVersion, loadConfig, newFileFormat, parseConfigText, reloadConfig, resetConfigCache, writeConfig, LAYERED_CONFIG_NAMES } from "@/lib/config";
+import { configRegistry } from "@/lib/config/registry";
+import { saveAdvanced } from "@/lib/settings/advanced/service";
+import { loadAdvancedFile } from "@/lib/settings/advanced/view";
 import { parseConfigYaml } from "@/lib/config/yaml-options";
 
 import { makeTempConfig, type TempConfig } from "./helpers";
@@ -64,6 +67,63 @@ describe("--to-full", () => {
     const search = reloadConfig("search");
     await writeConfig("search", { ...search });
     expect(parsed("search.yaml").config_version).toBe(legacyFormatVersion("search"));
+  });
+
+  /** What the code before the overlay format needs of the directory: every file at its whole-file version, readable on its own. */
+  function olderCodeAccepts(): void {
+    for (const name of LAYERED_CONFIG_NAMES) {
+      const target = file(configRegistry[name].file);
+      if (!hasOverlayFormat(name) || !fs.existsSync(target)) continue;
+      const text = fs.readFileSync(target, "utf8");
+      expect((parseConfigYaml(text, { unset: "overlay" }) as Record<string, unknown>).config_version, name).toBe(legacyFormatVersion(name));
+      expect(text, name).not.toContain("!unset");
+      expect(() => parseConfigText(name, text), name).not.toThrow();
+    }
+  }
+
+  it("after it, the form, the editor and a new file all write whole files, and the older code accepts every file", async () => {
+    await pinned();
+    expect(runConfigScript(temp, "config-migrate.ts", ["--to-full", "--write"]).status).toBe(0);
+    resetConfigCache();
+    olderCodeAccepts();
+
+    // the form
+    const ui = reloadConfig("ui");
+    await writeConfig("ui", { ...ui, trend_cycles: ui.trend_cycles + 1 });
+    // the editor, on a file that has no user copy yet and on one that has
+    const open = (stem: string) => {
+      const loaded = loadAdvancedFile(stem);
+      if (!loaded.ok) throw new Error("not loadable");
+      return loaded.data;
+    };
+    const fresh = open("search");
+    expect(await saveAdvanced({ file: "search", text: fresh.text, baseHash: fresh.hash, baseLayer: fresh.layer, confirmOverride: false })).toMatchObject({ status: "saved" });
+    const existing = open("ui");
+    const edited = existing.text.replace(/^trend_cycles: \d+/m, `trend_cycles: ${ui.trend_cycles + 2}`);
+    expect(edited).not.toBe(existing.text);
+    expect(await saveAdvanced({ file: "ui", text: edited, baseHash: existing.hash, baseLayer: existing.layer, confirmOverride: false })).toMatchObject({ status: "saved" });
+    // new files from config:init
+    const created = (await ensureConfigFiles()).filter((r) => r.created && hasOverlayFormat(r.name));
+    expect(created.length).toBeGreaterThan(2);
+
+    resetConfigCache();
+    expect(reloadConfig("ui").trend_cycles).toBe(ui.trend_cycles + 2);
+    olderCodeAccepts();
+  });
+
+  it("upgrade, pin, downgrade, upgrade again: a pin equal to the shipped value is lost, a changed one survives", async () => {
+    const shippedTrend = loadConfig("ui").trend_cycles;
+    const backups = loadConfig("ui").config_editor.backups_keep + 4;
+    fs.writeFileSync(file("ui.yaml"), `config_version: ${currentConfigVersion("ui")}\ntrend_cycles: ${shippedTrend}\nconfig_editor:\n  backups_keep: ${backups}\n`);
+    resetConfigCache();
+    expect(runConfigScript(temp, "config-migrate.ts", ["--to-full", "--write"]).status).toBe(0);
+    expect(runConfigScript(temp, "config-migrate.ts", ["--write", "--convert-overlays"]).status).toBe(0);
+    resetConfigCache();
+    const overlay = parsed("ui.yaml");
+    expect(overlay.config_version).toBe(currentConfigVersion("ui"));
+    expect(overlay).not.toHaveProperty("trend_cycles");
+    expect(overlay.config_editor).toEqual({ backups_keep: backups });
+    expect(loadConfig("ui").trend_cycles).toBe(shippedTrend);
   });
 
   it("upgrade, pin, downgrade, upgrade again: the pinned value survives, the rest follows the shipped file", async () => {
