@@ -290,7 +290,7 @@ export const pipelineSchema = z.strictObject({
 
   /**
    * Work mode (onsite / hybrid / remote) read from the posting's own words when the source does not
-   * state one (C3: only what the text says; two different modes in the text = unknown). `head` is
+   * state one (only what the text says; two different modes in the text = unknown). `head` is
    * matched against the title, the location texts and the contract hint (short, so looser); `text`
    * against the description (strict: benefit lists and side remarks must not count).
    */
@@ -339,7 +339,7 @@ export const pipelineSchema = z.strictObject({
      * convert through it: from X to the base currency = `fx_rates[X] / fx_rates[base]` (the pivot's own rate is 1).
      */
     fx_pivot: z.string().regex(/^[A-Z]{3}$/, "must be an ISO 4217 code"),
-    /** Units of `fx_pivot` per one unit of a currency (reference rates, updated by hand). A currency missing here is kept but not converted (no invented rates, C3). */
+    /** Units of `fx_pivot` per one unit of a currency (reference rates, updated by hand). A currency missing here is kept but not converted (no invented rates). */
     fx_rates: z.record(z.string().regex(/^[A-Z]{3}$/), z.number().positive()),
     /** A bare amount (no period named) is read as annual from this amount up; below it the period stays unknown. */
     assume_annual_from: nonNegativeNumber,

@@ -47,7 +47,7 @@ describe("merging a new source into a job", () => {
     const incoming = fields({ title: "Applied AI Engineer", titleNorm: "applied ai engineer", seniority: "senior", contract: "unknown", description: "ats text" });
     const merged = mergeJobFields(existing, incoming, true);
     expect(merged).toMatchObject({ title: "Applied AI Engineer", seniority: "senior", description: "ats text" });
-    expect(merged.contract).toBe("permanent"); // a known value is never replaced by unknown (C3)
+    expect(merged.contract).toBe("permanent"); // a known value is never replaced by unknown
   });
 
   it("lets a lower-priority source only fill what is unknown", () => {

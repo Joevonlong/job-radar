@@ -9,8 +9,8 @@ import { ghostEnabled } from "@/lib/ghost/settings";
 
 /**
  * Server Action of "Not a ghost job" / "Undo" on the detail page's checks card. The dismissal keeps the reason codes the job has
- * now (`job_ghost.dismissed_codes`): the mark stays away until a new kind of reason comes up. Nothing else changes (C3). The app is
- * single-user and bound to loopback (C5); input is still validated (C6).
+ * now (`job_ghost.dismissed_codes`): the mark stays away until a new kind of reason comes up. Nothing else changes. The app is
+ * single-user and bound to loopback; input is still validated.
  */
 
 const inputSchema = z.object({

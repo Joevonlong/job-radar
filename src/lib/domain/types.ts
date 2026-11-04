@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { SALARY_PERIODS } from "@/lib/channels/types";
 
-/** Domain vocabulary of the `jobs` table. Values a posting does not state are `unknown` (C3). */
+/** Domain vocabulary of the `jobs` table. Values a posting does not state are `unknown`. */
 
 export const SENIORITIES = ["intern", "junior", "mid", "senior", "staff", "principal", "lead", "manager", "unknown"] as const;
 export type Seniority = (typeof SENIORITIES)[number];
@@ -64,7 +64,7 @@ export const LEGACY_BASE_CURRENCY = "EUR";
  * `jobs.salary_json`. `min` / `max` / `period` are as the posting states them; `perYear` is the same
  * amounts in the same currency per year (period factors from pipeline.yaml); `basePerYear` is that in the market's base
  * currency `baseCurrency`, only when the currency is the base or pipeline.yaml gives a rate for it.
- * `eurPerYear` is written too while the base is EUR (older code reads it). Anything not stated stays null (C3).
+ * `eurPerYear` is written too while the base is EUR (older code reads it). Anything not stated stays null.
  * Reading accepts both shapes: a salary without `baseCurrency` (stored before the market packs) has its EUR figure as the base.
  */
 const storedJobSalarySchema = z.object({

@@ -1,5 +1,5 @@
 /**
- * Config system (layered). YAML is the single source of truth (C8); everything is validated with zod (C6).
+ * Config system (layered). YAML is the single source of truth; everything is validated with zod.
  *
  * Locations (relative values resolve against the app root, not cwd):
  * - `JOB_RADAR_DEFAULTS_DIR` (default `<job-radar>/config`): shipped defaults, tracked in git, read-only.

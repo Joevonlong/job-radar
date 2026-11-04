@@ -1,7 +1,7 @@
 /**
  * From stored rows to what the check reads: which channels count for which signal (their declarations), the trusted posted date
  * (the channel's own `parse` of the stored payload), the repost label, the source of the description and the current breakdown.
- * C1: payloads are only read.
+ * Payloads are only read.
  */
 import { createHash } from "node:crypto";
 

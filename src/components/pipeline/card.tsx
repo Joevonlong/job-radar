@@ -33,7 +33,7 @@ interface CardViewProps {
   className?: string;
 }
 
-/** What a pipeline card shows (design "申请看板"): mark, title, company, score, salary, overdue bar, next step, rounds. The controls (drag handle, move menu) are small icon buttons in the corner, so the card keeps the design's height. */
+/** What a pipeline card shows: mark, title, company, score, salary, overdue bar, next step, rounds. The controls (drag handle, move menu) are small icon buttons in the corner, so the card keeps its height. */
 export function CardView({ card, pushLine, density, onOpen, controls, overlay = false, className }: CardViewProps) {
   const t = useTranslations("pipeline");
   const tReplies = useTranslations("replies.card");
@@ -73,7 +73,7 @@ export function CardView({ card, pushLine, density, onOpen, controls, overlay = 
       aria-label={`${job.companyName} · ${job.title}`}
       className={cn("bg-card text-card-foreground border-bw border-ink rounded-card shadow-e2 @container flex flex-col p-sp-2", compact ? "gap-sp-1" : "gap-sp-2", overlay && "shadow-e5 cursor-grabbing", className)}
     >
-      {/* title first, with the controls in its corner; the company gets a full line of its own under it (design: mark + title + company, then the score row) */}
+      {/* title first, with the controls in its corner; the company gets a full line of its own under it (mark + title + company, then the score row) */}
       <div className="gap-sp-1 flex items-start justify-between">
         {job.favorite ? <FavoriteMark className="mt-1" /> : null}
         {overlay ? (

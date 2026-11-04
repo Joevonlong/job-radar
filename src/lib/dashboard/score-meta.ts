@@ -15,7 +15,7 @@ export interface ScoreMetaLabels {
 const known = (value: string | null): value is string => value !== null && value.trim() !== "";
 
 /**
- * "Scored by codex-cli · gpt-5 · prompt v3 · 2026/10/8 05:42": only the parts that are known (C3: no "?" placeholders),
+ * "Scored by codex-cli · gpt-5 · prompt v3 · 2026/10/8 05:42": only the parts that are known (no "?" placeholders),
  * a model that only repeats the provider left out. Null when nothing is known, so the line is not drawn.
  */
 export function scoreMetaText(input: ScoreMetaInput, labels: ScoreMetaLabels): string | null {

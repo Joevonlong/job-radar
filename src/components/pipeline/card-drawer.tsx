@@ -252,7 +252,7 @@ function NotesForm({ card }: { card: BoardCard }) {
   );
 }
 
-/** The flow a card walks (design "流程步骤条"); an ended card has walked none of it and says so below. */
+/** The flow a card walks; an ended card has walked none of it and says so below. */
 const FLOW = ["interested", "preparing", "applied", "interviewing", "offer"] as const satisfies readonly ApplicationStatus[];
 
 function StepBar({ status }: { status: ApplicationStatus }) {

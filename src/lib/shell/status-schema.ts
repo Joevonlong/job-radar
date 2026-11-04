@@ -3,7 +3,7 @@ import { z } from "zod";
 import { STEP_NAMES } from "@/lib/cycle/step-health";
 
 /**
- * What `/api/shell/status` returns and the sidebar polls (a boundary, so it is parsed with zod on the client too, C6).
+ * What `/api/shell/status` returns and the sidebar polls (a boundary, so it is parsed with zod on the client too).
  * Dates are ISO strings.
  */
 const iso = z.iso.datetime();

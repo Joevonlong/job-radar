@@ -336,7 +336,7 @@ describe("German level", () => {
     fake.replies.set("Disagree", answer({ score: 80, german_level_required: "C1" }));
     await runScoring(deps(fake), { limit: 5 });
     expect(await latest(id)).toMatchObject({ germanLevel: "C1", germanLevelAi: "C1", germanLevelSource: "ai_explicit", germanPenalty: 20, score: 60 });
-    // the pipeline's fact about the posting is not overwritten (C3)
+    // the pipeline's fact about the posting is not overwritten
     const [job] = await getDb().select().from(schema.jobs).where(eq(schema.jobs.id, id));
     expect(job?.germanLevelRequired).toBe("B2");
   });

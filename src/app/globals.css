@@ -830,7 +830,7 @@
     font-synthesis-weight: none;
   }
 
-  /* Focus ring for every interactive element (spec: 3px t4, 2px offset). */
+  /* Focus ring for every interactive element (3px t4, 2px offset). */
   :focus-visible {
     outline: 3px solid var(--signal-t4);
     outline-offset: 2px;

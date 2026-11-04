@@ -38,7 +38,7 @@ export interface FloorPreview {
   total: number;
   /** Of them: how many the hard filter would drop at this floor. */
   filtered: number;
-  /** `filtered / total`, whole percent; null when nothing is disclosed (C3: no basis, not 0 %). */
+  /** `filtered / total`, whole percent; null when nothing is disclosed (no basis, not 0 %). */
   percent: number | null;
 }
 

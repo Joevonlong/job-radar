@@ -84,7 +84,7 @@ function workplaceOf(job: AshbyJob): NormalizedPostingDraft["workplace"] {
     case "onsite":
       return "onsite";
     default:
-      // older boards only carry the flag; "not remote" says nothing about hybrid vs on-site (C3)
+      // older boards only carry the flag; "not remote" says nothing about hybrid vs on-site
       return job.isRemote === true ? "remote" : "unknown";
   }
 }

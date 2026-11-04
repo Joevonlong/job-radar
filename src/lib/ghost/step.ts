@@ -1,7 +1,7 @@
 /**
  * The stored ghost job check: inside the cycle's `signals` step (after the trap and visa checks) and in `pnpm ghost:check`. Jobs whose
  * inputs changed since their last check, or that reached the next "open for long" tier, are checked again (never-checked first,
- * newest first), at most `per_cycle_limit` per cycle. Nothing here touches a score, a filter or a push (C3).
+ * newest first), at most `per_cycle_limit` per cycle. Nothing here touches a score, a filter or a push.
  */
 import { createHash } from "node:crypto";
 

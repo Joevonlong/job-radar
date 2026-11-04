@@ -13,4 +13,4 @@ subdirectory, when present, is its profile directory.
   (`../interests.v1.yaml`, `../notify.v1.yaml`) and the files of `../legacy-de` (including `profile/preferences.yaml`).
 
 Do not edit them without regenerating the golden files (`scripts/dev/gen-config-golden.ts`): the golden hashes were
-taken with an older loader, and an edit here would make them disagree for no reason in the code.
+taken with an older loader, and an edit here would make them disagree for no reason in the code. Comments are outside the hashes, so a comment-only edit changes nothing.

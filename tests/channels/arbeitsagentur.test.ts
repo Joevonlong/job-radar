@@ -174,7 +174,7 @@ describe("collect: list and details", () => {
     expect(result.map((r) => r.externalId)).toEqual(ITEMS.map((i) => i.referenznummer));
     expect(result[0]?.url).toBe(`https://www.arbeitsagentur.de/jobsuche/jobdetail/${REF_MULTI}`);
     expect(result[0]?.postedAt).toEqual(new Date("2026-10-05T00:00:00Z"));
-    // list item untouched (C1), detail attached
+    // list item untouched, detail attached
     expect(result[0]?.payload).toEqual({ list: ITEMS[0], detail: DETAIL_MULTI });
     // postings without a fetchable detail (404) keep list data only
     expect(result[2]?.payload).toEqual({ list: ITEMS[2], detail: null });

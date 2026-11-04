@@ -139,7 +139,7 @@ function omitEmpty(record: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(record).filter(([, v]) => v !== undefined && v !== null));
 }
 
-/** Convert a stored `{ url, list, detail }` payload into the normalized draft (C3: unstated facts stay unknown). */
+/** Convert a stored `{ url, list, detail }` payload into the normalized draft (unstated facts stay unknown). */
 export function parseXingPayload(payload: unknown): NormalizedPostingDraft {
   const parsed = payloadSchema.safeParse(payload);
   if (!parsed.success) {
@@ -155,7 +155,7 @@ export function parseXingPayload(payload: unknown): NormalizedPostingDraft {
   const companyName = organizationName(detail) ?? clean(job?.companyInfo?.companyNameOverride) ?? clean(list.companyInfo?.companyNameOverride);
   if (!companyName) throw new ChannelError("parse", "xing posting has no employer name");
 
-  // Only a `SalaryRange` is the employer's own figure; a `SalaryEstimate` is XING's guess (C3).
+  // Only a `SalaryRange` is the employer's own figure; a `SalaryEstimate` is XING's guess.
   const salary = job?.salary ?? list.salary ?? null;
   const stated = salary?.__typename === "SalaryRange" ? pay(salary.minimum, salary.maximum, salary.currency) : null;
   const estimate = salary?.__typename === "SalaryEstimate" ? pay(salary.minimum, salary.maximum, salary.currency) : null;

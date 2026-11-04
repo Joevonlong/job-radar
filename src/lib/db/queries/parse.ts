@@ -11,7 +11,7 @@ import {
   type JobSalary,
 } from "@/lib/domain/types";
 
-/** The text columns `contract` / `german_level_required` / `language` hold the pipeline vocabulary; anything else reads as `unknown` (C3). */
+/** The text columns `contract` / `german_level_required` / `language` hold the pipeline vocabulary; anything else reads as `unknown`. */
 export function asContract(value: string): Contract {
   return CONTRACTS.find((c) => c === value) ?? "unknown";
 }
@@ -34,7 +34,7 @@ export function parseLocations(value: unknown): JobLocation[] {
 }
 
 /**
- * `jobs.salary_json` → salary, or null when it is absent (the posting states none, C3) or does not
+ * `jobs.salary_json` → salary, or null when it is absent (the posting states none) or does not
  * match the stored shape (callers still know a salary exists from `salary_json` being set).
  */
 export function parseSalary(value: unknown): JobSalary | null {

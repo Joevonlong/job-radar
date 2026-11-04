@@ -3,27 +3,30 @@
  * images and `<picture>` sources) in the Markdown files, and every `href` / `src` / `srcset` in the HTML guides under
  * docs/ (and the top-level *.md files) must point to an existing file; `#anchors` and absolute URLs are not followed.
  * Also checks the references in code, config and prose: a path under one of REFERENCE_ROOTS, and in a comment a Markdown
- * file name without a directory, must exist in the repository, because a reader cannot open anything else. Under the test
- * directories only comments count (test data holds made-up paths), and saved pages and JSON there are skipped.
+ * file name without a directory, must exist in the repository, because a reader cannot open anything else. Outside comments
+ * only a path with a file extension counts (a pair of words with a slash is not a path). Under the test directories only comments
+ * count (test data holds made-up paths), and saved pages and JSON there are skipped.
  * Plain Node, no dependencies. Run with `pnpm docs:check [root]` (default: the repository); exit code 1 lists the broken
  * links and references.
  */
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(process.argv[2] ?? path.resolve(import.meta.dirname, ".."));
 const SKIP_DIRS = new Set(["node_modules", ".next", "data", ".git", "dist", "drizzle", "tests", "src", "e2e", "jobspy"]);
-const REFERENCE_SKIP_DIRS = new Set(["node_modules", "data", "dist", "drizzle", "licenses"]);
+const REFERENCE_SKIPPED = /^(data|dist|drizzle|licenses)\/|(^|\/)node_modules\/|(^|\/)\.(?!github\/)[^/]+\//;
 const REFERENCE_SKIP_FILES = new Set(["pnpm-lock.yaml"]);
-const REFERENCE_ROOTS = "docs|research|spec|dev-notes|tracking|planning|changes|vision|marketing";
+const REFERENCE_ROOTS = "docs|research|spec|dev-notes|tracking|planning|changes|vision|marketing|promo|requirements|site|job-radar-workspace";
 const PATH_REFERENCE = new RegExp(`(?:^|[^\\w./@:-])((?:\\.\\.?/)*(?:${REFERENCE_ROOTS})/[\\w./-]*[\\w-])`, "g");
-const BARE_MARKDOWN = /(?:^|[\s("'`])([A-Za-z0-9][\w.-]*\.md)\b/g;
+const BARE_MARKDOWN = /(?:^|[^\w./@:-])([A-Za-z0-9][\w.-]*\.md)\b/g;
+const HAS_EXTENSION = /\.\w+$/;
 /** Files of other projects that a comment may name: the skill of resume-kit. */
 const OTHER_PROJECT_FILES = new Set(["SKILL.md"]);
-const SCANNED_FILE = /\.(ts|tsx|mts|cts|js|mjs|cjs|css|sh|py|ya?ml|toml|json|md|html)$/;
+const SCANNED_FILE = /(\.(ts|tsx|mts|cts|js|mjs|cjs|css|sh|py|ya?ml|toml|json|md|html)|(^|\/)\.env\.example|(^|\/)Dockerfile[^/]*)$/;
 const PROSE_FILE = /\.(md|html)$/;
-const HASH_COMMENT_FILE = /\.(sh|py|ya?ml|toml)$/;
-const TEST_FILE = /^(tests|e2e|e2e-demo|e2e-setup)\//;
+const HASH_COMMENT_FILE = /(\.(sh|py|ya?ml|toml)|(^|\/)\.env\.example|(^|\/)Dockerfile[^/]*)$/;
+const TEST_FILE = /^(tests|e2e|e2e-demo|e2e-setup|jobspy\/tests)\//;
 const REFERENCE_SUFFIXES = ["", ".md", ".html", ".ts", ".tsx", ".mjs"];
 
 /** @param {string} dir @param {string[]} out @returns {string[]} */
@@ -88,15 +91,28 @@ for (const file of collect(root, [])) {
   }
 }
 
-/** Every file for the reference check; of the hidden directories only .github is published source. @param {string} dir @param {string[]} out @returns {string[]} */
-function collectForReferences(dir, out) {
+/** @param {string} dir @param {string[]} out @returns {string[]} */
+function walkForReferences(dir, out) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isDirectory()) {
-      const hidden = entry.name.startsWith(".") && entry.name !== ".github";
-      if (!hidden && !REFERENCE_SKIP_DIRS.has(entry.name)) collectForReferences(path.join(dir, entry.name), out);
-    } else out.push(path.join(dir, entry.name));
+    const relative = path.relative(root, path.join(dir, entry.name));
+    if (!entry.isDirectory()) out.push(relative);
+    else if (!REFERENCE_SKIPPED.test(`${relative}/`)) walkForReferences(path.join(dir, entry.name), out);
   }
   return out;
+}
+
+/**
+ * The files of the reference check, as absolute paths: what git tracks plus new files it does not ignore, so ignored local
+ * folders never count; a walk outside a repository. Of the hidden directories only .github is published source.
+ * @returns {string[]}
+ */
+function collectForReferences() {
+  const listed = spawnSync("git", ["ls-files", "-co", "--exclude-standard", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const names = listed.status === 0 ? listed.stdout.split("\0").filter((name) => name !== "") : walkForReferences(root, []);
+  return names
+    .filter((name) => !REFERENCE_SKIPPED.test(name))
+    .map((name) => path.join(root, name))
+    .filter((file) => fs.statSync(file, { throwIfNoEntry: false })?.isFile());
 }
 
 /**
@@ -140,7 +156,7 @@ function referenceExists(file, target) {
 /** @type {string[]} */
 const unresolved = [];
 let referencesChecked = 0;
-const referenceFiles = collectForReferences(root, []);
+const referenceFiles = collectForReferences();
 const fileNames = new Set(referenceFiles.map((file) => path.basename(file)));
 for (const file of referenceFiles) {
   const relative = path.relative(root, file);
@@ -150,11 +166,13 @@ for (const file of referenceFiles) {
   if (isTest && (file.endsWith(".html") || file.endsWith(".json"))) continue;
   const text = fs.readFileSync(file, "utf8");
   const comments = isProse || file.endsWith(".json") ? [] : commentLines(text, HASH_COMMENT_FILE.test(file));
+  const commentNumbers = new Set(comments.map(([lineNumber]) => lineNumber));
   /** @type {[number, string][]} */
   const lines = isTest && !isProse ? comments : text.split("\n").map((line, index) => [index + 1, line]);
   for (const [lineNumber, line] of lines) {
     for (const m of line.matchAll(PATH_REFERENCE)) {
       const target = m[1] ?? "";
+      if (!commentNumbers.has(lineNumber) && !HAS_EXTENSION.test(target)) continue;
       referencesChecked += 1;
       if (!referenceExists(file, target)) unresolved.push(`${relative}:${lineNumber}: ${target}`);
     }

@@ -104,7 +104,7 @@ describe("queries", () => {
   });
 });
 
-describe("parallelism and isolation (C2)", () => {
+describe("parallelism and isolation", () => {
   it("runs channels in parallel up to collect.concurrency", async () => {
     const shared: SharedProbe = { current: 0, max: 0 };
     const registry = new ChannelRegistry();

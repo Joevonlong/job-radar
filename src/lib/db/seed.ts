@@ -59,7 +59,7 @@ import {
  * - Jobs are first seen inside a seeded cycle's window (today's in the latest cycle, yesterday's in the one before), so the summary
  *   blocks, the ticker and the "new this cycle" list all have something to show. One of the latest cycle's jobs was pushed.
  * - The scores and signals are fake: they exist so the rank colours, sorting and badges can be
- *   looked at before the AI milestone (M2) produces real ones. Some jobs deliberately have none.
+ *   looked at before the scoring step produces real ones. Some jobs deliberately have none.
  */
 
 export const SEED_EXTERNAL_PREFIX = "seed:";
@@ -103,7 +103,7 @@ interface SeedSignal {
   tier: SignalTier;
   kind: string;
   value?: unknown;
-  /** Must be one of the job's `offer` lines (C7: the quote is verbatim JD text). */
+  /** Must be one of the job's `offer` lines (the quote is verbatim JD text). */
   quote: string;
 }
 

@@ -51,7 +51,7 @@ const doctor = z.strictObject({
   compose_project: nonEmptyString,
   /** Services of that project that must be running and healthy. */
   compose_services: z.array(nonEmptyString).min(1),
-  /** The dashboard as the host sees it (compose publishes web on loopback only, C5). `JOB_RADAR_DOCTOR_WEB_URL` overrides it. */
+  /** The dashboard as the host sees it (compose publishes web on loopback only). `JOB_RADAR_DOCTOR_WEB_URL` overrides it. */
   web_url: z.url({ protocol: /^https?$/ }),
   /** One HTTP request or TCP connect may take this long. */
   probe_timeout_seconds: positiveInt,

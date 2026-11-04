@@ -1,7 +1,7 @@
 /**
  * Deal-breakers: the user's own veto rules (preferences.yaml `deal_breakers`), judged in the hard filter before any AI
  * call. Pure: no database, no file reads; the caller passes the market's local language and the user's level of it.
- * A vetoed job is kept (C1) with the reason `deal_breaker:<id>`; what a posting does not say never vetoes (C3).
+ * A vetoed job is kept with the reason `deal_breaker:<id>`; what a posting does not say never vetoes.
  *
  * User patterns are regular expressions, and JavaScript has no time limit for them. So every pattern run happens inside a
  * `TimeBox` the server passes in (`vmTimeBox`, which interrupts a running expression): before a run each pattern is tried on
@@ -451,7 +451,7 @@ export function dealBreakerVetoes(
 export interface DealBreakerExplanation {
   id: string;
   type: DealBreaker["type"];
-  /** Verbatim text of the job around the hit (C7): a substring of the title or of the description; null when there is none to show. */
+  /** Verbatim text of the job around the hit: a substring of the title or of the description; null when there is none to show. */
   quote: string | null;
   /** Where `quote` comes from and where it starts. */
   field: "title" | "description" | null;

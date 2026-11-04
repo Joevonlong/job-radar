@@ -1,4 +1,4 @@
-/** The stored breakdown of a job's JD and the queries around it (C9: all access to `job_breakdowns` lives here). */
+/** The stored breakdown of a job's JD and the queries around it (all access to `job_breakdowns` lives here). */
 import { and, desc, eq, isNotNull, ne, sql } from "drizzle-orm";
 
 import type { Executor } from "../executor";

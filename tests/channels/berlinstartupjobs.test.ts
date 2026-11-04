@@ -372,7 +372,7 @@ describe("the stored envelope", () => {
     for (const p of a.filter((x) => x.externalId !== "1008")) expect(normalizedPostingDraftSchema.safeParse(parseBerlinStartupJobsPayload(p.payload)).success, p.externalId).toBe(true);
   });
 
-  it("keeps the raw description with its contact details (C1)", async () => {
+  it("keeps the raw description with its contact details", async () => {
     const postings = await channel().collect(query(), makeContext(site()).ctx);
     expect(JSON.stringify(postings.find((p) => p.externalId === "1004")?.payload)).toContain("jobs@example.com");
   });

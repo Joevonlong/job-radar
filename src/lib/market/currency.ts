@@ -2,7 +2,7 @@
  * Converting between currencies through the pivot of pipeline.yaml (`salary.fx_pivot` + `fx_rates`): the rate
  * of a currency is how many units of the pivot one unit of it is worth (the pivot's own rate is 1). From X to the base
  * currency the factor is `rate(X) / rate(base)`. With the pivot as base this is `rate(X)` itself, bit for bit what the
- * EUR-only table did before. A currency without a rate is not converted (C3: no invented rates).
+ * EUR-only table did before. A currency without a rate is not converted (no invented rates).
  */
 export interface FxTable {
   fx_pivot: string;

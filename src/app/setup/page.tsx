@@ -21,7 +21,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t("title") };
 }
 
-/** `?step=` is untrusted (C6): an unknown value opens the first step that is not done yet. */
+/** `?step=` is untrusted: an unknown value opens the first step that is not done yet. */
 const searchSchema = z.object({ step: z.enum(SETUP_STEP_IDS).optional().catch(undefined) });
 
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {

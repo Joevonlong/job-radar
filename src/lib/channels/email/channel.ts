@@ -53,7 +53,7 @@ interface MessageOutcome {
  * user's Gmail. Reads one label read-only (never marks, moves or deletes), picks the parser by sender
  * domain, and turns each job card into a raw posting. An email whose layout no parser recognises is
  * stored whole as an `email_unparsed` raw posting (the pipeline marks it `parse_failed`) so nothing
- * is lost (C1); it never stops the other emails (C2). Handled Message-IDs are kept in
+ * is lost; it never stops the other emails. Handled Message-IDs are kept in
  * `email_messages`, so a message is read once.
  */
 export function createGmailAlertsChannel(options: GmailAlertsOptions): Channel {

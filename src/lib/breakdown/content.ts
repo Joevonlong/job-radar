@@ -27,7 +27,7 @@ export type BreakdownContent = z.infer<typeof breakdownContentSchema>;
 /** One schema per prompt version whose rows can still be shown. */
 const CONTENT_SCHEMAS: Readonly<Record<string, z.ZodType<BreakdownContent>>> = { [BREAKDOWN_PROMPT_VERSION]: breakdownContentSchema };
 
-/** The stored content, or null when the version is unknown or the content does not match its schema (C6). */
+/** The stored content, or null when the version is unknown or the content does not match its schema. */
 export function parseStoredBreakdown(promptVersion: string, content: unknown): BreakdownContent | null {
   const schema = CONTENT_SCHEMAS[promptVersion];
   if (!schema) return null;

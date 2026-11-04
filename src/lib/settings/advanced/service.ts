@@ -1,6 +1,6 @@
 /**
  * The advanced config editor's server side: validate, preview, save and restore the raw text of a config file.
- * Everything the browser sends is validated with zod again here (C6), the file is re-validated before every write, and
+ * Everything the browser sends is validated with zod again here, the file is re-validated before every write, and
  * a save is refused when the file changed since the editor opened it. Nothing here throws for bad input.
  */
 import { z } from "zod";

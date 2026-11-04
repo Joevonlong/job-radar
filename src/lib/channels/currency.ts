@@ -8,7 +8,7 @@ const SYMBOLS: Readonly<Record<string, string>> = {
 
 /**
  * A currency as a source writes it ("€", "$", "eur", "EUR") -> its ISO 4217 code, or null when it is
- * neither a known symbol nor a three-letter code (C3: nothing is guessed).
+ * neither a known symbol nor a three-letter code (nothing is guessed).
  */
 export function currencyCodeOf(value: string | null | undefined): string | null {
   const token = value?.trim();

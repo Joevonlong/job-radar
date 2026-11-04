@@ -17,7 +17,7 @@ import { previewCategory, type CategoryPreview } from "@/lib/interests/preview";
 import type { InterestsActionState } from "@/lib/interests/types";
 
 // Server Actions are public POST endpoints: everything arriving here is validated again in the
-// service (zod), and the web server only listens on 127.0.0.1 / Tailscale (C5).
+// service (zod), and the web server only listens on 127.0.0.1 / Tailscale.
 
 /** Pages that show saved views or the ranking. */
 function refresh(result: InterestsActionState): InterestsActionState {

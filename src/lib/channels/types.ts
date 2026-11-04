@@ -54,7 +54,7 @@ export interface SearchQuery {
   maxResults: number;
 }
 
-// ---------------------------------------------------------------- raw postings (C1)
+// ---------------------------------------------------------------- raw postings
 
 /** Whether `value` survives `JSON.stringify` → `JSON.parse` (no BigInt, cycles, undefined, functions at the root). */
 export function isJsonSerializable(value: unknown): boolean {
@@ -111,8 +111,8 @@ export const postingSalarySchema = z
 const httpUrl = z.url({ protocol: /^https?$/ });
 
 /**
- * What a channel's `parse` returns (C6: validated by the pipeline before use).
- * Facts the posting does not state are `unknown` / null, never guessed (C3).
+ * What a channel's `parse` returns (validated by the pipeline before use).
+ * Facts the posting does not state are `unknown` / null, never guessed.
  */
 export const normalizedPostingDraftSchema = z.object({
   title: z.string().trim().min(1),
@@ -196,7 +196,7 @@ export interface HttpResponse {
 export interface HttpClient {
   /** Resolves for 2xx/3xx and `allowStatus` statuses; otherwise throws a classified `ChannelError`. */
   request(url: string, init?: HttpRequestInit): Promise<HttpResponse>;
-  /** GET/POST + JSON body parsed and validated (C6). A shape mismatch throws `ChannelError("parse")`. */
+  /** GET/POST + JSON body parsed and validated. A shape mismatch throws `ChannelError("parse")`. */
   json<S extends z.ZodType>(url: string, schema: S, init?: HttpRequestInit): Promise<z.infer<S>>;
 }
 
@@ -296,7 +296,7 @@ export interface Channel {
   readonly usesQueries: boolean;
   readonly supportsCompanyQueries?: boolean;
   /**
-   * Fetch postings for one query. Must return every posting verbatim (C1). Throw `ChannelError`
+   * Fetch postings for one query. Must return every posting verbatim. Throw `ChannelError`
    * (or let `ctx.http` throw) for failures; other thrown values are classified as `unknown`.
    */
   collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPostingInput[]>;
@@ -304,7 +304,7 @@ export interface Channel {
   parse(payload: unknown): NormalizedPostingDraft;
   /**
    * The HTML parts of a stored payload the description is made from, for the AI trap scan (hidden text, comments,
-   * attributes). Reads the payload only (C1); returns `[]` when the payload does not match. Omit for channels that keep no HTML.
+   * attributes). Reads the payload only; returns `[]` when the payload does not match. Omit for channels that keep no HTML.
    */
   descriptionHtml?(payload: unknown): DescriptionHtmlFragment[];
   /**
@@ -324,7 +324,7 @@ export interface Channel {
   supportsCatchUp?(settings: ChannelRuntimeSettings): boolean;
   /**
    * The ghost job check: the source's own "reposted" label of a stored payload ("Reposted 2 weeks ago"), or null. Reads the payload
-   * only (C1) and returns null when it does not match. Omit for channels without such a label.
+   * only and returns null when it does not match. Omit for channels without such a label.
    */
   repostLabel?(payload: unknown): string | null;
   /** USD for `paidRecords` billable records; omit for free channels. */

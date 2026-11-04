@@ -79,7 +79,7 @@ const systemLines = (code: string): string[] => [
   "Put each requirement into one list only.",
 ];
 
-/** The breakdown prompt: title, company and the JD only. Nothing of the user's profile is sent (C5). */
+/** The breakdown prompt: title, company and the JD only. Nothing of the user's profile is sent. */
 export function buildBreakdownPrompt(input: BreakdownPromptInput): AiPrompt {
   const jd = truncateJd(input.description, input.jdMaxChars, input.jdHeadShare);
   const user = [

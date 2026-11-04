@@ -3,7 +3,7 @@ import type { NormalizedPostingDraft } from "../types";
 import { cleanUrl, rankApplyLinks } from "./apply";
 import { lacksDescription, payloadSchema, type JsearchJob } from "./schema";
 
-/** `job_salary_period` as the API spells it → period. Other values keep the text only (C3: no guessing). */
+/** `job_salary_period` as the API spells it → period. Other values keep the text only (no guessing). */
 const SALARY_PERIODS: Readonly<Record<string, "year" | "month" | "week" | "day" | "hour">> = {
   YEAR: "year",
   MONTH: "month",
@@ -109,7 +109,7 @@ function omitEmpty(record: Record<string, unknown>): Record<string, unknown> {
 }
 
 /**
- * Convert a stored `{ search, detail }` payload into the normalized draft (C3: unstated facts stay
+ * Convert a stored `{ search, detail }` payload into the normalized draft (unstated facts stay
  * unknown). `applyPublisherPreference` orders the non-direct apply links (sources.yaml).
  */
 export function parseJsearchPayload(payload: unknown, applyPublisherPreference: readonly string[]): NormalizedPostingDraft {

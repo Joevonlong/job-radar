@@ -4,7 +4,7 @@ import { z } from "zod";
  * Wire shapes of the Handpicked Berlin job index (`GET /jobs/search-index.json`) and posting detail (`GET /jobs/d/{id}.json`),
  * checked against live responses in 2026-10. The index root is an ARRAY of postings (about 4000, a rolling ~30 days); the
  * detail is `{ id, descriptionHTML, url, company }`. Only the fields the channel reads are declared; both objects are stored as
- * delivered (C1).
+ * delivered.
  */
 
 /** Ids are hexadecimal; the id goes into a URL path, so anything else makes the entry unusable. */
@@ -46,7 +46,7 @@ export const detailSchema = z.looseObject({
 });
 export type HandpickedDetail = z.infer<typeof detailSchema>;
 
-/** What is stored per posting (C1): the index entry and the detail, both as delivered. */
+/** What is stored per posting: the index entry and the detail, both as delivered. */
 export const storedPayloadSchema = z.looseObject({
   index: z.looseObject({
     id: z.string(),

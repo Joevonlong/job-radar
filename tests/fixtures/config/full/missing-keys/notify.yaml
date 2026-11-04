@@ -2,7 +2,7 @@
 # 建 bot 和拿 chat id 见 docs/telegram.md；配好后用 `pnpm telegram:test` 发一条测试消息。
 config_version: 2
 telegram:
-  enabled: true # M3 配好 bot 后再打开
+  enabled: true # 配好 bot 后再打开
   api_base_url: "https://api.telegram.org"
   # long-polling：一次 getUpdates 最长等多久（秒，≤ 50）
   poll_timeout_seconds: 30

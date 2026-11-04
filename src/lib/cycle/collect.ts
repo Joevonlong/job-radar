@@ -158,11 +158,11 @@ export async function mapWithConcurrency<T>(items: readonly T[], limit: number, 
 }
 
 /**
- * The `collect` step: run every enabled channel for the cycle's queries (C2: a channel's failure
+ * The `collect` step: run every enabled channel for the cycle's queries (a channel's failure
  * stays inside its own runs). Channels run in parallel, up to `collect.concurrency`; the queries of
  * one channel — or of one cascade family — run sequentially with the channel's throttle between
  * them. Every (channel, query) attempt gets a `runs` row; postings go to `raw_postings` verbatim
- * (C1) before anything parses them. Dry runs do the same in memory and write nothing.
+ * before anything parses them. Dry runs do the same in memory and write nothing.
  */
 export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
   const { config, channels: services } = ctx;
@@ -423,7 +423,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
         }
       }
 
-      // validate the boundary (C6); keep every valid record, flag the rest
+      // validate the boundary; keep every valid record, flag the rest
       const valid: RawPostingInput[] = deliveries ? deliveries.validate(collected) : [];
       if (!deliveries) {
         for (const record of collected) {

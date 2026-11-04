@@ -8,7 +8,7 @@ import type { HandpickedIndexEntry } from "./schema";
 
 /**
  * Which index entries the channel keeps. Pure functions of the entries and the user's configuration: the places come from
- * `search.yaml: locations` (with the spellings of `filter.city_aliases`), never from the code (C8).
+ * `search.yaml: locations` (with the spellings of `filter.city_aliases`), never from the code.
  */
 
 export interface Places {

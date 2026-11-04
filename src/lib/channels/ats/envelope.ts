@@ -5,7 +5,7 @@ import { ATS_KINDS, ATS_REGIONS } from "@/lib/config";
 
 /**
  * What a board posting is stored as in `raw_postings.payload_json`: the posting exactly as the ATS
- * delivered it (C1), wrapped with the board it came from, because `parse` only receives the payload
+ * delivered it, wrapped with the board it came from, because `parse` only receives the payload
  * and needs the company name.
  */
 export const atsEnvelopeSchema = z.object({

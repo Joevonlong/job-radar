@@ -29,7 +29,7 @@ describe("formatDuration", () => {
 });
 
 describe("redact", () => {
-  it("hides URL credentials and bot tokens (C4)", () => {
+  it("hides URL credentials and bot tokens", () => {
     const text = redact("connect postgres://jobradar:s3cret@127.0.0.1:5433/db failed; https://api.telegram.org/bot123456:ABC-def_ghi/getMe; Bearer abc.def");
     expect(text).not.toContain("s3cret");
     expect(text).not.toContain("ABC-def_ghi");

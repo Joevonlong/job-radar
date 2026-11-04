@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-/** A titled card (design `.card`): 2px border, hard shadow, header row with the heading and an optional aside, body below. */
+/** A titled card: 2px border, hard shadow, header row with the heading and an optional aside, body below. */
 export function Panel({ id, title, aside, children, className, bodyClassName }: { id: string; title: string; aside?: ReactNode; children: ReactNode; className?: string; bodyClassName?: string }) {
   return (
     <section aria-labelledby={id} className={cn("rounded-card border-bw border-border bg-card text-card-foreground shadow-e3 min-w-0 scroll-mt-20", className)}>

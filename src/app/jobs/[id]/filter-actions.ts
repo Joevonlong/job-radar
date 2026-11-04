@@ -11,8 +11,8 @@ import { refilterJob } from "@/lib/filter";
 /**
  * Server Action of the "keep anyway / exclude" buttons on the detail page. The decision is stored per
  * job (`job_filter_overrides`), so it survives re-filtering and new preference snapshots, and the job's
- * filter result is recomputed right away. The app is single-user and bound to loopback (C5); input is
- * still validated (C6).
+ * filter result is recomputed right away. The app is single-user and bound to loopback; input is
+ * still validated.
  */
 
 const inputSchema = z.object({

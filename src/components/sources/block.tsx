@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-/** A summary block of /sources (design `.kpi`): a mono label, then what it says, then the detail line. */
+/** A summary block of /sources: a mono label, then what it says, then the detail line. */
 export function Block({ label, children, className, ...props }: { label: ReactNode; children: ReactNode; className?: string } & React.ComponentProps<"div">) {
   return (
     <Card className={cn("min-w-0 gap-1.5 px-4 py-3", className)} {...props}>

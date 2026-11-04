@@ -54,7 +54,7 @@ describe("smartrecruiters consecutive detail failure setting", () => {
 describe("sources.yaml: ashby, personio, smartrecruiters, brave", () => {
   const parsed = configRegistry.channels.schema.parse(shippedYaml("sources.yaml"));
 
-  it("ships the four channels on, with their hosts and tunables in config (C8)", () => {
+  it("ships the four channels on, with their hosts and tunables in config", () => {
     expect(parsed.sources.ashby).toMatchObject({ enabled: true, api_base_url: "https://api.ashbyhq.com", include_compensation: true });
     expect(parsed.sources.personio).toMatchObject({ enabled: true, api_base_url: "https://{token}.jobs.personio.de", language: "en" });
     expect(parsed.sources.smartrecruiters).toMatchObject({ enabled: true, api_base_url: "https://api.smartrecruiters.com", country: "de", page_size: 100, fetch_details: true });
@@ -107,7 +107,7 @@ describe("sources.yaml ats_boards: boards of the new ATS", () => {
 describe("sources.yaml: tavily replaces brave as the default search backend", () => {
   const parsed = configRegistry.channels.schema.parse(shippedYaml("sources.yaml"));
 
-  it("ships tavily on and brave off, with the credit budget in config (C8)", () => {
+  it("ships tavily on and brave off, with the credit budget in config", () => {
     expect(parsed.sources.tavily).toMatchObject({
       enabled: true,
       api_base_url: "https://api.tavily.com",

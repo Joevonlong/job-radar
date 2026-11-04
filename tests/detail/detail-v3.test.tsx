@@ -62,7 +62,7 @@ describe("jump tags of the pay signals", () => {
     const [withJump, without] = screen.getAllByTestId("signal-item");
     expect(within(withJump as HTMLElement).getByTestId("jump-tag")).toHaveAttribute("data-quote-index", "0");
     expect(within(without as HTMLElement).queryByTestId("jump-tag")).toBeNull();
-    // the quote itself (C7) is shown either way
+    // the quote itself is shown either way
     expect(within(without as HTMLElement).getByTestId("signal-quote")).toHaveTextContent("Yearly bonus.");
   });
 

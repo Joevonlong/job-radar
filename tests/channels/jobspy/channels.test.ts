@@ -11,7 +11,7 @@ import { httpResponse, jobspyContext, jobspySettings, loadJobspyFixture, query }
 const settings = jobspySettings();
 
 describe("channel metadata", () => {
-  it("follows the spec: families, kinds and ids", () => {
+  it("sets the family, kind and id of each channel", () => {
     expect(createLinkedinGuestChannel({ settings: () => settings })).toMatchObject({ id: "linkedin-guest", family: "linkedin", kind: "guest", usesQueries: true });
     expect(createIndeedChannel({ settings: () => settings })).toMatchObject({ id: "indeed", family: "indeed", usesQueries: true });
     expect(createJobspyGoogleChannel({ settings: () => settings })).toMatchObject({ id: "jobspy-google", family: "google", usesQueries: true });

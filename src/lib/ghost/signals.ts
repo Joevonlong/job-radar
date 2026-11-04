@@ -1,6 +1,6 @@
 /**
  * The five signals of the ghost job check, each a pure function of the stored inputs (no AI, no network). Thresholds and points
- * come from pipeline.yaml `job_checks.ghost`, words from the market packs' `ghost` section (C8).
+ * come from pipeline.yaml `job_checks.ghost`, words from the market packs' `ghost` section.
  */
 import { segmentText, type TextSegment } from "@/lib/job-checks/segment";
 import { clipQuote } from "@/lib/signals/quote";
@@ -523,7 +523,7 @@ export interface EvergreenOptions {
  * (itself or the question right before it), a sentence that is itself a question (ends in a `lead_in_question.ends` mark; a
  * statement with a short invitation tagged on is none, `question_tag`), a negated hit, a hit in the reach of an `exclude_clause`
  * match, a hit of a pattern with `requires_context` whose sentence has none of it, a hit of an `only_before_duties` pattern below
- * the first duties heading, and a list item under a duties heading do not count. The quote is verified against the description (C7).
+ * the first duties heading, and a list item under a duties heading do not count. The quote is verified against the description.
  */
 export function evergreenWording(description: string | null, rules: CompiledGhostRules, options: EvergreenOptions = {}): GhostReasonOf<"evergreen_wording"> | null {
   const settings = rules.settings.evergreen_wording;
@@ -609,7 +609,7 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
       if (pattern.requiresContext.length > 0 && !hasContext(pattern)) continue;
       if (pattern.checkNegation && negated(segment, hit, pattern, rules, piece)) continue;
       const { quote, offset } = clipQuote(description, segment.start, segment.end, hit, rules.settings.quote_max_chars);
-      // C7: the quote must be the description at its offset; a quote that is not is never stored
+      // The quote must be the description at its offset; a quote that is not is never stored
       if (quote === "" || description.slice(offset, offset + quote.length) !== quote) continue;
       return { code: "evergreen_wording", points: settings.points, patternId: pattern.id, quote, offset };
     }
@@ -620,7 +620,7 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
 /**
  * The job's title says it is a talent pool or an open application (the packs' `title_patterns`): the first pattern that matches a
  * title that no `title_exclude` matches. A title is short and has no sentences: no negation, no segments, no trap spans. The quote is
- * the title around the hit (cut at `quote_max_chars`, never inside a surrogate pair, always with the hit) and a verbatim piece of it (C7).
+ * the title around the hit (cut at `quote_max_chars`, never inside a surrogate pair, always with the hit) and a verbatim piece of it.
  */
 export function evergreenTitle(title: string | null, rules: CompiledGhostRules): GhostReasonOf<"evergreen_wording"> | null {
   const { enabled, title_points: points } = rules.settings.evergreen_wording;
@@ -637,7 +637,7 @@ export function evergreenTitle(title: string | null, rules: CompiledGhostRules):
       offset += 1;
     }
     if (/[\uD800-\uDBFF]$/u.test(quote)) quote = quote.slice(0, -1);
-    // C7: the quote must be the title at its offset; a quote that is not is never stored
+    // The quote must be the title at its offset; a quote that is not is never stored
     if (quote === "" || title.slice(offset, offset + quote.length) !== quote) continue;
     return { code: "evergreen_wording", points, patternId: pattern.id, quote, offset, field: "title" };
   }

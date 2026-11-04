@@ -1,6 +1,6 @@
 /**
  * The files of a market pack (`config/packs/<id>/`, user copy in `data/config/packs/<id>/`) and the market
- * settings of preferences.yaml, validated with zod (C6). A pack is public data: countries, regions, cities, rule
+ * settings of preferences.yaml, validated with zod. A pack is public data: countries, regions, cities, rule
  * phrases. Every section is optional; which sections a pack has is a matter of its data.
  */
 import { z } from "zod";

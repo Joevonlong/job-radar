@@ -7,7 +7,7 @@ export type FloorSalary = Pick<JobSalary, "qualityStatus" | "basePerYear" | "bas
 /**
  * The salary rule of the hard filter: a posting is excluded when its stated upper bound,
  * a year in the base currency `currency`, is below the floor. Anything the posting does not state (no salary,
- * not convertible, flagged implausible, no upper bound) never excludes (C3), and neither does a figure in another
+ * not convertible, flagged implausible, no upper bound) never excludes, and neither does a figure in another
  * base currency (worked out before the base currency changed).
  *
  * Returns the upper bound that fell below the floor (the reason payload), or null when the job passes.

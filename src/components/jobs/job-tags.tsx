@@ -9,7 +9,7 @@ import { VisaBadge } from "./visa-badge";
 import type { JobListItem, JobListSignal } from "./types";
 import { useLocalLanguageName } from "@/components/base-currency";
 
-/** Contract kinds that deserve a gate of their own (`permanent` is the default, `unknown` never gets one, C3). */
+/** Contract kinds that deserve a gate of their own (`permanent` is the default, `unknown` never gets one). */
 const CONTRACT_GATES = ["freelance", "student", "fixed_term"] as const;
 
 /**

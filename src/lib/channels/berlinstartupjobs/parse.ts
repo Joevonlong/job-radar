@@ -77,10 +77,10 @@ function readEnvelope(payload: unknown): BerlinStartupJobsEnvelope {
 }
 
 /**
- * A stored posting (`{ post, terms }`) -> the normalized draft. Facts the site does not state stay unknown (C3): "remote possible"
+ * A stored posting (`{ post, terms }`) -> the normalized draft. Facts the site does not state stay unknown: "remote possible"
  * is not hybrid and an unmarked job is not on site; the categories and the package are the site's own grouping, not a contract or a
  * level. The title loses its " // Company" end, so the same job from another source matches. The description is the HTML as text,
- * without e-mail addresses and phone numbers; the stored payload keeps them (C1). The apply link is the site's page for the job,
+ * without e-mail addresses and phone numbers; the stored payload keeps them. The apply link is the site's page for the job,
  * never a `mailto:`.
  */
 export function parseBerlinStartupJobsPayload(payload: unknown): NormalizedPostingDraft {

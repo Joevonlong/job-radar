@@ -8,7 +8,7 @@ import type { NormalizedPostingDraft } from "../types";
 import type { AlertJob, GmailPlatform } from "./types";
 
 /**
- * What the Gmail channel stores in `raw_postings.payload_json` (C1). The job payload holds only what
+ * What the Gmail channel stores in `raw_postings.payload_json`. The job payload holds only what
  * the card states, so the same job in a later digest produces the same payload (no re-parse); which
  * email it came from is in `email_messages`.
  */
@@ -27,7 +27,7 @@ const jobPayloadSchema = z.object({
   }),
 });
 
-/** An email no parser could read: the original goes in whole so the parser can be fixed and re-run (C1). */
+/** An email no parser could read: the original goes in whole so the parser can be fixed and re-run. */
 const unparsedPayloadSchema = z.object({
   kind: z.literal("email_unparsed"),
   platform: gmailPlatformSchema,
@@ -90,7 +90,7 @@ export function parseEmailPayload(payload: unknown): NormalizedPostingDraft {
   const title = job.title.trim();
   if (!title) throw new ChannelError("parse", `${platform} alert card has no title`);
   const company = job.company?.trim();
-  // C3: the company is never guessed from the platform name
+  // The company is never guessed from the platform name
   if (!company) throw new ChannelError("parse", `${platform} alert card for "${title}" has no company`);
   const url = httpUrlOrNull(job.url);
   return {

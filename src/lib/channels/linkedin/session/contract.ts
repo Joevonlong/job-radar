@@ -18,7 +18,7 @@ export const LINKEDIN_SESSION_RECOMMENDED_ID = "linkedin-session:recommended";
 
 export type { SessionSettings };
 
-/** Validate the channel's config block (C6). Throws a non-retryable `ChannelError`. */
+/** Validate the channel's config block. Throws a non-retryable `ChannelError`. */
 export function readSessionSettings(extra: unknown): SessionSettings {
   const parsed = sessionSettingsSchema.safeParse(extra);
   if (!parsed.success) {

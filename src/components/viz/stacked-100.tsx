@@ -19,7 +19,7 @@ export interface Stacked100Part {
 
 export interface Stacked100Props {
   parts: readonly Stacked100Part[];
-  /** Show the legend under the bar (default; with two or more parts it is required by the design rules). */
+  /** Show the legend under the bar (default; with two or more parts it is required). */
   legend?: boolean;
   className?: string;
 }

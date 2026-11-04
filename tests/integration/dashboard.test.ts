@@ -405,7 +405,7 @@ describe("getJobDetail", () => {
     expect(student.jobs[0]?.germanLevelRequired).toBe("C1");
   });
 
-  it("shows undisclosed salary as null and no score as null (C3)", async () => {
+  it("shows undisclosed salary as null and no score as null", async () => {
     const detail = await getJobDetail(getDb(), await jobIdByTitle("Security Engineer, Cloud"));
     expect(detail?.salary).toBeNull();
     expect(detail?.score).toBeNull();

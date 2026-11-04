@@ -36,7 +36,7 @@ export interface ShippedConfigReporter {
   report(): Promise<boolean>;
 }
 
-/** Why a report failed, without connection details (C4): our own errors and time-outs by message, others by class. */
+/** Why a report failed, without connection details: our own errors and time-outs by message, others by class. */
 function describeFailure(error: unknown): string {
   if (error instanceof ShippedConfigError || error instanceof TimeoutError) return error.message;
   return error instanceof Error ? error.name : "unknown error";

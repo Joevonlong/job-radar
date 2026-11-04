@@ -5,7 +5,7 @@ import { LOG_LEVELS, type LogLevel } from "@/lib/logging/levels";
 import { resolveHostDatabaseUrl } from "@/lib/ops/doctor/database-url";
 
 /**
- * Environment variables are an external boundary (C6): parse them with zod.
+ * Environment variables are an external boundary: parse them with zod.
  * Parsing is lazy so `next build` never needs a database URL.
  * Every variable is documented in `.env.example`; tunables get a default here
  * until the config system lands.
@@ -36,7 +36,7 @@ const runnerEnvSchema = z.object({
   PG_RESTORE_PATH: z.string().min(1).default("pg_restore"),
 });
 
-/** Telegram credentials. Never echo the values (C4): messages name the variable only. */
+/** Telegram credentials. Never echo the values: messages name the variable only. */
 const telegramEnvSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().regex(/^\d+:[\w-]+$/, "is not a bot token (expected <digits>:<secret>)"),
   /** A private chat id is a positive integer; groups / channels are negative. */
@@ -58,7 +58,7 @@ function withoutEmpty(source: EnvSource): Record<string, string | undefined> {
 
 /**
  * Error messages only name the offending variable, never its value, so a
- * malformed DATABASE_URL (which may embed a password) cannot leak (C4).
+ * malformed DATABASE_URL (which may embed a password) cannot leak.
  */
 function parseEnv<T extends z.ZodType>(schema: T, source: EnvSource): z.infer<T> {
   const result = schema.safeParse(withoutEmpty(source));

@@ -131,7 +131,7 @@ describe("German level rules", () => {
     expect(extractGermanLevel("Fließend Deutsch (C1) und Englisch", config)).toBe("C1");
   });
 
-  it("is unknown when German is not mentioned or has no level (C3)", () => {
+  it("is unknown when German is not mentioned or has no level", () => {
     expect(extractGermanLevel(EN, config)).toBe("unknown");
     expect(extractGermanLevel("Fluent English required", config)).toBe("unknown");
     expect(extractGermanLevel("German required", config)).toBe("unknown");

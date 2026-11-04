@@ -86,7 +86,7 @@ export function ScoreCard({ jobId, score, pushLine, bonusCap, scoreNow, scoredWh
             <ScoreComposition match={score.score} bonus={bonus} bonusCap={bonusCap} pushLine={line} />
           </>
         ) : (
-          // not scored yet: one dashed box (the design's null state), not an empty meter and an empty bar
+          // not scored yet: one dashed box, not an empty meter and an empty bar
           <JobViewTransition id={jobId} part="score">
             <div className="border-border text-ink-2 rounded-card flex flex-col gap-1 border-dashed border-[1.5px] px-4 py-3" data-rank="pending">
               <span className="text-data text-ink-3 font-mono" aria-hidden>

@@ -16,7 +16,7 @@ export { foldText, foldTransliterated } from "./text";
  * The hard filter: pure rules over the fields the pipeline already normalized
  * (contract, salary per year in the base currency, locations, workplace, seniority), plus the user's own words and rules
  * (`exclude_keywords`, `deal_breakers`). Nothing here parses a job description for facts. What a posting does not state
- * never excludes it (C3): the job is kept and, where it matters, noted.
+ * never excludes it: the job is kept and, where it matters, noted.
  */
 
 export interface FilterJob {

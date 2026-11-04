@@ -23,7 +23,7 @@ export interface SalaryDisplay {
 }
 
 /**
- * Normalized salary text (C3: only what the posting states; a missing bound reads "up to" / "from"), written by `formatSalary` like
+ * Normalized salary text (only what the posting states; a missing bound reads "up to" / "from"), written by `formatSalary` like
  * every other salary on the page. Per-year amounts (`perYear`, from the pipeline's period factors) are preferred so salaries
  * compare; otherwise the amounts as stated, with their period.
  */

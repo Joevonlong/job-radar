@@ -7,7 +7,7 @@ import { postedAtOf } from "./posted-date";
 
 const LINKEDIN_JOB_URL = "https://www.linkedin.com/jobs/view/";
 
-/** Validate one raw dataset item (C6) without transforming it. Throws `ChannelError("parse")`. */
+/** Validate one raw dataset item without transforming it. Throws `ChannelError("parse")`. */
 export function readJobItem(payload: unknown): JobItem {
   const parsed = jobItemSchema.safeParse(payload);
   if (!parsed.success) {
@@ -32,7 +32,7 @@ export function parseApifyJob(payload: unknown): NormalizedPostingDraft {
     title: item.title,
     companyName: item.companyName,
     locations: parseLocation(item.location),
-    // the actor does not say whether a job is remote/hybrid/on-site: unknown, never guessed (C3)
+    // the actor does not say whether a job is remote/hybrid/on-site: unknown, never guessed
     workplace: "unknown",
     contractHint: item.contractType?.trim() || null,
     seniorityHint: item.experienceLevel?.trim() || null,

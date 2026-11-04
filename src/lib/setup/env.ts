@@ -1,6 +1,6 @@
 /**
  * Which environment variables are set, by name. The values are only ever compared with the empty string here and
- * never leave this module (C4): every result is `{ name, present }`.
+ * never leave this module: every result is `{ name, present }`.
  */
 import { CHANNEL_REQUIRED_ENV } from "@/lib/sources/required-env";
 import type { AiProviderIdChoice } from "@/lib/config/ai-options";

@@ -53,10 +53,10 @@ providers:
     command: codex
     # model: 不写就用 CLI 内置的默认模型（0.160.1 是 gpt-6.1-sol）。调用带 --ignore-user-config，
     # 所以 ~/.codex/config.toml 里选的模型不生效；实际用的模型会记在 ai_usage 里。
-    # G8：推理强度。打分、信号、翻译用 low 足够，快很多；可按任务覆盖，例如 { translate: low }。
+    # 推理强度。打分、信号、翻译用 low 足够，快很多；可按任务覆盖，例如 { translate: low }。
     reasoning_effort: low
     reasoning_effort_by_task: {}
-    # G0：精简 Codex 的 agent 上下文。每次调用输入 token 约 1.6 万 -> 约 0.3 万（实测 0.160.1）。false = 旧行为。
+    # 精简 Codex 的 agent 上下文。每次调用输入 token 约 1.6 万 -> 约 0.3 万（实测 0.160.1）。false = 旧行为。
     trim_context: true
     # 每次调用关掉的 Codex feature，以 -c features.<名字>=false 传入（--disable 遇到未知名字会直接退出，-c 会忽略）。
     disable_features: [shell_tool, unified_exec, multi_agent, plugins, apps, memories, image_generation, browser_use, computer_use, in_app_browser, view_image, tool_suggest, skill_search, goals, sleep_tool, hooks, workspace_dependencies, worktrees, code_mode_host, mentions_v2, realtime_conversation]
@@ -69,11 +69,11 @@ providers:
       include_environment_context: "false"
       include_collaboration_mode_instructions: "false"
       include_apps_instructions: "false"
-    # G7：同一进程里同时运行的 codex 调用数；多个进程共用 ~/.codex/auth.json，刷新 token 时可能撞车。
+    # 同一进程里同时运行的 codex 调用数；多个进程共用 ~/.codex/auth.json，刷新 token 时可能撞车。
     max_concurrency: 3
     # 第一次遇到登录（auth）错误时等这么多秒再重试一次，仍失败才判定登录过期；0 = 不重试。
     auth_retry_seconds: 5
-    # G6：参数集验证过的 codex 版本。装的是别的版本只提醒（ai:probe、ai-worker 启动日志），不阻断。升级清单见 docs/ai-providers.md。
+    # 参数集验证过的 codex 版本。装的是别的版本只提醒（ai:probe、ai-worker 启动日志），不阻断。升级清单见 docs/ai-providers.md。
     verified_version: "0.160.1"
     timeout_seconds: 180
   anthropic:

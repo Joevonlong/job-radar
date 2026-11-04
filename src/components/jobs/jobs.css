@@ -182,7 +182,7 @@
 /* the short labels are for the phone row only */
 .kpi__ls { display: none; }
 
-/* phone (design s-phone): three compact blocks in one row (fetched, at-or-above the push line, salary stated: label + rolling number, no bar or trend),
+/* phone: three compact blocks in one row (fetched, at-or-above the push line, salary stated: label + rolling number, no bar or trend),
    so the first job is on the first screen. "passed" and "pushed" are on the tablet / desktop strip only. */
 @media (max-width: 47.99rem) {
   .kpis { grid-template-columns: 1.2fr 1fr 1fr; gap: var(--space-2); }

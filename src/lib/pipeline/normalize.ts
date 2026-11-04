@@ -59,7 +59,7 @@ export function normalizeTitle(title: string): string {
 
 /**
  * A validated draft -> the normalized job fields. Pure: no database, no clock. Nothing the posting
- * does not state is invented (C3): unknown stays `unknown` / null.
+ * does not state is invented: unknown stays `unknown` / null.
  */
 export function normalizeDraft(draft: NormalizedPostingDraft, config: PipelineConfig): NormalizedJob {
   const title = cleanTitle(draft.title);
@@ -73,7 +73,7 @@ export function normalizeDraft(draft: NormalizedPostingDraft, config: PipelineCo
     titleNorm: normalizeTitle(title),
     companyName: draft.companyName.trim(),
     locations,
-    // the source's own value wins; only when it states none is the posting's wording read (C3: nothing is invented)
+    // the source's own value wins; only when it states none is the posting's wording read (nothing is invented)
     workplace:
       draft.workplace === "remote"
         ? (workplaceOverridingRemoteLabel(description, config) ?? "remote") // a generic "remote" channel label yields to a JD that says hybrid / on-site

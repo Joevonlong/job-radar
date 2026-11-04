@@ -29,7 +29,7 @@ import {
  *   `channels.id` is a human-readable text key and `email_messages.message_id` is the RFC 5322 id.
  * - All timestamps are `timestamptz`.
  * - Status-like fields are Postgres enums (adding a value is a cheap migration).
- * - Facts a posting does not state are stored as 'unknown' / NULL, never guessed (C3).
+ * - Facts a posting does not state are stored as 'unknown' / NULL, never guessed.
  */
 
 const id = () => bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity();
@@ -152,7 +152,7 @@ export const runs = pgTable(
   ],
 );
 
-/** C1: every fetched posting lands here verbatim before any parsing. */
+/** Every fetched posting lands here verbatim before any parsing. */
 export const rawPostings = pgTable(
   "raw_postings",
   {
@@ -489,7 +489,7 @@ export const signals = pgTable(
     tier: text("tier").notNull(),
     kind: text("kind").notNull(),
     valueJson: jsonb("value_json"),
-    /** C7: no quote, no signal. */
+    /** No quote, no signal. */
     quote: text("quote").notNull(),
     /** Where `quote` sits in the JD; NULL for a `structured` quote (it is the source field's own text, not part of the JD). */
     quoteOffset: integer("quote_offset"),
@@ -657,7 +657,7 @@ export const translations = pgTable(
 /**
  * The AI breakdown of a job's JD (responsibilities, tech stack by category, experience, projects, soft skills,
  * languages, other), one row per job, replaced when the job is broken down again. An AI reading, never a fact of the
- * job (C3): nothing here is copied into `jobs`. Every item carries a verbatim JD quote and its offset (C7).
+ * job: nothing here is copied into `jobs`. Every item carries a verbatim JD quote and its offset.
  * `content` is validated with the zod schema of `prompt_version` when read (`parseStoredBreakdown`).
  */
 export const jobBreakdowns = pgTable("job_breakdowns", {
@@ -671,7 +671,7 @@ export const jobBreakdowns = pgTable("job_breakdowns", {
   provider: text("provider"),
   model: text("model"),
   content: jsonb("content").notNull(),
-  /** Items the model returned whose quote is not in the JD (dropped, C7). */
+  /** Items the model returned whose quote is not in the JD (dropped). */
   droppedItems: integer("dropped_items").notNull().default(0),
   /** The language the items are written in (a BCP 47 code). */
   outputLang: text("output_lang").notNull(),
@@ -820,7 +820,7 @@ export const salaryBenchmarks = pgTable(
 );
 
 /**
- * on-demand AI salary lookups (AI estimates from public web pages, C3: never written into `jobs`). `lookup_key`
+ * on-demand AI salary lookups (AI estimates from public web pages, never written into `jobs`). `lookup_key`
  * = normalised company | family | title | seniority | country | city: the cache key. `result_json` is the checked
  * answer (sources with URLs, bands, confidence); a failed lookup keeps its `error_code` and is never served from the cache.
  */
@@ -853,7 +853,7 @@ export const salaryLookups = pgTable(
 );
 
 /**
- * Company backgrounds found by an AI provider with web search (C3: AI estimates, never written into `companies` or `jobs`). One
+ * Company backgrounds found by an AI provider with web search (AI estimates, never written into `companies` or `jobs`). One
  * company's result serves all its jobs. `result_json` is the checked answer (`lib/research/verify.ts`: only fields with a source
  * that passed the trap and range checks); a failed lookup keeps its `error_code`, has no result and is never served from the cache.
  */
@@ -908,7 +908,7 @@ export const trapQuoteSourceEnum = pgEnum("trap_quote_source", ["description", "
 
 /**
  * Content of a JD written to mislead an AI (hidden text, instructions to an AI, invisible characters), one row per
- * finding. A marker only (C3): nothing here changes the score, the facts or the filter. C7: every row carries a verbatim quote and
+ * finding. A marker only: nothing here changes the score, the facts or the filter. Every row carries a verbatim quote and
  * its place: an offset in `jobs.description`, or (`quote_source = raw`) the field path of the source payload in `location`.
  * `technique` / `method` / `ai_verdict` are text validated by zod (`@/lib/traps/types`).
  */
@@ -986,9 +986,9 @@ export const trapScans = pgTable(
 );
 
 /**
- * Signs that a job is not a real opening (the ghost job check, rules only), one row per checked job. A hint only (C3): nothing here
+ * Signs that a job is not a real opening (the ghost job check, rules only), one row per checked job. A hint only: nothing here
  * changes a score, a filter or a push. `evidence` is the list of reasons (`[{code, points, …}]`, validated by zod in
- * `@/lib/ghost/types`); an evergreen quote is a verbatim piece of `jobs.description` at its offset (C7). `input_hash` covers the
+ * `@/lib/ghost/types`); an evergreen quote is a verbatim piece of `jobs.description` at its offset. `input_hash` covers the
  * inputs of the check (see `@/lib/db/repos/ghost`); `recheck_at` is when the "open for long" points would next change. The owner's
  * "not a ghost job" sets `dismissed_at` and the reason codes seen then; a new code shows the mark again.
  */
@@ -1014,8 +1014,8 @@ export const jobGhost = pgTable(
 );
 
 /**
- * What a job's JD says about visa sponsorship / a work permit (rules only), one row per scanned job. A marker only (C3): nothing
- * here changes a score or filters a job. C7: every evidence item (`[{status, kind, quote, offset}]`, validated by zod in
+ * What a job's JD says about visa sponsorship / a work permit (rules only), one row per scanned job. A marker only: nothing
+ * here changes a score or filters a job. Every evidence item (`[{status, kind, quote, offset}]`, validated by zod in
  * `@/lib/visa/types`) is a verbatim quote of `jobs.description` and its offset. `input_hash` covers the JD, the rules and the
  * other inputs of the check (see `@/lib/visa/step`): a different hash rescans the job.
  */

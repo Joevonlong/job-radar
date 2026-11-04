@@ -33,7 +33,7 @@ export interface JobMatch {
 
 const locationsSchema = z.array(jobLocationSchema);
 
-/** The locations stored on a job (`locations_json`), validated (C6); unreadable JSON counts as none. */
+/** The locations stored on a job (`locations_json`), validated; unreadable JSON counts as none. */
 export function storedLocations(job: Pick<Job, "locationsJson">): JobLocation[] {
   const parsed = locationsSchema.safeParse(job.locationsJson);
   return parsed.success ? parsed.data : [];
@@ -282,7 +282,7 @@ export function unionLocations(first: readonly JobLocation[], second: readonly J
 /**
  * Fold a new source's fields into the job it matched. When the new source has the best (or equal)
  * apply-link priority it wins every field it states; otherwise it only fills what the job does not
- * know yet. A known value is never replaced by `unknown` (C3). Locations, skills and the agency
+ * know yet. A known value is never replaced by `unknown`. Locations, skills and the agency
  * flag accumulate; the earliest posting date is kept.
  */
 export function mergeJobFields(existing: JobFields, incoming: JobFields, incomingWins: boolean): JobFields {

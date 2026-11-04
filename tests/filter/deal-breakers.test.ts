@@ -84,7 +84,7 @@ describe("language gate", () => {
     expect(vetoes([fixed], posting({ germanLevel: "C2" }), context({ me: null }))).toEqual(["gate"]);
   });
 
-  it("never vetoes preferred, none or unknown (C3)", () => {
+  it("never vetoes preferred, none or unknown", () => {
     for (const level of ["preferred", "none", "unknown"] as const) {
       expect(vetoes([gate()], posting({ germanLevel: level }), context({ me: me() }))).toEqual([]);
       expect(vetoes([gate({ at_least: "A1" })], posting({ germanLevel: level }))).toEqual([]);

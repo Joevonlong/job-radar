@@ -1,6 +1,6 @@
 /**
  * The switches of the visa check: ui.yaml `job_checks.visa` (on / off, when the list badge and filter show) and me.yaml
- * `needs_visa_sponsorship`. The latter stays on this machine (C5): it is read here only to decide what the pages show.
+ * `needs_visa_sponsorship`. The latter stays on this machine: it is read here only to decide what the pages show.
  * Both are read from the file each time (two small files): the web app has no config watcher, and a hand edit of me.yaml or
  * ui.yaml must show on the next page load, as the settings and /me pages do.
  */

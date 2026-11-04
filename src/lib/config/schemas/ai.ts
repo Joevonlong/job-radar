@@ -160,8 +160,8 @@ const scoring = z.strictObject({
   /** The order waiting postings are scored in, for cycles and for the backlog. */
   priority,
   /**
-   * The user's own scoring criteria, each one sentence in any language, sent to the model with the prompt (preferences,
-   * C5). `dealbreakers` push a posting into the 0-29 band. Changing them re-scores (`score-v1+c<hash>`). Absent = none.
+   * The user's own scoring criteria, each one sentence in any language, sent to the model with the prompt (preferences).
+   * `dealbreakers` push a posting into the 0-29 band. Changing them re-scores (`score-v1+c<hash>`). Absent = none.
    */
   criteria: z
     .strictObject({
@@ -386,12 +386,12 @@ export const aiSchema = z.strictObject({
        * so ~/.codex/config.toml does not count). The model that answered is stored in `ai_usage`.
        */
       model: nonEmptyString.optional(),
-      /** G8: `-c model_reasoning_effort=`. Low is enough for scoring, signals and translation and is much faster. */
+      /** `-c model_reasoning_effort=`. Low is enough for scoring, signals and translation and is much faster. */
       reasoning_effort: z.enum(CODEX_REASONING_EFFORTS),
       /** Per-task override of `reasoning_effort`. */
       reasoning_effort_by_task: z.partialRecord(z.enum(AI_TASK_NAMES), z.enum(CODEX_REASONING_EFFORTS)),
       /**
-       * G0: true = run Codex with a trimmed agent context (own system prompt as the base instructions, skills list and
+       * true = run Codex with a trimmed agent context (own system prompt as the base instructions, skills list and
        * environment text switched off; ~16k -> ~3k input tokens per call). false = system + user prompt on stdin, Codex's
        * default context. The tools are off either way.
        */
@@ -407,9 +407,9 @@ export const aiSchema = z.strictObject({
        * (`skills.include_instructions`, `agents.enabled`, `include_*_instructions`, `include_*_context`); other keys are dropped with a warning.
        */
       config_overrides: z.record(codexKey, tomlValue),
-      /** G7: most codex-cli calls running at the same time in one process. */
+      /** Most codex-cli calls running at the same time in one process. */
       max_concurrency: positiveInt,
-      /** G7: after a first `auth` failure wait this many seconds and retry once (token refresh race); 0 = no retry. */
+      /** After a first `auth` failure wait this many seconds and retry once (token refresh race); 0 = no retry. */
       auth_retry_seconds: nonNegativeInt,
       /**
        * The oldest codex-cli this app works with: `codex exec --ignore-user-config --ignore-rules` (0.122.0) plus the options and

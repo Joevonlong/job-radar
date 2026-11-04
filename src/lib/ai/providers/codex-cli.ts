@@ -38,14 +38,14 @@ import { childEnv, findExecutable, makeScratchDir, processFailure, runProcess, t
  *   benign allowlist, plus the fixed fallback list and ai.yaml `disable_features`, as `-c features.<name>=false` (an
  *   unknown name is ignored, unlike `--disable`); then web search off, no apply-patch / image tool, approval "never"
  *   (`CODEX_ENFORCED_CONFIG`). These come last, so no earlier `-c` can switch a tool back on.
- * - G0 (trim_context): the task's system prompt becomes Codex's base instructions (`model_instructions_file`), the
+ * - `trim_context`: the task's system prompt becomes Codex's base instructions (`model_instructions_file`), the
  *   skills list and environment text are switched off with `config_overrides` (only allowlisted keys, see
  *   `filterCodexOverrides`), and stdin carries the user prompt only. trim_context=false: system + user on stdin, Codex's
  *   default context (still without tools).
  * - `command` must be the `codex` executable (`cliCommandProblem`); any other program is never started. The model name
  *   is checked too (`cliModelProblem`).
- * - G8: `-m` only when ai.yaml sets `providers.codex_cli.model` (else the CLI's built-in default); reasoning effort always explicit.
- * - G7: at most `max_concurrency` calls at once per process; one retry after a first `auth` failure.
+ * - `-m` only when ai.yaml sets `providers.codex_cli.model` (else the CLI's built-in default); reasoning effort always explicit.
+ * - At most `max_concurrency` calls at once per process; one retry after a first `auth` failure.
  * - The one exception (`web-tasks.ts`, a task in `WEB_ACCESS_TASKS` only): `-c web_search="live"` instead of
  *   "disabled"; every feature stays off as above (`standalone_web_search` too). Codex's web search cannot be limited to
  *   domains. When `codex features list` cannot be read the web task fails (no fallback list for it).
@@ -133,7 +133,7 @@ export function codexArgs(options: CodexArgsOptions): string[] {
   return args;
 }
 
-/** Process-wide cap shared by every codex-cli provider instance (G7). */
+/** Process-wide cap shared by every codex-cli provider instance. */
 const processSemaphore = new Semaphore(3);
 
 const defaultSleep = (ms: number, signal?: AbortSignal): Promise<void> =>
@@ -277,7 +277,7 @@ export function createCodexCliTransport(options: CodexCliOptions): AiTransport {
       try {
         output = await attempt();
       } catch (error) {
-        // G7: concurrent processes share ~/.codex/auth.json; a token refresh race looks like an expired login. Retry once.
+        // Concurrent processes share ~/.codex/auth.json; a token refresh race looks like an expired login. Retry once.
         if (!(error instanceof AiProviderError) || error.kind !== "auth" || config.auth_retry_seconds <= 0) throw error;
         await sleep(config.auth_retry_seconds * 1000, request.signal);
         output = await attempt();

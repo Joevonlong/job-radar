@@ -249,7 +249,7 @@ describe("usage and budget", () => {
   });
 });
 
-describe("secrets (C4)", () => {
+describe("secrets", () => {
   it("never puts a credential into AiUnavailableError, even when a provider echoes it", async () => {
     const secret = "sk-live-0123456789abcdefSECRET";
     const previous = process.env.DEEPSEEK_API_KEY;

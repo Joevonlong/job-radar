@@ -193,7 +193,7 @@ export function createJsearchChannel(deps: JsearchDeps = {}): Channel {
         return {
           externalId: id,
           url: cleanUrl(stringField(record, "job_apply_link")),
-          // the whole record as the API sent it (C1), plus the details record when one was fetched; a detail kept from an earlier
+          // the whole record as the API sent it, plus the details record when one was fetched; a detail kept from an earlier
           // cycle is marked, and the parser takes only its description
           payload: keptDetail === undefined ? { search: record, detail: details.get(id) ?? null } : { search: record, detail: keptDetail, detail_source: "stored" },
           postedAt: typed.success ? postedAt(typed.data) : null,

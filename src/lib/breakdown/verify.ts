@@ -1,4 +1,4 @@
-/** Quote check of a breakdown (C7): every item must quote the JD; the ones that do not are dropped and counted. */
+/** Quote check of a breakdown: every item must quote the JD; the ones that do not are dropped and counted. */
 import type { BreakdownOutput } from "@/lib/ai/prompts/breakdown";
 import { skillKey } from "@/lib/dashboard/skills";
 import { locateQuote } from "@/lib/signals/quote";

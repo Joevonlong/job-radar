@@ -6,7 +6,7 @@ export type { LogLevel };
 
 const LEVEL_ORDER: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
 
-/** Field names whose values are never written to a log (C4). Matched case-insensitively as substrings. */
+/** Field names whose values are never written to a log. Matched case-insensitively as substrings. */
 const SENSITIVE_KEY = /authorization|cookie|token|secret|password|passwd|api[-_]?key|apikey|credential|session|headers|body|payload/i;
 const MAX_STRING = 300;
 const MAX_DEPTH = 3;

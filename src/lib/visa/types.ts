@@ -8,7 +8,7 @@ export type VisaStatus = (typeof VISA_STATUSES)[number];
 export const VISA_KINDS = ["no_sponsorship", "permit_required"] as const;
 export type VisaKind = (typeof VISA_KINDS)[number] | null;
 
-/** One quote behind a result: a verbatim piece of `jobs.description` and its offset (C7). `kind` is set only for `not_offered`. */
+/** One quote behind a result: a verbatim piece of `jobs.description` and its offset. `kind` is set only for `not_offered`. */
 export const visaEvidenceSchema = z
   .strictObject({
     status: z.enum(["offered", "not_offered", "unclear"]),

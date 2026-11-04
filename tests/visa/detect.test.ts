@@ -36,7 +36,7 @@ describe("detectVisa: the synthetic postings", () => {
         const result = detect(text);
         expect(result.status).toBe(expected);
         expect(visaEvidenceListSchema.parse(result.evidence)).toEqual(result.evidence);
-        // C7: every quote is a verbatim piece of the JD at its offset
+        // Every quote is a verbatim piece of the JD at its offset
         for (const e of result.evidence) expect(text.slice(e.offset, e.offset + e.quote.length)).toBe(e.quote);
         if (expected === "not_mentioned") expect(result.evidence).toEqual([]);
         else expect(result.evidence.length).toBeGreaterThan(0);

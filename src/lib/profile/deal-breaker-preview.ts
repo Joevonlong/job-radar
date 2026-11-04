@@ -147,7 +147,7 @@ export async function previewDealBreakers(db: Db, rules: readonly DealBreaker[],
   return { total, partial, rules: prepared.map((entry) => ({ ...entry.result, ms: Math.round(entry.result.ms * 10) / 10 })) };
 }
 
-/** The form's rules as sent by the browser: drafts, validated here (C6). */
+/** The form's rules as sent by the browser: drafts, validated here. */
 export const previewRequestSchema = z.array(dealBreakerDraftSchema).max(DEAL_BREAKER_HARD_LIMITS.rules);
 
 /** One row of the form's preview: the rule's result, or "invalid" while the row cannot be saved as it is. */

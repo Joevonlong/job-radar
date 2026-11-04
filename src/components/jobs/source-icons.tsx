@@ -5,7 +5,7 @@ import { knownFamily } from "@/lib/dashboard/labels";
 import { cn } from "@/lib/utils";
 
 /**
- * Two-letter marks per source family (from the mockup); an unknown family shows its first letters. `ats` (a company's
+ * Two-letter marks per source family; an unknown family shows its first letters. `ats` (a company's
  * own job board) and `linkedin` have a drawn mark: "in" in a small monospace box read as "1n", and "AT" says nothing.
  */
 const FAMILY_MARK: Record<string, string> = {

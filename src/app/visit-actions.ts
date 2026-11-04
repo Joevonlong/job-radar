@@ -11,7 +11,7 @@ import { loadJobsSearchParams, withLegacyKeys } from "@/lib/jobs/search-params";
 
 /**
  * Server Actions for "new since my last visit" and the seen / unseen state of single jobs. Single-user app
- * bound to loopback (C5): no session to check; the input is still validated (C6).
+ * bound to loopback: no session to check; the input is still validated.
  */
 
 /** The lists that show seen state: refreshed (and their client cache dropped) after a change, so "back" shows the new state. */

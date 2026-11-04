@@ -47,7 +47,7 @@ export function fullTime(iso: string, timeZone: string): string {
   return `${year}-${shortTime(iso, timeZone)}`;
 }
 
-/** One reason in words. Only environment variable names appear, never values (C4). */
+/** One reason in words. Only environment variable names appear, never values. */
 export function reasonText(reason: RegistryReason, timeZone: string, text: RegistryText): string {
   const { r } = text;
   const v = reason.values ?? {};

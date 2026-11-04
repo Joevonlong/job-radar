@@ -1,7 +1,7 @@
 /**
  * What the settings forms edit: per config file, the sections and fields, each addressed by
  * its dotted path in the YAML. The zod schemas stay the single source of truth for what is valid
- * (C8); this table only says which key is shown how. `tests/settings/fields.test.ts` keeps it in
+ *; this table only says which key is shown how. `tests/settings/fields.test.ts` keeps it in
  * step with the shipped YAML: every key is either a field here or listed in `HIDDEN_PATHS`.
  *
  * Pure data, no server-only imports: the client form and the server action share it.

@@ -153,7 +153,7 @@ export function withoutTrapCandidates(candidates: RuleCandidate[], spans: readon
 
 /**
  * The rule part of the `signals` step: every job whose JD or vocabulary changed since its last scan
- * gets its candidates found (no AI), and the rule signals stored with their quotes (C7).
+ * gets its candidates found (no AI), and the rule signals stored with their quotes.
  */
 export async function runRuleScan(db: Db, options: RuleScanOptions): Promise<RuleScanResult> {
   const { interests, pipeline, logger } = options;
@@ -335,7 +335,7 @@ const emptyStats = (): ReviewStats => ({ confirmed: 0, rejected: 0, added: 0, un
  * The AI part of the `signals` step: jobs with fresh rule signals that the AI has not reviewed
  * (jobs with candidates first) go to the `signals` task; the answer confirms or rejects every
  * candidate and adds what the vocabulary missed. Every quote is checked against the JD text before
- * it is stored (C7); the final signals replace the job's rule signals.
+ * it is stored; the final signals replace the job's rule signals.
  */
 export async function runAiReview(db: Db, options: AiReviewOptions): Promise<AiReviewResult> {
   const { interests, pipeline, logger } = options;

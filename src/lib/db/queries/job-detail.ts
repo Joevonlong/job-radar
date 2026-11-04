@@ -86,7 +86,7 @@ export interface JobDetail {
   relistCount: number;
   /** Original JD text (null when the source gave none). */
   description: string | null;
-  /** Normalized salary; null = none stated (C3) or not readable (see `salaryDisclosed`). */
+  /** Normalized salary; null = none stated or not readable (see `salaryDisclosed`). */
   salary: JobSalary | null;
   salaryDisclosed: boolean;
   /** Skill names the pipeline found in the posting. */

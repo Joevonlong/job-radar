@@ -41,7 +41,7 @@ function CompanyName({ name, tabIndex }: { name: string; tabIndex: number }) {
   );
 }
 
-/** What the list needs from the config files to draw its graphics (the page loads it on the server: C8). */
+/** What the list needs from the config files to draw its graphics (the page loads it on the server). */
 export interface JobListViz {
   /** `notify.yaml: push_min_score`: the red triangle of the score cells. */
   pushLine: number;

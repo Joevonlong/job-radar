@@ -1,4 +1,4 @@
-/** `jobs.link_check_json`, what the last recheck of a watched job's posting found; read with zod (it is stored JSON, C6). */
+/** `jobs.link_check_json`, what the last recheck of a watched job's posting found; read with zod (it is stored JSON). */
 import { z } from "zod";
 
 export const linkCheckEvidenceSchema = z.object({

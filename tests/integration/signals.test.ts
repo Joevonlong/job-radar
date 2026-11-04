@@ -129,7 +129,7 @@ describe("rule scan", () => {
     expect(rows.map((r) => r.tier)).toEqual(["T1", "T2", "T3", "tag"]);
     expect(rows.every((r) => r.extractor === "rule")).toBe(true);
     for (const row of rows) {
-      expect(JD_RICH.slice(row.quoteOffset ?? 0, (row.quoteOffset ?? 0) + row.quote.length)).toBe(row.quote); // C7
+      expect(JD_RICH.slice(row.quoteOffset ?? 0, (row.quoteOffset ?? 0) + row.quote.length)).toBe(row.quote);
     }
     expect(rows[0]).toMatchObject({ kind: "salary_range", value: { currency: "EUR", min: 85000, max: 105000, eurPerYear: { min: 85000, max: 105000 } } });
     expect(await listSignalsOfJob(getDb(), plain)).toEqual([]);

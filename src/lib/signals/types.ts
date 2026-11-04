@@ -52,7 +52,7 @@ export interface SignalDraft {
   kind: string;
   /** Amount category: a `SignalAmount`; null otherwise. */
   value: SignalAmount | null;
-  /** C7: verbatim substring of the JD, or (`structured`) the text of the source's own salary field. */
+  /** Verbatim substring of the JD, or (`structured`) the text of the source's own salary field. */
   quote: string;
   /** Index of `quote` in the JD text; null for a `structured` quote. */
   quoteOffset: number | null;

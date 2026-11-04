@@ -52,7 +52,7 @@ function Cap({ children }: { children: ReactNode }) {
 /**
  * "Checks" card of the detail page: your German against the one the posting asks for (A1-C2 scale, the gap hatched),
  * the skills it lists against your profile (cells + all the skills), and the stated salary against your floor.
- * Every unknown stays unknown: no German requirement written means no guess, no salary means no verdict (C3).
+ * Every unknown stays unknown: no German requirement written means no guess, no salary means no verdict.
  */
 export function ChecksPanel({ german, germanPenalty, germanDetail, skills, profileHasSkills, floor, traps, visa, ghost, languageName = null }: ChecksPanelProps) {
   const language = languageName ?? "";

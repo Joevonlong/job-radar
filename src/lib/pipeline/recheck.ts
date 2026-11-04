@@ -1,9 +1,9 @@
 /**
  * The recheck of watched jobs (starred, or an application the user follows). Each link is fetched like a careful reader: our
  * own User-Agent, robots.txt obeyed, one request per host every `per_host_min_interval_ms`, a body read up to `max_body_bytes`.
- * The page is untrusted data (C6): it is parsed, never run, and only its visible text is searched. A 404 / 410 means the posting is
+ * The page is untrusted data: it is parsed, never run, and only its visible text is searched. A 404 / 410 means the posting is
  * gone; a "no longer accepting applications" phrase in the visible text only marks it possibly closed (the user confirms), with the
- * phrase and a short quote kept as evidence (C3).
+ * phrase and a short quote kept as evidence.
  */
 import * as cheerio from "cheerio";
 

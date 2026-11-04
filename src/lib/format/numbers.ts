@@ -1,7 +1,7 @@
 /**
  * Number formatting rules. Pure functions, no I/O: components, pages
  * and tests share them, so a rule lives in exactly one place. Unknown values (null / undefined / NaN) never
- * become 0 (C3): every function answers with `UNKNOWN` ("—") for them, and the caller says "未披露" next to it
+ * become 0: every function answers with `UNKNOWN` ("—") for them, and the caller says "未披露" next to it
  * where that is the right word.
  *
  * Locale: one per messages file. The `Intl` tag comes from its `meta`, the words ("up to", "and up", the period

@@ -1,7 +1,7 @@
 /**
  * Cuts a JD into the pieces the job checks judge one by one: sentences, list items, and a short heading line together with the line
  * after it ("Visa sponsorship:" / "## Visa sponsorship" / "Visa sponsorship" + "Not available"). Every piece is a verbatim range of
- * the text (C7).
+ * the text.
  */
 
 /** A piece of the text: `text === description.slice(start, end)`. */

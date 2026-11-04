@@ -12,7 +12,7 @@ const appPath = nonEmptyString;
 
 /**
  * config/resume.yaml — the resume-kit hand-off. The paths point at the
- * user's own files, which live outside this repository (C4: the master resume is never read here).
+ * user's own files, which live outside this repository (the master resume is never read here).
  */
 export const resumeSchema = z.strictObject({
   /** Checkout of resume-kit; the `/tailor` command is run there. null: the panel shows the export path only. */

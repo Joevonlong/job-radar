@@ -7,7 +7,7 @@ import { formatScoreValue } from "@/lib/format/numbers";
 import { signalColorClasses } from "@/lib/signals/palette";
 
 /**
- * The bar under "pay and benefits" (design `.capbar`): the categories that count stacked in category order (their colours), what goes over
+ * The bar under "pay and benefits": the categories that count stacked in category order (their colours), what goes over
  * `bonus_cap` hatched, a red line at the cap, and the points that count (the signal bonus of the rank value) at the end.
  * The piece widths are points over the longer of the total and the cap.
  */

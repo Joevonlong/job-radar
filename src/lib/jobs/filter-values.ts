@@ -5,7 +5,7 @@ import { APPLICATION_FILTER_STATUSES, ARCHIVE_REASONS, JOB_STATUSES, JOB_WORKPLA
 
 /**
  * One value of a multi-value filter, defined once: the /jobs URL parsers and the saved-view schema (interests.yaml)
- * both use it (C6). Free text values are trimmed and bounded; enum values are exact.
+ * both use it. Free text values are trimmed and bounded; enum values are exact.
  */
 export const filterText = z.string().trim().min(1).max(MAX_FILTER_VALUE_CHARS);
 

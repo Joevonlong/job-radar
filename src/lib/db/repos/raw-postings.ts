@@ -18,7 +18,7 @@ export function rawPostingColumns() {
 export interface RawUpsertItem {
   externalId: string;
   url: string | null;
-  /** JSON-serializable payload, stored verbatim (C1). */
+  /** JSON-serializable payload, stored verbatim. */
   payload: unknown;
 }
 
@@ -42,7 +42,7 @@ function chunks<T>(items: readonly T[], size: number): T[][] {
 }
 
 /**
- * Upsert postings on (channel_id, external_id) (C1). New rows start `pending`. Existing rows get
+ * Upsert postings on (channel_id, external_id). New rows start `pending`. Existing rows get
  * their payload, url, `fetched_at` and `run_id` refreshed; they go back to `pending` only when the
  * payload hash changed, so an unchanged posting that is already parsed is not parsed again.
  * Duplicate external ids within one batch collapse to the last one.
@@ -164,7 +164,7 @@ export async function lockPendingRawPosting(db: Executor, raw: Pick<RawPosting, 
   return row?.status === "pending" && row.hash === raw.payloadHash;
 }
 
-/** C1: the payload stays; the reason is recorded. */
+/** The payload stays; the reason is recorded. */
 export async function markRawParseFailed(db: Executor, id: number, reason: string): Promise<void> {
   await db
     .update(rawPostings)
@@ -175,7 +175,7 @@ export async function markRawParseFailed(db: Executor, id: number, reason: strin
 /**
  * Put already processed raw postings (`parsed` or `parse_failed`) back to `pending`, so the next
  * `pipeline` run reads them again with the current rules (`pnpm reprocess`). Their payloads are not
- * touched (C1). Every channel when `channelIds` is empty. Returns how many were put back.
+ * touched. Every channel when `channelIds` is empty. Returns how many were put back.
  */
 export async function requeueRawPostings(db: Executor, channelIds: readonly string[] = []): Promise<number> {
   const rows = await db

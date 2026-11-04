@@ -1,7 +1,7 @@
 /**
  * The on-demand salary lookup (ai-worker side). Only public facts of the posting go out: the company name, the
- * title, city, country and seniority (C5: never the profile, never the JD). The provider searches the web (the one task
- * allowed to, `web-tasks.ts`); the answer is checked in code (`lookup-verify.ts`) and stored in `salary_lookups` (C3:
+ * title, city, country and seniority (never the profile, never the JD). The provider searches the web (the one task
+ * allowed to, `web-tasks.ts`); the answer is checked in code (`lookup-verify.ts`) and stored in `salary_lookups` (
  * an estimate with sources, never a fact of the job).
  */
 import { AiProviderError } from "@/lib/ai/errors";

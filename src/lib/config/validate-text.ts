@@ -1,7 +1,7 @@
 /**
  * Validate the raw text of a config file the way the loader would read it, and say where each problem is.
  * No cache; the disk is read for the shipped file an overlay merges with and for the other file of a cross-file check (injectable, see `ValidateOptions`).
- * Messages hold paths and reasons only, never the file's contents (C4).
+ * Messages hold paths and reasons only, never the file's contents.
  *
  * Order: YAML syntax -> `config_version` (written down, not newer than the code) -> by format: an overlay is merged over
  * the shipped value, a whole file is migrated in memory without crossing the overlay format -> zod schema -> cross-file

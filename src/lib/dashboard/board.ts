@@ -38,7 +38,7 @@ export function columnOfStatus(status: ApplicationStatus): BoardColumn {
   return isEndedStatus(status) ? "ended" : (status as Exclude<BoardColumn, "ended">);
 }
 
-/** Days after which a card in the status is overdue; from notify.yaml `reminders` (C8). */
+/** Days after which a card in the status is overdue; from notify.yaml `reminders`. */
 export interface OverdueThresholds {
   interestedDays: number;
   appliedDays: number;

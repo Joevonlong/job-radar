@@ -4,11 +4,11 @@ import { z } from "zod";
  * What the StepStone pages embed. The search page assigns its state to
  * `window.__PRELOADED_STATE__["app-unifiedResultlist"]`; a posting page carries a JSON-LD
  * `JobPosting` and `window.__PRELOADED_STATE__.JobAdContent`. Schemas are loose: StepStone adds
- * fields without notice, and the raw objects are stored as they came (C1).
+ * fields without notice, and the raw objects are stored as they came.
  */
 
 const salaryOnList = z.looseObject({
-  /** "Predicted" marks StepStone's own estimate, which is not a fact of the posting (C3). */
+  /** "Predicted" marks StepStone's own estimate, which is not a fact of the posting. */
   salaryType: z.string().nullish(),
   min: z.number().nullish(),
   max: z.number().nullish(),

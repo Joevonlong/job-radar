@@ -4,7 +4,7 @@ import { DEFAULT_APPLICATION_STATUS } from "./constants";
 
 export type StatusTone = "muted" | "accent" | "primary" | "warning" | "success" | "destructive";
 
-/** Chip colour per application status (from the mockup). */
+/** Chip colour per application status. */
 export const STATUS_TONE: Record<ApplicationStatus, StatusTone> = {
   new: "muted",
   interested: "accent",

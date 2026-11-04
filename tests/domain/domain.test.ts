@@ -23,7 +23,7 @@ const salary = (over: Partial<JobSalary> = {}): JobSalary => asSalary({
   ...over,
 });
 
-describe("comparable salary evidence (ported from the legacy salary tests)", () => {
+describe("comparable salary evidence", () => {
   it("requires both disclosed endpoints rather than inventing a range endpoint", () => {
     expect(comparableAnnualRange(salary({ min: 90_000, max: null, eurPerYear: { min: 90_000, max: null } }), "EUR")).toBeNull();
     expect(comparableAnnualRange(salary({ min: null, max: 120_000, eurPerYear: { min: null, max: 120_000 } }), "EUR")).toBeNull();
@@ -51,7 +51,7 @@ describe("comparable salary evidence (ported from the legacy salary tests)", () 
   });
 });
 
-describe("country-scoped geography (ported from the legacy geography tests)", () => {
+describe("country-scoped geography", () => {
   const locations: JobLocation[] = [
     { label: "Amsterdam, Netherlands", city: "Amsterdam", countryCode: "NL", isPrimary: true },
     { label: "Berlin, Germany", city: "Berlin", countryCode: "DE", isPrimary: false },

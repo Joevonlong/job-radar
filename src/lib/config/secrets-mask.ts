@@ -1,5 +1,5 @@
 /**
- * C4: sources.yaml can carry proxy URLs with a user name and password (`jobspy.proxies`). The advanced editor
+ * `sources.yaml` can carry proxy URLs with a user name and password (`jobspy.proxies`). The advanced editor
  * shows them as `***:***@`, and a save puts the real text back at the same place. It never lets them be changed there:
  * credentials belong in the file itself (or `.env`), not in a web form.
  */

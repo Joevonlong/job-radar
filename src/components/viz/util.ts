@@ -35,7 +35,7 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-/** A finite number, or null: the guard every component uses before drawing (C3: unknown is never 0). */
+/** A finite number, or null: the guard every component uses before drawing (unknown is never 0). */
 export function known(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }

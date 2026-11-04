@@ -19,7 +19,7 @@ describe("signalAmountLabel", () => {
     expect(signalAmountLabel({ min: 139320, max: 163400, currency: "EUR" }, "en")).toBe("€139–163k");
     expect(signalAmountLabel({ min: 92500, max: 100000, currency: "EUR" }, "en")).toBe("€92.5–100k");
   });
-  it("returns null when nothing readable is there (C3: no guessing)", () => {
+  it("returns null when nothing readable is there (no guessing)", () => {
     expect(signalAmountLabel({ percent: 10 }, "en")).toBeNull();
     expect(signalAmountLabel("x", "en")).toBeNull();
     expect(signalAmountLabel(null, "en")).toBeNull();
@@ -84,7 +84,7 @@ describe("parse helpers", () => {
     expect(parseLocations([berlin, 5, { city: "x" }, koeln])).toEqual([koeln, berlin]);
     expect(parseLocations("nope")).toEqual([]);
   });
-  it("narrows text columns to the pipeline vocabulary, unknown otherwise (C3)", () => {
+  it("narrows text columns to the pipeline vocabulary, unknown otherwise", () => {
     expect(asContract("fixed_term")).toBe("fixed_term");
     expect(asContract("whatever")).toBe("unknown");
     expect(asGermanLevel("B2")).toBe("B2");

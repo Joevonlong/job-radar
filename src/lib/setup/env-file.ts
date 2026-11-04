@@ -2,7 +2,7 @@
  * Change a few keys of the local `.env` file (host side, `pnpm run setup`): every other line, comment and the order stay
  * exactly as they were. The file is backed up first (`.env.backup-<time>`, mode 0600), written to a temporary file in
  * the same directory and renamed over the original (atomic), and ends up with mode 0600. A missing `.env` is created
- * from `.env.example`. Values never appear in an error message or a result (C4): only key names do.
+ * from `.env.example`. Values never appear in an error message or a result: only key names do.
  */
 import fs from "node:fs";
 import path from "node:path";

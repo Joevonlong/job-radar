@@ -1,8 +1,8 @@
 /**
  * The company background (ai-worker side). Only public facts go out: the company name and a website domain the user
- * confirmed (C5: never a title, a place, the JD, the profile or a domain inferred from postings). The provider searches the
+ * confirmed (never a title, a place, the JD, the profile or a domain inferred from postings). The provider searches the
  * web (one of the tasks allowed to, `web-tasks.ts`); the answer is checked in code (`verify.ts`) and stored in
- * `company_research` (C3: an estimate with sources, never a fact of the company).
+ * `company_research` (an estimate with sources, never a fact of the company).
  */
 import { AiProviderError } from "@/lib/ai/errors";
 import { buildCompanyResearchPrompt, companyResearchOutputSchema, COMPANY_RESEARCH_PROMPT_VERSION } from "@/lib/ai/prompts/company-research";

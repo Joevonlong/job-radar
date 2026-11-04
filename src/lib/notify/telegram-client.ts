@@ -6,8 +6,8 @@ import type { ChannelLogger } from "@/lib/channels/types";
 
 /**
  * Minimal Telegram Bot API client over plain `fetch`: `sendMessage`,
- * `editMessageText`, `answerCallbackQuery`, `getUpdates`. Responses are validated with zod (C6).
- * The token is part of every URL, so it is scrubbed from every error and log line (C4).
+ * `editMessageText`, `answerCallbackQuery`, `getUpdates`. Responses are validated with zod.
+ * The token is part of every URL, so it is scrubbed from every error and log line.
  */
 
 export type TelegramErrorKind = "api" | "network" | "timeout" | "aborted" | "parse";

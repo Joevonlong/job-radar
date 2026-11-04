@@ -36,7 +36,7 @@ export function Ring({ value, size = "m", tone = "meter", caption, ariaLabel, cl
   const offset = CIRCUMFERENCE * (1 - (shown ?? 0) / 100);
   const name = ariaLabel ?? formatPercent(value);
   const centre = formatPercent(value);
-  // the label shrinks with its length so "100%" and "8.9%" stay inside the inner hairline (the design's "24%" keeps 22%)
+  // the label shrinks with its length so "100%" and "8.9%" stay inside the inner hairline ("24%" keeps 22%)
   const labelScale = Math.min(LABEL_MAX, INNER_SPACE / (Math.max(centre.length, 1) * GLYPH_EM));
   return (
     <PlayOnView className={cx("jr-ring-wrap", className)}>

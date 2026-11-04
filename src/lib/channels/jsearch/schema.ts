@@ -10,7 +10,7 @@ import { z } from "zod";
  * as an array; the older RapidAPI `/search` returns `data` as an array. The envelope accepts both.
  *
  * Only fields the channel reads are declared; everything else stays in the stored payload untouched
- * (C1). Every field except the id is optional or nullable: the API sends null for what a source does
+ *. Every field except the id is optional or nullable: the API sends null for what a source does
  * not state, and one malformed record must not cost the whole page (records are validated one by one).
  */
 

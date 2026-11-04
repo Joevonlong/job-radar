@@ -1,4 +1,4 @@
-/** The notes on what the company background means for an application (C9: all access to `application_fit_notes` lives here). */
+/** The notes on what the company background means for an application (all access to `application_fit_notes` lives here). */
 import { eq } from "drizzle-orm";
 
 import type { Executor } from "../executor";

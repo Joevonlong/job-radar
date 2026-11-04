@@ -209,7 +209,7 @@ function readClause(clause: Clause, fullText: string, lang: CompiledLanguageRule
  * explicit CEFR levels ("German C1", "Deutsch B2"), phrases (fließend, verhandlungssicher, gute
  * Deutschkenntnisse, Grundkenntnisse, native), `preferred` when German is only a plus / preferred /
  * under a "Preferred qualifications" heading (never a requirement), `none` for "no German required",
- * and `unknown` when German is not mentioned with a level (C3). When several clauses disagree the
+ * and `unknown` when German is not mentioned with a level. When several clauses disagree the
  * highest required level wins, then `preferred`, then `none`; AI cross-checks it later.
  */
 export function extractGermanLevel(text: string, config: PipelineConfig): GermanLevel {

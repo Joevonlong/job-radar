@@ -5,7 +5,7 @@ import { z } from "zod";
  * Posts are read with a field whitelist (`POST_FIELDS`): the full post object also carries the poster's order and submission
  * data, which must never be stored. The whitelist is the shape of the interface, not a setting.
  *
- * Only the fields the channel reads are declared; the stored post is the whitelisted object as delivered (C1).
+ * Only the fields the channel reads are declared; the stored post is the whitelisted object as delivered.
  */
 
 /** The `_fields` of a posts request, and the keys kept of a post before it is stored (the second guard, if the server ignores `_fields`). */

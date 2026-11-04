@@ -8,7 +8,7 @@ import { pipelineWith, shippedPipeline } from "./helpers";
 const config = shippedPipeline();
 const key = (name: string) => normalizeCompanyKey(name, config.company.legal_suffixes);
 
-describe("company name normalization (ported from the legacy company-resolution tests)", () => {
+describe("company name normalization", () => {
   it("normalizes harmless legal suffix and punctuation differences", () => {
     expect(key("Signal Works GmbH")).toBe("signal-works");
     expect(key("SIGNAL Works, G.m.b.H.")).toBe("signal-works");

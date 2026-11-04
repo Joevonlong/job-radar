@@ -4,7 +4,7 @@ import type { Market } from "@/lib/market/types";
 import { foldDiacritics } from "./fold";
 
 /**
- * Location normalization, ported from the legacy `normalize.ts` (the tables come from the market packs). City
+ * Location normalization (the tables come from the market packs). City
  * names are canonicalised so the same city spelled differently by two sources (München / Munich) gives the same dedupe
  * key; the canonical names of the generic pack's city table are part of that key and never change.
  *

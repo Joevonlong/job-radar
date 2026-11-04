@@ -17,7 +17,6 @@ import {
   UNKNOWN,
 } from "@/lib/format/numbers";
 
-/** The number formats, plus the edge cases around them. */
 describe("formatInteger", () => {
   it.each([
     [1284, "1,284"],

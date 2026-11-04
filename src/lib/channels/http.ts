@@ -111,7 +111,7 @@ export async function readTextUpTo(response: HttpResponse, maxBytes: number): Pr
  * `fetch` with a per-request timeout and retries: network errors, timeouts, 5xx and 429 are retried
  * with exponential backoff and jitter, honouring Retry-After (a wait longer than `backoffMaxMs` is
  * not worth sleeping through: the error is raised immediately). Everything else becomes a
- * classified `ChannelError` (see errors.ts). Logs host + path only, never headers or queries (C4).
+ * classified `ChannelError` (see errors.ts). Logs host + path only, never headers or queries.
  */
 export function createHttpClient(options: HttpClientOptions): HttpClient {
   const { settings } = options;

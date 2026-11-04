@@ -27,7 +27,7 @@ export function offeredTools(settings: McpConfig, writerEnabled: boolean): McpTo
 }
 
 /**
- * What went wrong with a config file, without the file path or any value (C4): the error kind and the dotted paths of the
+ * What went wrong with a config file, without the file path or any value: the error kind and the dotted paths of the
  * offending fields.
  */
 export function configProblem(error: unknown): string {

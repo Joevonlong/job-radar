@@ -5,7 +5,7 @@ const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
 export type CefrLevel = (typeof CEFR_LEVELS)[number];
 
 /**
- * What the German block of the checks card says (C3: a requirement the posting does not state is never guessed).
+ * What the German block of the checks card says (a requirement the posting does not state is never guessed).
  * - `not_required`: the posting says German is not needed. `preferred`: nice to have, no deduction.
  * - `unknown`: the posting does not say. `met` / `gap`: it asks for a level, and yours reaches it or not.
  * - `no_german`: it asks for a level and your profile lists no German.

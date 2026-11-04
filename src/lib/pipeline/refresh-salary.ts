@@ -44,7 +44,7 @@ export function salaryFingerprint(config: PipelineConfig): string {
  * Read every job's raw postings again with the current salary parsing and store the salary it gives:
  * the best of its sources (valid before needs-review before none; then the better apply-link priority),
  * exactly the order a merge would pick. Unlike a merge this may REPLACE a stored salary by "none": the
- * stored one came from older parsing (a relocation allowance read as a salary), the raw posting is the truth (C1).
+ * stored one came from older parsing (a relocation allowance read as a salary), the raw posting is the truth.
  */
 export async function refreshSalaries(db: Db, options: SalaryRefreshOptions): Promise<SalaryRefreshResult> {
   const result: SalaryRefreshResult = { jobs: 0, changed: 0, cleared: 0, unreadable: 0, aborted: false };

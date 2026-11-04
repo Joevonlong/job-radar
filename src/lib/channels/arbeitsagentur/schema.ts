@@ -4,10 +4,10 @@ import { z } from "zod";
  * Wire shapes of the Bundesagentur für Arbeit Jobsuche API (verified live 2026-10: search
  * `/pc/v6/jobs`, detail `/pc/v4/jobdetails/{base64(refnr)}`; the older `/pc/v4/jobs` search and the
  * v3/v6 detail paths answer 403 now). Only fields the channel reads are declared; everything else
- * stays in the stored payload untouched (C1). Optional fields are optional because the API omits
+ * stays in the stored payload untouched. Optional fields are optional because the API omits
  * them instead of sending null; the detail record also accepts null for them (see `detailSchema`).
  *
- * No contact person fields are declared or read (spec: contact data is not stored).
+ * No contact person fields are declared or read (contact data is not stored).
  */
 
 const optionalString = z.string().optional();
@@ -110,7 +110,7 @@ export const detailSchema = z.looseObject({
 export type BaDetail = z.infer<typeof detailSchema>;
 
 /**
- * What the channel stores per posting (C1) and `parse` receives: the list item as delivered, plus
+ * What the channel stores per posting and `parse` receives: the list item as delivered, plus
  * the detail record when it could be fetched. The JSON objects are kept verbatim except for
  * contact data redacted from the description text; see `redact.ts`.
  */

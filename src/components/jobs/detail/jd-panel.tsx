@@ -21,7 +21,7 @@ interface JdPanelProps {
   description: string | null;
   /** JD language as the pipeline detected it. */
   language: JobLanguage;
-  /** Signal quotes to highlight in the original text (C7: verbatim JD text). The position in this list is the quote's mark id (`jdMarkId`). */
+  /** Signal quotes to highlight in the original text (verbatim JD text). The position in this list is the quote's mark id (`jdMarkId`). */
   quotes: ReadonlyArray<{ text: string; tier: JdQuoteTier; /** Tier `trap`: hidden text or an instruction to an AI (the mark's tooltip). */ trapKind?: "hidden" | "instruction" }>;
   /** The active signal categories, in order: colours and names of the marks and the legend. */
   categories: readonly CategoryView[];

@@ -9,8 +9,8 @@ import { htmlFragments, issuePaths, readEnvelopePosting, unwrapPayload } from ".
 import { htmlToText } from "./text";
 
 /**
- * Greenhouse Job Board API (`GET /v1/boards/{token}/jobs?content=true`). Ported from the legacy
- * adapter: same field mapping, minus the policy snapshot and the 2800-character description cap.
+ * Greenhouse Job Board API (`GET /v1/boards/{token}/jobs?content=true`). The description is
+ * kept whole, without a length cap.
  */
 
 /** Top level of a board response. Individual postings are validated by `parse`, so one odd posting never costs the board. */

@@ -7,7 +7,7 @@ import { scores, signalScans, signals } from "../schema";
 import { notDormantSql } from "../queries/job-status";
 import { dormancyReady } from "./dormancy";
 
-/** A signal to store; `SignalDraft` of `@/lib/signals` fits. C7: the quote is never empty. */
+/** A signal to store; `SignalDraft` of `@/lib/signals` fits. The quote is never empty. */
 export interface SignalInsert {
   tier: (typeof signals.$inferInsert)["tier"];
   kind: string;

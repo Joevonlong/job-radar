@@ -5,7 +5,7 @@ import { z } from "zod";
  * cache of the page. A search page holds the result list (`ROOT_QUERY.jobSearchByQuery(...)`) and one
  * `VisibleJob` entity per result; a posting page holds the `job(...)` entity plus a JSON-LD
  * `JobPosting`. Schemas are loose (XING adds fields without notice); raw objects are stored as they
- * came (C1).
+ * came.
  */
 
 export const apolloStateSchema = z.record(z.string(), z.unknown());
@@ -13,7 +13,7 @@ export const apolloStateSchema = z.record(z.string(), z.unknown());
 const localized = z.looseObject({ id: z.string().nullish(), localizationValue: z.string().nullish() });
 
 const salarySchema = z.looseObject({
-  /** `SalaryRange` is what the employer states; `SalaryEstimate` is XING's own estimate (not a fact of the posting, C3). */
+  /** `SalaryRange` is what the employer states; `SalaryEstimate` is XING's own estimate (not a fact of the posting). */
   __typename: z.string(),
   currency: z.string().nullish(),
   minimum: z.number().nullish(),

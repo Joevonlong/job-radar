@@ -43,7 +43,7 @@ async function rejection(promise: Promise<unknown>): Promise<unknown> {
   throw new Error("expected the promise to reject");
 }
 
-describe("shipped configuration (C8)", () => {
+describe("shipped configuration", () => {
   it("ships jsearch off, with the free RapidAPI plan's request limit and no overage", () => {
     expect(shippedJsearch()).toMatchObject({
       enabled: false,

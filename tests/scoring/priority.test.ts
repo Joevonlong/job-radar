@@ -170,7 +170,7 @@ describe("the priority", () => {
     expect(unclear.priority).toBe(60.55);
   });
 
-  it("follows the weights of ai.yaml (C8)", () => {
+  it("follows the weights of ai.yaml", () => {
     const heavySignals = inputs({}, (raw) => {
       const weights = (raw.scoring as { priority: { weights: Record<string, number> } }).priority.weights;
       weights.title = 0;

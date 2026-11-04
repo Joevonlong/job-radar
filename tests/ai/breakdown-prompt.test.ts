@@ -34,7 +34,7 @@ describe("breakdown prompt", () => {
     expect(prompt.user.length).toBeLessThan(1500);
   });
 
-  it("sends nothing of the profile (C5)", () => {
+  it("sends nothing of the profile", () => {
     const prompt = buildBreakdownPrompt(base);
     for (const marker of ["Summary:", "Skills:", "Languages:", "Years of experience", "Target titles", "Candidate"]) {
       expect(prompt.system).not.toContain(marker);

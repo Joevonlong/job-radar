@@ -167,7 +167,7 @@ describe("cycles, runs and heartbeats", () => {
 });
 
 describe("constraints", () => {
-  it("rejects duplicate raw postings per (channel, external id) and keeps the original (C1)", async () => {
+  it("rejects duplicate raw postings per (channel, external id) and keeps the original", async () => {
     const db = getDb();
     await db.insert(schema.channels).values({ id: "stepstone", family: "stepstone", kind: "scrape" }).onConflictDoNothing();
     await db.insert(schema.rawPostings).values({ channelId: "stepstone", externalId: "42", payloadJson: { a: 1 } });

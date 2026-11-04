@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { markClass } from "./marks";
 
 interface ClampedQuoteProps {
-  /** C7: the verbatim JD quote. */
+  /** The verbatim JD quote. */
   text: string;
   /** Where the term that makes it a signal stands in `text`; null when unknown. */
   term: QuoteTerm | null;

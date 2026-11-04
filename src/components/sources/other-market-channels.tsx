@@ -7,7 +7,7 @@ import type { SourceCard } from "@/lib/sources/view";
 
 /**
  * Channels that serve only other markets (`markets` of sources.yaml without the home country). They do not run in
- * this market and that is not a failure (C2); one compact row each, in a section that is closed by default.
+ * this market and that is not a failure; one compact row each, in a section that is closed by default.
  */
 export async function OtherMarketChannels({ cards }: { cards: readonly SourceCard[] }) {
   if (cards.length === 0) return null;

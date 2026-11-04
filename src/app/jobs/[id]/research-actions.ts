@@ -16,7 +16,7 @@ import { readResearchSettings } from "@/lib/research/settings";
 
 /**
  * Server Actions of the company background panel. Like the salary lookup: the web app calls no AI provider; it leaves a
- * `company_research` request for the ai-worker and the panel polls `companyResearchStatusAction`. Input is validated (C6).
+ * `company_research` request for the ai-worker and the panel polls `companyResearchStatusAction`. Input is validated.
  */
 
 const jobIdSchema = z.number().int().positive();

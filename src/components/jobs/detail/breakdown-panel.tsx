@@ -75,7 +75,7 @@ function Cap({ children }: { children: ReactNode }) {
 /**
  * The "Job breakdown" card: a button that asks for an AI breakdown of the JD (the AI runs on the host, so the
  * button queues a request and the card polls it), and the structured result with its JD quotes. Off by default; every
- * state of the spec has its own `data-state`.
+ * state has its own `data-state`.
  */
 export function BreakdownPanel({ jobId, availability, hasDescription, view, initialRequest = null, timeZone }: BreakdownPanelProps) {
   const t = useTranslations("jdBreakdown");

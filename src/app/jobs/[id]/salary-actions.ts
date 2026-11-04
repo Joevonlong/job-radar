@@ -15,7 +15,7 @@ import { readSalarySettings } from "@/lib/salary/settings";
 
 /**
  * Server Actions of the salary lookup in the salary panel. Like the breakdown button: the web app calls no AI provider;
- * it leaves a `salary_lookup` request for the ai-worker and the card polls `salaryLookupStatusAction`. Input is validated (C6).
+ * it leaves a `salary_lookup` request for the ai-worker and the card polls `salaryLookupStatusAction`. Input is validated.
  */
 
 const jobIdSchema = z.number().int().positive();

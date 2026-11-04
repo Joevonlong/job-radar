@@ -3,7 +3,7 @@ import { activityErrorCode, noopSpan, type ItemEventCode } from "@/lib/activity"
  * The AI layer of the trap detection: the AI sub-task `traps`, registered before `score`, so the scoring of the same
  * cycle already gets the cleaned JD. It reports what the rules do not know and judges the rule findings. What the AI may change:
  * a suspicious finding becomes a trap ("confirmed") or harmless ("benign"); a rule trap it doubts stays a trap ("disputed", with
- * the reason shown). Every quote it gives must be the JD's or a hidden text's own text (C7), else it is dropped.
+ * the reason shown). Every quote it gives must be the JD's or a hidden text's own text, else it is dropped.
  */
 import { AiProviderError, AiUnavailableError, QUOTA_GUARD_CODE, quotaGuardResume } from "@/lib/ai/errors";
 import { buildTrapsPrompt, TRAPS_PROMPT_VERSION, trapsOutputSchema, type TrapCandidate, type TrapsOutput } from "@/lib/ai/prompts/traps";
@@ -32,7 +32,7 @@ export function trapCandidates(rules: readonly RuleRow[]): TrapCandidate[] {
 export interface MergedCheck {
   verdicts: SaveTrapAiCheckInput["verdicts"];
   findings: TrapInsert[];
-  /** Quotes that are neither in the JD nor in a hidden text (dropped, C7). */
+  /** Quotes that are neither in the JD nor in a hidden text (dropped). */
   dropped: number;
 }
 
@@ -105,7 +105,7 @@ export interface TrapCheckResult {
   disputed: number;
   /** Findings only the AI made. */
   added: number;
-  /** Quotes the model gave that are not in the JD or a hidden text (C7). */
+  /** Quotes the model gave that are not in the JD or a hidden text. */
   droppedQuotes: number;
   failed: number;
   /** The JD changed while the AI worked: the next cycle checks it again. */

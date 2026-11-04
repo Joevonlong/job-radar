@@ -4,7 +4,7 @@
  * here, so a cycle that fetched postings but could not process them never reads as "finished".
  *
  * Pure: no database, no clock, no imports of the cycle runner (client components use the types and constants). Reading
- * `summary_json` is a boundary, so it is parsed with zod (C6).
+ * `summary_json` is a boundary, so it is parsed with zod.
  */
 import { z } from "zod";
 

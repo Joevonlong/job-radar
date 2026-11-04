@@ -154,7 +154,7 @@ export function summariesOfAnswer(answer: Readonly<Record<string, unknown>>, out
 
 /**
  * The candidate's own scoring criteria (`ai.yaml: scoring.criteria`), each a sentence in any language. They are
- * preferences (C5) and go into the prompt; any change re-scores (`score-v1+c<hash>`).
+ * preferences and go into the prompt; any change re-scores (`score-v1+c<hash>`).
  */
 export interface ScoringCriteria {
   priorities: readonly string[];
@@ -357,7 +357,7 @@ function formatSkills(me: MeConfig): string {
 }
 
 /**
- * The scoring prompt. Per C5 only the profile summary, skills, languages and preferences leave the
+ * The scoring prompt. Only the profile summary, skills, languages and preferences leave the
  * machine together with the posting; city, visa status and the like stay local.
  */
 export function buildScorePrompt(input: ScorePromptInput): AiPrompt {

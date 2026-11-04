@@ -86,7 +86,7 @@ function thousands(value: number): string {
 
 /**
  * The normalized yearly range for the 💰 badge, e.g. "€85–105k", "≤ €120k", "€90k". Prefers the figure in the base
- * currency, else the posting's own currency; null when there is no usable range (C3: nothing is guessed).
+ * currency, else the posting's own currency; null when there is no usable range (nothing is guessed).
  */
 export function salaryRangeText(salary: JobSalary | null): string | null {
   if (!salary || salary.qualityStatus === "review") return null;

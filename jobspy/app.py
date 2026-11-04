@@ -8,7 +8,7 @@ The endpoint maps those, together with any exception, to a structured error (`{"
 breaker. It reads `attrs` rather than jobspy's loggers: the logger names changed between releases, which
 silently turned blocked searches into empty results (tests/test_search.py pins the real `scrape_jobs`).
 
-C5: e-mail addresses and phone fields are dropped before anything leaves this process.
+E-mail addresses and phone fields are dropped before anything leaves this process.
 Proxy URLs may carry credentials: this code never logs them and scrubs them from the error messages it returns. jobspy
 itself still writes ERROR lines to stderr when a scrape fails, even with `verbose=0`; a review of those lines found the
 proxy's host:port but no credentials. That is an observation, not a guarantee: it has not been checked against a proxy
@@ -36,7 +36,7 @@ app = FastAPI(title="job-radar-jobspy", docs_url=None, redoc_url=None, openapi_u
 Site = Literal["linkedin", "indeed", "google"]
 ErrorCode = Literal["rate_limited", "blocked", "upstream_error"]
 
-# Result columns that are never returned (C5): e-mail addresses and anything phone-like.
+# Result columns that are never returned: e-mail addresses and anything phone-like.
 _DROPPED_EXACT = frozenset({"emails", "email"})
 _DROPPED_SUBSTRINGS = ("phone",)
 

@@ -109,7 +109,7 @@ const PERIOD_WORDS: ReadonlyArray<readonly [RegExp, (typeof SALARY_PERIODS)[numb
   [/(?:\/\s*hr|\/\s*hour|per hour|hourly|pro stunde|\/\s*std|\/\s*stunde)/i, "hour"],
 ];
 
-/** "€70K/yr - €90K/yr", "$120,000.00/yr - $150,000.00/yr", "50.000 € - 70.000 € pro Jahr" -> amounts; null unless amounts, currency and period are all stated (C3). */
+/** "€70K/yr - €90K/yr", "$120,000.00/yr - $150,000.00/yr", "50.000 € - 70.000 € pro Jahr" -> amounts; null unless amounts, currency and period are all stated. */
 export function parseSalaryLine(text: string | null | undefined): ParsedSalary | null {
   const raw = squash(text);
   if (!raw) return null;

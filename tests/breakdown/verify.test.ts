@@ -8,7 +8,7 @@ import { emptyOutput, JD } from "./helpers";
 
 const STACK = "Our stack: Python, Kubernetes and AWS. Nice to have: Terraform.";
 
-describe("verifyBreakdown (C7)", () => {
+describe("verifyBreakdown", () => {
   it("keeps a verbatim quote with its offset", () => {
     const output = { ...emptyOutput(), responsibilities: [{ text: "构建检索管线", quote: "Build and operate retrieval pipelines in production." }] };
     const { content, dropped } = verifyBreakdown(output, JD);

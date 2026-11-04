@@ -2,7 +2,7 @@
  * `pnpm run setup` (host side; scripts/setup.ts is the thin entry). The same eight steps as the web wizard, through
  * the same step services, so both write the same files. Modes: interactive (`node:readline`), `--answers <file.yaml>`
  * (unattended), `--step <id>` (one step), `--status [--json]`, `--complete`. Prints environment variables by name with
- * set / not set only; no value is ever read into the output (C4). The one exception to "the setup never touches .env" is
+ * set / not set only; no value is ever read into the output. The one exception to "the setup never touches .env" is
  * the interactive Telegram step (telegram-setup.ts): it writes the three Telegram keys, then restarts what reads them
  * (`--no-restart` only prints the commands).
  */

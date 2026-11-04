@@ -183,7 +183,7 @@ export function createHandpickedChannel(deps: HandpickedDeps = defaultHandpicked
         postings.push({ externalId: entry.id, url: entry.url, payload: { index: rawOf.get(entry.id), detail }, postedAt });
       }
 
-      // company discovery reads the same index; it never costs the postings (C2)
+      // company discovery reads the same index; it never costs the postings
       let candidates: number | null = null;
       if (settings.discover_boards.enabled) {
         try {

@@ -101,7 +101,7 @@ describe("smartrecruiters sweep", () => {
       { channel: "smartrecruiters", company: "Example Labs", board: "ExampleLabs", outcome: "changed", fetched: 3, kept: 2 },
     ]);
     expect(logs.find((l) => l.message === "ats sweep done")?.fields).not.toHaveProperty("detailFailedBoards");
-    // the stored payload is the detail, in the envelope (C1)
+    // the stored payload is the detail, in the envelope
     expect(postings[0]?.payload).toEqual({ source, posting: detail(1) });
     for (const p of postings) expect(normalizedPostingDraftSchema.parse(c.parse(p.payload)).companyName).toBe("Example Labs");
     expect(store.checks.at(-1)?.update).toMatchObject({ status: "ok", completeRead: true, detailRetryIds: [] });

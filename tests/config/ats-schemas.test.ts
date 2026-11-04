@@ -23,7 +23,7 @@ function channels(edit: (sources: Record<string, Json>) => void): Json {
 }
 
 describe("sources.yaml: ats channels", () => {
-  it("ships the prefilter on with the agreed term lists, and the API hosts in config (C8)", () => {
+  it("ships the prefilter on with the agreed term lists, and the API hosts in config", () => {
     const parsed = configRegistry.channels.schema.parse(shippedYaml("sources.yaml"));
     expect(parsed.sources.greenhouse).toMatchObject({
       api_base_url: "https://boards-api.greenhouse.io",

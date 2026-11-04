@@ -151,7 +151,7 @@ describe("writeConfig", () => {
     for (const line of before.split("\n").filter((l) => l.trim().startsWith("#"))) expect(after).toContain(line.trim());
     // inline comments survive
     expect(after).toContain("# 告警（通道熔断、预算、登录失效等）不受静默时段限制");
-    expect(after).toContain("# M3 配好 bot 后再打开");
+    expect(after).toContain("# 配好 bot 后再打开");
     expect(parse(after)).toMatchObject({ push_min_score: 82, quiet_hours: { start: "23:00", end: "07:00" } });
 
     resetConfigCache();

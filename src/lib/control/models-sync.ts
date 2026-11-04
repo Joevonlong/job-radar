@@ -34,7 +34,7 @@ export function createModelsSyncHandler(deps: ModelsSyncDeps = {}): ControlHandl
       return { status: "done", result: { provider, sync } };
     } catch (error) {
       if (context.signal.aborted) throw error;
-      // only the kind of failure goes into the result: a provider's message stays in the log (C4)
+      // only the kind of failure goes into the result: a provider's message stays in the log
       const errorKind = error instanceof AiProviderError ? error.kind : "provider_error";
       context.logger.warn("model list refresh failed", { provider, kind: errorKind, message: sanitize(error instanceof Error ? error.message : "") });
       return failed("models_sync_failed", { provider, errorKind });

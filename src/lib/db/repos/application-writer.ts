@@ -1,5 +1,5 @@
 /**
- * The application writer's questions and answer versions (C9: all access to `application_questions` and
+ * The application writer's questions and answer versions (all access to `application_questions` and
  * `application_answer_versions` lives here). Every write names the job (or question) it is for, so an id alone never
  * reaches another job's rows.
  */

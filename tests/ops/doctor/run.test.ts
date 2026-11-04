@@ -16,7 +16,7 @@ describe("runDoctor on a healthy system", () => {
     expect(report.generatedAt).toBe(NOW.toISOString());
   });
 
-  it("has unique result ids and groups, and covers every item of the spec", async () => {
+  it("has unique result ids and groups, and covers every expected check", async () => {
     const report = await runDoctor(makeContext());
     const ids = report.checks.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);

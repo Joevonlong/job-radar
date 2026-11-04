@@ -1,5 +1,5 @@
 /**
- * Reads and writes of the visa check (`job_visa`). C9: every query of the feature lives here (and the `/jobs` filter condition in
+ * Reads and writes of the visa check (`job_visa`). Every query of the feature lives here (and the `/jobs` filter condition in
  * `queries/jobs.ts`). Every function first checks that the table exists: before the migration ran, readers see "not checked yet"
  * and writers skip.
  */
@@ -75,7 +75,7 @@ export interface VisaScanInput {
   companyNameNorm: string | null;
 }
 
-/** The JD and the company key of the given jobs (C1: only read). */
+/** The JD and the company key of the given jobs (only read). */
 export async function loadVisaScanInputs(db: Executor, jobIds: readonly number[]): Promise<VisaScanInput[]> {
   if (jobIds.length === 0) return [];
   const rows = await db

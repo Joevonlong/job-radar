@@ -1,4 +1,4 @@
-/** Reads and writes of `salary_benchmarks` and the salary figures it is built from (C9). */
+/** Reads and writes of `salary_benchmarks` and the salary figures it is built from. */
 import { and, desc, eq, gte, inArray, isNotNull, ne, sql } from "drizzle-orm";
 
 import { jobLocationSchema, type JobLocation } from "@/lib/domain/types";

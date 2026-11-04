@@ -222,7 +222,7 @@ sources:
       include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
       exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
   jsearch:
-    enabled: false # M5：JSearch（Google for Jobs，RapidAPI）。需要 .env 的 JSEARCH_API_KEY；没有 key 时通道显示"未配置"，不发任何请求
+    enabled: false # JSearch（Google for Jobs，RapidAPI）。需要 .env 的 JSEARCH_API_KEY；没有 key 时通道显示"未配置"，不发任何请求
     monthly_budget_usd: 0 # 只计超出 monthly_request_limit 之后的花费（overage_cost_per_request_usd × 请求数）
     throttle: { min_delay_ms: 500, max_delay_ms: 1500 }
     max_results: 50
@@ -334,7 +334,7 @@ sources:
     throttle: { min_delay_ms: 3000, max_delay_ms: 8000 }
     max_results: 50
   gmail:
-    enabled: false # M5：读取各平台的提醒邮件，需要应用专用密码（.env 的 GMAIL_USER / GMAIL_APP_PASSWORD）
+    enabled: false # 读取各平台的提醒邮件，需要应用专用密码（.env 的 GMAIL_USER / GMAIL_APP_PASSWORD）
     monthly_budget_usd: 0
     throttle: { min_delay_ms: 0, max_delay_ms: 0 }
     max_results: 200 # 单轮最多产出多少条岗位（所有邮件合计）

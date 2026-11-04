@@ -1,5 +1,5 @@
 /**
- * A coach review as stored on the reviewed version (`application_answer_versions.coach`) and read back: parsed with zod (C6),
+ * A coach review as stored on the reviewed version (`application_answer_versions.coach`) and read back: parsed with zod,
  * a row that does not parse shows as no review. Pure; client-safe.
  */
 import { z } from "zod";

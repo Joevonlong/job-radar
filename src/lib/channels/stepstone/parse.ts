@@ -142,7 +142,7 @@ function amountText(f: SalaryFigures): string {
 
 /**
  * The salary the posting itself states. StepStone also prints its own estimate (list `salaryType:
- * "Predicted"`, page `isPredicted`): that is not a fact of the posting (C3) and goes to `extra`.
+ * "Predicted"`, page `isPredicted`): that is not a fact of the posting and goes to `extra`.
  */
 function salaries(list: StepstoneListItem, detail: StepstoneDetail | null): { stated: SalaryFigures | null; predicted: SalaryFigures | null } {
   const page = detail?.jobAd?.salary;
@@ -186,7 +186,7 @@ function firstAddressCountry(detail: StepstoneDetail | null): string | null {
   return typeof address.addressCountry === "string" ? countryCode(address.addressCountry) : null;
 }
 
-/** Convert a stored `{ url, list, detail }` payload into the normalized draft (C3: unstated facts stay unknown). */
+/** Convert a stored `{ url, list, detail }` payload into the normalized draft (unstated facts stay unknown). */
 export function parseStepstonePayload(payload: unknown): NormalizedPostingDraft {
   const parsed = payloadSchema.safeParse(payload);
   if (!parsed.success) {

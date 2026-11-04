@@ -8,7 +8,7 @@ import { addSyncedModels, type AddSyncedModelsState } from "@/lib/control/models
 import { requestModelsSync, requestRunCycle, requestTestAi, requestTestChannel, requestTestTelegram, type ControlActionState } from "@/lib/control/service";
 
 // The trigger buttons of /sources and /settings. Server Actions are public POST endpoints: everything arriving
-// here is validated again in the service (zod), and the web server only listens on 127.0.0.1 / Tailscale (C5).
+// here is validated again in the service (zod), and the web server only listens on 127.0.0.1 / Tailscale.
 
 /** "Collect now" on a channel card: a manual cycle of this one channel (an open cycle request is reused). */
 export async function runChannelNowAction(channelId: unknown): Promise<ControlActionState> {

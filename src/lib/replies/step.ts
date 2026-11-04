@@ -146,7 +146,7 @@ export async function classifyEml(source: Buffer, config: RepliesConfig): Promis
 
 /**
  * Open the one configured label read-only, read the mail not seen before (oldest first, so a long backlog drains in order), and store what the
- * rules make of it. Writes only `email_replies`: applications stay as they are until the user confirms (C3). Logs carry uids and counts, never
+ * rules make of it. Writes only `email_replies`: applications stay as they are until the user confirms. Logs carry uids and counts, never
  * a subject, a sender or a word of a mail.
  */
 export async function readReplies(options: ReadRepliesOptions): Promise<ReplyRunResult> {
@@ -253,7 +253,7 @@ export interface RepliesStepOptions {
   environment?: Readonly<Record<string, string | undefined>>;
 }
 
-/** The cycle step `replies`. Off or without mailbox credentials it records why and does nothing else; a failure only fails this step (C2). */
+/** The cycle step `replies`. Off or without mailbox credentials it records why and does nothing else; a failure only fails this step. */
 export function createRepliesStep(options: RepliesStepOptions = {}): CycleStepFn {
   return async (ctx) => {
     const db = ctx.db;

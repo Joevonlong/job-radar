@@ -200,7 +200,7 @@ const idValue = z.union([z.string(), z.number()]).transform((v) => String(v).tri
 
 /**
  * One job record of the default actor (`valig/linkedin-jobs-scraper`, documented output). Unknown fields are kept
- * (the raw payload is stored verbatim, C1). Only title and company are mandatory; the job id comes from `id` or,
+ * (the raw payload is stored verbatim). Only title and company are mandatory; the job id comes from `id` or,
  * failing that, from the URL.
  */
 export const jobItemSchema = z.looseObject({

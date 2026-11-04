@@ -1,6 +1,6 @@
 /**
  * Instructions addressed to an AI ("if you are an AI, ...", "ignore all previous instructions", "如果你是AI，请...") and the weaker
- * trigger patterns. The patterns live in traps.yaml (C8), grouped by language; only the groups of
+ * trigger patterns. The patterns live in traps.yaml, grouped by language; only the groups of
  * `instruction_languages` are used.
  */
 import type { TrapPatternConfig, TrapsConfig } from "@/lib/config/schemas/traps";

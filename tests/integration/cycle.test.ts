@@ -174,7 +174,7 @@ describe("runCycle with fixture channels", () => {
     expect(rows[1]?.payloadJson).toMatchObject({ description: "Build different things" });
   });
 
-  it("a failing channel does not stop the others (C2) and its failure is recorded", async () => {
+  it("a failing channel does not stop the others and its failure is recorded", async () => {
     const registry = new ChannelRegistry();
     registerFixtureChannel(registry, { id: "arbeitsagentur", failure: { code: "blocked" } });
     registerFixtureChannel(registry, { id: "indeed", postings: [posting("ok-1")] });
@@ -728,7 +728,7 @@ describe("raw posting upsert", () => {
     expect(rows[0]?.url).toBe("https://a");
   });
 
-  it("round-trips payload shapes verbatim (C1): arrays, nested objects, unicode, nulls", async () => {
+  it("round-trips payload shapes verbatim: arrays, nested objects, unicode, nulls", async () => {
     const payload = { title: "KI-Entwickler (m/w/d) – Köln", tags: ["a", "b"], nested: { n: null, x: 1.5 }, list: [] };
     await upsertRawPostings(getDb(), { channelId: "indeed", runId: null, items: [{ externalId: "u", url: null, payload }] });
     const [row] = await listRawPostingsForChannel(getDb(), "indeed");

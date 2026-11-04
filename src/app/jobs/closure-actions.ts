@@ -8,8 +8,8 @@ import { clearClosureOverride, getDb, jobExists, markSeen, reopenJob, restoreClo
 import { CLOSURE_NOTE_MAX } from "@/lib/jobs/closure";
 
 /**
- * The user's own "this job is closed" / "it is still open" (single-user app bound to loopback, C5: no session; input validated,
- * C6). Each change answers with what was there before, so the toast's undo puts exactly that back. Closing a job also marks it seen
+ * The user's own "this job is closed" / "it is still open" (single-user app bound to loopback, so no session; input validated).
+ * Each change answers with what was there before, so the toast's undo puts exactly that back. Closing a job also marks it seen
  * (a decision on it).
  */
 

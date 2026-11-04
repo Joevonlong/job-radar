@@ -127,7 +127,7 @@ describe("tailscale.serve", () => {
     expect(r.status).toBe("warn");
     expect(r.detail).toContain("9999");
   });
-  it("fails when funnel exposes it to the internet (C5)", async () => {
+  it("fails when funnel exposes it to the internet", async () => {
     const funnel = JSON.stringify({ ...JSON.parse(SERVE_OK), AllowFunnel: { "mac.example-tailnet.ts.net:443": true } });
     const r = await only(tailscaleServeCheck, serve(funnel));
     expect(r.status).toBe("fail");

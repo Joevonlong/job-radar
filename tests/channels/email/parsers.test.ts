@@ -60,7 +60,7 @@ describe("StepStone parser", () => {
     expect(jobs[1]).toMatchObject({ location: "Berlin-Mitte", salaryText: null });
   });
 
-  it("never takes a salary estimate for the posting's salary (C3)", () => {
+  it("never takes a salary estimate for the posting's salary", () => {
     const [, , third] = parse("stepstone", "stepstone-alert-table");
     expect(third).toMatchObject({ id: "11235120", salaryText: null });
     expect(third?.snippet).toBeNull();

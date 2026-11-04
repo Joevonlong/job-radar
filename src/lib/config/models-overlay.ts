@@ -10,7 +10,7 @@
  *   that equals a shipped alias takes it over (the shipped alias is dropped). Clashes inside the user layer are errors;
  * - a provider section the user file lacks is the shipped one (a whole copy made before a provider existed keeps loading).
  *
- * Pure apart from reading the shipped file; it holds paths and reasons only, never values (C4).
+ * Pure apart from reading the shipped file; it holds paths and reasons only, never values.
  */
 import fs from "node:fs";
 

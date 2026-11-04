@@ -62,7 +62,7 @@ export interface TrapFinding {
   technique: TrapTechnique;
   method: string | null;
   severity: TrapSeverity;
-  /** C7: verbatim text; the JD's own text when `quoteSource` is `description`. */
+  /** Verbatim text; the JD's own text when `quoteSource` is `description`. */
   quote: string;
   quoteSource: "description" | "raw";
   /** Where `quote` starts in `jobs.description`; null for a quote only the source page has. */
