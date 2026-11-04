@@ -104,8 +104,14 @@ Some postings only say it in the title ("AI Talent Pool", "Open Application", "I
 Engineer", "Candidature spontanée"), with an ordinary description. The check reads the **title** first, with the packs'
 `ghost.title_patterns`: narrow phrases tested against the whole title (no sentences, no negation). A title that matches
 `ghost.title_exclude` never counts: those are the recruiting jobs themselves ("Talent Pool Manager", "Recruiter - Talent
-Community", "Head of Talent Community"). "Open Application" counts only as the title or one part of it, so "Open Application
-Security Engineer" and "AI Application Engineer" do not.
+Community", "Head of Talent Community", "Team Lead - Talent Pool"), and so do teams, products and departments that carry the
+words in their name ("Software Engineer, Talent Network", "Talent Community Platform", "Director of Future Opportunities"). A comma before the phrase
+is read as a team name, which trades some misses ("AI Engineer, Talent Pool") for fewer false alarms; a dash is still a pool
+("Engineering Manager - Talent Pool"), except after "Team Lead".
+"Open Application" counts only as the title or one part of it, so "Open Application Security Engineer" and "AI Application
+Engineer" do not; the plural "General Applications" is a business line, not an open application. "Evergreen" counts only when it
+opens the title or one part of it, followed by a spaced dash, a colon or a job word ("Evergreen - AI Engineer", "Evergreen
+Role"), not inside a company name ("Evergreen Solar", "Evergreen-Solar Technician", "Data Engineer at Evergreen").
 
 A job has one `evergreen_wording` reason. When the title says it, that reason has `field: "title"`, the points are
 `evergreen_wording.title_points` (3, not added to the 2 of the description), and the quote is the title around the phrase. Only
