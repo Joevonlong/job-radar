@@ -227,6 +227,23 @@ describe("the prepare scripts on a database that does not exist yet", () => {
     expect(loadConfig("ui").applications.hidden_statuses).toEqual([]);
     expect(await lockDatabases()).toEqual([]);
 
+    // the five values land on overlays (version and only a few keys, never a whole file); the example the script applies first
+    // adds its own keys to some of them
+    const overlayOf = (file: string): Record<string, unknown> => parseConfigYaml(fs.readFileSync(path.join(configDir, file), "utf8"), { unset: "overlay" }) as Record<string, unknown>;
+    const allowed: Record<string, string[]> = {
+      "search.yaml": ["locations", "keyword_groups", "max_per_group_per_location"],
+      "sources.yaml": ["linkedin", "ats_boards", "sources"],
+      "schedule.yaml": ["timezone"],
+      "notify.yaml": ["public_base_url"],
+      "ui.yaml": ["applications"],
+    };
+    const names = { "search.yaml": "search", "sources.yaml": "channels", "schedule.yaml": "schedule", "notify.yaml": "notify", "ui.yaml": "ui" } as const;
+    for (const [file, keys] of Object.entries(allowed)) {
+      const overlay = overlayOf(file);
+      expect(overlay.config_version, file).toBe(overlayFormatVersion(names[file as keyof typeof names]));
+      expect(Object.keys(overlay).filter((key) => key !== "config_version" && !keys.includes(key)), file).toEqual([]);
+    }
+
     // --drop leaves nothing behind
     const drop = runScript("demo-prepare.ts", ["--drop"], demoEnv());
     expect(await drop.exited, drop.output()).toBe(0);

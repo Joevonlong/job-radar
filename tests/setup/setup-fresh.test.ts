@@ -8,6 +8,8 @@ import { ensureConfigFiles, installedConfigFiles, loadConfig, parseConfigText, r
 import { ARCHIVE_META_YAML } from "@/lib/ops/config-archive";
 import { setConfigWriteLockProviderForTests, type ConfigWriteLockProvider } from "@/lib/config/write-lock";
 import { readSetupState, resetSetupStateCache } from "@/lib/setup/state";
+import { resetAdvanced } from "@/lib/settings/advanced/service";
+import { loadAdvancedFile } from "@/lib/settings/advanced/view";
 import { saveLanguageStep } from "@/lib/setup/steps/language";
 
 import { inProcessConfigWriteLock } from "../config/in-process-lock";
@@ -143,7 +145,10 @@ describe("config:init and the wizard's files", () => {
   it("a language.yaml the user deleted (restore defaults) stays deleted after the deploy's write step, and the loader reads the shipped values", async () => {
     await saveLanguageStep({ ui_locale: "zh", ai_output: "de" });
     expect(loadConfig("language").ai.output).toBe("de");
-    fs.rmSync(user("language.yaml"));
+    const opened = loadAdvancedFile("language");
+    if (!opened.ok) throw new Error("not loadable");
+    expect(await resetAdvanced({ file: "language", baseHash: opened.data.hash, baseLayer: opened.data.layer })).toMatchObject({ status: "reset", layer: "default" });
+    expect(fs.existsSync(user("language.yaml"))).toBe(false);
     const setupBytes = fs.readFileSync(user("setup.yaml"));
     const run = runConfigScript(tmp, "config-init.ts");
     expect(run.status, run.out).toBe(0);

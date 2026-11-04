@@ -42,6 +42,7 @@ afterEach(() => {
   setOnProfileSaved(null);
   tmp.cleanup();
   if (savedUrl !== undefined) process.env.DATABASE_URL = savedUrl;
+  else delete process.env.DATABASE_URL;
 });
 
 const fileOf = (name: ConfigName): string => getConfigPath(name);
