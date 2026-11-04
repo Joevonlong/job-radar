@@ -189,20 +189,29 @@ ghost:
     - id: talent_pool_title
       pattern: '(?<![\p{L}\p{N}])talent[\s-]?(?:pool|community|network)(?![\p{L}\p{N}])'
     # "Open Application", "AI Engineer - General Application", "Spontaneous Application (m/f/d)": the phrase is the title or one part of it
-    # (after a separator), and ends it, or is followed by a separator, "(" or "for" - not "Open Application Security Engineer"
+    # (after a separator), and ends it, or is followed by a separator, "(" or "for" - not "Open Application Security Engineer". The
+    # singular "General Application" only: "General Applications" is a business line ("Engineer - General Applications").
     - id: open_application_title
-      pattern: '(?:(?<=^\s{0,3})|(?<=[-–—:|/(\[]\s{0,3}))(?:open|speculative|unsolicited|spontaneous|general)\s{1,3}applications?(?=\s{0,3}(?:$|[-–—:|/(,)\]]|for(?![\p{L}\p{N}])))|(?<![\p{L}\p{N}])(?:candidature\s{1,3}spontan[eé]e|candidatura\s{1,3}(?:espont[aá]nea|spontanea)|open\s{1,3}sollicitatie)(?![\p{L}\p{N}])'
-    # "Evergreen - AI Engineer", "Evergreen: Sales", "Evergreen Role" - not "Evergreen Energy Analyst"
+      pattern: '(?:(?<=^\s{0,3})|(?<=[-–—:|/(\[]\s{0,3}))(?:(?:open|speculative|unsolicited|spontaneous)\s{1,3}applications?|general\s{1,3}application)(?=\s{0,3}(?:$|[-–—:|/(,)\]]|for(?![\p{L}\p{N}])))|(?<![\p{L}\p{N}])(?:candidature\s{1,3}spontan[eé]e|candidatura\s{1,3}(?:espont[aá]nea|spontanea)|open\s{1,3}sollicitatie)(?![\p{L}\p{N}])'
+    # "Evergreen - AI Engineer", "Evergreen: Sales", "Evergreen Role": the title or one part of it starts with the word, followed by a
+    # spaced dash or a colon, or by a job word that ends the part. Not a company, product or team of that name ("Evergreen Energy
+    # Analyst", "Evergreen-Solar Technician", "Evergreen Job Board Engineer", "Data Engineer at Evergreen - Remote").
     - id: evergreen_title
-      pattern: '(?<![\p{L}\p{N}])evergreen(?:\s{0,3}[-–—:|]|\s{1,3}(?:role|position|requisition|req|opening|job|posting|vacancy)(?![\p{L}\p{N}]))'
+      pattern: '(?:(?<=^\s{0,3})|(?<=[-–—:|/(\[]\s{0,3}))evergreen(?:\s{1,3}[-–—|]|\s{0,3}:|\s{1,3}(?:role|position|requisition|req|opening|job|posting|vacancy)(?=\s{0,3}(?:$|[-–—:|/(,)\]])))'
     # "Future Opportunities", "Upcoming Openings"
     - id: future_openings_title
       pattern: '(?<![\p{L}\p{N}])(?:future|upcoming)\s{1,3}(?:openings|opportunities|vacancies|positions|roles)(?![\p{L}\p{N}])'
   title_exclude:
     # the job is recruiting or running the pool: "Talent Pool Manager (m/w/d)", "Talent Community Lead"
     - '(?<![\p{L}\p{N}])talent[\s-]?(?:pool|community|network)\s{0,3}(?:manager|lead|specialist|coordinator|engineer|partner|owner|director|analyst|associate|consultant|administrator|programs?)(?![\p{L}\p{N}])'
-    # "Head of Talent Community", "Manager, Talent Pool", "Lead Talent Network"
-    - '(?<![\p{L}\p{N}])(?:head\s{1,3}of|director\s{1,3}of|vp\s{1,3}of|manager\s{1,3}of|(?:manager|lead|specialist|coordinator|director|head)\s{0,3},?)\s{0,3}(?:the\s{1,3})?(?:global\s{1,3})?talent[\s-]?(?:pool|community|network)(?![\p{L}\p{N}])'
+    # "Head of Talent Community", "Manager, Talent Pool", "Lead Talent Network", "Team Lead - Talent Pool"
+    - '(?<![\p{L}\p{N}])(?:head\s{1,3}of|director\s{1,3}of|vp\s{1,3}of|manager\s{1,3}of|(?:manager|lead|specialist|coordinator|director|head)\s{0,3}[,\-–—:]?)\s{0,3}(?:the\s{1,3})?(?:global\s{1,3})?talent[\s-]?(?:pool|community|network)(?![\p{L}\p{N}])'
+    # a team or product of that name: "Software Engineer, Talent Network", "Backend Engineer - Talent Community Platform",
+    # "Talent Network Team Lead" (after a comma the phrase names the team; a dash, "(" or the start keeps it a pool)
+    - ',\s{0,3}talent[\s-]?(?:pool|community|network)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])talent[\s-]?(?:pool|community|network)\s{1,3}(?:platform|products?|teams?|software|tools?|apps?|crm|ats|services?|infrastructure|engineering|marketing|growth|design|data|analytics|operations|ops|squad|group)(?![\p{L}\p{N}])'
+    # a leader of a department of that name: "Director of Future Opportunities", "Head of Future Roles", "VP, Upcoming Openings"
+    - '(?<![\p{L}\p{N}])(?:head|director|vp|vice\s{1,3}president|svp|evp|chief|manager|lead|officer)(?:\s{1,3}of\s{1,3}|\s{0,3}[,\-–—:]\s{0,3})(?:the\s{1,3})?(?:future|upcoming)\s{1,3}(?:openings|opportunities|vacancies|positions|roles)(?![\p{L}\p{N}])'
     # "Recruiter - Talent Community", "Sourcer", "Talent Acquisition Partner"
     - '(?<![\p{L}\p{N}])(?:recruit\p{L}*|sourcers?|sourcing|talent\s{1,3}acquisition|people\s{1,3}partner)(?![\p{L}\p{N}])'
   # A heading that opens the duties of the role. Tested only against heading-shaped lines (short; a "#" heading, ending in ":" or

@@ -35,6 +35,14 @@ describe("title patterns", () => {
     "Candidatura espontánea",
     "Open sollicitatie",
     "Sales [Open Application]",
+    // the shapes that must keep matching next to the tightened ones
+    "Senior Engineer - Talent Network",
+    "Evergreen: Sales",
+    "Evergreen Role (m/f/d)",
+    "Evergreen | Data Scientist",
+    "Platform Engineer - General Application",
+    "Platform Engineer - Spontaneous Applications",
+    "Future Openings",
   ])("%s", (title) => {
     expect(hit(title)).not.toBeNull();
   });
@@ -62,6 +70,24 @@ describe("title patterns", () => {
     "Talentpoolmanager",
     "Leitung Talentpool (m/w/d)",
     "Recruiting Partner - Talentpool",
+    // a team or product that carries the words in its name
+    "Software Engineer, Talent Network",
+    "Backend Engineer - Talent Community Platform",
+    "Talent Community Team Lead",
+    "Product Designer, Talent Pool Product",
+    "Team Lead - Talent Pool",
+    "Team Lead: Talent Community",
+    // a business line, a department, a company
+    "Software Engineer - General Applications",
+    "General Applications Engineer",
+    "Director of Future Opportunities",
+    "Head of Future Roles (m/f/d)",
+    "VP, Upcoming Openings",
+    "Evergreen Solar - Field Engineer",
+    "Evergreen-Solar Technician",
+    "Evergreen Job Board Engineer",
+    "Data Engineer at Evergreen - Remote",
+    "Evergreen Health: Registered Nurse",
   ])("%s has no hit", (title) => {
     expect(hit(title)).toBeNull();
   });
