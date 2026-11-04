@@ -190,7 +190,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
     note: e.note,
   }));
 
-  // ---- v3: score card, salary card, checks (thresholds and scales come from the config files, C8)
+  // ---- v3: score card, salary card, checks (thresholds and scales come from the config files)
   const ui = loadConfig("ui");
   const pushLine = loadConfig("notify").push_min_score;
   const bonusCap = interests.bonus_cap;
@@ -694,7 +694,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
 
 const SENIORITY_KEYS = ["entry", "mid", "senior", "lead"] as const;
 
-/** A fit / gap row: a boxed `+` / `–` glyph (design `.fitlist`) and the text. */
+/** A fit / gap row: a boxed `+` / `–` glyph and the text. */
 const REASON_ROW =
   "grid grid-cols-[22px_minmax(0,1fr)] items-start gap-1.5 [overflow-wrap:anywhere] before:border-border before:rounded-[4px] before:border-[1.5px] before:text-center before:font-mono before:text-data before:font-bold before:leading-4 before:h-[18px]";
 

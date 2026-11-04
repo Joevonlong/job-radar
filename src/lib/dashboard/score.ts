@@ -2,7 +2,7 @@ import { SCORE_BANDS } from "./constants";
 
 export type ScoreTone = "top" | "good" | "mid" | "low";
 
-/** Colour band of a rank value (docs/design/tokens.md: <50, 50-69, 70-84, >=85). */
+/** Colour band of a rank value (<50, 50-69, 70-84, >=85). */
 export function scoreTone(value: number): ScoreTone {
   if (value >= SCORE_BANDS.top) return "top";
   if (value >= SCORE_BANDS.good) return "good";

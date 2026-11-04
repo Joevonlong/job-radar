@@ -23,7 +23,7 @@ export interface SalaryDisplay {
 }
 
 /**
- * Normalized salary text (C3: only what the posting states; a missing bound reads "up to" / "from"), written by `formatSalary` like
+ * Normalized salary text (only what the posting states; a missing bound reads "up to" / "from"), written by `formatSalary` like
  * every other salary on the page. Per-year amounts (`perYear`, from the pipeline's period factors) are preferred so salaries
  * compare; otherwise the amounts as stated, with their period.
  */
@@ -47,7 +47,7 @@ export function describeSalary(salary: JobSalary, locale: Locale): SalaryDisplay
 }
 
 /**
- * Is the annual figure an estimate, not what the posting states (tokens.md "数字格式": a converted amount is written "≈ €86k")?
+ * Is the annual figure an estimate, not what the posting states (a converted amount is written "≈ €86k")?
  * It is when the per-year amount was computed from a monthly / weekly / daily / hourly one (`period`), or, on the base basis
  * (`basePerYear`), when the posting's currency is not the base currency. The ONE place this is decided: the list, the ticker, the board and the
  * detail page all take `approx` from here, so one job never reads "€86.4k" in one place and "≈ €86k" in another.

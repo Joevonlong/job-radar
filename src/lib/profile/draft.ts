@@ -1,8 +1,8 @@
 /**
  * Form drafts for the profile page. A draft is what the browser holds and sends: plain
- * strings, booleans and lists. It is untrusted input, so it is validated with zod (C6), converted
+ * strings, booleans and lists. It is untrusted input, so it is validated with zod, converted
  * to the config shape and then validated again with the real config schema (the single source of
- * truth for what a valid profile is, C8).
+ * truth for what a valid profile is).
  *
  * Pure and free of server-only imports: the client form and the server action share it.
  */

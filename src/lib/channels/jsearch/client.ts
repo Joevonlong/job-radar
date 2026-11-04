@@ -70,7 +70,7 @@ export interface JsearchAnswer {
 /**
  * One GET against JSearch. 5xx and network errors are retried by `ctx.http`; auth problems and 429s
  * are classified here because the response body tells the kinds of 429 apart (see `classifyRateLimit`).
- * Error messages never carry the response body or the key (C4).
+ * Error messages never carry the response body or the key.
  */
 export async function getRecords(ctx: ChannelContext, settings: ClientSettings, apiKey: string, url: string): Promise<JsearchAnswer> {
   for (let attempt = 0; ; attempt += 1) {

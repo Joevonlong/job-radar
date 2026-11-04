@@ -2,7 +2,7 @@
  * Approving and rejecting interest suggestions. Approving is the only place a suggestion changes a config
  * file, and always through the shared config mutator (comments kept, atomic replace, validated, profile snapshot hook for
  * preferences.yaml). Server Actions in `app/interests/suggestion-actions.ts` are thin wrappers around these
- * functions; whatever arrives here is untrusted and checked with zod (C6).
+ * functions; whatever arrives here is untrusted and checked with zod.
  */
 import { logActionFailure } from "@/lib/logging/action-failure";
 import { z } from "zod";

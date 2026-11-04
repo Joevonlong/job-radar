@@ -20,7 +20,7 @@ import { isCalendarDate } from "@/lib/jobs/search-params";
  * Server Actions of the pipeline board that the job detail does not have (next step, interview
  * rounds). Status changes and notes reuse `setApplicationStatusAction` / `saveApplicationNotesAction`
  * of the job detail, so every status change goes through one place and writes one event. The web app
- * is single-user and bound to loopback (C5); input is still validated (C6).
+ * is single-user and bound to loopback; input is still validated.
  */
 
 export type PipelineActionResult<T = object> = ({ ok: true } & T) | { ok: false; error: "invalid" | "not_found" | "failed" };

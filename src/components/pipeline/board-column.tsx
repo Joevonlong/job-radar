@@ -16,7 +16,7 @@ import { ColumnScroll } from "./column-scroll";
 import { COLUMN_COLOR } from "./status-colors";
 import type { BoardCard } from "./types";
 
-// Every column is the same width, empty or not, the ended one included (design "申请看板"). Phones: one column per swipe. From md up the
+// Every column is the same width, empty or not, the ended one included. Phones: one column per swipe. From md up the
 // columns share the row; the configured minimum width makes the board scroll sideways inside its own container.
 export const columnClass =
   "bg-soft border-bw border-ink rounded-card flex min-h-0 w-[78vw] max-w-[300px] min-w-0 shrink-0 snap-start flex-col gap-sp-2 p-sp-2 md:w-0 md:min-w-[var(--board-col-min)] md:max-w-none md:flex-1";

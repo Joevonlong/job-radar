@@ -1,5 +1,5 @@
 /**
- * Mail text is untrusted (C6). `htmlToVisibleText` keeps only what a reader would see: hidden nodes are dropped, not just reported,
+ * Mail text is untrusted. `htmlToVisibleText` keeps only what a reader would see: hidden nodes are dropped, not just reported,
  * because the quote on /pipeline is cut from this text. This works whether or not the trap feature is on: its visibility helpers
  * and instruction patterns are used, its switch is not read.
  */

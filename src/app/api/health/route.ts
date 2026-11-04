@@ -18,7 +18,7 @@ export async function GET(): Promise<Response> {
       void reportWebShippedConfig();
     }
   } catch (error) {
-    // Only the error class is logged: messages can embed connection details (C4).
+    // Only the error class is logged: messages can embed connection details.
     console.error("[health] database unavailable:", error instanceof Error ? error.name : "unknown error");
   }
 

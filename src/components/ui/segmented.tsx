@@ -7,7 +7,7 @@ import { LayoutGroup, motion, slideTransition, useReducedMotion } from "@/compon
 import { cn } from "@/lib/utils"
 
 /*
- * Segmented control (2-5 views, tokens.md "选择控件"). Radiogroup semantics through Radix: the selected segment is the
+ * Segmented control (2-5 views). Radiogroup semantics through Radix: the selected segment is the
  * tab stop and the arrow keys move and select. The selected block is a Motion `layoutId` indicator rendered inside the
  * checked segment, so it glides from the old segment to the new one (viz/motion.tsx wrappers; --dur-base, spring ease).
  * It is part of the server render, so there is no flash; with reduced motion it jumps instead of sliding.

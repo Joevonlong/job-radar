@@ -1,4 +1,4 @@
-/** The user's own judgement whether a job is closed (`job_closure_overrides`). C9: every write of the feature lives here. */
+/** The user's own judgement whether a job is closed (`job_closure_overrides`). Every write of the feature lives here. */
 import { eq } from "drizzle-orm";
 
 import type { ClosureAction } from "@/lib/jobs/closure";

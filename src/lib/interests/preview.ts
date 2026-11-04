@@ -2,7 +2,7 @@
  * "Try on recent jobs" of a category on /interests. The rule stage (`findCandidates`, no AI) runs the draft's
  * category over the newest `limits.preview_jobs` open jobs in memory and reports how many it would hit, with a few
  * quoted samples; when the draft changes what the AI looks for (the signals prompt version), it also estimates how many
- * jobs the next cycles review again. Read only: no AI call, no write (C5: nothing leaves the machine).
+ * jobs the next cycles review again. Read only: no AI call, no write (nothing leaves the machine).
  */
 import { z } from "zod";
 

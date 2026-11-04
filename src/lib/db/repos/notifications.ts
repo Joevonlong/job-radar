@@ -288,7 +288,7 @@ async function assembleCandidates(
  * from the backlog, is pushed like a new one), oldest first. Whether they were pushed already is a separate lookup.
  */
 export async function listPushCandidates(db: Executor, input: { since: Date; isHighValue?: HighValueCheck }): Promise<PushCandidate[]> {
-  // written out with table names: a column interpolated into a subquery can render without its table (UAT r2 P2-5)
+  // written out with table names: a column interpolated into a subquery can render without its table
   const scoredSince = sql`exists (select 1 from scores sc where sc.job_id = "jobs"."id" and sc.scored_at >= ${input.since.toISOString()})`;
   const rows = await db
     .select({ job: await jobReadColumns(db), company: companies })

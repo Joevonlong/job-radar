@@ -1,5 +1,5 @@
 /**
- * What each step accepts (C6). These are the shapes the wizard's forms send; `pnpm run setup --answers` converts
+ * What each step accepts. These are the shapes the wizard's forms send; `pnpm run setup --answers` converts
  * its friendlier file format (answers.ts) into them. Pure zod, no server imports: the browser imports the types.
  */
 import { z } from "zod";

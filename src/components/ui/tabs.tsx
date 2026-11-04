@@ -25,7 +25,7 @@ function Tabs({
 }
 
 /*
- * Tabs (tokens.md "选择控件": independent content blocks). `default` = folder tabs on a 2px rule, the active one
+ * Tabs (independent content blocks). `default` = folder tabs on a 2px rule, the active one
  * takes the card fill; `line` = bare tabs with a bar under the active one.
  */
 const tabsListVariants = cva(

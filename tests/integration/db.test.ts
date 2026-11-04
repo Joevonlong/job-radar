@@ -91,7 +91,7 @@ async function pgErrorCode(promise: Promise<unknown>): Promise<string | undefine
 }
 
 describe("migrations", () => {
-  it("creates every table from plan §11 plus runner_heartbeats", async () => {
+  it("creates every expected table", async () => {
     const rows = await getDb().execute<{ table_name: string }>(
       sql`select table_name from information_schema.tables where table_schema = 'public' order by table_name`,
     );
@@ -167,7 +167,7 @@ describe("cycles, runs and heartbeats", () => {
 });
 
 describe("constraints", () => {
-  it("rejects duplicate raw postings per (channel, external id) and keeps the original (C1)", async () => {
+  it("rejects duplicate raw postings per (channel, external id) and keeps the original", async () => {
     const db = getDb();
     await db.insert(schema.channels).values({ id: "stepstone", family: "stepstone", kind: "scrape" }).onConflictDoNothing();
     await db.insert(schema.rawPostings).values({ channelId: "stepstone", externalId: "42", payloadJson: { a: 1 } });

@@ -1,4 +1,4 @@
-/** Reading the stored sentences of a version (`application_answer_versions.sentences`, C6): a row that does not parse shows as one unchecked text. */
+/** Reading the stored sentences of a version (`application_answer_versions.sentences`): a row that does not parse shows as one unchecked text. */
 import { z } from "zod";
 
 import { EVIDENCE_SOURCES, SENTENCE_ABOUT, SENTENCE_STATUSES, type CheckedSentence } from "./types";

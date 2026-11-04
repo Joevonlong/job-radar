@@ -38,7 +38,7 @@ export function SignalBadge({ tier, color, icon, children, title, className, mut
   );
 }
 
-/** The dashed "unknown" look: a missing fact must not read as "none" (design rule for unknown values). */
+/** The dashed "unknown" look: a missing fact must not read as "none". */
 export function UnknownBadge({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <span

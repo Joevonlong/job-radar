@@ -1,4 +1,4 @@
-/** URL state of /sources/ai-usage: everything is validated here (C6); a bad value falls back to "not set". */
+/** URL state of /sources/ai-usage: everything is validated here; a bad value falls back to "not set". */
 import { createLoader, createParser, parseAsInteger, parseAsStringLiteral } from "nuqs/server";
 
 import { AI_PROVIDER_IDS } from "@/lib/config/ai-options";

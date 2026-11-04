@@ -1,6 +1,6 @@
 /**
  * The HTML part of the rule layer: text a page hides with inline styles or attributes, instructions in comments and
- * attributes, and the content of elements that are never rendered. The HTML is untrusted data (C6): it is parsed, never rendered,
+ * attributes, and the content of elements that are never rendered. The HTML is untrusted data: it is parsed, never rendered,
  * and only text leaves this module. External stylesheets are not read (a class hides only when traps.yaml lists it).
  */
 import * as cheerio from "cheerio";

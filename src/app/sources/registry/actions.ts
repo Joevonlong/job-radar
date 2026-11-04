@@ -14,7 +14,7 @@ import {
 } from "@/lib/sources/registry/service";
 
 // Server Actions are public POST endpoints: every payload is validated again in the service (zod), and the web
-// server only listens on 127.0.0.1 / Tailscale (C5).
+// server only listens on 127.0.0.1 / Tailscale.
 
 function refresh(result: RegistryActionState): RegistryActionState {
   if (result.status === "done") {

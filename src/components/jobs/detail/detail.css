@@ -18,7 +18,7 @@
   }
 }
 
-/* The "suspicious" block of the AI trap panel: the warn colour always comes with a hatch (tokens.md). */
+/* The "suspicious" block of the AI trap panel: the warn colour always comes with a hatch. */
 .jr-trap-sus {
   background-color: var(--warn);
   background-image: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 30%, transparent) 0 1.5px, transparent 1.5px 5px);

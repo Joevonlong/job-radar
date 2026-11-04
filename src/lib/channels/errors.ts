@@ -26,7 +26,7 @@ export interface ChannelErrorOptions {
 
 /**
  * Classified channel failure. The code drives retries, the circuit breaker and the cascade; the
- * message must never contain secrets, headers or response bodies (C4).
+ * message must never contain secrets, headers or response bodies.
  */
 export class ChannelError extends Error {
   readonly code: ChannelErrorCode;

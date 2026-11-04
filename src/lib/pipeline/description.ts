@@ -8,7 +8,7 @@ import { compileRules } from "./rules";
  * 2. a long description that has no line break at all (Bright Data's LinkedIn summary) gets its
  *    structure back: bullet glyphs, known section headings and sentences become lines / paragraphs.
  * Only whitespace is added, a glyph is swapped for "- ", and the trailing interface text is removed:
- * no word of the posting is changed (C3, C7: quotes stay verbatim substrings of the stored text).
+ * no word of the posting is changed (quotes stay verbatim substrings of the stored text).
  */
 export function cleanDescription(text: string, config: PipelineConfig): string {
   const trimmed = stripTrailingUi(text, config);

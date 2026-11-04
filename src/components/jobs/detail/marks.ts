@@ -2,7 +2,7 @@ import { signalColorClasses, type SignalColor } from "@/lib/signals/palette";
 
 /**
  * Highlight classes of a signal category (by its palette colour): the same marker in the JD text, in its legend and on
- * a quote's term. Solid fills like the design's `mark.t1`.
+ * a quote's term. Solid fills.
  */
 export function markClass(color: SignalColor): string {
   return signalColorClasses(color).solid;

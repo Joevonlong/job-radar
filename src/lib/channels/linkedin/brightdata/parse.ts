@@ -88,7 +88,7 @@ function periodOf(value: string | null | undefined): (typeof SALARY_PERIODS)[num
   return null;
 }
 
-/** Salary only when the source states amounts, a 3-letter currency and a known period (C3: no guessing). */
+/** Salary only when the source states amounts, a 3-letter currency and a known period (no guessing). */
 function salaryOf(job: JobRecord, rawText: string | null): NormalizedPostingDraft["salary"] {
   const base = job.base_salary;
   if (!base) return null;
@@ -108,7 +108,7 @@ function salaryOf(job: JobRecord, rawText: string | null): NormalizedPostingDraf
   };
 }
 
-/** Validate one raw record (C6) without transforming it. Throws `ChannelError("parse")`. */
+/** Validate one raw record without transforming it. Throws `ChannelError("parse")`. */
 export function readJobRecord(payload: unknown): JobRecord {
   const parsed = jobRecordSchema.safeParse(payload);
   if (!parsed.success) {
@@ -139,7 +139,7 @@ export function parseBrightDataJob(payload: unknown): NormalizedPostingDraft {
           },
         ]
       : [],
-    // the dataset does not say whether a job is remote/hybrid/on-site: unknown, never guessed (C3)
+    // the dataset does not say whether a job is remote/hybrid/on-site: unknown, never guessed
     workplace: "unknown",
     contractHint: job.job_employment_type?.trim() || null,
     seniorityHint: job.job_seniority_level?.trim() || null,

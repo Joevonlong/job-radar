@@ -67,7 +67,7 @@ describe("capBar", () => {
   });
 });
 
-describe("germanCheck (C3: no guess when the posting is silent)", () => {
+describe("germanCheck (no guess when the posting is silent)", () => {
   it("shows only your level for none / preferred / unknown", () => {
     expect(germanCheck("none", "B1")).toMatchObject({ state: "not_required", mine: "B1", required: null });
     expect(germanCheck("preferred", "B1")).toMatchObject({ state: "preferred", required: null });
@@ -135,7 +135,7 @@ describe("names", () => {
   });
 });
 
-describe("scoreMetaText (C3: no placeholders for what is not known)", () => {
+describe("scoreMetaText (no placeholders for what is not known)", () => {
   const labels = { by: (p: string) => `by ${p}`, model: (m: string) => m, prompt: (v: string) => `prompt ${v}` };
   it("joins what is known", () => {
     expect(scoreMetaText({ provider: "codex-cli", model: "gpt-5", promptVersion: "v3", when: "10/8 05:42" }, labels)).toBe("by codex-cli · gpt-5 · prompt v3 · 10/8 05:42");

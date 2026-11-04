@@ -1,4 +1,4 @@
-/** HTML → plain text for ATS descriptions (ported from legacy `sanitize.ts`, without the length cap). */
+/** HTML → plain text for ATS descriptions, without a length cap. */
 
 const ENTITIES: Record<string, string> = {
   amp: "&",

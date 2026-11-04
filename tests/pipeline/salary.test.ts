@@ -278,7 +278,7 @@ describe("salary sources", () => {
     expect(normalizeSalary(draft({ description: "Your salary is competitive; we hire 25 people." }), config)).toBeNull();
   });
 
-  it("is null when no salary is stated (C3)", () => {
+  it("is null when no salary is stated", () => {
     expect(normalizeSalary(draft(), config)).toBeNull();
   });
 });

@@ -18,7 +18,7 @@ import { adoptStoryDraft } from "@/lib/stories/adopt";
 import { adoptedStorySchema } from "@/lib/stories/extract";
 
 // Server Actions are public POST endpoints: everything arriving here is validated again in the
-// service (zod), and the web server only listens on 127.0.0.1 / Tailscale (C5).
+// service (zod), and the web server only listens on 127.0.0.1 / Tailscale.
 
 async function refreshed(result: ProfileActionState): Promise<ProfileActionState> {
   // stale: the file changed elsewhere; the page reloads with the saved values (the form remounts and shows the message)

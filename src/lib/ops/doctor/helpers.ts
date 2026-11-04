@@ -68,7 +68,7 @@ export function formatBytes(bytes: number): string {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-/** Strip anything that looks like a URL with credentials, or a bearer token, before an error text is shown (C4). */
+/** Strip anything that looks like a URL with credentials, or a bearer token, before an error text is shown. */
 export function redact(text: string): string {
   return text
     .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@]*@/gi, "$1***@")

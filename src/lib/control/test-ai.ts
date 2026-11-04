@@ -78,7 +78,7 @@ export function createTestAiHandler(deps: TestAiDeps = {}): ControlHandler {
         context.logger.warn("ai provider test held back by Job Radar's AI usage cap", { provider, resumeAt: capped.resumeAt });
         return failed(QUOTA_GUARD_CODE, { provider, resumeAt: capped.resumeAt, latencyMs: now().getTime() - started });
       }
-      // only the kind goes into the result: provider messages may quote the CLI's output (C4: they stay in the log)
+      // only the kind goes into the result: provider messages may quote the CLI's output (they stay in the log)
       const errorKind =
         error instanceof AiUnavailableError ? (error.attempts.find((a) => a.provider === provider)?.kind ?? "not_configured") : error instanceof AiProviderError ? error.kind : "provider_error";
       const skipped = error instanceof AiUnavailableError && error.attempts.find((a) => a.provider === provider)?.outcome === "skipped";

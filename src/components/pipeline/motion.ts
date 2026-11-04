@@ -1,9 +1,9 @@
 /**
- * Motion of the board (docs/design/tokens.md "看板卡片"): a lifted card tilts 3 degrees and a dropped one settles with
+ * Motion of the board: a lifted card tilts 3 degrees and a dropped one settles with
  * the spring curve. Reduced motion: no tilt, no spring, no travel.
  */
 
-/** Tilt of a lifted card, in degrees (design: rotate(-3deg)). */
+/** Tilt of a lifted card, in degrees. */
 export const LIFT_TILT_DEG = -3;
 /** Offset of a lifted card, in px: it moves up-left while its shadow grows to `shadow-e5`. */
 export const LIFT_SHIFT_PX = -3;

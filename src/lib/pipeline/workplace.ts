@@ -43,7 +43,7 @@ function textModes(description: string, config: PipelineConfig): Mode[] {
  * pipeline.yaml `workplace`). The title, location texts and contract hint are read first (each on
  * its own); if they name exactly one mode that is it. Otherwise the description decides, with
  * stricter patterns and negations taken into account. Two different modes in the same place
- * ("remote or hybrid") mean the posting does not commit to one: `unknown`, never a guess (C3).
+ * ("remote or hybrid") mean the posting does not commit to one: `unknown`, never a guess.
  */
 export function extractWorkplace(input: WorkplaceInput, config: PipelineConfig): Workplace {
   const head = headModes(compileRules(config).workplaceHead, [input.title, ...input.locationLabels, input.contractHint ?? ""]);

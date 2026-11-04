@@ -99,7 +99,7 @@ describe("mergeAiReview", () => {
     expect(found.stats.added).toBe(1);
   });
 
-  it("discards a signal whose quote is not in the JD (C7)", () => {
+  it("discards a signal whose quote is not in the JD", () => {
     const { signals, stats } = merge({ signals: [signal({ tier: "T2", quote: "Generous stock option plan with 4 year vesting" })] });
     expect(signals.some((s) => s.quote.includes("vesting"))).toBe(false);
     expect(stats.droppedQuote).toBe(1);

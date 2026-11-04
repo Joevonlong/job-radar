@@ -42,7 +42,7 @@ async function addJob(title: string, firstSeen: string, over: { rank?: number; w
   return id;
 }
 
-/** The backfill statement of the upgrade, read from the migration that ships it (the orchestrator may renumber the file, not rename it). */
+/** The backfill statement of the upgrade, read from the migration that ships it (a merge may renumber the file, not rename it). */
 function backfillStatement(): string {
   const dir = path.join(process.cwd(), "drizzle");
   const file = readdirSync(dir).find((name) => name.endsWith("_ux_seen_closed.sql"));

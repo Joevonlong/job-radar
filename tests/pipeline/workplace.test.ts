@@ -55,7 +55,7 @@ describe("work mode from the posting's own words", () => {
     expect(read("Build things.", { locations: ["Home Office, DE"] })).toBe("remote");
   });
 
-  it("says nothing it does not read: unknown (C3)", () => {
+  it("says nothing it does not read: unknown", () => {
     expect(read("Build LLM-powered features for our logistics platform.")).toBe("unknown");
     expect(read("")).toBe("unknown");
   });

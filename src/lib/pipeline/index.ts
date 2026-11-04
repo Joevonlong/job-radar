@@ -192,7 +192,7 @@ async function persist(db: Db, raw: RawPosting, normalized: NormalizedJob, famil
  * The `pipeline` step: every `pending` raw posting → the channel's `parse` → draft validation →
  * normalization → match an existing job (same source, exact company + title + city key, SimHash) or
  * create one → `job_sources` → raw marked `parsed`. A posting that cannot be parsed is marked
- * `parse_failed` with its reason and the rest carry on (C1, C2); a posting whose result cannot be
+ * `parse_failed` with its reason and the rest carry on; a posting whose result cannot be
  * stored stays `pending` for the next cycle.
  */
 export async function runPipeline(db: Db, options: PipelineOptions): Promise<PipelineResult> {
@@ -335,7 +335,7 @@ export async function pipelineStep(ctx: CycleStepContext): Promise<StepResult> {
   const db = requireDb(ctx);
   // Filing with the new keys against a table that still holds old ones would create companies and jobs next to the stored
   // ones, and such duplicates are never merged afterwards. So when the keys cannot be brought up to date, nothing is filed:
-  // the postings stay `pending` (stored, C1), the step fails visibly, and the next cycle tries again.
+  // the postings stay `pending` (stored), the step fails visibly, and the next cycle tries again.
   const keys = await refreshStoredIdentityKeys(db, { config: loadPipeline(), logger: ctx.logger, signal: ctx.signal });
   if (!keys.ok) return { status: "failed", result: { identityKeys: { error: keys.error }, filed: 0 } };
   // the display names of config/sources.yaml (ats_boards) reach companies that were created before a name was corrected

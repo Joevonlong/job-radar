@@ -15,7 +15,7 @@ import type { JobTranslation, PartialTranslation } from "@/lib/translation/servi
 
 /**
  * Server Actions for the application state of a job (status, notes). The web app is single-user and
- * bound to loopback (C5), so there is no session to check; input is still validated (C6).
+ * bound to loopback, so there is no session to check; input is still validated.
  */
 
 const jobIdSchema = z.number().int().positive();

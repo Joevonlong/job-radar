@@ -1,7 +1,7 @@
 /**
  * Form draft of the signal category editor. A draft is what the browser holds and sends: plain strings
- * and lists. It is untrusted input, so it is validated with zod (C6), merged into the current config and validated
- * again with the real schema (the single source of truth, C8): fields the form does not show (the amount settings,
+ * and lists. It is untrusted input, so it is validated with zod, merged into the current config and validated
+ * again with the real schema (the single source of truth): fields the form does not show (the amount settings,
  * `default_kind`, limits, views, watched companies ...) are kept as they are.
  *
  * Rules the merge enforces (the schema cannot: it does not know the file before):

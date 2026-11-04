@@ -5,7 +5,7 @@
  * is projected back onto the old shape and compared with the original: lists as sets (regex lists also by what they
  * match over the golden inputs), ordered blocks in order. A second migration changes nothing.
  *
- * `MARKET_LEGACY_DIR=<dir>` runs the same checks on another copy (the orchestrator's check of a real instance).
+ * `MARKET_LEGACY_DIR=<dir>` runs the same checks on another copy (to check a real instance).
  */
 import fs from "node:fs";
 import path from "node:path";

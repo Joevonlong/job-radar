@@ -1,7 +1,7 @@
 import type { SignalTier } from "@/lib/db/queries/types";
 
 /**
- * Signal highlights inside a translation (spec: best effort). The model wraps the translation of a
+ * Signal highlights inside a translation (best effort). The model wraps the translation of a
  * marked sentence in `[[S<n>]]…[[/S<n>]]`; before the text is stored `S<n>` becomes the sentence's
  * category id (`[[T1]]…[[/T1]]`: any category id), so the stored content stays valid when the signal list
  * changes later.
@@ -25,7 +25,7 @@ export interface MarkedSentence {
 const MAX_QUOTE_CHARS = 300;
 const MAX_MARKED_PER_PIECE = 12;
 
-/** The signal quotes that occur verbatim in `chunk` (C7: quotes are JD text), in order of appearance. */
+/** The signal quotes that occur verbatim in `chunk` (quotes are JD text), in order of appearance. */
 export function markedSentencesFor(chunk: string, signals: readonly MarkableSignal[]): MarkedSentence[] {
   const seen = new Set<string>();
   const hits: Array<MarkedSentence & { at: number }> = [];

@@ -18,7 +18,7 @@ function regexOf(source: string): RegExp {
 
 export interface Classification {
   category: ReplyCategory;
-  /** The body sentence that decided it (C7); null when the subject decided it or nothing did. */
+  /** The body sentence that decided it; null when the subject decided it or nothing did. */
   evidence: string | null;
 }
 

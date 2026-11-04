@@ -45,7 +45,7 @@ export interface ReviewStats {
   added: number;
   /** Rule candidates the AI did not mention; they stay as the rules found them (`ai_confirm_only` candidates: dropped). */
   unreviewed: number;
-  /** Dropped because the quote is not in the JD (C7) or is too long. */
+  /** Dropped because the quote is not in the JD or is too long. */
   droppedQuote: number;
   /** Amount signals dropped because the amount is missing, not found in the quote, or not a plausible salary. */
   droppedAmount: number;
@@ -71,7 +71,7 @@ function numbersIn(text: string): number[] {
   return values;
 }
 
-/** The AI's amount is accepted only when its figures can be read from the quote itself (no invented numbers, C3). */
+/** The AI's amount is accepted only when its figures can be read from the quote itself (no invented numbers). */
 function figuresAppearIn(quote: string, amount: { min: number | null; max: number | null }): boolean {
   const available = numbersIn(quote);
   return [amount.min, amount.max].every((v) => v === null || available.some((n) => Math.abs(n - v) < 0.5));

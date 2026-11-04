@@ -94,7 +94,7 @@ export function isRegionCode(code: string): boolean {
 
 /**
  * `"Berlin, BE, DE"` (Indeed: city, state, ISO country) and `"Berlin, Berlin, Germany"` / `"Germany"`
- * (LinkedIn: country spelled out) → one location. A country that cannot be identified stays null (C3).
+ * (LinkedIn: country spelled out) → one location. A country that cannot be identified stays null.
  */
 export function parseLocation(raw: string | null | undefined): NormalizedPostingDraft["locations"] {
   const label = clean(raw);
@@ -122,7 +122,7 @@ function salaryOf(record: JobspyRecord): NonNullable<NormalizedPostingDraft["sal
   const interval = clean(record.interval);
   const currency = clean(record.currency)?.toUpperCase() ?? null;
   const period = interval === null ? undefined : PERIOD_BY_INTERVAL[interval.toLowerCase()];
-  // No guessing (C3): without a known period and currency, or with a nonsensical range, there is no structured salary.
+  // No guessing: without a known period and currency, or with a nonsensical range, there is no structured salary.
   if ((min === null && max === null) || period === undefined || currency === null || !/^[A-Z]{3}$/.test(currency)) return null;
   if (min !== null && max !== null && min > max) return null;
   if ((min ?? 0) < 0 || (max ?? 0) < 0) return null;
@@ -151,7 +151,7 @@ function pickExtra(record: JobspyRecord): Record<string, unknown> {
 
 /**
  * jobspy record → draft. A posting without title or company is a parse failure (the pipeline skips
- * it); `is_remote: false` is jobspy's keyword guess, so only `true` becomes `remote` (C3).
+ * it); `is_remote: false` is jobspy's keyword guess, so only `true` becomes `remote`.
  */
 export function parseJobspyPosting(payload: unknown): NormalizedPostingDraft {
   const parsed = jobspyRecordSchema.safeParse(payload);

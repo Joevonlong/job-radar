@@ -17,7 +17,7 @@ interface SalaryChipProps {
 }
 
 /**
- * Salary of a card or the drawer (design "board card"): a stated range is a yellow mono chip, a range under the floor or
+ * Salary of a card or the drawer: a stated range is a yellow mono chip, a range under the floor or
  * probably another region's pay is a grey chip, nothing stated is a dashed box. The text is `formatSalary`, never local.
  */
 export function SalaryChip({ salary, floor, className }: SalaryChipProps) {

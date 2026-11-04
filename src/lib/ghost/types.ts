@@ -53,7 +53,7 @@ export const repostedReasonSchema = z.strictObject({
 
 /**
  * The JD (or, with `field: "title"`, the job's title) says it is a talent pool or always open: a verbatim quote of
- * `jobs.description` (`jobs.title`) at `offset` (C7). No `field` = the JD (rows stored before titles were read).
+ * `jobs.description` (`jobs.title`) at `offset`. No `field` = the JD (rows stored before titles were read).
  */
 export const evergreenReasonSchema = z.strictObject({
   code: z.literal("evergreen_wording"),
@@ -108,7 +108,7 @@ export interface GhostPosting {
   repostLabel: string | null;
 }
 
-/** What one job's check reads (C1: built from stored rows only). */
+/** What one job's check reads (built from stored rows only). */
 export interface GhostInput {
   jobId: number;
   status: "active" | "possibly_closed" | "closed";

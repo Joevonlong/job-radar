@@ -1,6 +1,6 @@
 /**
  * Everything the /setup page shows, read fresh on every request (server only). Serializable for the client.
- * Environment variables appear as names with present / absent only; no value is read into this view (C4).
+ * Environment variables appear as names with present / absent only; no value is read into this view.
  */
 import { consentKind, type ConsentKind } from "@/lib/channels/access";
 import { CHANNEL_GROUP } from "@/lib/sources/registry/entries";

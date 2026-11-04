@@ -1,7 +1,7 @@
-# Telegram 推送（docs/plan.md §9）。token 和 chat id 放在 .env：TELEGRAM_BOT_TOKEN、TELEGRAM_CHAT_ID。
-# 建 bot 和拿 chat id 见 spec/guides/telegram.md；配好后用 `pnpm telegram:test` 发一条测试消息。
+# Telegram 推送。token 和 chat id 放在 .env：TELEGRAM_BOT_TOKEN、TELEGRAM_CHAT_ID。
+# 配好后用 `pnpm telegram:test` 发一条测试消息。
 telegram:
-  enabled: true # M3 配好 bot 后再打开
+  enabled: true # 配好 bot 后再打开
   api_base_url: "https://api.telegram.org"
   # long-polling：一次 getUpdates 最长等多久（秒，≤ 50）
   poll_timeout_seconds: 30

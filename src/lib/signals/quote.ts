@@ -29,7 +29,7 @@ const LEADING_MARKER = /^(?:[-*•–·]\s+|\d{1,3}[.)]\s+|#{1,6}\s+)/u;
 /**
  * The sentence of the line that holds `hit`, trimmed, without a list marker; at most `maxChars`
  * long (a longer sentence is cut around the hit at word boundaries). The result is a verbatim
- * substring of `text` (C7); `offset` is where it starts.
+ * substring of `text`; `offset` is where it starts.
  */
 export function sentenceAround(text: string, hit: Span, maxChars: number): { quote: string; offset: number } {
   const line = lineBounds(text, hit.start);
@@ -86,7 +86,7 @@ const escapeRegex = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g
 
 /**
  * Where `quote` sits in `description`, or null. A quote counts only when it is a substring of the
- * JD (C7). Whitespace differences (a line break the model turned into a space) are tolerated; the
+ * JD. Whitespace differences (a line break the model turned into a space) are tolerated; the
  * returned `quote` is then the JD's own text, so what is stored is always verbatim.
  */
 export function locateQuote(description: string, quote: string): { quote: string; offset: number } | null {

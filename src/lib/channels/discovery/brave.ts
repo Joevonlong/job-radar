@@ -13,8 +13,7 @@ import { createDbDiscoveryStore } from "./store";
 export { boardUrlOf, type DiscoveredBoard, type DiscoveryQuery };
 
 /**
- * `brave` — discovery of new ATS boards through Brave Search (ported from the legacy
- * `source-discovery.ts`, extended from two to five ATS). It collects no postings: each run searches
+ * `brave` — discovery of new ATS boards through Brave Search. It collects no postings: each run searches
  * `site:<ats host> ("<keyword>" OR …) <city>` for every ATS x keyword group x city, keeps the results
  * that are official board URLs, and writes the boards that are not in `sources.yaml (ats_boards)` to the
  * candidate table, where `/sources` lists them. It never edits the config itself.

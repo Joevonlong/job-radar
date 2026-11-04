@@ -1,7 +1,7 @@
 import { extractWorkplace, isSalaryLine, matchesAny, snippetOf, type CardCandidate } from "./html";
 import type { AlertJob } from "./types";
 
-/** Prediction / estimate lines are not the posting's salary (C3). */
+/** Prediction / estimate lines are not the posting's salary. */
 const SALARY_ESTIMATE = /gehaltsprognose|gehaltssch[äa]tzung|gesch[äa]tzt|estimated|estimate\b|salary insights/i;
 /** "4,2 ★", "4.1 stars" company ratings. */
 const RATING = /^\d[.,]\d\s*(?:★|☆|stars?|sterne?)?$|^★+/i;

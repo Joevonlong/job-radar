@@ -58,7 +58,7 @@ describe("greenhouse sweep", () => {
     ]);
     expect(lastLog(logs, "ats board listed duplicate ids")).toEqual([]);
     for (const p of postings) expect(rawPostingInputSchema.safeParse(p).success).toBe(true);
-    // C1: the posting is stored verbatim inside the envelope
+    // The posting is stored verbatim inside the envelope
     const verbatim = (fixtureJson("greenhouse-board.json") as { jobs: unknown[] }).jobs[0];
     expect(postings[0]?.payload).toEqual({ source: { ats: "greenhouse", token: "examplelabs", companyName: "Example Labs" }, posting: verbatim });
     expect(postings[0]?.url).toBe("https://job-boards.greenhouse.io/examplelabs/jobs/6186419001");
@@ -186,7 +186,7 @@ describe("greenhouse sweep", () => {
     const { fetch } = routedFetch([[GH_URL, response(200, body)]]);
     const { ctx, query, logs } = atsContext("greenhouse", fetch);
     const postings = await greenhouse().channel.collect(query, ctx);
-    // id 8 has no title: it cannot be judged, so it is kept and flagged by parse later (C1)
+    // id 8 has no title: it cannot be judged, so it is kept and flagged by parse later
     expect(postings.map((p) => p.externalId)).toEqual(["7", "8"]);
     expect(() => greenhouse().channel.parse(postings[1]?.payload)).toThrow(ChannelError);
     expect(lastLog(logs, "ats board postings without an id skipped")).toEqual([{ channel: "greenhouse", board: "examplelabs", count: 1 }]);
@@ -410,7 +410,7 @@ describe("conditional requests (ETag)", () => {
   });
 });
 
-describe("board failures (C2)", () => {
+describe("board failures", () => {
   const two = [gh, company({ name: "Second", ats: "greenhouse", token: "second" })];
 
   it("a missing board (404) does not stop the other boards and is remembered as an error", async () => {

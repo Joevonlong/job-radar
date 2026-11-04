@@ -39,7 +39,7 @@ describe("ashby parse", () => {
     expect(d.extra).toMatchObject({ ats: "ashby", department: expect.any(String) });
   });
 
-  it("maps workplaceType, and falls back to the isRemote flag only for remote (C3)", () => {
+  it("maps workplaceType, and falls back to the isRemote flag only for remote", () => {
     expect(draft(1).workplace).toBe("onsite");
     expect(draft(2).workplace).toBe("hybrid");
     expect(draft(4).workplace).toBe("remote");

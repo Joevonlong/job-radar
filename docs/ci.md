@@ -125,8 +125,12 @@ NUL-delimited records using the rules above.
 
 `node scripts/check-doc-links.mjs` (also `pnpm docs:check`, and part of `scripts/validate.sh`). Checks that every relative
 link in the Markdown files and every `href` / `src` of the HTML guides points to an existing file; anchors and absolute
-URLs are not followed. About 5 seconds. A failure lists `file -> target`. Typical causes: a renamed or deleted doc, a
-typo in a relative path.
+URLs are not followed. It also checks path references in code, config and prose: a path under `docs/` or the maintainer's
+private folder (`research/`, `spec/` and the like), and a bare `name.md` in a comment, must exist in the repository. Outside
+comments only a path with a file extension counts, and under the test directories only comments count. It reads the files git
+tracks, plus new ones it does not ignore. About 5 seconds. A failure lists `file: target` or `file:line: target`. Typical
+causes: a renamed or deleted doc, a typo in a relative path, a comment citing a document readers cannot open (state the
+fact instead).
 
 ### Job `ci-docs`
 

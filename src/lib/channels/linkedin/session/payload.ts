@@ -9,7 +9,7 @@ import { stripWorkModeSuffix, type ListCard } from "./parse-search";
 import { htmlFragmentToText, parseSalaryLine, squash } from "./text";
 
 /**
- * The raw payload stored for a posting read through the LinkedIn session (C1): what the pages showed, as fields. The description is kept as
+ * The raw payload stored for a posting read through the LinkedIn session: what the pages showed, as fields. The description is kept as
  * HTML so a better parser can re-read it later (`pnpm reprocess`). No cookie, header or page chrome is stored.
  */
 export const PAYLOAD_SOURCES = ["search", "recommended"] as const;
@@ -90,7 +90,7 @@ export function buildPayload(input: PayloadInput): SessionPayload | null {
   };
 }
 
-/** Validate one stored payload (C6) without transforming it. Throws `ChannelError("parse")`. */
+/** Validate one stored payload without transforming it. Throws `ChannelError("parse")`. */
 export function readSessionPayload(payload: unknown): SessionPayload {
   const parsed = sessionPayloadSchema.safeParse(payload);
   if (!parsed.success) {
@@ -112,7 +112,7 @@ function workplaceOf(text: string | null | undefined): NormalizedPostingDraft["w
   return WORKPLACE_PATTERNS.find(([pattern]) => pattern.test(value))?.[1] ?? "unknown";
 }
 
-/** One stored payload -> the normalized draft. Facts the pages did not state stay `unknown` / null (C3). */
+/** One stored payload -> the normalized draft. Facts the pages did not state stay `unknown` / null. */
 export function parseSessionPayload(payload: unknown): NormalizedPostingDraft {
   const record = readSessionPayload(payload);
   const url = httpUrlOrNull(record.url);

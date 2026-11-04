@@ -1,7 +1,7 @@
 /**
- * Reads and writes of the ghost job check (`job_ghost`). C9: every query of the feature lives here (the `/jobs` filter condition
+ * Reads and writes of the ghost job check (`job_ghost`). Every query of the feature lives here (the `/jobs` filter condition
  * too). Every function first checks that the table exists: before the migration ran, readers see "not checked yet" and writers skip.
- * C1: `raw_postings` is only read.
+ * `raw_postings` is only read.
  */
 import { and, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
 
@@ -108,7 +108,7 @@ export interface GhostInputRow {
   breakdown: { sourceHash: string; promptVersion: string; content: unknown } | null;
 }
 
-/** The stored rows the check of the given jobs is made from (C1: only read), in one query per table. */
+/** The stored rows the check of the given jobs is made from (only read), in one query per table. */
 export async function loadGhostInputs(db: Executor, jobIds: readonly number[], options: { payloadChannels: readonly string[] }): Promise<GhostInputRow[]> {
   const ids = [...new Set(jobIds)];
   if (ids.length === 0) return [];

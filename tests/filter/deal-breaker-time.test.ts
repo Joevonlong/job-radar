@@ -1,5 +1,5 @@
 /**
- * No user pattern may hold up the filter step or a page for long: the patterns a review measured as catastrophic are refused
+ * No user pattern may hold up the filter step or a page for long: the patterns measured as catastrophic are refused
  * by the schema, the test texts catch them when the schema is bypassed (a hand-written file read without it), and at run time
  * each rule has a budget and the preview a deadline.
  *
@@ -31,8 +31,8 @@ import { compileVisaRules } from "@/lib/visa/rules";
 import { cpuTime, leastCpuTime, type MeasureOptions } from "../helpers/cpu-time";
 import { shippedPipeline } from "../pipeline/helpers";
 
-/** Measured in the review: seconds each on a 26-character or a 20,000-character line. */
-const REVIEW_PATTERNS = ["(a|a)+$", ".*.*.*x", "\\d+.*\\d+.*\\d+.*\\d+.*Z", ".*100%\\s*on-?site"];
+/** Measured: seconds each on a 26-character or a 20,000-character line. */
+const CATASTROPHIC_PATTERNS = ["(a|a)+$", ".*.*.*x", "\\d+.*\\d+.*\\d+.*\\d+.*Z", ".*100%\\s*on-?site"];
 /** Fine on the test texts, statically fine too: the examples of the user guide. */
 const GUIDE_PATTERNS = ["Reisetätigkeit.{0,30}(?:[5-9]\\d|100)\\s?%", "100\\s?%\\s*(?:on-?site|vor Ort)", "\\bno travel\\b", "travel (?:is )?not required", "\\bon-?call\\b"];
 
@@ -99,7 +99,7 @@ describe("the schema refuses the slow shapes", () => {
 });
 
 describe("the test texts", () => {
-  it.each(REVIEW_PATTERNS)("catch %s when the schema is bypassed, within a few match_ms", (pattern) => {
+  it.each(CATASTROPHIC_PATTERNS)("catch %s when the schema is bypassed, within a few match_ms", (pattern) => {
     let fast = true;
     const ms = cpuTime(() => void (fast = patternIsFast(pattern, "pattern", { ...limits, match_ms: 50 }, vmTimeBox)));
     expect(fast).toBe(false);
@@ -166,7 +166,7 @@ describe("at run time", () => {
     expect(run.warnings).toHaveLength(1);
   });
 
-  it("bounds the review's quadratic pattern on a 20,000-character line", () => {
+  it("bounds a quadratic pattern on a 20,000-character line", () => {
     const run = unprobed([unchecked([".*100%\\s*on-?site"])], { rule_budget_ms: 100 });
     const line = "Lorem ipsum dolor sit amet ".repeat(800).slice(0, 20_000);
     const ms = cpuTime(() => void dealBreakerVetoes(run, Array.from({ length: 20 }, () => posting(line))));

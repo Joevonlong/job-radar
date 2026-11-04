@@ -30,7 +30,7 @@ const suggestionSchema = z.discriminatedUnion("kind", [
 ]);
 const candidatesSchema = z.array(z.object({ applicationId: z.number(), jobId: z.number(), score: z.number(), hits: z.array(z.string()) }));
 
-/** The stored suggestion; an unreadable one counts as "nothing to do" (C6). */
+/** The stored suggestion; an unreadable one counts as "nothing to do". */
 function suggestionOf(json: unknown): ReplySuggestion {
   const parsed = suggestionSchema.safeParse(json);
   return parsed.success ? parsed.data : { kind: "none" };

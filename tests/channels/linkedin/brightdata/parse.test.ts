@@ -33,7 +33,7 @@ describe("parseBrightDataJob", () => {
     expect(draft.description).not.toMatch(/<|&amp;/);
   });
 
-  it("states nothing the posting does not say (C3): no salary, unknown workplace, apply falls back to the LinkedIn URL", () => {
+  it("states nothing the posting does not say: no salary, unknown workplace, apply falls back to the LinkedIn URL", () => {
     const draft = normalizedPostingDraftSchema.parse(parseBrightDataJob(noSalary));
     expect(draft.salary ?? null).toBeNull();
     expect(draft.salaryText).toBeNull();

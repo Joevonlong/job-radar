@@ -178,7 +178,7 @@ describe("Ring", () => {
       unmount();
       return scale;
     };
-    expect(scaleOf(46)).toBeLessThanOrEqual(0.22); // "46%": the design's 22%
+    expect(scaleOf(46)).toBeLessThanOrEqual(0.22); // "46%" keeps 22%
     expect(scaleOf(100)).toBeLessThan(scaleOf(46)); // "100%" is one glyph longer
     expect(scaleOf(8.9)).toBeLessThan(scaleOf(46)); // "8.9%" too
     // the label never needs more than the inner space (52% of the ring) at about 0.85 em per glyph

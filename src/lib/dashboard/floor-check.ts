@@ -6,7 +6,7 @@ import { isApproxAnnual } from "./salary";
 /**
  * Does the stated salary reach your floor (`preferences.yaml: salary_floor_year`)? The same reading as the filter:
  * the upper end of the range counts (the lower end of a "from X" range).
- * - `no_salary`: nothing stated (or no figure in the base currency): not judged, not a fail (C3).
+ * - `no_salary`: nothing stated (or no figure in the base currency): not judged, not a fail.
  * - `other_region`: the figure is possibly another region's pay: not judged.
  * - `no_floor`: no floor is set.
  */

@@ -86,7 +86,7 @@ describe("seniority", () => {
     expect(inferSeniority(title)).toBe(expected);
   });
 
-  it("never derives seniority from required years (C3)", () => {
+  it("never derives seniority from required years", () => {
     const job = normalizeDraft(draft({ title: "AI Engineer", description: "10+ years of experience required." }), config);
     expect(job.seniority).toBe("unknown");
   });

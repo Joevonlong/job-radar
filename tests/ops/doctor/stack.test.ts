@@ -177,7 +177,7 @@ describe("compose.<service>", () => {
     expect(map.get("compose.web")?.detail).toContain("docker 不可用");
   });
 
-  it("fails a service published on a non-loopback address (C5)", async () => {
+  it("fails a service published on a non-loopback address", async () => {
     const map = await byService(makeContext({ commands: { [COMPOSE_PS]: ran(composeJson({ web: { Publishers: [{ URL: "0.0.0.0", TargetPort: 3000, PublishedPort: 3000 }] } })) } }));
     expect(map.get("compose.web")).toMatchObject({ status: "fail" });
     expect(map.get("compose.web")?.detail).toContain("0.0.0.0:3000");

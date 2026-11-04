@@ -84,7 +84,7 @@ workflow 级设置：`permissions: contents: read`（任何任务都不能写仓
 
 #### Documentation links
 
-`node scripts/check-doc-links.mjs`（即 `pnpm docs:check`，也在 `scripts/validate.sh` 里）。检查 Markdown 里的每个相对链接和 HTML 指南里的每个 `href` / `src` 是否指向存在的文件；不跟踪锚点和绝对 URL。约 5 秒。失败时列出 `文件 -> 目标`。常见原因：文档被改名或删除、相对路径写错。
+`node scripts/check-doc-links.mjs`（即 `pnpm docs:check`，也在 `scripts/validate.sh` 里）。检查 Markdown 里的每个相对链接和 HTML 指南里的每个 `href` / `src` 是否指向存在的文件；不跟踪锚点和绝对 URL。同时检查代码、配置和文档里的路径引用：`docs/` 或维护者私有目录（`research/`、`spec/` 等）下的路径，以及注释里不带目录的 `name.md`，都必须在仓库里存在；注释之外只看带扩展名的路径，测试目录只看注释。检查范围是 git 跟踪的文件和未被忽略的新文件。约 5 秒。失败时列出 `文件: 目标` 或 `文件:行号: 目标`。常见原因：文档被改名或删除、相对路径写错、注释引用了读者打不开的文档（直接写明事实）。
 
 ### Job `ci-docs`
 

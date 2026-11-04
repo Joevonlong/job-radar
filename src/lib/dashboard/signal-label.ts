@@ -32,7 +32,7 @@ function shortAmount(value: number, decimals: 0 | 1 = 1): string {
 
 /**
  * Short amount text for a T1 signal ("€85–105k", "≤ €120k") from its `value_json`, or null when the
- * value carries no readable amount (the badge then shows the tier label instead; nothing is guessed, C3).
+ * value carries no readable amount (the badge then shows the tier label instead; nothing is guessed).
  * `approx` (a converted figure, `isApproxAnnual`): whole k and a leading "≈ ", like `formatSalary` writes it.
  */
 export function signalAmountLabel(value: unknown, locale: string, options: { approx?: boolean } = {}): string | null {

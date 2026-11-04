@@ -68,13 +68,13 @@ describe("buildScorePrompt", () => {
     expect(user).toContain("Contracts allowed: permanent, fixed_term, freelance; excluded: temp_agency");
   });
 
-  it("does not send the city or the visa status (C5)", () => {
+  it("does not send the city or the visa status", () => {
     const { user } = buildScorePrompt({ me: exampleMe((raw) => { raw.city = "Springfield"; raw.needs_visa_sponsorship = true; }), preferences: examplePreferences(), job: job(), jdMaxChars: 6000, jdHeadShare: 0.7, language: GERMAN, currency: "EUR" });
     expect(user).not.toContain("Springfield");
     expect(user.toLowerCase()).not.toContain("visa");
   });
 
-  it("describes the posting and says what it does not state instead of guessing (C3)", () => {
+  it("describes the posting and says what it does not state instead of guessing", () => {
     const full = build().user;
     expect(full).toContain("Title: Forward Deployed Engineer");
     expect(full).toContain("Salary: EUR 85,000 to 105,000 per year");

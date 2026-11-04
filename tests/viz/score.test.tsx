@@ -77,7 +77,7 @@ describe("ScoreMeter", () => {
     expect(container.querySelector("[data-score=pending]")).not.toBeNull();
   });
 
-  it("a rank above 100 shows its real number, fills every cell and marks the overflow (C3)", () => {
+  it("a rank above 100 shows its real number, fills every cell and marks the overflow", () => {
     const { container } = renderViz(<ScoreMeter value={106} pushLine={70} match={91} bonus={15} max={115} />);
     const meter = screen.getByRole("meter");
     expect(meter).toHaveAttribute("aria-valuenow", "106");

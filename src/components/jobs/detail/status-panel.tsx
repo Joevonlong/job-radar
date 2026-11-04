@@ -190,7 +190,7 @@ interface StatusPanelProps {
 export function StatusPanel({ jobId, status, notes, history, firstSeen }: StatusPanelProps) {
   const t = useTranslations("dashboard.detail.status");
   const tStatus = useTranslations("dashboard.status");
-  // newest first, like the terminal log of the design: status changes in amber, the first sighting dim
+  // newest first, like a terminal log: status changes in amber, the first sighting dim
   const lines: TermLine[] = [
     ...history.map((entry): TermLine => ({ prefix: entry.when, tone: "amber", text: `${entry.from ? `${tStatus(entry.from)} → ` : "→ "}${tStatus(entry.to)}${entry.note ? ` · ${entry.note}` : ""}` })),
     ...(firstSeen ? [{ prefix: firstSeen, tone: "dim", text: t("firstSeen") } satisfies TermLine] : []),

@@ -39,8 +39,8 @@
 //     resolve hook passes on through nextResolve, and the load hook only what tsx's load hook passes on through
 //     nextLoad. A resolution tsx completes on its own reaches neither (the tests record that every module the worker
 //     loads is inside the release);
-//   - require.resolve() does not go through the hooks: esbuild's binary is checked explicitly above; for other packages
-//     the audit recorded with the change that introduced this guard applies;
+//   - require.resolve() does not go through the hooks: esbuild's binary is checked explicitly above; other packages
+//     are not checked here;
 //   - worker_threads: hooks are per thread. The worker's own code starts no thread, but tsx calls esbuild's
 //     transformSync, which starts a worker thread with `execArgv: []`, so this guard is not loaded there. That thread
 //     only runs esbuild's JavaScript API, which talks to the binary checked in 4. (found by the same resolution, with

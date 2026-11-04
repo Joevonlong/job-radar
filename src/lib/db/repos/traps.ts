@@ -1,6 +1,6 @@
 import type { ScoreTx } from "./current-scores";
 import { inScoreLockOrder } from "./score-lock-order";
-/** Reads and writes of the AI trap tables (`job_traps`, `trap_scans`). C9: every query of the feature lives here. */
+/** Reads and writes of the AI trap tables (`job_traps`, `trap_scans`). Every query of the feature lives here. */
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import type { Executor } from "../executor";
@@ -101,7 +101,7 @@ export interface TrapScanInput {
   sources: Array<{ rawPostingId: number; channelId: string; payload: unknown }>;
 }
 
-/** The JD and every source payload of the given jobs (what the rule scan reads; C1: the payloads are only read). */
+/** The JD and every source payload of the given jobs (what the rule scan reads; the payloads are only read). */
 export async function loadTrapScanInputs(db: Executor, jobIds: readonly number[]): Promise<TrapScanInput[]> {
   if (jobIds.length === 0) return [];
   const jobRows = await db.select({ id: jobs.id, description: jobs.description }).from(jobs).where(inArray(jobs.id, [...jobIds]));

@@ -20,7 +20,7 @@ export function fillOf(name: string): (typeof FILLS)[number] {
   return FILLS[hash % FILLS.length] ?? FILLS[0];
 }
 
-/** The company mark of a card (the design's `.logo`): a small rounded square with the initials. Decorative: the name is next to it. */
+/** The company mark of a card: a small rounded square with the initials. Decorative: the name is next to it. */
 export function CompanyMark({ name, className }: { name: string; className?: string }) {
   return (
     <span aria-hidden data-slot="company-mark" className={cn("border-bw border-ink text-on-signal rounded-tag font-display text-cap inline-grid size-7 shrink-0 place-items-center leading-none", fillOf(name), className)}>

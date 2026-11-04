@@ -157,6 +157,10 @@ it("provides indexes whose keys match run, notification, pending raw and per-job
       select case when g % 20 = 0 then 'fixture' else 'other' end, '2025-01-01'::timestamptz + g * interval '4 hours', (case when g % 4 = 0 then 'succeeded' else 'failed' end)::run_status
       from generate_series(1, 3000) g`);
     await tx.execute(sql`analyze runs`);
+    await tx.execute(sql`insert into control_requests (kind, payload, status)
+      select (case when g % 20 = 0 then 'translate_job' else 'breakdown_job' end)::control_request_kind, jsonb_build_object('jobId', '123'), 'done'
+      from generate_series(1, 3000) g`);
+    await tx.execute(sql`analyze control_requests`);
     await tx.execute(sql`set local enable_seqscan = off`);
     await tx.execute(sql`set local enable_bitmapscan = off`);
     await tx.execute(sql`set local enable_sort = off`);

@@ -12,7 +12,7 @@ import type { JobListItem } from "./types";
 /** An amount that is not a local high-pay signal (below the floor, or possibly another region's pay): muted. */
 export const isMutedT1 = (signal: JobListItem["signals"][number]): boolean => signal.belowFloor === true || signal.otherRegion === true;
 
-/** Contract kinds that deserve a badge of their own (`permanent` is the default, `unknown` never gets one, C3). */
+/** Contract kinds that deserve a badge of their own (`permanent` is the default, `unknown` never gets one). */
 const CONTRACT_BADGES = ["freelance", "student", "fixed_term"] as const;
 
 /**

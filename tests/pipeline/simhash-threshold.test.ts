@@ -46,7 +46,7 @@ describe("simhash_max_distance on borderline postings", () => {
 
   it("does not merge when a second location sentence is added (a known miss, traded for no false merges)", () => {
     // Same title in two cities with different location blurbs is a true duplicate at distance 4-5 in the real data;
-    // widening the threshold to catch it would also merge many different jobs (see the research note).
+    // widening the threshold to catch it would also merge many different jobs.
     expect(distance(jd("Berlin"), jd("Munich, Germany (hybrid, remote within the EU possible)"))).toBeGreaterThan(max);
   });
 

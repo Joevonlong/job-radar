@@ -35,7 +35,7 @@ export function ScoreMeter({ value, pushLine, size = "md", match, bonus, max = 1
   const t = useTranslations("viz");
   const cells = CELLS[size];
   const isKnown = known(value);
-  // C3: the number is the real value (never cut at 100); only the cells stop at full
+  // The number is the real value (never cut at 100); only the cells stop at full
   const shown = isKnown ? Math.max(0, value) : null;
   const perCell = 100 / cells;
   const lit = shown === null ? 0 : Math.round(clamp(shown, 0, 100) / perCell);

@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-// Design system v3 (docs/design/tokens.md): text is always an ink shade; signal colours only fill blocks that carry
+// Design system v3: text is always an ink shade; signal colours only fill blocks that carry
 // their own 2px border and a label, with --on-signal text on top. Check the pairs that carry text in both themes.
 const css = fs.readFileSync(path.resolve(import.meta.dirname, "../../src/app/globals.css"), "utf8");
 

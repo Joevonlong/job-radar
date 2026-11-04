@@ -14,7 +14,7 @@ export interface KpiStripProps {
   blocks: readonly KpiBlock[];
   /** "Evening 17:38": which cycle the numbers are from. */
   cycleLabel: string;
-  /** The time part of `cycleLabel` ("17:38"): on a phone the block shows only this, like the design. */
+  /** The time part of `cycleLabel` ("17:38"): on a phone the block shows only this. */
   cycleTime?: string;
   /** Channels that took part in the cycle (the first block says "14 sources"). */
   sourceCount: number;

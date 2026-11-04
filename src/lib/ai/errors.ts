@@ -1,6 +1,6 @@
 import type { AiProviderId, AiTask, AiTokenUsage } from "./types";
 
-/** Environment variables that hold provider credentials. Their values are masked in every message (C4). */
+/** Environment variables that hold provider credentials. Their values are masked in every message. */
 export const SECRET_ENV_NAMES = [
   "CLAUDE_CODE_OAUTH_TOKEN",
   "ANTHROPIC_API_KEY",

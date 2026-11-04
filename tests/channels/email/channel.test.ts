@@ -295,7 +295,7 @@ describe("parse", () => {
         failed += 1;
       }
     }
-    // XING "Platform Engineer" has no company: that one card fails on its own (C3: no guessing)
+    // XING "Platform Engineer" has no company: that one card fails on its own (no guessing)
     expect(failed).toBe(1);
     expect(parsed).toBe(postings.length - 1);
   });

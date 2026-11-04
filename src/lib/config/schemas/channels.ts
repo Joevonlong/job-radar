@@ -29,7 +29,7 @@ const baseShape = {
   company_queries: z.boolean().default(true),
   /**
    * The markets (home countries, ISO 3166-1 alpha-2) the channel serves; missing = every market. Under another
-   * market the channel is left out of the cycle (not a failure, C2) and shown as "other market".
+   * market the channel is left out of the cycle (not a failure) and shown as "other market".
    */
   markets: z.array(z.string().regex(/^[A-Z]{2}$/, "must be an ISO 3166-1 alpha-2 code, upper case")).min(1).optional(),
   /** Paid budget per calendar month in USD. 0 = no paid usage allowed. */

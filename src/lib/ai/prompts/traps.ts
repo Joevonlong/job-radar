@@ -85,7 +85,7 @@ function neutralizeHidden(text: string): string {
   return neutralize(text).replace(/<\/?\s*hidden\b[^>]*>/gi, "[tag removed]");
 }
 
-/** The trap check prompt: title, company, the JD and the hidden texts the rules found. Nothing of the user's profile is sent (C5). */
+/** The trap check prompt: title, company, the JD and the hidden texts the rules found. Nothing of the user's profile is sent. */
 export function buildTrapsPrompt(input: TrapsPromptInput): AiPrompt {
   const jd = truncateJd(input.description, input.jdMaxChars, 0.7);
   const hidden =

@@ -37,7 +37,7 @@ function readPayload(payload: unknown): HandpickedStoredPayload {
 }
 
 function workplaceOf(remoteType: string): NormalizedPostingDraft["workplace"] {
-  // `onsite` is 78% of the index and looks like the site's default: it is no evidence of an on-site job (C3)
+  // `onsite` is 78% of the index and looks like the site's default: it is no evidence of an on-site job
   if (remoteType === "remote") return "remote";
   if (remoteType === "hybrid") return "hybrid";
   return "unknown";
@@ -46,7 +46,7 @@ function workplaceOf(remoteType: string): NormalizedPostingDraft["workplace"] {
 /**
  * A stored posting (`{ index, detail }` as delivered) -> the normalized draft. Contract, seniority and salary are not
  * stated (the salary range text is passed on for the pipeline to read). The description is the detail HTML as text without
- * e-mail addresses and phone numbers; the stored payload keeps them (C1). The apply and source link is the employer's own
+ * e-mail addresses and phone numbers; the stored payload keeps them. The apply and source link is the employer's own
  * posting URL: the site has no posting pages of its own.
  */
 export function parseHandpickedPayload(payload: unknown): NormalizedPostingDraft {

@@ -97,7 +97,7 @@ export function buildSearchRequest(site: JobspySite, query: SearchQuery, setting
   };
 }
 
-// ---------------------------------------------------------------- responses (C6)
+// ---------------------------------------------------------------- responses
 
 export const jobspyResponseSchema = z.object({
   site: z.enum(JOBSPY_SITES),
@@ -191,7 +191,7 @@ export async function searchJobspy(ctx: ChannelContext, settings: JobspySettings
 
 // ---------------------------------------------------------------- raw postings
 
-/** Keys never kept, even if a sidecar version returned them (C5: no e-mail addresses, no phone numbers). */
+/** Keys never kept, even if a sidecar version returned them (no e-mail addresses, no phone numbers). */
 function isPrivateKey(key: string): boolean {
   const lowered = key.toLowerCase();
   return lowered === "emails" || lowered === "email" || lowered.includes("phone");

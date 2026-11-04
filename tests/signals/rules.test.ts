@@ -101,7 +101,7 @@ describe("benefit tags", () => {
 describe("quotes and limits", () => {
   const jd = "## Benefits\n- Competitive salary package & benefits\n- Stock options for everyone. Free lunch every day.\n\nSalary: €80,000 - €120,000 gross a year";
 
-  it("quote the sentence of the hit, verbatim, with its offset (C7)", () => {
+  it("quote the sentence of the hit, verbatim, with its offset", () => {
     const found = candidatesOf(jd);
     expect(found.map((c) => c.tier)).toEqual(["T1", "T2", "T3"]);
     for (const c of found) {

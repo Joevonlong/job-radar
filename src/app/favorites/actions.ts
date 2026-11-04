@@ -10,7 +10,7 @@ import { triggerAutoResearch } from "@/lib/research/auto";
 
 /**
  * Server Actions for the star on a job. They set a value rather than flip one, so a double click or two tabs end in the
- * state the user saw last. The web app is single-user and bound to loopback (C5); input is still validated (C6).
+ * state the user saw last. The web app is single-user and bound to loopback; input is still validated.
  */
 
 const jobIdSchema = z.number().int().positive();

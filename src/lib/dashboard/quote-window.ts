@@ -1,7 +1,7 @@
 /**
  * Shortening of a long JD quote on the detail page: the collapsed view shows a window of at most `maxChars`
  * characters that keeps the term which makes the quote a signal (the amount, "equity", ...) in sight; the rest is
- * behind "expand". Pure; the quote itself is never changed (C7), only how much of it shows.
+ * behind "expand". Pure; the quote itself is never changed, only how much of it shows.
  */
 
 export interface QuoteWindow {

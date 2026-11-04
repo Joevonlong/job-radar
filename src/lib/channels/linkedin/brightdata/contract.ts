@@ -7,8 +7,7 @@ import { searchKind } from "../../query";
 import type { SearchQuery } from "../../types";
 
 /**
- * Bright Data Web Scraper API contract for "LinkedIn job listings - discover by keyword"
- * (ported from the legacy connector's contract; approval/policy gates removed).
+ * Bright Data Web Scraper API contract for "LinkedIn job listings - discover by keyword".
  * Flow: POST /datasets/v3/trigger -> GET /datasets/v3/progress/{id} -> GET /datasets/v3/snapshot/{id}.
  * Everything tunable (dataset id, price, polling, timeout, country, remote locations) lives in sources.yaml.
  */
@@ -20,7 +19,7 @@ export const BRIGHTDATA_API_KEY_ENV = "BRIGHT_DATA_API_KEY";
 /**
  * Fields requested from the provider (`custom_output_fields`): the minimum the pipeline needs. Names must exist in the
  * dataset schema (`GET /datasets/{dataset_id}/metadata`); the API answers 500 for an unknown one. The dataset has no
- * workplace-type field (the legacy contract listed one that no longer exists) and `job_poster` is private data we never ask for.
+ * workplace-type field and `job_poster` is private data we never ask for.
  * `job_summary` is the description as one run of plain text (no line breaks, ends with "Show more Show less");
  * `job_description_formatted` is the same text as HTML with its paragraphs and lists, which the parser prefers.
  */
@@ -164,12 +163,12 @@ export function snapshotUrl(snapshotId: string, origin = BRIGHTDATA_API_ORIGIN):
 export const snapshotIdSchema = z.string().regex(/^[a-z]{1,3}_[a-z0-9]{8,80}$/i);
 export const triggerResponseSchema = z.object({ snapshot_id: snapshotIdSchema });
 
-/** `starting | running | ready | failed | canceled`; legacy also saw `collecting` and `digesting`: unknown values keep polling. */
+/** `starting | running | ready | failed | canceled`; `collecting` and `digesting` have also been seen: unknown values keep polling. */
 export const progressResponseSchema = z.object({ status: z.string().min(1) });
 
 const optionalText = z.string().nullish();
 
-/** One job record as delivered. Unknown fields are kept (the raw payload is stored verbatim, C1). */
+/** One job record as delivered. Unknown fields are kept (the raw payload is stored verbatim). */
 export const jobRecordSchema = z.looseObject({
   url: z.string().min(1),
   job_posting_id: z.union([z.string(), z.number()]).transform(String),

@@ -13,7 +13,7 @@ import { postedWithinSeconds } from "../date-window";
  * `POST /v2/acts/{actor}/run-sync-get-dataset-items` answers 201 with the dataset items (the actor must finish within
  * Apify's 300 s limit, else 408). The actor, its input template, the prices and the limits all live in sources.yaml
  * (`linkedin.apify`): switching actors is a config change. The default actor is documented in
- * `research/linkedin-apify-actors-2026-10.md`.
+ * `docs/apify.md`.
  */
 
 /** Environment variable holding the Apify API token (read at collect time, never logged). */
@@ -200,7 +200,7 @@ const idValue = z.union([z.string(), z.number()]).transform((v) => String(v).tri
 
 /**
  * One job record of the default actor (`valig/linkedin-jobs-scraper`, documented output). Unknown fields are kept
- * (the raw payload is stored verbatim, C1). Only title and company are mandatory; the job id comes from `id` or,
+ * (the raw payload is stored verbatim). Only title and company are mandatory; the job id comes from `id` or,
  * failing that, from the URL.
  */
 export const jobItemSchema = z.looseObject({

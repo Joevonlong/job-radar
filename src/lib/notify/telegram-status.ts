@@ -1,6 +1,6 @@
 /**
  * What the web shows about Telegram (Settings -> Notifications and the setup wizard): whether the bot token and the chat
- * id are set (names and booleans only, never a value, C4), whether the push is on, and the last test message. The values
+ * id are set (names and booleans only, never a value), whether the push is on, and the last test message. The values
  * are configured on the host with `pnpm run setup --step telegram`; the web never reads them out nor writes `.env`.
  * Server only.
  */

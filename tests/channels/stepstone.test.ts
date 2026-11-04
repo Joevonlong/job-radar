@@ -845,7 +845,7 @@ describe("parse", () => {
     expect(draft.contractHint).toBeNull();
   });
 
-  it("never turns StepStone's own salary estimate into the posting's salary (C3)", async () => {
+  it("never turns StepStone's own salary estimate into the posting's salary", async () => {
     const { payload } = await payloadOf("90000001");
     const withPage = (salary: NonNullable<NonNullable<StepstonePayload["detail"]>["jobAd"]>["salary"]): StepstonePayload => ({
       ...payload,

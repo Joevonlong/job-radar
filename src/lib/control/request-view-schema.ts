@@ -4,7 +4,7 @@ import { syncResultSchema } from "@/lib/ai/model-sync/types";
 
 /**
  * One control request as the trigger buttons poll it from `/api/control/requests/<id>`: a boundary, so the
- * browser parses it with zod too (C6). Dates are ISO strings. `result` keeps only the machine-readable parts the page
+ * browser parses it with zod too. Dates are ISO strings. `result` keeps only the machine-readable parts the page
  * shows (counts, codes, model names); free text never reaches it.
  */
 const iso = z.iso.datetime();

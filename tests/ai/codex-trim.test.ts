@@ -44,7 +44,7 @@ const make = (config: typeof base, run: ProcessRunner, extra: Partial<Parameters
 
 const valuesAfter = (args: readonly string[], flag: string): string[] => args.flatMap((a, i) => (args[i - 1] === flag ? [a] : []));
 
-describe("codex-cli G0 context trimming", () => {
+describe("codex-cli context trimming", () => {
   it("trim on: instructions file holds the system prompt, stdin only the user prompt, features and overrides go through -c", async () => {
     const { run, calls } = recorder();
     await make({ ...base, trim_context: true, model: "gpt-x" }, run).run("score", prompt, schema);
@@ -121,7 +121,7 @@ describe("codex-cli G0 context trimming", () => {
   });
 });
 
-describe("codex-cli G7 auth retry", () => {
+describe("codex-cli auth retry", () => {
   it("waits and retries once after an auth failure, then succeeds", async () => {
     const { run, calls } = recorder([authFailure, success]);
     const sleeps: number[] = [];
@@ -150,7 +150,7 @@ describe("codex-cli G7 auth retry", () => {
   });
 });
 
-describe("codex-cli G7 concurrency", () => {
+describe("codex-cli concurrency", () => {
   function gated() {
     let active = 0;
     let peak = 0;
@@ -212,7 +212,7 @@ describe("codex-cli G7 concurrency", () => {
   });
 });
 
-describe("codex version check (G6)", () => {
+describe("codex version check", () => {
   it("parses codex-cli X.Y.Z", () => {
     expect(parseCodexVersion("codex-cli 0.160.1\n")).toBe("0.160.1");
     expect(parseCodexVersion("codex-cli 0.161.0-alpha.2")).toBe("0.161.0-alpha.2");

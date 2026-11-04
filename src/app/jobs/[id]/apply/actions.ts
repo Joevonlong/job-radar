@@ -37,7 +37,7 @@ import { countStatuses, joinSentences } from "@/lib/writer/verify";
 
 /**
  * Server Actions of the application writer's workbench. The web app calls no AI provider: "write" leaves a `writer_job`
- * request for the ai-worker and the page polls `writerStatusAction`. Every input is validated (C6) and every write names
+ * request for the ai-worker and the page polls `writerStatusAction`. Every input is validated and every write names
  * its job, so an id alone never reaches another job's questions.
  */
 

@@ -6,7 +6,7 @@ export function isSeniority(value: string | undefined | null): value is Seniorit
 
 /**
  * Seniority as the title (or a channel's hint) words it. A level is never derived from required
- * years of experience: that would be a guess (C3).
+ * years of experience: that would be a guess.
  */
 export function inferSeniority(title: string): Seniority {
   if (/\bintern(ship)?\b|\bpraktik(?:ant|antin|um)\b|\bstagiaire\b|\bwerkstudent/i.test(title)) return "intern";

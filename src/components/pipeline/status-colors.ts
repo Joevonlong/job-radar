@@ -2,7 +2,7 @@ import type { VizTone } from "@/components/viz";
 import type { BoardColumn } from "@/lib/dashboard/board";
 
 /**
- * Column colours = application status colours (docs/design/design-system.html "申请状态"). Tokens only:
+ * Column colours = application status colours. Tokens only:
  * `dot` is a Tailwind background utility for the square in the column head, `tone` the matching data-viz tone.
  */
 export const COLUMN_COLOR: Record<BoardColumn, { dot: string; tone: VizTone }> = {

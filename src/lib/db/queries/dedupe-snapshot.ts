@@ -108,7 +108,7 @@ export function exportSnapshotLines(run: RunQuery, stamp: { exportedAt: string; 
 
 const lineSchema = z.discriminatedUnion("kind", [snapshotMetaSchema, snapshotRawSchema, snapshotSourceSchema, snapshotJobSchema]);
 
-/** Read a snapshot file's text (C6: it is checked like any other input). */
+/** Read a snapshot file's text (it is checked like any other input). */
 export function parseSnapshot(text: string): DedupeSnapshot {
   const snapshot: Omit<DedupeSnapshot, "meta"> & { meta: SnapshotMeta | null } = { meta: null, raws: [], sources: [], jobs: [] };
   for (const line of rows(text)) {

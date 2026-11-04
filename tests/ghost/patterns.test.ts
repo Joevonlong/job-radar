@@ -429,7 +429,7 @@ describe("evergreen_wording against the fixture packs", () => {
     expect(found?.patternId ?? null).toBe(expected);
     // the prefilter only makes it faster: the same verdict without it
     expect(evergreenWording(sentence, unfiltered)?.patternId ?? null).toBe(expected);
-    // C7: the quote is the description at its offset
+    // The quote is the description at its offset
     if (found) expect(sentence.slice(found.offset, found.offset + found.quote.length)).toBe(found.quote);
   });
 

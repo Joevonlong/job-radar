@@ -417,7 +417,7 @@ export interface DescriptionSalary extends ParsedSalaryText {
  * within `context_window_chars` (or a range with its period named, or a rate with its own currency and
  * a period shorter than a year) and no benefit word nearer, and
  * figures that are plausible for the period. Benefit numbers ("Relocation support: up to €2,500", "€60/month phone allowance") never
- * pass; nothing is guessed (C3).
+ * pass; nothing is guessed.
  */
 export function findDescriptionSalary(description: string, config: PipelineConfig): DescriptionSalary | null {
   const parser = currencyParser(config);
@@ -477,7 +477,7 @@ function clauseAround(text: string, span: Span, config: PipelineConfig): string 
 /**
  * The salary of a posting: the channel's structured figures win, then its salary text, then an
  * amount of the description that is a salary by its surrounding words (see `findDescriptionSalary`).
- * No salary stated anywhere: null (C3).
+ * No salary stated anywhere: null.
  */
 export function normalizeSalary(draft: NormalizedPostingDraft, config: PipelineConfig): BuiltSalary | null {
   if (draft.salary) {

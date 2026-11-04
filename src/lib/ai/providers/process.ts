@@ -126,7 +126,7 @@ export function findExecutable(command: string, env: Record<string, string | und
 
 /**
  * The only environment a CLI child receives. Everything else (database URL, other providers' keys,
- * the parent's own Claude Code session variables) stays out of the child (C4).
+ * the parent's own Claude Code session variables) stays out of the child.
  */
 const CHILD_ENV_ALLOW = [
   "PATH",

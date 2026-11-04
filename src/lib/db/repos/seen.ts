@@ -1,4 +1,4 @@
-/** Reads and writes of `job_seen`, the jobs the user has looked at. C9: every query of the feature lives here. */
+/** Reads and writes of `job_seen`, the jobs the user has looked at. Every query of the feature lives here. */
 import { and, eq, sql, type SQL } from "drizzle-orm";
 
 import type { Executor } from "../executor";

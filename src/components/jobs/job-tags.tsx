@@ -9,11 +9,11 @@ import { VisaBadge } from "./visa-badge";
 import type { JobListItem, JobListSignal } from "./types";
 import { useLocalLanguageName } from "@/components/base-currency";
 
-/** Contract kinds that deserve a gate of their own (`permanent` is the default, `unknown` never gets one, C3). */
+/** Contract kinds that deserve a gate of their own (`permanent` is the default, `unknown` never gets one). */
 const CONTRACT_GATES = ["freelance", "student", "fixed_term"] as const;
 
 /**
- * Signal tags and gates of a row (docs/design "信号 / 门槛"): one `[code | name]` tag per keyword category, in category order (the
+ * Signal tags and gates of a row: one `[code | name]` tag per keyword category, in category order (the
  * amount category is the salary axis, it has no tag; tag categories are detail-page material), then the gates: the German requirement (red, "!"),
  * things to watch (dashed: agency, freelance, student, fixed-term), "closed?" (yellow) and "filtered" (ink, struck through).
  */

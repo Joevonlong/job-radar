@@ -30,7 +30,7 @@ export async function loadKnownDetails<D>(
 }
 
 /**
- * `detailOf` for payloads shaped `{ ..., detail }`: the stored `detail` exactly as it was stored (C1; parsing it with `schema`
+ * `detailOf` for payloads shaped `{ ..., detail }`: the stored `detail` exactly as it was stored (parsing it with `schema`
  * would drop keys the schema does not name), or null when the payload does not match `schema` or holds no detail.
  */
 export function storedDetailOf<D>(schema: z.ZodType): (payload: unknown) => D | null {

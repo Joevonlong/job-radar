@@ -1,7 +1,7 @@
 /**
  * `test_telegram`: the "send a Telegram test message" button of /settings, the web version of
  * `pnpm telegram:test`. Claimed by the runner, which has the bot credentials (it sends the alerts). Works while
- * `notify.yaml: telegram.enabled` is still false. Only an error code goes into the result, never the token (C4).
+ * `notify.yaml: telegram.enabled` is still false. Only an error code goes into the result, never the token.
  */
 import { loadConfig, type NotifyConfig } from "@/lib/config";
 import { createTelegramRuntime, type TelegramRuntime } from "@/lib/notify/runtime";

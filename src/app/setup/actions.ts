@@ -17,8 +17,8 @@ import { saveTelegramStep } from "@/lib/setup/steps/telegram";
 import { SETUP_STEP_IDS } from "@/lib/setup/steps";
 import type { SetupActionState, SetupStepResult } from "@/lib/setup/types";
 
-// Server Actions are public POST endpoints. Every input is validated again in the step services (zod, C6), and
-// the web server only listens on 127.0.0.1 / Tailscale (C5). Nothing returned here carries a secret value.
+// Server Actions are public POST endpoints. Every input is validated again in the step services (zod), and
+// the web server only listens on 127.0.0.1 / Tailscale. Nothing returned here carries a secret value.
 
 const savableStep = z.enum(SETUP_STEP_IDS).exclude(["review"]);
 

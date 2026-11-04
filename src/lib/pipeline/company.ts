@@ -5,7 +5,7 @@ import { foldDiacritics } from "./fold";
 import { compileRules, matchesAny } from "./rules";
 
 /**
- * Company-name key (ported from the legacy `normalizeCompanyKey`): ß as ss (like the title key), diacritics folded
+ * Company-name key: ß as ss (like the title key), diacritics folded
  * (`foldDiacritics`), lower case, letters (with the marks of their script) and digits of every script kept and everything
  * else a word break, trailing legal forms (GmbH, AG, SE, Inc.,
  * "GmbH & Co. KG" ...) dropped, words joined with hyphens. Parent / subsidiary / brand names are never merged heuristically:

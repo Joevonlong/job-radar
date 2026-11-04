@@ -1,7 +1,7 @@
 /**
  * `test_channel`: the "test" button of a channel on /sources. One small dry fetch in the runner: the first
  * query of the cycle plan (or the board sweep), at most `sources.yaml: test_channel.max_results` postings, parsed in
- * memory. Nothing is written: no run, raw posting, usage or circuit row (C1 does not apply: nothing is kept).
+ * memory. Nothing is written: no run, raw posting, usage or circuit row.
  */
 import { BudgetTracker, monthKey } from "@/lib/channels/budget";
 import { createChannelContext, httpSettingsFromConfig, NO_KNOWN_POSTINGS } from "@/lib/channels/context";

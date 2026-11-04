@@ -144,7 +144,7 @@ function expectNoSentinel(value: unknown): void {
   for (const sentinel of Object.values(SENTINEL)) expect(json).not.toContain(String(sentinel));
 }
 
-describe("the output field sets (a change here is a change of the data egress register)", () => {
+describe("the output field sets (a change here is a change of what docs/privacy.md lists)", () => {
   it("job card", () => {
     expect(Object.keys(jobCardDto.shape).sort()).toMatchInlineSnapshot(`
       [

@@ -16,7 +16,7 @@ export function isSalaryDerived(signal: { quoteSource?: string | undefined; valu
 /**
  * The amount signal of a job's normalized salary: the source's own field makes a
  * signal as well as a sentence of the JD. A salary from a channel field or the channel's salary text
- * is quoted with that text (`quoteSource: "structured"`, C7: the quote is the source's, not the JD's);
+ * is quoted with that text (`quoteSource: "structured"`: the quote is the source's, not the JD's);
  * a salary read from the description is quoted from the description. A salary that needs review, has no
  * currency or period, or is below the amount category's `amount.min_annual` makes none; without an amount
  * category there is none either. The bonus floor is applied later, like for every amount (`signalBonus`).

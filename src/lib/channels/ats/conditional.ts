@@ -1,7 +1,7 @@
 import { ChannelError, isAbortError } from "@/lib/channels/errors";
 import type { ChannelContext } from "@/lib/channels/types";
 
-/** Conditional board requests (ported from legacy `http-conditional.ts`): ETag / If-None-Match over `ctx.http`. */
+/** Conditional board requests: ETag / If-None-Match over `ctx.http`. */
 
 const USER_AGENT = "JobRadar/0.1 (personal job search)";
 

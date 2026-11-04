@@ -10,7 +10,7 @@ import { requestJdJump } from "./marks";
 export type CheckRowTone = "good" | "bad" | "warn" | "dim";
 
 export interface CheckRowQuote {
-  /** Verbatim JD text (C7). */
+  /** Verbatim JD text. */
   text: string;
   /** A short label before the quote ("refusal", "support"). */
   label?: string;

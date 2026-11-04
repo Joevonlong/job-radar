@@ -2,7 +2,7 @@
  * Interests editing. The only code behind `/interests` and "save view" on `/jobs` that writes
  * `config/interests.yaml`, and always through the shared config mutator (comments are preserved, the file is
  * replaced atomically). Server Actions in `app/interests/actions.ts` are thin wrappers around these
- * functions; everything arriving here is untrusted and validated with zod (C6).
+ * functions; everything arriving here is untrusted and validated with zod.
  *
  * Every change re-reads the file first and changes only its own part, so saving the vocabulary never
  * touches views or watched companies and the other way round. File and directory locks serialize all writers.

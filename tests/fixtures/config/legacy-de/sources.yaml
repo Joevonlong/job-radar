@@ -10,7 +10,7 @@
 # 网页上的修改（开关、公司增删改、导入）都写回这个文件，注释会保留；数据库表 source_registry 是它的镜像（runner 约 5 秒内同步）。
 # 不要在这里写密钥（放 .env）。jobspy.proxies 可能含账号密码：网页不显示，导出时打码，导入时不改。
 
-# 采集通道（docs/plan.md §4）。未实现或需要额外配置的通道默认关闭。
+# 采集通道。未实现或需要额外配置的通道默认关闭。
 # monthly_budget_usd：该通道每月可花的付费额度（美元），0 表示不允许产生付费用量；单个通道不能超过 paid_total_monthly_budget_usd。
 # throttle：每次请求之间随机等待 min~max 毫秒。 max_results：单次请求最多取多少条。
 
@@ -74,7 +74,7 @@ linkedin:
 
   apify:
     # 级联第 2 位。没有 .env 的 APIFY_TOKEN（或 actor_id 为空）时通道显示"未配置"，级联直接跳过它，不产生失败记录。
-    # actor 选型和价格依据见 research/linkedin-apify-actors-2026-10.md；换 actor 只需改 actor_id、价格和 input_template。
+    # 换 actor 只需改 actor_id、价格和 input_template。
     enabled: true
     monthly_budget_usd: 10
     throttle: { min_delay_ms: 1000, max_delay_ms: 3000 }
@@ -108,7 +108,7 @@ linkedin:
   session:
     # 级联第 3 位：用你自己的 LinkedIn 登录态（Playwright，只读）搜索岗位。需要先在宿主机运行 `pnpm auth:linkedin` 登录一次；
     # 没有登录态（.auth/linkedin.json）时 /sources 显示"未登录"，级联直接跳过它。遇到登录页或验证页（checkpoint / CAPTCHA）立即停止、熔断并发 Telegram，
-    # 绝不尝试自动通过。说明见 spec/guides/linkedin-session.md。
+    # 绝不尝试自动通过。
     enabled: false # 登录并确认 `pnpm cycle:run --channel linkedin-session --dry-run` 正常后再打开
     monthly_budget_usd: 0
     throttle: { min_delay_ms: 3000, max_delay_ms: 8000 } # 两次页面加载之间随机等待
@@ -159,7 +159,7 @@ jobspy:
   # 代理列表（轮换），默认空 = 直连。代理 URL 可能含账号密码：不要提交真实值
   proxies: []
 
-# 其他来源（docs/plan.md §4.2、§4.3）
+# 其他来源
 sources:
   arbeitsagentur:
     enabled: true
@@ -204,7 +204,7 @@ sources:
       # 标题含这些词的岗位一律丢弃（学生岗、实习）
       exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
   xing:
-    enabled: false # 默认关闭：XING 的 robots.txt 不允许抓 /jobs/search/（见 research/stepstone-xing-access-2026-10.md）
+    enabled: false # 默认关闭：XING 的 robots.txt 不允许抓 /jobs/search/
     monthly_budget_usd: 0
     throttle: { min_delay_ms: 3000, max_delay_ms: 8000 }
     max_results: 50
@@ -222,7 +222,7 @@ sources:
       include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
       exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
   jsearch:
-    enabled: false # M5：JSearch（Google for Jobs，RapidAPI）。需要 .env 的 JSEARCH_API_KEY（见 spec/guides/jsearch.md）；没有 key 时通道显示"未配置"，不发任何请求
+    enabled: false # JSearch（Google for Jobs，RapidAPI）。需要 .env 的 JSEARCH_API_KEY；没有 key 时通道显示"未配置"，不发任何请求
     monthly_budget_usd: 0 # 只计超出 monthly_request_limit 之后的花费（overage_cost_per_request_usd × 请求数）
     throttle: { min_delay_ms: 500, max_delay_ms: 1500 }
     max_results: 50
@@ -307,7 +307,7 @@ sources:
       include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
       exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
   tavily:
-    enabled: true # 默认的 ATS board 发现通道；没有 TAVILY_API_KEY 时显示"未配置"，不会搜索（见 spec/guides/tavily.md）
+    enabled: true # 默认的 ATS board 发现通道；没有 TAVILY_API_KEY 时显示"未配置"，不会搜索
     monthly_budget_usd: 0 # 只计超出 monthly_credit_limit 之后的花费（credit_cost_usd × 额度）
     throttle: { min_delay_ms: 500, max_delay_ms: 1000 }
     max_results: 20 # 每次搜索取多少条（Tavily 上限 20）
@@ -334,7 +334,7 @@ sources:
     throttle: { min_delay_ms: 3000, max_delay_ms: 8000 }
     max_results: 50
   gmail:
-    enabled: false # M5：读取各平台的提醒邮件，需要应用专用密码（.env 的 GMAIL_USER / GMAIL_APP_PASSWORD，见 spec/guides/gmail-alerts.md）
+    enabled: false # 读取各平台的提醒邮件，需要应用专用密码（.env 的 GMAIL_USER / GMAIL_APP_PASSWORD）
     monthly_budget_usd: 0
     throttle: { min_delay_ms: 0, max_delay_ms: 0 }
     max_results: 200 # 单轮最多产出多少条岗位（所有邮件合计）
@@ -352,8 +352,8 @@ sources:
       indeed: [indeed.com]
       xing: [xing.com]
 
-# ATS 公司清单（docs/plan.md §4.2）。
-# 由旧项目 eu-ai-jobs-tracker/config/automatic-sources.json 转换而来（共 79 家 Greenhouse / Lever board）。
+# ATS 公司清单。
+# 最初共 79 家 Greenhouse / Lever board。
 # ats：greenhouse | lever | ashby | personio | smartrecruiters；token 是公开 API 里的 board 标识（smartrecruiters 的 token 区分大小写）。
 # region（可选，只对 lever 有效）：global（默认，api.lever.co）| eu（api.eu.lever.co，jobs.eu.lever.co 上的 board）。
 # name：显示名（列表和详情页里的公司名，按它归一后和其他来源的同名公司合并）；别写成 token 的小写形式。

@@ -5,7 +5,7 @@
 batch_size: 200
 
 dedupe:
-  # 同一公司的两条岗位，JD 正文的 64 位 SimHash 海明距离 ≤ 该值就归并（2026-10 用 621 条真实岗位复核，维持 3，依据见 dev-notes/research/simhash-threshold-2026-10.md；复核命令 pnpm simhash:analyze）
+  # 同一公司的两条岗位，JD 正文的 64 位 SimHash 海明距离 ≤ 该值就归并（2026-10 用 621 条真实岗位复核，维持 3；复核命令 pnpm simhash:analyze）
   simhash_max_distance: 3
   # 公司名不同但相关（一个名字是另一个的词前缀，或首词相同："SIV.AG" / "SIV.AG - Service für …"、"Allianz in Deutschland" / "Allianz Kunde und Markt GmbH"）、标题相同时，海明距离 ≤ 该值也归并（同一 JD 在不同渠道的样板文字不同，所以比同公司宽）
   cross_company_simhash_max_distance: 14
@@ -15,7 +15,7 @@ dedupe:
   simhash_min_words: 30
 
 lifecycle:
-  # 所有来源连续这么多天没有再返回 → possibly_closed（只统计这期间成功跑过的通道，见 C2）
+  # 所有来源连续这么多天没有再返回 → possibly_closed（只统计这期间成功跑过的通道）
   possibly_closed_after_days: 7
   # 每轮最多检查多少个 possibly_closed 岗位的原链接（404 / 410 → closed）
   max_link_checks_per_cycle: 20
@@ -229,7 +229,7 @@ description:
     bullet_glyphs: ["•", "●", "▪", "◦", "→", "➢", "✓", "✔", "►"]
 
 workplace:
-  # 办公方式（onsite / hybrid / remote）：来源没有给时才从文字里读，只读文字明说的，不推测（C3）。
+  # 办公方式（onsite / hybrid / remote）：来源没有给时才从文字里读，只读文字明说的，不推测。
   # head：标题、地点文字、合同提示，各自单独匹配（短，所以宽松）；head 里只出现一种方式就用它。
   # text：描述正文（严格：福利列表里的 "Remote Working Furniture"、"100% remote work option during pregnancy" 这类不算）。
   # 同一段文字里出现两种以上方式（"remote 或 hybrid"）就保持 unknown，不选边。
@@ -497,7 +497,7 @@ salary:
     day: 260
     hour: 2080
   # 非欧元币种折成 EUR 的汇率（1 单位外币 = 多少 EUR；参考汇率，2026-10 手动填写，变化大时再改）。
-  # 表里没有的币种保留原币种、不折算（不编造汇率，C3）。折算后的欧元年薪用于薪资底线、"最低年薪"筛选、统计页和 T1 门槛。
+  # 表里没有的币种保留原币种、不折算（不编造汇率）。折算后的欧元年薪用于薪资底线、"最低年薪"筛选、统计页和 T1 门槛。
   fx_to_eur:
     USD: 0.86
     GBP: 1.15

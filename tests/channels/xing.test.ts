@@ -620,7 +620,7 @@ describe("parse", () => {
     expect(draft.extra).toMatchObject({ xingId: "90100004", discipline: "IT und Softwareentwicklung", hasDescription: true });
   });
 
-  it("never turns XING's salary estimate into the posting's salary (C3) and uses the employer's apply URL", async () => {
+  it("never turns XING's salary estimate into the posting's salary and uses the employer's apply URL", async () => {
     const draft = parseXingPayload(await payloadOf("90100001"));
     expect(draft.salary).toBeNull();
     expect(draft.salaryText).toBeNull();

@@ -9,7 +9,7 @@ import { enqueueSuggestRequest } from "@/lib/interests/suggest-schedule";
 import type { SuggestionActionState, SuggestRunState } from "@/lib/interests/suggestion-types";
 
 // Server Actions are public POST endpoints: everything arriving here is validated again in the services (zod),
-// and the web server only listens on 127.0.0.1 / Tailscale (C5).
+// and the web server only listens on 127.0.0.1 / Tailscale.
 
 /** Pages that show the interests lists or the ranking. */
 function refresh(state: SuggestionActionState): SuggestionActionState {

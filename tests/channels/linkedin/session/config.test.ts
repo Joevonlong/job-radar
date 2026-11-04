@@ -17,7 +17,7 @@ describe("linkedin.session config", () => {
     expect(session.browser.headless).toBe(true);
   });
 
-  it("rejects unknown keys and bad values (strict, C6)", () => {
+  it("rejects unknown keys and bad values (strict)", () => {
     expect(() => channelsWith((raw) => ((raw.linkedin as Record<string, Record<string, unknown>>).session!.surprise = 1))).toThrow();
     expect(() => channelsWith((raw) => ((raw.linkedin as Record<string, Record<string, unknown>>).session!.daily_request_limit = 0))).toThrow();
     expect(() => channelsWith((raw) => (((raw.linkedin as Record<string, Record<string, Record<string, unknown>>>).session!.browser!.block_resources = ["video"])))).toThrow();

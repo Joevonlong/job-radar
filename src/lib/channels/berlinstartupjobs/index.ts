@@ -117,7 +117,7 @@ async function scan(
         continue;
       }
       seen.add(post.id);
-      // the site keeps a post up after its own end date: not collecting it is not closing it (C2)
+      // the site keeps a post up after its own end date: not collecting it is not closing it
       const until = unpublishDay(post._unpublish_on);
       if (settings.skip_expired && until !== null && until.getTime() < todayUtc) {
         stats.expired += 1;

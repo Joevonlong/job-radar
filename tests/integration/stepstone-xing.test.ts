@@ -101,7 +101,7 @@ describe("runCycle with the stepstone and xing channels", () => {
       ["xing", "succeeded", 2, 2],
     ]);
 
-    // C1: the raw posting keeps the board's own objects, including the page data
+    // The raw posting keeps the board's own objects, including the page data
     const stepstone = await listRawPostingsForChannel(getDb(), "stepstone");
     expect(stepstone.map((r) => r.externalId).sort()).toEqual(["90000001", "90000002", "90000003", "90000004", "90000008"]);
     const first = stepstone.find((r) => r.externalId === "90000001");
@@ -136,7 +136,7 @@ describe("runCycle with the stepstone and xing channels", () => {
     expect(calls.filter((c) => c.includes("/stellenangebote--"))).toHaveLength(5);
   });
 
-  it("records a blocked board as a failed run and does not touch the other one (C2)", async () => {
+  it("records a blocked board as a failed run and does not touch the other one", async () => {
     const calls: string[] = [];
     const real = boards(calls);
     const fetch: FetchLike = async (requestUrl, init) => (new URL(requestUrl).host === "www.stepstone.de" ? htmlResponse(403, fixtureHtml("stepstone", "blocked-403.html")) : real(requestUrl, init));

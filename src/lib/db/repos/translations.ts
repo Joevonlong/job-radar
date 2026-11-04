@@ -100,7 +100,7 @@ export async function getJobForTranslation(db: Executor, jobId: number): Promise
   return row ?? null;
 }
 
-/** The quotes of the job's signals (C7: verbatim JD text), for highlighting them in the translation. */
+/** The quotes of the job's signals (verbatim JD text), for highlighting them in the translation. */
 export async function listJobSignalQuotes(db: Executor, jobId: number): Promise<Array<{ tier: (typeof signals.$inferSelect)["tier"]; quote: string }>> {
   return db.select({ tier: signals.tier, quote: signals.quote }).from(signals).where(eq(signals.jobId, jobId)).orderBy(asc(signals.tier), asc(signals.id));
 }

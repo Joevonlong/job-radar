@@ -1,6 +1,6 @@
 /*
- * Job table / card layout of Today and /jobs. Ported from docs/design/design-system.html ".jobs", ".mc" and ".kpi";
- * colours, type sizes, radii, shadows and motion durations are the v3 tokens. Column widths are local geometry.
+ * Job table / card layout of Today and /jobs.
+ * Colours, type sizes, radii, shadows and motion durations are the v3 tokens. Column widths are local geometry.
  *
  * The list is a container: from `--jb-table-min` of its own width the rows are table rows (7 columns under a sticky head), below
  * that they are cards (score + salary side by side, then tags, skill overlap + freshness). The phone (<= 768px) is always cards.
@@ -182,7 +182,7 @@
 /* the short labels are for the phone row only */
 .kpi__ls { display: none; }
 
-/* phone (design s-phone): three compact blocks in one row (fetched, at-or-above the push line, salary stated: label + rolling number, no bar or trend),
+/* phone: three compact blocks in one row (fetched, at-or-above the push line, salary stated: label + rolling number, no bar or trend),
    so the first job is on the first screen. "passed" and "pushed" are on the tablet / desktop strip only. */
 @media (max-width: 47.99rem) {
   .kpis { grid-template-columns: 1.2fr 1fr 1fr; gap: var(--space-2); }

@@ -582,7 +582,7 @@ describe("a job seen again by the pipeline", () => {
   });
 });
 
-describe("failures stay isolated (C1, C2)", () => {
+describe("failures stay isolated", () => {
   const broken = (id: string): Channel => ({
     id,
     family: "manual",
@@ -624,7 +624,7 @@ describe("failures stay isolated (C1, C2)", () => {
     expect(byExternal["bad-draft"]).toContain("title");
     expect(byExternal.boom).toBe("parse failed: TypeError: unexpected shape");
     expect(byExternal["g-1"]).toContain('unknown channel "ghost"');
-    // the payload is kept (C1)
+    // the payload is kept
     expect(failed.find((r) => r.externalId === "bad-shape")?.payloadJson).toEqual({ nothing: true });
 
     // a second cycle does not retry them while the payload is unchanged
@@ -673,7 +673,7 @@ describe("failures stay isolated (C1, C2)", () => {
 describe("reprocessing stored postings with improved rules", () => {
   const description = `${Array.from({ length: 10 }, (_, i) => `Sentence ${i + 1} describes the work of the team in some detail.`).join(" ")} Hybrid work model: 3 days in the office. Preferred Qualifications Fluent in German and English. Show more Show less`;
 
-  it("puts parsed postings back to pending and updates the jobs in place with the current rules, keeping the payload (C1)", async () => {
+  it("puts parsed postings back to pending and updates the jobs in place with the current rules, keeping the payload", async () => {
     const registry = new ChannelRegistry();
     const fixture = createFixtureChannel({ id: "fx-a", family: "ats", usesQueries: false, postings: [posting("1", { description })] });
     registry.register(fixture, { settings: { enabled: true, maxResults: 10, monthlyBudgetUsd: 0, companyQueries: true, freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: {} } });
@@ -781,7 +781,7 @@ describe("job lifecycle (fake clock)", () => {
     expect(Object.values(await statuses())).toEqual(["possibly_closed", "possibly_closed", "possibly_closed"]);
   });
 
-  it("never closes jobs of a channel that did not complete a run after the deadline (C2)", async () => {
+  it("never closes jobs of a channel that did not complete a run after the deadline", async () => {
     const { at } = await seeded();
     // ATS and LinkedIn ran fine, StepStone only failed: the job StepStone also carries stays active
     await insertRun("fx-ats", at(7.1));

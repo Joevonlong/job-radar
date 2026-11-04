@@ -9,8 +9,7 @@ import { htmlFragments, issuePaths, readEnvelopePosting, unwrapPayload } from ".
 import { htmlToText } from "./text";
 
 /**
- * Lever Postings API (`GET /v0/postings/{token}?mode=json`, global host or the EU host). Ported
- * from the legacy adapter: same field mapping, minus the policy snapshot; real responses also carry
+ * Lever Postings API (`GET /v0/postings/{token}?mode=json`, global host or the EU host). Real responses also carry
  * `lists` and `additional`, which hold requirements and often the salary, so they join the description.
  */
 
@@ -80,7 +79,7 @@ function workplaceOf(value: string | null | undefined): NormalizedPostingDraft["
   }
 }
 
-/** `per-year-salary`, `per-month-salary`, `per-hour-wage` … (legacy fixtures used `year`). `one-time` and unknown values give null. */
+/** `per-year-salary`, `per-month-salary`, `per-hour-wage` … (plain `year` counts too). `one-time` and unknown values give null. */
 function periodOf(interval: string | null | undefined): "year" | "month" | "week" | "day" | "hour" | null {
   const text = interval?.toLowerCase() ?? "";
   for (const period of ["year", "month", "week", "day", "hour"] as const) {

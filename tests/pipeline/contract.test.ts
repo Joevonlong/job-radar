@@ -76,7 +76,7 @@ describe("contract type", () => {
     expect(contract("AI Engineer", { description: "unbefristet" })).toBe("permanent");
   });
 
-  it("is unknown when nothing is said (C3), and full-time is not a contract type", () => {
+  it("is unknown when nothing is said, and full-time is not a contract type", () => {
     expect(contract("AI Engineer", { hint: "Vollzeit" })).toBe("unknown");
   });
 

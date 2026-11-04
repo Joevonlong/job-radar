@@ -7,7 +7,7 @@ import { languagePenalty } from "./german";
 /**
  * The cheap relevance pre-score: decides which waiting postings the AI scores first. Pure
  * rules over fields the pipeline already extracted (title, locations, seniority, signals, age): no AI,
- * no description parsing. Weights and tables come from ai.yaml `scoring.priority` (C8). Only the
+ * no description parsing. Weights and tables come from ai.yaml `scoring.priority`. Only the
  * order matters; the number is never shown as a score and never stored.
  */
 

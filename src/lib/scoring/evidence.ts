@@ -1,6 +1,6 @@
 /**
  * Reason sources: where each fit reason and gap of a score comes from. The model marks a reason `jd` (with a verbatim quote),
- * `inferred` or, for a gap, `unstated`; this module checks every `jd` quote against the stored JD (C7) and keeps it only when the
+ * `inferred` or, for a gap, `unstated`; this module checks every `jd` quote against the stored JD and keeps it only when the
  * JD really contains it outside an AI trap. A quote that is not found makes the reason `inferred`; the reason itself stays.
  * Pure functions: the scoring task loads the JD and the trap spans, the repository stores the result.
  */

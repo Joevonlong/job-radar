@@ -180,7 +180,7 @@ describe("writeConfigText", () => {
   });
 });
 
-describe("proxy credentials (C4)", () => {
+describe("proxy credentials", () => {
   const withProxies = (): string => {
     const text = userText("sources.yaml");
     return text.replace("proxies: []", 'proxies:\n    - "http://alice:s3cret@proxy.example:8080"\n    - http://proxy2.example:3128');

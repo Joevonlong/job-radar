@@ -36,10 +36,10 @@ function readJob(payload: unknown): StoredArbeitnowJob {
 }
 
 /**
- * A stored posting (the API object as delivered) -> the normalized draft. Facts the API does not state stay unknown (C3):
+ * A stored posting (the API object as delivered) -> the normalized draft. Facts the API does not state stay unknown:
  * `remote: false` only means "not marked remote", `job_types` is free text passed on as a hint, no seniority, no salary (the
  * pipeline reads it from the text). The description is the HTML as text, without e-mail addresses and phone numbers; the
- * stored payload keeps them (C1).
+ * stored payload keeps them.
  */
 export function parseArbeitnowPayload(payload: unknown): NormalizedPostingDraft {
   const job = readJob(payload);

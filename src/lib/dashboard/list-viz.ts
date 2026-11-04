@@ -5,7 +5,7 @@ import { loadBaseCurrency, loadSalaryFloor } from "@/lib/signals/floor";
 
 import { loadDealBreakerLabels } from "./deal-breakers";
 
-/** Scales and lines of the list graphics and the names of the deal-breakers, read from `ui.yaml` / `notify.yaml` / `preferences.yaml` on every request (C8: no thresholds in code). */
+/** Scales and lines of the list graphics and the names of the deal-breakers, read from `ui.yaml` / `notify.yaml` / `preferences.yaml` on every request (no thresholds in code). */
 export function loadListViz(now: Date, timezone: string): JobListViz {
   const ui = loadConfig("ui");
   return {

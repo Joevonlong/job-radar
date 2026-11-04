@@ -1,7 +1,7 @@
 /**
  * The breakdown card's view model: a pure function from the stored row, the JD, the signal quotes and the profile
  * to something a client component can render (serializable). Grouping, ordering, quote jump indexes, the staleness marks
- * and the "have / missing" comparison (C5: done here, locally, never by the AI) all happen here.
+ * and the "have / missing" comparison (done here, locally, never by the AI) all happen here.
  */
 import { BREAKDOWN_PROMPT_VERSION } from "@/lib/ai/prompts/breakdown";
 import { quotesFoundInJd } from "@/lib/dashboard/jd";

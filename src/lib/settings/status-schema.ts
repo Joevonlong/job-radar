@@ -6,7 +6,7 @@ import { ACK_NAMES } from "./tabs";
 
 /**
  * What `/api/control/status` returns and the settings page polls (a boundary, so it is parsed with
- * zod on the client too, C6). Dates are ISO strings.
+ * zod on the client too). Dates are ISO strings.
  */
 const iso = z.iso.datetime();
 

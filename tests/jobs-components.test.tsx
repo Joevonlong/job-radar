@@ -150,7 +150,7 @@ const item = (over: Partial<JobListItem> = {}): JobListItem => ({
 });
 
 describe("JobBadges", () => {
-  it("shows the dashed unknown badge when no salary is stated, never a salary (C3)", () => {
+  it("shows the dashed unknown badge when no salary is stated, never a salary", () => {
     render(wrap(<JobBadges job={item()} />));
     expect(screen.getByText(/Salary not disclosed/)).toBeInTheDocument();
   });

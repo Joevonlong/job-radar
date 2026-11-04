@@ -3,7 +3,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { COMPACT_OPTIONS, formatUsdAmount, isCompact } from "@/lib/format/numbers";
 import { cn } from "@/lib/utils";
 
-/** An unknown value: a dashed box that says so, never a 0 (C3). */
+/** An unknown value: a dashed box that says so, never a 0. */
 export function Unknown({ className }: { className?: string }) {
   const t = useTranslations("aiUsage");
   return (
@@ -16,7 +16,7 @@ export function Unknown({ className }: { className?: string }) {
 /**
  * `1,800 / 500`: the first number must be known (else the whole cell is unknown); a missing second one is a dash.
  * For a sum over several calls, `partUnknown` is how many of the `main` calls did not report the sub-count (old rows):
- * the known sum is shown with "N unknown" next to it, or just "unknown" when none reported it (C3: never a 0).
+ * the known sum is shown with "N unknown" next to it, or just "unknown" when none reported it (never a 0).
  */
 export function Tokens({ main, part, partUnknown = 0, partTotal = 0 }: { main: number | null; part: number | null; partUnknown?: number; partTotal?: number }) {
   const format = useFormatter();

@@ -11,7 +11,7 @@ import { getDb } from "@/lib/db";
 
 /**
  * Server Actions of the breakdown card. Like the translate button: the web app calls no AI provider; it
- * leaves a `breakdown_job` request for the ai-worker and the card polls `breakdownStatusAction`. Input is validated (C6).
+ * leaves a `breakdown_job` request for the ai-worker and the card polls `breakdownStatusAction`. Input is validated.
  */
 
 const jobIdSchema = z.number().int().positive();

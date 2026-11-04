@@ -14,7 +14,7 @@ import { pdfDisplayName, type PdfPathError } from "@/lib/resume/types";
 
 /**
  * Server Actions of the resume-kit hand-off: export the JD, attach / detach the tailored PDF.
- * The app is single-user and bound to loopback (C5); input is still validated (C6), and a PDF path is
+ * The app is single-user and bound to loopback; input is still validated, and a PDF path is
  * only accepted inside `config/resume.yaml: pdf_dir` (see `resolveAllowedPdf`).
  */
 

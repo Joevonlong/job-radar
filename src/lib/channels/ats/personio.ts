@@ -94,7 +94,7 @@ function locationLabels(position: PersonioPosition): string[] {
   return [...new Set(labels.filter((l) => l !== ""))];
 }
 
-/** Only a clear "remote" or "hybrid" label counts; "Remote / Hybrid" (both) and plain city names say nothing (C3). */
+/** Only a clear "remote" or "hybrid" label counts; "Remote / Hybrid" (both) and plain city names say nothing. */
 function workplaceOf(labels: readonly string[]): NormalizedPostingDraft["workplace"] {
   const joined = labels.join(" ");
   const remote = /remote/i.test(joined);

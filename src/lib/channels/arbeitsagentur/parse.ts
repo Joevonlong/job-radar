@@ -25,7 +25,7 @@ const COUNTRY_CODES: Readonly<Record<string, string>> = {
   SPANIEN: "ES",
 };
 
-/** Salary kinds the API names → period. Other kinds keep the text only (C3: no guessing). */
+/** Salary kinds the API names → period. Other kinds keep the text only (no guessing). */
 const SALARY_PERIODS: Readonly<Record<string, "year" | "month" | "week" | "day" | "hour">> = {
   JAHRESGEHALT: "year",
   MONATSGEHALT: "month",
@@ -142,7 +142,7 @@ function omitUndefined(record: Record<string, unknown>): Record<string, unknown>
   return Object.fromEntries(Object.entries(record).filter(([, v]) => v !== undefined));
 }
 
-/** Convert a stored `{ list, detail }` payload into the normalized draft (C3: unstated facts stay unknown). */
+/** Convert a stored `{ list, detail }` payload into the normalized draft (unstated facts stay unknown). */
 export function parseArbeitsagenturPayload(payload: unknown): NormalizedPostingDraft {
   const parsed = payloadSchema.safeParse(payload);
   if (!parsed.success) {

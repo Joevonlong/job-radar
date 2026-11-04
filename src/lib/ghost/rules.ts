@@ -1,6 +1,6 @@
 /**
  * The ghost job patterns of the market packs and the limits of pipeline.yaml `job_checks.ghost`, compiled once per configuration
- * (C8: every word is in the packs, every number in pipeline.yaml).
+ * (every word is in the packs, every number in pipeline.yaml).
  */
 import type { GhostCheckConfig, PipelineConfig } from "@/lib/config/schemas/pipeline";
 import type { GhostLeadInQuestion, GhostNegationAfter, GhostPack } from "@/lib/market/schema";

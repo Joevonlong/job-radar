@@ -12,7 +12,7 @@ export interface RuleCandidate {
   /** Category id. */
   tier: SignalCategoryId;
   kind: string;
-  /** Verbatim sentence of the JD that holds the hit (C7). */
+  /** Verbatim sentence of the JD that holds the hit. */
   quote: string;
   quoteOffset: number;
   /** Where the hit itself is. */

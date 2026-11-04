@@ -6,7 +6,7 @@ import { z } from "zod";
  * size is not reliable (`meta.per_page` disagrees with what arrives), pages are cached separately and are not sorted inside,
  * so the channel reads `data` item by item and only trusts `links.next` as "there is another page".
  *
- * Only the posting fields the channel reads are declared; the object is stored as delivered (C1).
+ * Only the posting fields the channel reads are declared; the object is stored as delivered.
  */
 
 const stringList = z.array(z.string()).optional().default([]);

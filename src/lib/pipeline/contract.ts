@@ -15,7 +15,7 @@ export interface ContractInput {
  * Contract type from the posting's own words (patterns in pipeline.yaml). Order: student >
  * temp_agency (unless the posting says it is a direct hire) > freelance > fixed_term > permanent. Student and freelance only look at the title
  * and the channel's hint (a description mentioning "Praktikum" or "contractor" says little about
- * the job itself); the others also read the description. Nothing found: `unknown` (C3).
+ * the job itself); the others also read the description. Nothing found: `unknown`.
  */
 export function detectContract(input: ContractInput, config: PipelineConfig): Contract {
   const rules = compileRules(config).contract;

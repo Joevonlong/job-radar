@@ -1,5 +1,5 @@
 /**
- * The answers file of `pnpm run setup --answers <file.yaml>` (unattended setup). Validated with zod (C6), then
+ * The answers file of `pnpm run setup --answers <file.yaml>` (unattended setup). Validated with zod, then
  * converted into the inputs the wizard's step services take, so the command line and the web write the same files.
  * Every section is optional: a missing section is recorded as skipped. Omitted fields keep what the files say now.
  */

@@ -6,7 +6,7 @@ import { clamp, cssVars, cx, known, toneVar, type VizTone } from "./util";
 
 export type RingSize = "s" | "m" | "l";
 
-/** Outer size in px of the three ring sizes (docs/design: S 48 · M 84 · L 110). */
+/** Outer size in px of the three ring sizes. */
 const SIZE_PX: Record<RingSize, number> = { s: 48, m: 84, l: 110 };
 const RADIUS = 30;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
@@ -14,7 +14,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const INNER_SPACE = 0.52;
 /** Width of one character of the centre label in em (Archivo Black digits and the percent sign are wide). */
 const GLYPH_EM = 0.85;
-/** The centre label is at most this share of the ring size tall (docs/design: 22%). */
+/** The centre label is at most this share of the ring size tall. */
 const LABEL_MAX = 0.22;
 
 export interface RingProps {
@@ -36,7 +36,7 @@ export function Ring({ value, size = "m", tone = "meter", caption, ariaLabel, cl
   const offset = CIRCUMFERENCE * (1 - (shown ?? 0) / 100);
   const name = ariaLabel ?? formatPercent(value);
   const centre = formatPercent(value);
-  // the label shrinks with its length so "100%" and "8.9%" stay inside the inner hairline (the design's "24%" keeps 22%)
+  // the label shrinks with its length so "100%" and "8.9%" stay inside the inner hairline ("24%" keeps 22%)
   const labelScale = Math.min(LABEL_MAX, INNER_SPACE / (Math.max(centre.length, 1) * GLYPH_EM));
   return (
     <PlayOnView className={cx("jr-ring-wrap", className)}>

@@ -33,7 +33,7 @@ function useNumbers() {
     int: (value: number) => formatInteger(value, locale),
     /** `ratio` is 0 to 1. */
     percent: (ratio: number) => formatPercent(ratio * 100),
-    /** `62/135 · 46%` (tokens.md number formats), never "62 of 135". */
+    /** `62/135 · 46%`, never "62 of 135". */
     fraction: (part: number, whole: number) => formatFraction(part, whole, locale),
     decimal: (value: number) => format.number(value, { maximumFractionDigits: 1 }),
     format,

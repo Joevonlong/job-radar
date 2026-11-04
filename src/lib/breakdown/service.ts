@@ -29,7 +29,7 @@ export interface BreakdownRunOptions {
 
 /**
  * Break one job down. AI errors (`AiUnavailableError`, `AiProviderError`) are thrown as they are; the caller classifies them.
- * Only the title, the company and the JD go to the AI (C5); every item is checked against the JD (C7) before it is saved.
+ * Only the title, the company and the JD go to the AI; every item is checked against the JD before it is saved.
  */
 export function runBreakdown(db: Db, router: AiRouter, jobId: number, opts: BreakdownRunOptions): Promise<BreakdownRunOutcome> {
   const outputLanguage = opts.outputLanguage ?? aiOutputLanguage();

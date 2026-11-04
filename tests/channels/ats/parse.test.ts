@@ -44,7 +44,7 @@ describe("greenhouse parse", () => {
     ]);
   });
 
-  it("derives remote / hybrid from the location text, otherwise leaves it unknown (C3)", () => {
+  it("derives remote / hybrid from the location text, otherwise leaves it unknown", () => {
     expect(gh(1).workplace).toBe("remote");
     expect(gh(1).extra).toMatchObject({ remoteScope: "Remote - Germany" });
     expect(gh(2).workplace).toBe("hybrid");

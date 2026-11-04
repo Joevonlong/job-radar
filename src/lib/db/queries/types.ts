@@ -33,7 +33,7 @@ export interface JobSignal {
   tier: SignalTier;
   kind: string;
   value: unknown;
-  /** C7: verbatim JD quote, or the source field's own text when `quoteSource` is `structured`. */
+  /** Verbatim JD quote, or the source field's own text when `quoteSource` is `structured`. */
   quote: string;
   quoteOffset: number | null;
   /** `structured`: the quote is a source's salary field, not JD text (the UI labels it as the source field). */
@@ -42,7 +42,7 @@ export interface JobSignal {
   extractor: "rule" | "ai";
 }
 
-/** The newest `scores` row of a job (M2 fills these; before that nothing is ranked). */
+/** The newest `scores` row of a job (the scoring step fills these; before that nothing is ranked). */
 export interface JobRank {
   rankValue: number | null;
   score: number | null;
@@ -77,7 +77,7 @@ export interface JobCard {
   lastListedAt: Date | null;
   relistedAt: Date | null;
   relistCount: number;
-  /** `salary_json` is present. When false the posting does not state a salary (C3). */
+  /** `salary_json` is present. When false the posting does not state a salary. */
   salaryDisclosed: boolean;
   /** The parsed salary; null when none is stated, or when the stored JSON is not readable. */
   salary: JobSalary | null;

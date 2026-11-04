@@ -1,7 +1,7 @@
 /**
  * What a stored interest suggestion looks like. `interest_suggestions.payload_json` is parsed with
  * these schemas wherever it is read (the page, the approval), so a row that does not fit is shown as unreadable
- * instead of crashing anything (C6). Pure: shared by the server code and the client components.
+ * instead of crashing anything. Pure: shared by the server code and the client components.
  */
 import { z } from "zod";
 

@@ -136,7 +136,7 @@ export function parseImportText(text: string, format: ImportFormat, maxBytes: nu
 
 const CREDENTIALS_IN_URL = /(\b[a-z][a-z0-9+.-]*:\/\/)[^\s@/"'`]+@/gi;
 
-/** Replace `user:password@` of every URL in a text with `***:***@` (the proxy list may carry credentials, C4). */
+/** Replace `user:password@` of every URL in a text with `***:***@` (the proxy list may carry credentials). */
 export function maskCredentialsInText(text: string): string {
   return text.replace(CREDENTIALS_IN_URL, "$1***:***@");
 }

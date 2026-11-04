@@ -1,7 +1,7 @@
 /**
  * Compatibility: with the five default categories (what interests.yaml v1 becomes), the rule fingerprint and the
  * AI prompt are exactly what the code before the signal categories produced, so an upgrade rescans nothing and sends nothing to the AI
- * again. The constants below were computed with the pre-category code (main 74d9500) from the v1 fixture.
+ * again. The constants below were computed with the pre-category code from the v1 fixture.
  */
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -18,7 +18,7 @@ import { rawCategories, rawCategory, shippedInterests, shippedPipeline } from ".
 
 /** `rulesFingerprint` of tests/fixtures/config/interests.v1.yaml + the pipeline fixture, computed by the code before the signal categories. */
 const V1_RULES_FINGERPRINT = "08524588cac609820854be1fd76175b8";
-/** sha256 of the system prompt the code before the signal categories sent (`SYSTEM` of src/lib/ai/prompts/signals.ts at 74d9500). */
+/** sha256 of the system prompt the code before the signal categories sent (`SYSTEM` of src/lib/ai/prompts/signals.ts back then). */
 const V1_SYSTEM_SHA256 = "0bf0500928ca77c43bf7f2cf748462aac0d51eca0fd78fee60a63d00e9390b08";
 
 const V1_FILE = path.resolve(import.meta.dirname, "../fixtures/config/interests.v1.yaml");

@@ -1,6 +1,6 @@
 /**
  * Before market packs Job Radar only supported Germany, so every file older than the packs migrates to the
- * German market. The values here are what that meant; they belong to the migrations only (C8 allow-list).
+ * German market. The values here are what that meant; they belong to the migrations only.
  */
 import type { Document } from "yaml";
 

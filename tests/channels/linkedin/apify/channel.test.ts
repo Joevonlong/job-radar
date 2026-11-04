@@ -127,7 +127,7 @@ describe("output", () => {
 
     expect(channelRows(postings)).toEqual(["4385163817", "4385163819", "4385163821", "4385100001"]);
     expect(postings.every((p) => rawPostingInputSchema.safeParse(p).success)).toBe(true);
-    expect(postings[0]?.payload).toEqual(FIXTURE_ITEMS[0]); // C1: exactly what the actor delivered
+    expect(postings[0]?.payload).toEqual(FIXTURE_ITEMS[0]); // exactly what the actor delivered
     expect(postings[0]?.url).toBe("https://www.linkedin.com/jobs/view/senior-ml-engineer-at-example-gmbh-4385163817");
     expect(postings[0]?.postedAt?.toISOString()).toBe("2026-10-07T00:00:00.000Z");
     expect(logs.find((l) => l.message === "apify records not stored")?.fields).toEqual({ outsideWindow: 0, noIdentity: 1 });

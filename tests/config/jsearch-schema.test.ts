@@ -20,7 +20,7 @@ function jsearchWith(edit: (block: Json) => void): Json {
 }
 
 describe("sources.yaml: sources.jsearch", () => {
-  it("ships valid, with every tunable in config (C8)", () => {
+  it("ships valid, with every tunable in config", () => {
     const parsed = configRegistry.channels.schema.parse(shippedYaml("sources.yaml"));
     expect(parsed.sources.jsearch).toMatchObject({
       enabled: false,

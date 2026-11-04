@@ -47,8 +47,8 @@ const MAX_CYCLES = 60;
 const MAX_TICKER_ITEMS = 50;
 
 /**
- * config/ui.yaml — scales and counts used by the data-visualisation components (
- * docs/design/tokens.md "数据可视化组件"). Nothing here changes what is collected or scored.
+ * config/ui.yaml — scales and counts used by the data-visualisation components.
+ * Nothing here changes what is collected or scored.
  */
 export const uiSchema = z
   .strictObject({

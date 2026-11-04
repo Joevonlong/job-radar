@@ -1,4 +1,4 @@
-/** Reads and writes of `salary_lookups` and the `salary_lookup` requests around them (C9). */
+/** Reads and writes of `salary_lookups` and the `salary_lookup` requests around them. */
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 
 import { rekeySalaryLookupKey, salaryLookupKey } from "@/lib/salary/lookup-key";

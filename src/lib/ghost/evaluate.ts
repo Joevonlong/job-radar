@@ -1,6 +1,6 @@
 /**
  * The ghost job verdict of one job: the points of its reasons summed up into a level (pipeline.yaml `job_checks.ghost.levels`). Pure:
- * the cycle's check stores the result, `pnpm ghost:check` previews it. Only a hint: nothing here touches a score (C3).
+ * the cycle's check stores the result, `pnpm ghost:check` previews it. Only a hint: nothing here touches a score.
  */
 import type { CompiledGhostRules } from "./rules";
 import { evergreenTitle, evergreenWording, longOpen, repostLabel, reposted, thinDescription, type EvergreenOptions } from "./signals";

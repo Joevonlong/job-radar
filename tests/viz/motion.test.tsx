@@ -141,7 +141,7 @@ describe("steps utility", () => {
     expect(stepStyle(5)).toEqual({ "--n": 5 });
     expect(stepStyle(2, { width: "10px" })).toEqual({ width: "10px", "--n": 2 });
   });
-  it("bars grow in 6-8 steps (tokens.md)", () => {
+  it("bars grow in 6-8 steps", () => {
     expect(STEPS.bar).toBeGreaterThanOrEqual(6);
     expect(STEPS.bar).toBeLessThanOrEqual(8);
     expect(STEPS.column).toBeGreaterThanOrEqual(6);

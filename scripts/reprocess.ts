@@ -9,7 +9,7 @@
  *
  * 1. reset: a full run first clears the work mode, German level, contract and agency flag of the jobs, so they are
  *    rebuilt from the postings and nothing the old rules got wrong survives; the raw postings (payloads
- *    stay untouched, C1) go back to `pending`,
+ *    stay untouched) go back to `pending`,
  * 2. `pipeline`: pending postings are processed again (jobs are updated in place),
  * 3. salaries: every job's raw postings are read again with the current salary parsing and the stored
  *    salary is corrected (the cycle's pipeline step does this once per parsing change; here it is forced),

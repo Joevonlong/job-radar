@@ -1,5 +1,5 @@
 /**
- * The visa patterns of the market packs, compiled once per configuration (C8: every word is in the packs, every limit in
+ * The visa patterns of the market packs, compiled once per configuration (every word is in the packs, every limit in
  * pipeline.yaml). Pure (no node modules): the deal-breaker filter, which the job pages' client code reaches, uses it too.
  */
 import type { PipelineConfig } from "@/lib/config/schemas/pipeline";

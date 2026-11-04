@@ -21,7 +21,7 @@ export interface CompSignal {
   tier: SignalTier;
   kind: string;
   value: unknown;
-  /** C7: verbatim JD quote, or the source field's own text when `quoteSource` is `structured`. */
+  /** Verbatim JD quote, or the source field's own text when `quoteSource` is `structured`. */
   quote: string;
   /** Default `description`. */
   quoteSource?: "description" | "structured";
@@ -34,7 +34,7 @@ export interface CompSignal {
   term?: { start: number; end: number } | null;
   /** Position of the quote in the JD panel's quote list (its mark id); with `inJd` the tag jumps to the sentence. */
   quoteIndex?: number;
-  /** The JD text shows this quote highlighted. Without it there is nothing to jump to and the tag is plain (C7: the quote is still shown). */
+  /** The JD text shows this quote highlighted. Without it there is nothing to jump to and the tag is plain (the quote is still shown). */
   inJd?: boolean;
 }
 
@@ -71,7 +71,7 @@ export interface CompPanelProps {
 }
 
 /**
- * "Pay and benefits" of the detail page (mockup `.sig-list`): the salary the posting states, then
+ * "Pay and benefits" of the detail page: the salary the posting states, then
  * every signal with its tier, the normalized amount, the points it brings and the verbatim JD
  * quote; the capped bonus total; the benefit tags (no points).
  */

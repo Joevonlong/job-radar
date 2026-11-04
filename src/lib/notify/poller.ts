@@ -204,7 +204,7 @@ export function createUpdateHandler(deps: UpdateHandlerDeps): UpdateHandler {
           result = await handleCallback(update, text);
           scope?.set(result === "changed" || result === "unchanged" ? "ok" : result === "export_failed" || result === "failed" ? "failed" : "skipped");
         } else if (update.message) {
-          // No free-form conversation (spec: out of scope): foreign senders are logged without content, ours are dropped.
+          // No free-form conversation: foreign senders are logged without content, ours are dropped.
           const foreign = String(update.message.chat.id) !== deps.chatId;
           logger.debug(foreign ? "ignored a message from a foreign chat" : "ignored a text message (no conversation)", { updateId: update.update_id });
         }

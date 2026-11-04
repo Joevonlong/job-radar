@@ -12,7 +12,7 @@ import type { WorkflowActionState } from "@/lib/settings/workflow/types";
 import type { SettingsActionState } from "@/lib/settings/types";
 
 // Server Actions are public POST endpoints: everything arriving here is validated again in the
-// services (zod), and the web server only listens on 127.0.0.1 / Tailscale (C5).
+// services (zod), and the web server only listens on 127.0.0.1 / Tailscale.
 
 export async function saveSettingsAction(_prev: SettingsActionState, request: unknown): Promise<SettingsActionState> {
   const result = await saveSettings(request);

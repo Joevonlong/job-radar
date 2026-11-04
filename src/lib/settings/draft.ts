@@ -1,9 +1,9 @@
 /**
  * Form drafts for the settings page. A draft is what the browser holds and sends: one entry
  * per field of `fields.ts`, keyed by dotted path, holding plain strings, booleans and lists. It is
- * untrusted input, so it is validated with zod (C6), merged onto the config that is on disk (keys
+ * untrusted input, so it is validated with zod, merged onto the config that is on disk (keys
  * the form does not show stay as they are) and then validated again with the real config schema —
- * the single source of truth for what is valid (C8).
+ * the single source of truth for what is valid.
  *
  * Pure and free of server-only imports: the client form and the server action share it.
  */
