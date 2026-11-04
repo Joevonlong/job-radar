@@ -172,7 +172,7 @@ async function main(): Promise<number> {
   // Config files newer than this code: an upgrade is under way and this worker is the old one. Stop before touching the
   // queue, and before reading ai.yaml, which can be one of them; check again before and after every claim. Waits like a
   // refused lock, so launchd does not restart it in a tight loop.
-  const versionChecks = createVersionChecks({ db, once, log, exit: (code) => process.exit(code) });
+  const versionChecks = createVersionChecks({ db, once, log, signal: abort.signal, exit: (code) => process.exit(code) });
   await versionChecks.beforeClaim();
   const activity = createActivityRecorder({ db, process: "ai-worker" });
   activity.systemRoot("system.startup").finish("ok");

@@ -65,6 +65,8 @@ export interface VersionChecksOptions {
   /** `--once` exits at once; a running worker first waits `host_worker.already_running_wait_seconds`. */
   once: boolean;
   log: (message: string) => void;
+  /** Aborted by the shutdown: ends that wait at once. */
+  signal: AbortSignal;
   /** Ends the process. */
   exit: (code: number) => void;
 }
@@ -86,7 +88,11 @@ export function createVersionChecks(options: VersionChecksOptions): { beforeClai
     }
     const waitSeconds = options.once ? 0 : hostWorkerSettings().already_running_wait_seconds;
     options.log(`config files newer than this code: ${newer.map((file) => `${file.name} v${file.version} (reads up to v${file.supported})`).join(", ")}. Exiting${waitSeconds > 0 ? ` in ${waitSeconds}s` : ""}; the upgraded worker takes over`);
-    if (waitSeconds > 0) await sleep(waitSeconds * 1000);
+    if (waitSeconds > 0) {
+      await sleep(waitSeconds * 1000, undefined, { signal: options.signal }).catch(() => {
+        // aborted: the service manager is stopping us, so it needs no protection from a tight restart loop
+      });
+    }
     options.exit(1);
   };
   return { beforeClaim: () => stopIfOutdated(), afterClaim: (request) => stopIfOutdated(request) };

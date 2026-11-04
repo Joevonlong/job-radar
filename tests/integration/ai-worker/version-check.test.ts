@@ -143,8 +143,8 @@ describe("the worker and a config file newer than its code", () => {
     expect(await statusOf(running)).toBe("running");
   }, 90_000);
 
-  it("a signal during that wait still ends in the bounded shutdown, with the shipped grace period", async () => {
-    setShippedHostWorker({ already_running_wait_seconds: 60, shutdown_grace_seconds: 1 });
+  it("a signal during that wait ends it at once, without using up the grace period", async () => {
+    setShippedHostWorker({ already_running_wait_seconds: 120, shutdown_grace_seconds: 60 });
     makeNewer("ai");
 
     const child = spawn(process.execPath, ["--import", LOADER, WORKER], { cwd: REPO, env: workerEnv(), stdio: ["ignore", "pipe", "pipe"] });
@@ -159,9 +159,12 @@ describe("the worker and a config file newer than its code", () => {
         if (Date.now() > until) throw new Error(`the worker did not reach the wait: ${output}`);
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
+      const signalled = Date.now();
       child.kill("SIGTERM");
       expect(await exited, output).toBe(1);
-      expect(output).toContain("shutdown did not finish within 1s");
+      expect(Date.now() - signalled).toBeLessThan(30_000);
+      expect(output).toContain("received SIGTERM");
+      expect(output).not.toContain("shutdown did not finish");
       expect(output).not.toContain("uncaught exception");
     } finally {
       if (child.exitCode === null) child.kill("SIGKILL");
@@ -205,6 +208,7 @@ describe("the worker and a config file newer than its code", () => {
       db: conn.db,
       once: true,
       log: (message) => messages.push(message),
+      signal: new AbortController().signal,
       exit: () => {
         throw new Stopped();
       },
