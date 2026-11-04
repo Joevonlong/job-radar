@@ -86,6 +86,14 @@ function makeNewer(name: ConfigName): void {
   fs.writeFileSync(file, `${text.replace(/^config_version:.*\n/m, "")}\nconfig_version: ${version}\n`);
 }
 
+/** Values of the shipped ai.yaml, the only layer left when the user's file is newer than the code. */
+function setShippedHostWorker(values: Record<string, number>): void {
+  const file = path.join(temp.defaultsDir, "ai.yaml");
+  const doc = parseDocument(fs.readFileSync(file, "utf8"));
+  for (const [key, value] of Object.entries(values)) doc.setIn(["host_worker", key], value);
+  fs.writeFileSync(file, doc.toString());
+}
+
 async function pendingRunAi(): Promise<number> {
   const cycle = await createCycle(conn.db, { kind: "manual" });
   await finishCycle(conn.db, cycle.id, { status: "succeeded", summary: { steps: [] } });
@@ -106,7 +114,7 @@ const quiet: ChannelLogger = { debug() {}, info() {}, warn() {}, error() {}, chi
 const statusOf = async (id: number): Promise<string | undefined> => (await getControlRequest(conn.db, id))?.status;
 
 describe("the worker and a config file newer than its code", () => {
-  it.each(["notify", "ui", "me"] as const)("%s newer at start-up: exit 1, nothing put back, nothing claimed", async (name) => {
+  it.each(["notify", "ui", "me", "ai"] as const)("%s newer at start-up: exit 1, nothing put back, nothing claimed", async (name) => {
     const running = await interruptedRunAi();
     const pending = await pendingRunAi();
     makeNewer(name);
@@ -118,6 +126,46 @@ describe("the worker and a config file newer than its code", () => {
     expect(output).toContain(`${name} v${currentConfigVersion(name) + 1}`);
     expect(await statusOf(running)).toBe("running");
     expect(await statusOf(pending)).toBe("pending");
+  }, 90_000);
+
+  it("ai.yaml newer at start-up without --once: it says so and waits the shipped time, so the service manager does not restart it in a tight loop", async () => {
+    setShippedHostWorker({ already_running_wait_seconds: 2 });
+    const running = await interruptedRunAi();
+    makeNewer("ai");
+
+    const started = Date.now();
+    const r = spawnSync(process.execPath, ["--import", LOADER, WORKER], { cwd: REPO, env: workerEnv(), encoding: "utf8", timeout: 60_000 });
+    const output = `${r.stdout}${r.stderr}`;
+
+    expect(r.status, output).toBe(1);
+    expect(output).toContain("Exiting in 2s");
+    expect(Date.now() - started).toBeGreaterThanOrEqual(2000);
+    expect(await statusOf(running)).toBe("running");
+  }, 90_000);
+
+  it("a signal during that wait still ends in the bounded shutdown, with the shipped grace period", async () => {
+    setShippedHostWorker({ already_running_wait_seconds: 60, shutdown_grace_seconds: 1 });
+    makeNewer("ai");
+
+    const child = spawn(process.execPath, ["--import", LOADER, WORKER], { cwd: REPO, env: workerEnv(), stdio: ["ignore", "pipe", "pipe"] });
+    let output = "";
+    child.stdout.on("data", (d: Buffer) => (output += d.toString()));
+    child.stderr.on("data", (d: Buffer) => (output += d.toString()));
+    const exited = new Promise<number | null>((resolve) => child.on("exit", (code) => resolve(code)));
+    try {
+      const until = Date.now() + 45_000;
+      while (!output.includes("config files newer than this code")) {
+        if (child.exitCode !== null) throw new Error(`the worker exited early: ${output}`);
+        if (Date.now() > until) throw new Error(`the worker did not reach the wait: ${output}`);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      child.kill("SIGTERM");
+      expect(await exited, output).toBe(1);
+      expect(output).toContain("shutdown did not finish within 1s");
+      expect(output).not.toContain("uncaught exception");
+    } finally {
+      if (child.exitCode === null) child.kill("SIGKILL");
+    }
   }, 90_000);
 
   it("newer while it runs: it exits before the next claim, and the queued request stays queued", async () => {

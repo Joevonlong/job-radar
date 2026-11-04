@@ -6,7 +6,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { parseDocument } from "yaml";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { loadConfig } from "@/lib/config";
+import { currentConfigVersion, getUserConfigPath, loadConfig } from "@/lib/config";
 import { aiWorkerLaunchdLabel } from "@/lib/ops/ai-worker-label";
 import { exitProcess } from "@/lib/ops/shutdown";
 
@@ -75,5 +75,16 @@ describe.each(["darwin", "linux", "freebsd"] as const)("worker lock contention o
       expect(aiWorkerLaunchdLabel).not.toHaveBeenCalled();
       expect(loadConfig).not.toHaveBeenCalledWith("schedule");
     }
+  });
+});
+
+describe("worker lock contention with an ai.yaml newer than this code", () => {
+  it("keeps exit code 3 and waits the shipped time", async () => {
+    fs.mkdirSync(tmp.configDir, { recursive: true });
+    fs.writeFileSync(getUserConfigPath("ai"), `config_version: ${currentConfigVersion("ai") + 1}\n`);
+    process.argv = [process.execPath, "ai-worker"];
+    await import("@/ai-worker/index");
+    await vi.waitFor(() => expect(exitProcess).toHaveBeenCalledExactlyOnceWith(3));
+    expect(sleep).toHaveBeenCalledExactlyOnceWith(7000);
   });
 });

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { currentConfigVersion, getUserConfigPath } from "@/lib/config";
 
-import { newerConfigFiles, type VersionCache } from "../../src/ai-worker/version-guard";
+import { hostWorkerSettings, newerConfigFiles, type VersionCache } from "../../src/ai-worker/version-guard";
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 
 let temp: TempConfig;
@@ -64,5 +64,13 @@ describe("newerConfigFiles", () => {
     newerConfigFiles(cache);
 
     expect(read.mock.calls.filter(([file]) => file === getUserConfigPath("notify"))).toEqual([]);
+  });
+});
+
+describe("hostWorkerSettings", () => {
+  it("falls back to the shipped values when the user's ai.yaml cannot be loaded", () => {
+    fs.writeFileSync(getUserConfigPath("ai"), `config_version: ${currentConfigVersion("ai") + 1}\n`);
+
+    expect(hostWorkerSettings().already_running_wait_seconds).toBeGreaterThan(0);
   });
 });

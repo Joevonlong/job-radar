@@ -8,7 +8,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { parse as parseYaml } from "yaml";
 
-import { CONFIG_NAMES, currentConfigVersion, getUserConfigPath, loadConfig, type ConfigName } from "@/lib/config";
+import { CONFIG_NAMES, currentConfigVersion, getUserConfigPath, loadConfig, readShippedConfig, type ConfigName, type ConfigValue } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
 import { releaseClaimedControlRequest, type ControlRequest } from "@/lib/db/repos/control-requests";
 
@@ -46,6 +46,20 @@ function fileVersion(file: string, cache: VersionCache): number | null {
   return version;
 }
 
+/**
+ * `ai.yaml: host_worker` for the paths that end the process. The user's file may be the one this code cannot read, and a stop
+ * must still wait and shut down in bounds: then the shipped values apply.
+ */
+export function hostWorkerSettings(): ConfigValue<"ai">["host_worker"] {
+  try {
+    return loadConfig("ai").host_worker;
+  } catch (error) {
+    const shipped = readShippedConfig("ai");
+    if (shipped === null) throw error;
+    return shipped.host_worker;
+  }
+}
+
 export interface VersionChecksOptions {
   db: Db;
   /** `--once` exits at once; a running worker first waits `host_worker.already_running_wait_seconds`. */
@@ -70,7 +84,7 @@ export function createVersionChecks(options: VersionChecksOptions): { beforeClai
         options.log(`could not put request #${claim.id} back: ${error instanceof Error ? error.message : "unknown error"}`);
       });
     }
-    const waitSeconds = options.once ? 0 : loadConfig("ai").host_worker.already_running_wait_seconds;
+    const waitSeconds = options.once ? 0 : hostWorkerSettings().already_running_wait_seconds;
     options.log(`config files newer than this code: ${newer.map((file) => `${file.name} v${file.version} (reads up to v${file.supported})`).join(", ")}. Exiting${waitSeconds > 0 ? ` in ${waitSeconds}s` : ""}; the upgraded worker takes over`);
     if (waitSeconds > 0) await sleep(waitSeconds * 1000);
     options.exit(1);
