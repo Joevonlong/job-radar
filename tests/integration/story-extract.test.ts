@@ -19,6 +19,7 @@ import { runMigrations } from "@/lib/db/migrate";
 import { claimNextControlRequest, requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
 import { deleteExpiredStoryDrafts, discardStoryDraft, insertStoryDrafts, listPendingStoryDrafts } from "@/lib/db/repos/story-drafts";
 import { adoptStoryDraft, loadPendingStoryDrafts } from "@/lib/stories/adopt";
+import { enterUpload } from "@/lib/stories/upload-gate";
 
 import { pinnedAi, scriptedProvider, type Step } from "../ai/helpers";
 import { quietLogger } from "../cycle/helpers";
@@ -281,6 +282,25 @@ describe("the upload route", () => {
     const row = await requestRow(body.requestId);
     expect((row.payload as { text: string }).text).toBe("Backend engineer who moved billing systems to new platforms.\n\nSkills: Go");
     expect(row.payload).toMatchObject({ origin: "profile" });
+  });
+
+  it("reads only import.max_concurrent_uploads files at once and turns the rest away, then reads again", async () => {
+    writerFile("enabled: true\nimport:\n  max_concurrent_uploads: 1\n");
+    const file = () => upload({ origin: "resume", file: new File([minimalPdf([`${MARKER} Moved the billing service.`]).slice()], "cv.pdf") });
+    // the slot is held explicitly, so nothing depends on how fast a PDF is read
+    const held = enterUpload(1);
+    expect(held).not.toBeNull();
+    const refused = await POST(file());
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toEqual({ ok: false, error: "too_many" });
+    // pasted text has no file and needs no slot
+    expect((await POST(upload({ origin: "self_description", text: SOURCE }))).status).toBe(200);
+    await db().delete(schema.controlRequests);
+    held?.();
+    // the slot is back once the first is done, also after a refusal
+    expect((await POST(file())).status).toBe(200);
+    writerFile("enabled: true\n");
+    await db().delete(schema.controlRequests);
   });
 
   it("refuses too large, wrong types, scans and damaged files, without leaving a request", async () => {

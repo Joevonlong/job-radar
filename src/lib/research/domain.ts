@@ -62,8 +62,8 @@ export function mostCommonDomain(urls: readonly string[], nonCompanyHosts: reado
 export function shownWebsite(company: { websiteDomain: string | null; websiteDomainSource: string | null }, research: ResearchConfig): CompanyWebsite | null {
   const { websiteDomain: domain, websiteDomainSource: source } = company;
   if (domain === null) return null;
-  if (source === "user") return { domain, source };
-  return source === "inferred" && isCompanyWebsiteCandidate(domain, research.company.non_company_hosts) ? { domain, source } : null;
+  // the host list may have grown since the domain was stored: a job board is no company's website, whoever said so
+  return (source === "inferred" || source === "user") && isCompanyWebsiteCandidate(domain, research.company.non_company_hosts) ? { domain, source } : null;
 }
 
 /** Suggest a website from the company's own posting links, for a company that has none yet. Stores what it finds as `inferred`; a user's domain is never replaced. */

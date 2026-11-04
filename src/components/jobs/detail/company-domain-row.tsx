@@ -9,6 +9,7 @@ import { confirmCompanyDomainAction as rawConfirm, saveCompanyDomainAction as ra
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { withActionFeedback } from "@/lib/actions/client";
+import { displayDomain } from "@/lib/research/display-domain";
 import type { CompanyWebsite } from "@/lib/research/domain";
 import { toastTone } from "@/lib/toast";
 
@@ -24,7 +25,7 @@ export function CompanyDomainRow({ companyId, website }: { companyId: number; we
   const router = useRouter();
   const inputId = useId();
   const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(website?.domain ?? "");
+  const [value, setValue] = useState(website ? displayDomain(website.domain) : "");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -35,7 +36,7 @@ export function CompanyDomainRow({ companyId, website }: { companyId: number; we
     }
     setError(null);
     setEditing(false);
-    setValue(result.domain);
+    setValue(displayDomain(result.domain));
     toastTone("success", t("saved"));
     router.refresh();
   };
@@ -74,7 +75,7 @@ export function CompanyDomainRow({ companyId, website }: { companyId: number; we
           onClick={() => {
             setEditing(false);
             setError(null);
-            setValue(website?.domain ?? "");
+            setValue(website ? displayDomain(website.domain) : "");
           }}
           data-testid="company-domain-cancel"
         >
@@ -107,7 +108,7 @@ export function CompanyDomainRow({ companyId, website }: { companyId: number; we
   if (website.source === "user") {
     return (
       <div className="flex flex-wrap items-center gap-2" data-testid="company-domain" data-state="confirmed">
-        <p className="text-ink-2 text-body-sm [overflow-wrap:anywhere]">{t("confirmed", { domain: website.domain })}</p>
+        <p className="text-ink-2 text-body-sm [overflow-wrap:anywhere]">{t("confirmed", { domain: displayDomain(website.domain) })}</p>
         {changeButton}
       </div>
     );
@@ -115,7 +116,7 @@ export function CompanyDomainRow({ companyId, website }: { companyId: number; we
 
   return (
     <div className="flex flex-col gap-1.5" data-testid="company-domain" data-state="inferred">
-      <p className="text-ink-2 text-body-sm [overflow-wrap:anywhere]">{t("inferred", { domain: website.domain })}</p>
+      <p className="text-ink-2 text-body-sm [overflow-wrap:anywhere]">{t("inferred", { domain: displayDomain(website.domain) })}</p>
       <p className="text-ink-3 text-body-sm">{t("inferredHint")}</p>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" size="sm" disabled={pending} aria-busy={pending} onClick={() => confirm(website.domain)} data-testid="company-domain-confirm">

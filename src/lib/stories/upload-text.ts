@@ -67,11 +67,17 @@ function pdfText(bytes: Uint8Array, limits: UploadTextLimits): Promise<{ ok: tru
       execArgv: [],
       resourceLimits: { maxOldGenerationSizeMb: limits.pdfMaxMemoryMb },
     });
+    let settled = false;
+    // the answer waits for the thread to be gone, so the caller's slot is not given back while it still holds memory (terminating takes milliseconds)
     const finish = (result: { ok: true; text: string } | { ok: false; error: "unreadable" | "too_complex" | "aborted" }): void => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       limits.signal?.removeEventListener("abort", onAbort);
-      void worker.terminate();
-      resolve(result);
+      void worker.terminate().then(
+        () => resolve(result),
+        () => resolve(result),
+      );
     };
     const onAbort = (): void => finish({ ok: false, error: "aborted" });
     const timer = setTimeout(() => finish({ ok: false, error: "too_complex" }), limits.pdfTimeoutMs);

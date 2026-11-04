@@ -80,6 +80,7 @@ import { ghostEnabled } from "@/lib/ghost/settings";
 import { buildGhostCheckView, GHOST_TOOLTIP_REASONS, ghostMarkText, ghostShortMessage } from "@/lib/ghost/view";
 import { readInitialBreakdownRequest } from "@/lib/control/breakdown-request";
 import { countApplicationAnswers } from "@/lib/db/repos/application-writer";
+import { WriteAnswersLink } from "@/components/jobs/detail/write-answers-link";
 import { writerEntryHref } from "@/lib/writer/entry";
 import { readWriterEnabled } from "@/lib/writer/settings";
 import { readInitialTranslateRequest, readPartialTranslation } from "@/lib/control/translate-request";
@@ -430,15 +431,13 @@ export default async function JobDetailPage({ params }: { params: Params }) {
             </a>
           ) : null}
           {/* the application writer: its workbench, or (off and nothing written yet) the setting that turns it on */}
-          <Link
+          <WriteAnswersLink
             href={writeHref}
-            className={cn(buttonVariants({ variant: "outline" }), actionLink)}
-            data-testid="action-write"
-            data-enabled={writerEnabled}
-          >
-            {t("actions.write")}
-            {answers.questions > 0 ? <span className="text-ink-3 font-mono text-data" data-testid="action-write-count">{t("actions.writeCount", { final: answers.final, total: answers.questions })}</span> : null}
-          </Link>
+            enabled={writerEnabled}
+            label={t("actions.write")}
+            countLabel={answers.questions > 0 ? t("actions.writeCount", { final: answers.final, total: answers.questions }) : null}
+            className={actionLink}
+          />
           {/* "exclude this job" is the optional one: it lives in the "more" menu so the row stays one line; "keep anyway" / "let the rules decide again" rescue a job the filter removed (or undo a decision), so they stay buttons */}
           {overrideAction === "exclude" ? null : <FilterOverrideAction rank={job.score} jobId={job.id} />}
           {/* the "more" menu: "exclude this job" when that is the decision on offer, and "mark as unseen" */}

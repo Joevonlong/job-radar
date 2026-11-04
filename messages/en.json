@@ -882,6 +882,7 @@
         "no_text": "No text to extract from. A scanned PDF has no text layer: paste the text instead, or fill in your profile first.",
         "disabled": "The application writer is off, so nothing was sent.",
         "busy": "Another extraction is still running. Wait for it to end.",
+        "too_many": "Too many files are being read right now. Wait a moment and try again.",
         "config_error": "A config file cannot be read, so nothing was sent. The settings page names it.",
         "unavailable": "The database cannot be reached right now. Try again later.",
         "auth": "The AI provider refused the login. Check it on the sources page.",
