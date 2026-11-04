@@ -36,6 +36,7 @@ const row = (over: Partial<GhostInputRow> = {}): GhostInputRow => ({
   jobId: 7,
   status: "active",
   firstSeenAt: daysAgo(20),
+  title: "Data Engineer",
   description: "Some text.",
   companyNameNorm: "acme",
   sources: [source()],

@@ -173,6 +173,19 @@ describe("the stored ghost job check", () => {
     expect(await check({ rulesHash: "rules-v2" })).toMatchObject({ scanned: 2 });
   });
 
+  it("reads the title: a changed title checks the job again, and a second run changes nothing", async () => {
+    const titled = rulesWith(() => {}, { title_patterns: [{ id: "pool_title", pattern: "(?<![\\p{L}\\p{N}])talent\\s?pool(?![\\p{L}\\p{N}])" }] });
+    const id = await cleanJob();
+    expect(await check({ rules: titled })).toMatchObject({ scanned: 1, changed: 1 });
+    expect(await check({ rules: titled })).toMatchObject({ scanned: 0, changed: 0 });
+    await db().update(schema.jobs).set({ title: "Backend Engineer - Talent Pool" }).where(eq(schema.jobs.id, id));
+    expect(await check({ rules: titled })).toMatchObject({ scanned: 1, changed: 1 });
+    const stored = (await row(id))?.evidence as Array<{ code: string; field?: string; quote: string; points: number }>;
+    expect(stored.find((r) => r.code === "evergreen_wording")).toMatchObject({ field: "title", quote: "Backend Engineer - Talent Pool", points: 3 });
+    expect((await row(id))?.level).toBe("watch");
+    expect(await check({ rules: titled })).toMatchObject({ scanned: 0, changed: 0 });
+  });
+
   it("checks a job again when it reaches the next open-for-long tier (recheck_at)", async () => {
     const id = await addJob(FULL_JD, { seenDaysAgo: 100 });
     await addSource(id, { id: `t-${id}`, seenDaysAgo: 100, postedDaysAgo: 100 });

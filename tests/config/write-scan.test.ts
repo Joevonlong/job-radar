@@ -65,6 +65,7 @@ const NOT_LOCKED = new Map<string, string>([
   // A file in the test's own directory, only under NODE_ENV=test.
   ["src/lib/config/write-lock.ts#lockTestPause", "the `reached` marker of the cross-process tests"],
   // Elsewhere on disk.
+  ["src/lib/companies/merge-run.ts#runSuggest", "the plan file named by companies:merge --suggest --out (it refuses a path in the config or profile directory)"],
   ["src/lib/config/models-overlay-write.ts#exportFullModels", "the file named by models:export --out, a copy nothing reads"],
   ["src/lib/ops/config-archive.ts#writeConfigArchive", "the archive in data/backups (.archive-meta.yaml exists only inside the archive)"],
   ["src/lib/ops/backup.ts#fsyncFile", "data/backups"],

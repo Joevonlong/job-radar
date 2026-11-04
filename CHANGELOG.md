@@ -8,9 +8,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **Gmail replies (optional, off by default).** Reads one Gmail label read-only with local rules and suggests status changes on `/pipeline`, each confirmed by you and undoable. No AI reads the mails and no mail content leaves the machine. See `docs/gmail-replies.md`. Adds the table `email_replies`.
+- **Merge duplicate companies.** `pnpm companies:merge` lists likely duplicate company rows and merges the pairs you confirm, with a dry run and an undo; a merged spelling no longer grows its row back in later cycles. See `docs/extraction.md`. Adds the table `company_merges` and `company.duplicate_tail_words` in `pipeline.yaml`.
 
 ### Changed
 
+- **The ghost job check reads the job title.** A title such as "AI Talent Pool", "Open Application", "Initiativbewerbung (m/w/d)" or "Evergreen - AI Engineer" is now caught even when the description reads like an ordinary posting. The reason says the title said it and quotes it; a title hit scores `evergreen_wording.title_points` (default 3, so it reaches "watch" on its own; the description's 2 is not added). Recruiting jobs ("Talent Pool Manager") are excluded. The check stays off by default and only hints, as before. Adds the pack keys `ghost.title_patterns` and `ghost.title_exclude`; if you keep a full copy of a pack in your config folder, copy them in. When the check is on, the next cycles check every open job once more (no AI calls). See `docs/ghost-jobs.md`.
 - **Writer and Gmail replies fixes.** The usage-cap notice in the application writer now reads like the other AI panels. The evidence check no longer reads a spaced single letter as a unit (`5 m` is a 5; `$5 m` and `3 x` still count). Gmail replies skip mail from a Gmail alias of the mailbox, and a mail that fails every cycle no longer holds a batch slot: `replies.yaml` gets `max_fetches_per_cycle` (default 100; a `replies.yaml` you already have needs no change, but older code refuses the new key, so remove it before rolling back).
 - **StepStone now only requests URLs its `robots.txt` permits.** The channel used to send `?sort=2&ag=…&radius=…&page=…`, which
   StepStone's current `robots.txt` disallows; it now sends a single `?q=<keyword>` parameter. Trade-off: one request per keyword

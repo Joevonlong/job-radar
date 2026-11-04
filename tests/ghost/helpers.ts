@@ -36,6 +36,7 @@ export function input(over: Partial<GhostInput> = {}): GhostInput {
     firstSeenAt: daysAgo(10),
     trustedCompany: false,
     trustedPostedAt: null,
+    title: "Senior Software Engineer",
     description: FULL_JD,
     descriptionSource: { channelId: "greenhouse" },
     postings: [posting()],

@@ -708,7 +708,7 @@ const SEED_JOBS: readonly SeedJob[] = [
     // after the first sighting, the JD says "talent pool" and has no duties section. Not scored, so no other seeded number moves.
     key: "lindwurm-ghost",
     company: "Lindwurm Data Systems",
-    title: "Data Engineer (Talent Pool)",
+    title: "Data Engineer (Ingestion)",
     cities: ["Berlin"],
     workplace: "hybrid",
     contract: "permanent",

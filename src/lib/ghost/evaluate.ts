@@ -3,7 +3,7 @@
  * the cycle's check stores the result, `pnpm ghost:check` previews it. Only a hint: nothing here touches a score (C3).
  */
 import type { CompiledGhostRules } from "./rules";
-import { evergreenWording, longOpen, repostLabel, reposted, thinDescription, type EvergreenOptions } from "./signals";
+import { evergreenTitle, evergreenWording, longOpen, repostLabel, reposted, thinDescription, type EvergreenOptions } from "./signals";
 import { GHOST_REASONS, NON_TIME_REASONS, type GhostInput, type GhostLevel, type GhostReason, type GhostResult } from "./types";
 
 const NONE: GhostResult = { level: "none", score: 0, reasons: [], recheckAt: null };
@@ -23,7 +23,8 @@ export function evaluateGhost(input: GhostInput, rules: CompiledGhostRules, now:
     open.reason,
     repostLabel(input.postings, rules),
     reposted(input.postings, rules),
-    evergreenWording(input.description, rules, options),
+    // the title first: a job counts once, with the title's own points
+    evergreenTitle(input.title, rules) ?? evergreenWording(input.description, rules, options),
     thinDescription(input, rules),
   ];
   const reasons = found.filter((reason): reason is GhostReason => reason !== null && reason.points > 0);

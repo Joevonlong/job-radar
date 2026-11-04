@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { isAgencyCompany, normalizeCompanyKey, resolveCompanyName } from "@/lib/pipeline/company";
+import { buildStoredAliasIndex, isAgencyCompany, normalizeCompanyKey, resolveCompanyName } from "@/lib/pipeline/company";
 
 import { pipelineWith, shippedPipeline } from "./helpers";
 
@@ -78,5 +78,25 @@ describe("agency companies", () => {
     expect(isAgencyCompany("Robert Half", config)).toBe(true);
     expect(isAgencyCompany("Acme Personalvermittlung", config)).toBe(true);
     expect(isAgencyCompany("Northwind Labs GmbH", config)).toBe(false);
+  });
+});
+
+describe("buildStoredAliasIndex", () => {
+  const suffixes = ["gmbh"];
+
+  it("keys only the stored aliases and normalizes them", () => {
+    const { targets, ambiguous } = buildStoredAliasIndex([{ id: 1, aliases: ["Alephalpha GmbH", "Aleph-Alpha"] }, { id: 2, aliases: [] }], suffixes);
+    expect([...targets]).toEqual([["alephalpha", 1], ["aleph-alpha", 1]]);
+    expect(ambiguous).toEqual([]);
+  });
+
+  it("drops empty keys", () => {
+    expect([...buildStoredAliasIndex([{ id: 1, aliases: ["", "   "] }], suffixes).targets]).toEqual([]);
+  });
+
+  it("gives one company's repeated key to it, and a key two companies give to neither", () => {
+    const { targets, ambiguous } = buildStoredAliasIndex([{ id: 1, aliases: ["Acme", "ACME GmbH"] }, { id: 2, aliases: ["Other", "Shared"] }, { id: 3, aliases: ["shared gmbh"] }], suffixes);
+    expect([...targets]).toEqual([["acme", 1], ["other", 2]]);
+    expect(ambiguous).toEqual([{ key: "shared", companyIds: [2, 3] }]);
   });
 });

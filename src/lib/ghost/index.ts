@@ -5,6 +5,6 @@
 export { evaluateGhost, levelOf } from "./evaluate";
 export { GHOST_RULES_VERSION, ghostRulesFingerprint } from "./fingerprint";
 export { compileGhostRules, ghostRulesFor, type CompiledGhostRules, type GhostRulesInput } from "./rules";
-export { countWords, evergreenWording, hasResponsibilityHeading, longOpen, repostLabel, reposted, thinDescription } from "./signals";
+export { countWords, evergreenTitle, evergreenWording, hasResponsibilityHeading, longOpen, repostLabel, reposted, thinDescription } from "./signals";
 export * from "./types";
 export { buildGhostCheckView, ghostMarkText, ghostReasonMessage, ghostShortMessage, type GhostCheckView, type GhostMessage } from "./view";

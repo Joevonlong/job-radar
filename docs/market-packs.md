@@ -89,6 +89,8 @@ reason, so the checks card and `pnpm ghost:check` can say which phrase matched.
 |---|---|
 | `repost_label_patterns` | The source's own "reposted" label ("Reposted 2 weeks ago", "Wiedereingestellt"); `{id, pattern}` |
 | `evergreen_patterns` | The JD says it is a talent pool or always open ("for our talent pool", "always hiring", "Initiativbewerbung (m/w/d)"); `{id, pattern, check_negation, negation_after, requires_context, only_before_duties}`. `check_negation: false` marks a phrase that is a negation itself ("no specific opening", "keine konkrete Stelle"); `negation_after` overrides the pack's for this entry; `requires_context` (regexes) makes a hit count only when its sentence also matches one of them ("join our AI talent pool" next to "apply", "future opportunities"); `only_before_duties: true` makes a hit count only above the first duties heading (the title line "Initiativbewerbung" of an open application, not the same line in a real posting's footer). Two entries may share an id |
+| `title_patterns` | The job's title says it is a talent pool or an open application ("Talent Pool - Senior Engineer", "Open Application", "Initiativbewerbung"); `{id, pattern}`, each tested against the whole title (no negation, no sentences), so keep them narrow. Scored with `pipeline.yaml job_checks.ghost.evergreen_wording.title_points`; the title is read before the description and a job has one such reason |
+| `title_exclude` | A title that matches one of these regexes has no `title_patterns` hit: the recruiting jobs themselves ("Talent Pool Manager", "Recruiter - Talent Community") |
 | `responsibility_patterns` | A heading that opens the duties of the role ("Responsibilities", "What you'll do", "Deine Aufgaben"), tested only against heading-shaped lines; `{id, pattern}`. The line is read without emphasis, markers and the emoji or arrows around it, with "&amp;" as "&" and `’` as `'`; a final "…", " -" or "—" counts as ":", and right above a list (at most one lead-in line between that ends in ":" or looks like a heading) so does a final "..." |
 | `question_words` | Words that open a question ("what", "which", "welche…"; whole words): a heading line ending in "?" counts as a heading only when its first word is one of them and a list follows it ("What will I be doing?" / "- …"), so "Ready to take on new responsibilities?" stays a sentence |
 | `negation_cues` | Words that cancel an evergreen phrase: inside it, within `pipeline.yaml job_checks.ghost.negation_words_before` words before it, within `negation_words_after` words after it in the same clause, or in the heading of its list |
@@ -104,7 +106,7 @@ reason, so the checks card and `pnpm ghost:check` can say which phrase matched.
 
 As for visa, **every phrase an `evergreen_patterns` entry can match must contain a `prefilter` match**, or it is never
 seen; `pnpm config:check` warns about a pattern whose own text has none, and names an invalid regular expression by its
-path (`ghost.evergreen_patterns[2]`). Changing the patterns checks every job again in the next cycles; preview with
+path (`ghost.evergreen_patterns[2]`; `ghost.title_patterns` and `ghost.title_exclude` the same way). A full copy of a pack in your config folder needs the title keys added by hand, or the title is not read. Changing the patterns checks every job again in the next cycles; preview with
 `pnpm ghost:check`.
 
 Start and end every `evergreen_patterns` entry at a word boundary (`(?<![\p{L}\p{N}])` … `(?![\p{L}\p{N}])`, as the shipped

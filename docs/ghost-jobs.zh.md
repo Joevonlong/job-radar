@@ -17,7 +17,7 @@
 | `long_open` | 来源给出可信发布日期（公司 ATS、用你的登录读的 LinkedIn）的在招岗位，挂了至少 90 天（1 分）或 180 天（2 分）。没有可信日期时从 Job Radar 第一次见到它算起，最多 1 分。 | 1–2 |
 | `repost_label` | 来源自己把帖子标成"重新发布"（用你的登录读的 LinkedIn） | 1 |
 | `reposted` | 同一个来源在同一地点以新编号重新挂出，距上一次至少 30 天。只有同一帖子编号不变的来源算（公司 ATS、用你的登录读的 LinkedIn、StepStone、XING、Arbeitsagentur）；两个不同来源之间从不算。 | 2 |
-| `evergreen_wording` | JD 写明是人才库或常年招聘（"This posting is for our talent pool"、"We are always hiring"、"Wir stellen laufend ein"、"Initiativbewerbung (m/w/d)"、"Es gibt keine konkrete Stelle"）。"We're always looking for people who …" 不算（很多真实招聘帖的公司介绍都这么写） | 2 |
+| `evergreen_wording` | JD 写明是人才库或常年招聘（"This posting is for our talent pool"、"We are always hiring"、"Wir stellen laufend ein"、"Initiativbewerbung (m/w/d)"、"Es gibt keine konkrete Stelle"）。"We're always looking for people who …" 不算（很多真实招聘帖的公司介绍都这么写）。先读**标题**（见[标题](#标题)）：标题写明时算 `title_points`（3），一个岗位只有一条这样的原因 | 2（标题：3） |
 | `thin_description` | JD 来自保留全文的来源，且不到 120 个词，或没有职责段落（"Responsibilities"、"Your tasks"、"What will I be doing?"、"The impact you'll have"、"Deine Aufgaben"、"Darum geht's" 这样的标题；读标题时去掉前后的 emoji 和箭头，"&amp;" 当作 "&"，行尾的 "…" 当作 ":"；以 "..." 结尾、或疑问词开头且以 "?" 结尾的行，只有下面紧跟列表时才算标题（中间最多隔一行以 ":" 结尾或像标题的引导语），所以公司介绍里的 "Which tasks can our AI automate?" 不算）。岗位有当前的 [JD 拆解](breakdown.zh.md)时，以拆解里的职责列表为准（职责列表为空也算），不看标题。`thin_description.infer_from_headings: false` 时不看标题：没有当前拆解时只有篇幅短才算。 | 1 |
 
 分数加起来得到等级：
@@ -49,13 +49,21 @@ JD 先切成片段（句子、列表项、短标题和它下一行），和[签�
 
 引文是 JD 原文的一段，带位置。[AI 陷阱检测](ai-traps.zh.md)找到的对读者隐藏的文字不算。说法写在市场包里（[market-packs.zh.md](market-packs.zh.md#幽灵岗位说法)）；英文说法所有市场都有，德文只在德国市场。
 
+## 标题
+
+有些帖子只在标题里这么说（"AI Talent Pool"、"Open Application"、"Initiativbewerbung (m/w/d)"、"Evergreen - AI Engineer"、"Candidature spontanée"），JD 却像普通岗位。检查会先用市场包的 `ghost.title_patterns` 读**标题**：只用窄的说法，对整条标题匹配（不切句子，不判断否定）。标题匹配 `ghost.title_exclude` 时不算：这些是招聘岗位本身（"Talent Pool Manager"、"Recruiter - Talent Community"、"Head of Talent Community"）。"Open Application" 只有作为整条标题或标题的一段才算，所以 "Open Application Security Engineer"、"AI Application Engineer" 不算。
+
+一个岗位只有一条 `evergreen_wording` 原因。标题写明时，这条原因带 `field: "title"`，分数是 `evergreen_wording.title_points`（3，不和 JD 的 2 分相加），引文是标题里围绕该说法的原文。标题没写明才读 JD。标题证据不在 JD 里，所以 JD 里没有标记，也没有 **查看原文**。如果你因为 JD 的证据排除过某个岗位，之后标题命中也算已排除（原因代码相同）。标题变了会重新检查。
+
+如果你在配置目录里放了整包副本（`packs/<id>/rules.yaml`），要把新的 `ghost.title_patterns` 和 `ghost.title_exclude` 抄进去，否则不读标题（JD 检查照旧）。`title_points: 0` 关掉标题检查。
+
 ## 在哪里看到
 
 只在 `ui.yaml: job_checks.ghost.enabled` 为 `true` 时：
 
 - **列表**（/jobs、今日、收藏）：分数下面的标记。悬停提示列出最强的三个原因，并说明分数不受影响。
 - **筛选**（/jobs、筛选标签、保存的视图）：**全部**（不筛）、**只看疑似**（`ghost=only`：`watch` 和 `likely`）、**隐藏疑似**（`ghost=hide`：去掉 `likely`，还没检查的岗位保留）。已排除的岗位按无标记算。检查关闭时，URL 或保存的视图里的 `ghost=` 被忽略但保留，和签证筛选一样。
-- **详情页**：分数卡上的标记（点击跳到检查卡），检查卡上的 **岗位真实性** 一行，在 AI 陷阱之后、签证之前。列出所有原因，引用人才库那句话并带 **查看原文**（JD 里用波浪下划线标出），还有 **不是幽灵岗位** 按钮。
+- **详情页**：分数卡上的标记（点击跳到检查卡），检查卡上的 **岗位真实性** 一行，在 AI 陷阱之后、签证之前。列出所有原因，引用人才库那句话并带 **查看原文**（JD 里用波浪下划线标出），还有 **不是幽灵岗位** 按钮。标题写明时，原因显示为"标题写明了：“…”"，JD 里没有标记，也没有 **查看原文**（标题不在 JD 里）。
 
 流程看板不显示标记。
 
@@ -65,7 +73,7 @@ JD 先切成片段（句子、列表项、短标题和它下一行），和[签�
 
 ## 什么时候运行
 
-每轮的 `signals` 步骤在 AI 陷阱和签证检查之后运行它。只有岗位的输入变了（JD、状态、来源、AI 拆解、隐藏文字、说法、设置或来源的声明），或者到了下一个 `long_open` 档位，才会重新检查；每轮最多 `pipeline.yaml: job_checks.ghost.per_cycle_limit` 个（没检查过的先，新的先）。出错时这一步记为 "partial"，下一轮重试。
+每轮的 `signals` 步骤在 AI 陷阱和签证检查之后运行它。只有岗位的输入变了（标题、JD、状态、来源、AI 拆解、隐藏文字、说法、设置或来源的声明），或者到了下一个 `long_open` 档位，才会重新检查；每轮最多 `pipeline.yaml: job_checks.ghost.per_cycle_limit` 个（没检查过的先，新的先）。出错时这一步记为 "partial"，下一轮重试。
 
 ```bash
 pnpm ghost:check                 # 预览：每个在招岗位会得到什么，什么都不写（检查关闭时也能用）
@@ -96,7 +104,8 @@ job_checks:
 | `job_checks.ghost.long_open.first_seen_max_points` | 1 | 没有可信发布日期时最多给几分 |
 | `job_checks.ghost.repost_label.points` | 1 | |
 | `job_checks.ghost.reposted.min_gap_days`、`.points` | 30、2 | |
-| `job_checks.ghost.evergreen_wording.points` | 2 | |
+| `job_checks.ghost.evergreen_wording.points` | 2 | JD 写明时 |
+| `job_checks.ghost.evergreen_wording.title_points` | 3 | 标题写明时（`0`：不读标题）。3 分单独就到 `watch`；再加 2 分（重新发布、挂了 180 天）就是 `likely` |
 | `job_checks.ghost.thin_description.min_words`、`.points` | 120、1 | |
 | `job_checks.ghost.thin_description.infer_from_headings` | `true` | 没有当前 JD 拆解时，由职责标题判断长 JD 有没有职责段落；`false`：不看标题，只有篇幅短才算 |
 | `job_checks.ghost.quote_max_chars` | 280 | 引文最长字数 |

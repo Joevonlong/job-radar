@@ -369,6 +369,7 @@ SQL
 | `pnpm deliveries:show --run <id>` | 查看付费运行的交付账本和用量，见[来源](sources.zh.md#付费交付账本) |
 | `pnpm telegram:test` | 发一条测试消息，确认 Telegram 通 |
 | `pnpm reprocess` | 规则改了以后，按新规则重新解析已入库的岗位（`--split-merged`：拆开旧版本因非拉丁文字名字而合并的岗位，见 [extraction.zh.md](extraction.zh.md#公司和标题的匹配键)） |
+| `pnpm companies:merge` | 列出重复的公司行，合并你确认的那些对，可试运行、可撤销；见 [extraction.zh.md](extraction.zh.md#合并重复公司) |
 | `pnpm db:studio` | 打开 Drizzle Studio，在浏览器里翻数据库表 |
 | `scripts/ops/backup.sh` / `scripts/ops/restore.sh` | 手动备份和恢复（见 `backup-restore.zh.md`） |
 

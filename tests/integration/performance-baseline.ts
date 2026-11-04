@@ -33,7 +33,7 @@ function ghostInputHashSql(options: GhostCheckListOptions): SQL {
     where s.job_id = j.id), '')`;
   const breakdown = sql`coalesce((select concat_ws('|', b.source_hash, b.prompt_version, md5(b.content::text)) from job_breakdowns b where b.job_id = j.id), '')`;
   const trusted = sql`(coalesce(c.name_norm, '') = any(${textArray(options.trustedKeys)}))::text`;
-  return sql`md5(concat_ws(':', md5(coalesce(j.description, '')), j.status::text, extract(epoch from j.first_seen_at)::text, ${options.rulesHash}::text, ${trusted}, ${sources}, ${breakdown}, ${spans}))`;
+  return sql`md5(concat_ws(':', md5(j.title), md5(coalesce(j.description, '')), j.status::text, extract(epoch from j.first_seen_at)::text, ${options.rulesHash}::text, ${trusted}, ${sources}, ${breakdown}, ${spans}))`;
 }
 
 export async function oldListJobsToGhostCheck(db: Executor, options: GhostCheckListOptions): Promise<GhostCheckCandidate[]> {

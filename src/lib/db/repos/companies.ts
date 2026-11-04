@@ -12,6 +12,11 @@ export async function getCompanyByNameNorm(db: Executor, nameNorm: string): Prom
   return row ?? null;
 }
 
+export async function getCompanyById(db: Executor, id: number): Promise<Company | null> {
+  const [row] = await db.select().from(companies).where(eq(companies.id, id)).limit(1);
+  return row ?? null;
+}
+
 /**
  * The company with this `name_norm`, created when missing (safe against a concurrent insert: the
  * unique key decides). An existing company keeps its name and flags; only a name that is the lower-case spelling of
@@ -108,6 +113,11 @@ export async function listCompanyKeys(db: Executor): Promise<Array<Pick<Company,
     .orderBy(asc(companies.id));
 }
 
+/** The companies that store aliases, for the pipeline's redirect of spellings that were merged away. */
+export async function listCompaniesWithAliases(db: Executor): Promise<Array<Pick<Company, "id" | "aliases">>> {
+  return db.select({ id: companies.id, aliases: companies.aliases }).from(companies).where(sql`cardinality(${companies.aliases}) > 0`).orderBy(asc(companies.id));
+}
+
 /**
  * Store another key for the company (its display name stays) when it still has key `from`; its salary lookups' cache keys
  * follow. Returns whether the row was changed. Run it in a transaction.
@@ -190,6 +200,14 @@ export async function suggestCompanies(db: Executor, query: string, limit: numbe
     .where(and(ilike(companies.name, `%${escapeLike(text)}%`), eq(companies.blacklisted, false)))
     .orderBy(sql`(${companies.name} ilike ${`${escapeLike(text)}%`}) desc`, sql`${jobCount} desc`, asc(companies.name))
     .limit(limit);
+}
+
+/** Every company with its job count, for finding duplicate rows. */
+export async function listCompaniesForDuplicateCheck(db: Executor): Promise<Array<Pick<Company, "id" | "name" | "nameNorm" | "aliases" | "watched" | "blacklisted"> & { jobCount: number }>> {
+  return db
+    .select({ id: companies.id, name: companies.name, nameNorm: companies.nameNorm, aliases: companies.aliases, watched: companies.watched, blacklisted: companies.blacklisted, jobCount: jobCountOfCompany })
+    .from(companies)
+    .orderBy(asc(companies.id));
 }
 
 /** The companies with these `name_norm` keys and their job counts (keys without a company are absent). */

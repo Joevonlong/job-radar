@@ -82,6 +82,8 @@ export function mergeGhostPacks(packs: ReadonlyArray<{ rules: { ghost: GhostPack
     repost_label_patterns: unionEntries(...ghost.map((g) => g.repost_label_patterns)),
     // each entry keeps its own pack's negation window
     evergreen_patterns: unionEntries(...ghost.map((g) => g.evergreen_patterns.map((entry) => ({ ...entry, negation_after: entry.negation_after ?? g.negation_after })))),
+    title_patterns: unionEntries(...ghost.map((g) => g.title_patterns)),
+    title_exclude: union(...ghost.map((g) => g.title_exclude)),
     responsibility_patterns: unionEntries(...ghost.map((g) => g.responsibility_patterns)),
     negation_cues: union(...ghost.map((g) => g.negation_cues)),
     question_words: union(...ghost.map((g) => g.question_words)),
@@ -152,6 +154,7 @@ export function buildEffectivePipeline(file: PipelineFileConfig, market: Market,
       legal_suffixes: listOf(file.company.legal_suffixes, (r) => r.company.legal_suffixes),
       aliases: file.company.aliases,
       agency_names: listOf(file.company.agency_names, (r) => r.company.agency_names),
+      duplicate_tail_words: file.company.duplicate_tail_words,
     },
     agency: {
       ...file.agency,

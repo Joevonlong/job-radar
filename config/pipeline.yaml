@@ -87,6 +87,8 @@ company:
     "Meta": ["Meta Platforms", "Facebook"]
   # Known headhunter / agency company names (legal form ignored); their jobs get the "agency" tag
   agency_names: []
+  # Words at the end of a company name that `pnpm companies:merge --suggest` ignores for its second tier (lowercase): candidates for a person to check, nothing is merged by them
+  duplicate_tail_words: [germany, deutschland, group, gruppe, holding, global, international, technologies, technology, software, systems, solutions, services, consulting, labs]
 
 agency:
   # Matched against the company name
@@ -527,7 +529,7 @@ filter:
 #       first_seen_max_points: 1   # at most this when only the first-seen date is known
 #     repost_label: { enabled: true, points: 1 }        # the source says "Reposted"
 #     reposted: { enabled: true, min_gap_days: 30, points: 2 }   # same channel, new id, same place, at least this many days later
-#     evergreen_wording: { enabled: true, points: 2 }   # "talent pool", "Initiativbewerbung", "always looking for"
+#     evergreen_wording: { enabled: true, points: 2, title_points: 3 }   # "talent pool", "Initiativbewerbung", "always looking for"; title_points: the title says it
 #     thin_description: { enabled: true, min_words: 120, points: 1, infer_from_headings: true }   # full-text sources only: short JD or no duties section
 #                             # infer_from_headings: without a current JD breakdown the duties headings decide; false: only a short JD counts
 #     quote_max_chars: 280
