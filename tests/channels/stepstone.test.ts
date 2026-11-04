@@ -326,6 +326,83 @@ describe("collect: known postings", () => {
   });
 });
 
+describe("collect: older postings already stored", () => {
+  const WIDE = searchQuery({ windowHours: 24 * 30 });
+
+  async function stored() {
+    const wide = await collectAll({}, WIDE);
+    const narrow = await collectAll();
+    const inWindow = new Set(narrow.postings.map((p) => p.externalId));
+    const old = wide.postings.filter((p) => !inWindow.has(p.externalId));
+    return { wide, narrow, old, inWindow };
+  }
+
+  async function withKnown(known: Map<string, unknown>) {
+    const channel = createStepstoneChannel({ now: () => NOW });
+    const made = makeContext(site(), extra(), { known: { payloads: async (ids) => new Map([...known].filter(([id]) => ids.includes(id))) } });
+    const postings = await channel.collect(searchQuery(), made.ctx);
+    return { postings, ...made };
+  }
+
+  it("delivers a stored posting older than the window again as stored, without a further request", async () => {
+    const { narrow, old } = await stored();
+    expect(old.length).toBeGreaterThan(0);
+    const target = old[0]!;
+    const run = await withKnown(new Map([[target.externalId, target.payload]]));
+    const refreshed = run.postings.find((p) => p.externalId === target.externalId);
+    expect(refreshed?.payload).toEqual(target.payload);
+    expect(refreshed?.url).toBe(target.url);
+    expect(run.postings.filter((p) => p.externalId === target.externalId)).toHaveLength(1);
+    // the postings of the window are as before, and the refresh cost no request
+    expect(run.postings.map((p) => p.externalId)).toEqual([...narrow.postings.map((p) => p.externalId), target.externalId]);
+    expect(run.calls).toHaveLength(narrow.calls.length);
+    const done = run.records.find((r) => r.message === "stepstone query done");
+    expect(done?.fields).toMatchObject({ refreshedStored: 1, outsideWindow: 2 });
+  });
+
+  it("does not store an unknown posting older than the window", async () => {
+    const { narrow, old } = await stored();
+    const known = await withKnown(new Map(narrow.postings.map((p) => [p.externalId, p.payload])));
+    expect(old.every((o) => !known.postings.some((p) => p.externalId === o.externalId))).toBe(true);
+    expect(known.postings.map((p) => p.externalId)).toEqual(narrow.postings.map((p) => p.externalId));
+  });
+
+  it("stores a posting of the window as before when it is not known yet", async () => {
+    const { narrow } = await stored();
+    const run = await withKnown(new Map());
+    expect(run.postings.map((p) => p.externalId)).toEqual(narrow.postings.map((p) => p.externalId));
+    expect(run.postings.every((p) => (p.payload as { detail: unknown }).detail !== undefined)).toBe(true);
+  });
+
+  it("refreshes nothing when the stored payload is unusable or the lookup fails", async () => {
+    const { narrow, old } = await stored();
+    const bad = await withKnown(new Map([[old[0]!.externalId, { nonsense: true }]]));
+    expect(bad.postings.map((p) => p.externalId)).toEqual(narrow.postings.map((p) => p.externalId));
+    const channel = createStepstoneChannel({ now: () => NOW });
+    const made = makeContext(site(), extra(), { known: { payloads: async () => { throw new Error("db down"); } } });
+    const postings = await channel.collect(searchQuery(), made.ctx);
+    expect(postings.map((p) => p.externalId)).toEqual(narrow.postings.map((p) => p.externalId));
+  });
+
+  it("does not refresh a stored posting whose title the prefilter rejects", async () => {
+    const { old } = await stored();
+    const target = old[0]!;
+    const title = (target.payload as { list: { title: string } }).list.title;
+    const prefilter = { enabled: true, include_terms: [], exclude_terms: [title] };
+    const made = makeContext(site(), extra({ title_prefilter: prefilter }), { known: { payloads: async () => new Map([[target.externalId, target.payload]]) } });
+    const postings = await createStepstoneChannel({ now: () => NOW }).collect(searchQuery(), made.ctx);
+    expect(postings.map((p) => p.externalId)).not.toContain(target.externalId);
+  });
+
+  it("says in the log how many listed answers the window dropped when nothing is stored", async () => {
+    const run = await collectAll({}, searchQuery({ windowHours: 1 }), site());
+    expect(run.postings).toHaveLength(0);
+    const line = run.records.find((r) => r.message.startsWith("stepstone query stored nothing"));
+    expect(line?.fields).toMatchObject({ windowHours: 1 });
+    expect(Number((line?.fields as { outsideWindow: number }).outsideWindow)).toBeGreaterThan(0);
+  });
+});
+
 describe("collect", () => {
   it("returns the postings of the window whose titles match, with their pages, newest first within a section", async () => {
     const { postings, calls, sleeps } = await collectAll();
