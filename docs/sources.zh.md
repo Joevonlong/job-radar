@@ -33,6 +33,8 @@ registry    来源清单页的统计窗口、判定阈值、导入大小上限�
 新块默认停用。自定义级联迁移后若要使用，须同时在 `/settings` 将 `linkedin-monid` 加入级联，并设置
 `linkedin.monid.enabled: true`。
 
+Apify 的远程查询不会被服务方过滤成远程：LinkedIn 的 `f_WT=2` 工作方式过滤经这个 actor 发出没有效果（实测结果与顺序完全相同，actor 也没有远程字段），所以默认的 `remote_input` 为空。远程查询只是在 `remote_locations` 的地点搜索，是否远程由流水线根据岗位本身判断。`remote_input` 的合并机制保留，供有这类字段的 actor 使用。
+
 ## 3. 七种状态怎么判
 
 | 状态 | 意思 |
@@ -491,9 +493,9 @@ Job Radar 是独立项目，与它能读取或连接的任何招聘网站、雇�
 
 预算限制之前，每个单元每天最多轮到 `max_per_cycle × 每天轮数` 家公司。名单超过这一容量的七倍时，部分等待可能超过通常的 168 小时补窗上限而漏采。干跑计划和轮换日志列出查询及最长等待；`pnpm sources:list` 列出公司查询，活动日志显示“公司：名字”，移出名单后用归一 key 显示。
 
-入库前，仅保留雇主归一 key 命中本查询或其他关注公司的结果；解析失败的原始记录仍保留供流水线诊断。`runs.fetched` 是后过滤前的返回数，新增数只计实际保留的岗位。日志计 `company_mismatch` 并列出至多三个雇主名。法律实体、子公司和品牌不会自动合并：分别关注或在 `pipeline.yaml: company.aliases` 添加别名，见[提取](extraction.zh.md)。常见短名容易让别家的结果占满上限，能配 ATS 看板时优先用看板。Arbeitsagentur 采用 `was` 自由文本备用查询，再校验雇主。
+入库前，仅保留雇主归一 key 命中本查询或其他关注公司的结果；解析失败的原始记录仍保留供流水线诊断。`runs.fetched` 是后过滤前的返回数，新增数只计实际保留的岗位。日志计 `company_mismatch` 并列出至多三个雇主名。法律实体、子公司和品牌不会自动合并：分别关注或在 `pipeline.yaml: company.aliases` 添加别名，见[提取](extraction.zh.md)。常见短名容易让别家的结果占满上限，能配 ATS 看板时优先用看板。Arbeitsagentur 先按雇主全名精确查询，只有没有该雇主的岗位时才退回 `was` 自由文本查询，再校验雇主；公司名请按职业介绍所的写法填（`SAP`、`Siemens AG`）：像 `SAP SE`（1 条，而 `SAP` 有 45 条）这样的部分命中算作找到，不会再退回自由文本。
 
-各通道的查询方式：LinkedIn 的 Bright Data、Apify 和 session 通道用公司名加本国名搜索，不加远程过滤；JSearch 发一次请求 `<公司> in <本国>`，不带 `work_from_home`；StepStone 和 XING 按名字全国搜索，不带城市、半径、居家办公或远程过滤（StepStone 只发 `?q=`，见上文），也不做标题预筛（岗位标题里不会有公司名）。
+各通道的查询方式：LinkedIn 的 Bright Data、Apify 和 session 通道用公司名加本国名搜索，不加远程过滤；JSearch 发一次请求 `<公司> in <本国>`，不带 `work_from_home`；StepStone 和 XING 按名字全国搜索，不带城市、半径、居家办公或远程过滤（StepStone 只发 `?q=`，见上文），也不做标题预筛（岗位标题里不会有公司名）。Arbeitsagentur 先按雇主全名（`arbeitgeber`）精确查询（要写成 `Siemens AG`，写 `Siemens` 查不到），没有该雇主的岗位才退回自由文本搜索（请求失败不会退回），其结果之后再按雇主过滤；因此没有岗位的关注公司每次查询要发两次搜索请求，而不是一次。
 
 **其他雇主的详情页不打开。**结果列表里已有雇主名的通道（Arbeitsagentur、LinkedIn session、JSearch、StepStone、XING），公司查询只在雇主是被搜的公司或另一家关注公司时才打开该条的详情页。其余的只保留列表数据，随后被上面的雇主校验丢弃，因此不占页面、详情请求、每日页面上限，也不占 `max_details_per_query`。没写雇主名的条目照旧打开。这条规则不覆盖 jobspy 通道，它的描述由 sidecar 自己抓取。
 

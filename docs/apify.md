@@ -20,7 +20,7 @@ The `linkedin-apify` channel takes over the main LinkedIn search after the Brigh
 | `remote_locations` | The location used by remote queries per `search.yaml: remote_scope` |
 | `date_posted` | Value of `{date_posted}` for a template that uses the actor's coarse filter: window <=24 hours / <=7 days / <=30 days / longer (empty = omit this key). The default template does not use it |
 | `input_template` | The actor input template; strings may use `{keywords}` `{location}` `{date_posted}` `{posted_within_seconds}` `{limit}` (when the whole string is `"{limit}"` it becomes a number); keys with empty values are omitted |
-| `remote_input` | Keys layered onto the template by remote queries (default `urlParam: f_WT=2`); a key replaces the template's, except that two `{key, value}` lists merge by `key` with the remote entry winning, and an empty list changes nothing. A list of any other shape replaces the template's list, which drops its `f_TPR` |
+| `remote_input` | Keys layered onto the template by remote queries (default empty: LinkedIn's `f_WT=2` has no effect through this actor, so remote queries are not filtered to remote by the provider; they are searches at the `remote_locations` place, and the pipeline decides remote from the posting); a key replaces the template's, except that two `{key, value}` lists merge by `key` with the remote entry winning, and an empty list changes nothing. A list of any other shape replaces the template's list, which drops its `f_TPR` |
 
 `input_template`, `remote_input` and `date_posted` are not shown on the settings page (they are actor-specific data); edit the YAML directly.
 

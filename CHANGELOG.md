@@ -12,6 +12,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Watched company lookups on Arbeitsagentur ask for the exact employer first.** The `arbeitgeber` parameter matches the employer name as written (`Siemens AG`: all hits are that employer), so it is tried first; only when it finds nothing (a short form such as `Siemens`) the search falls back to free text, whose results are narrowed to the employer afterwards, as before. Request and detail limits are unchanged. No config change.
+- **Apify remote queries no longer send LinkedIn's `f_WT=2`.** Through this actor it had no effect (same results, same order), so the shipped `remote_input` is now empty and the docs say that remote queries are plain searches at the remote location, with the pipeline judging remote from the posting. Needs no migration: your config files only hold what you changed, and an old whole file that still lists `f_WT` keeps working (the filter did nothing before either).
+
 - **The advanced editor shows "Restore default" only when your file changes something.** A file that is only the stub or comments no longer offers it (it did nothing visible); the button follows the saved state of the file.
 - **`pnpm config:check` reports what your config files change.** One line per overlay file with the number of overridden and unset keys, notes for a pin equal to the shipped value and for an `!unset` that does nothing, and `pnpm config:check --overrides` to list them (protected keys never show a value; others show only numbers, booleans and short plain strings, otherwise just their shape). The doctor's `config.layers` summary shows the same totals. `pnpm release:changed-defaults <from> <to>` lists the shipped defaults that differ between two git refs. Reports only: no file format changes and nothing is written.
 
