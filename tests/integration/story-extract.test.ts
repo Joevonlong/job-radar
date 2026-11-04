@@ -285,10 +285,16 @@ describe("the upload route", () => {
 
   it("reads only import.max_concurrent_uploads files at once and turns the rest away, then reads again", async () => {
     writerFile("enabled: true\nimport:\n  max_concurrent_uploads: 1\n");
-    const file = () => upload({ origin: "resume", file: new File([`# CV\n${SOURCE}`], "cv.md") });
+    const file = () => upload({ origin: "resume", file: new File([minimalPdf([`${MARKER} Moved the billing service.`]).slice()], "cv.pdf") });
     const [first, second] = await Promise.all([POST(file()), POST(file())]);
-    expect([first.status, second.status]).toEqual([200, 429]);
-    expect(await second.json()).toEqual({ ok: false, error: "too_many" });
+    expect([first.status, second.status].sort()).toEqual([200, 429]);
+    await db().delete(schema.controlRequests);
+    // pasted text and the profile have no file and do not use a slot (one open extraction at a time may still answer busy)
+    const [held, pasted] = await Promise.all([POST(file()), POST(upload({ origin: "self_description", text: SOURCE }))]);
+    expect([held.status, pasted.status].sort()).toEqual([200, 409]);
+    expect(held.status).not.toBe(429);
+    expect(pasted.status).not.toBe(429);
+    await db().delete(schema.controlRequests);
     // the slot is back once the first is done, also after a refusal
     expect((await POST(file())).status).toBe(200);
     writerFile("enabled: true\n");

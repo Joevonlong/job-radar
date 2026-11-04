@@ -4,6 +4,7 @@ import { ConfigError, reloadConfig, type WriterConfig } from "@/lib/config";
 import { profileSourceText, requestStoryExtract } from "@/lib/control/story-extract-request";
 import { getDb } from "@/lib/db";
 import { logActionFailure } from "@/lib/logging/action-failure";
+import { readBody } from "@/lib/stories/read-body";
 import { enterUpload } from "@/lib/stories/upload-gate";
 import { formatOfName, textOfUpload } from "@/lib/stories/upload-text";
 import { STORY_EXTRACT_ORIGINS, type StoryExtractOrigin } from "@/lib/stories/extract";
@@ -22,33 +23,6 @@ function reply(body: StoryExtractResponse, status = 200): NextResponse {
 }
 
 const refuse = (error: RouteError): NextResponse => reply({ ok: false, error }, STATUS[error]);
-
-/** The request body, read only up to `limit` and held in memory; null when it is longer. */
-async function readBody(request: Request, limit: number): Promise<Uint8Array<ArrayBuffer> | null> {
-  const declared = Number(request.headers.get("content-length") ?? "");
-  if (Number.isFinite(declared) && declared > limit) return null;
-  if (!request.body) return new Uint8Array();
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let length = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    length += value.byteLength;
-    if (length > limit) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(value);
-  }
-  const body = new Uint8Array(length);
-  let at = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, at);
-    at += chunk.byteLength;
-  }
-  return body;
-}
 
 const isOrigin = (value: unknown): value is StoryExtractOrigin => STORY_EXTRACT_ORIGINS.some((origin) => origin === value);
 
@@ -69,19 +43,13 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   if (!writer.enabled) return refuse("disabled");
 
-  const limits = writer.import;
-  const release = enterUpload(limits.max_concurrent_uploads);
-  if (release === null) return refuse("too_many");
-  try {
-    return await handle(request, writer);
-  } finally {
-    release();
-  }
+  return handle(request, writer);
 }
 
 async function handle(request: Request, writer: WriterConfig): Promise<NextResponse> {
   const limits = writer.import;
-  const body = await readBody(request, limits.max_file_bytes + FORM_OVERHEAD_BYTES);
+  const body = await readBody(request, limits.max_file_bytes + FORM_OVERHEAD_BYTES, limits.upload_timeout_seconds * 1000);
+  if (body === "timeout") return refuse("invalid");
   if (body === null) return refuse("too_large");
   let form: FormData;
   try {
@@ -110,13 +78,21 @@ async function handle(request: Request, writer: WriterConfig): Promise<NextRespo
     if (file.size > limits.max_file_bytes) return refuse("too_large");
     const format = formatOfName(file.name);
     if (format === null || !limits.formats.includes(format)) return refuse("bad_type");
-    const extracted = await textOfUpload(new Uint8Array(await file.arrayBuffer()), format, {
-      maxChars: limits.max_chars,
-      minChars: limits.min_chars,
-      pdfTimeoutMs: limits.pdf_timeout_seconds * 1000,
-      pdfMaxMemoryMb: limits.pdf_max_memory_mb,
-      signal: request.signal,
-    });
+    // only a file is read by this process side by side with others (its bytes and a PDF thread); pasted text and the profile are not
+    const release = enterUpload(limits.max_concurrent_uploads);
+    if (release === null) return refuse("too_many");
+    let extracted: Awaited<ReturnType<typeof textOfUpload>>;
+    try {
+      extracted = await textOfUpload(new Uint8Array(await file.arrayBuffer()), format, {
+        maxChars: limits.max_chars,
+        minChars: limits.min_chars,
+        pdfTimeoutMs: limits.pdf_timeout_seconds * 1000,
+        pdfMaxMemoryMb: limits.pdf_max_memory_mb,
+        signal: request.signal,
+      });
+    } finally {
+      release();
+    }
     // the client is gone: nobody reads this answer
     if (!extracted.ok) return refuse(extracted.error === "aborted" ? "invalid" : extracted.error);
     text = extracted.text;

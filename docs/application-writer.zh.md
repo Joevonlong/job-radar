@@ -196,7 +196,8 @@ ai-worker；请求完成、失败或过期后，素材从请求里清除，只�
 | `import.max_drafts` | `12` | 一次提取最多返回几条草稿 |
 | `import.pdf_timeout_seconds` | `15` | 读取一个 PDF 的最长时间，超时即停止并请你粘贴文字 |
 | `import.pdf_max_memory_mb` | `256` | 读取 PDF 的线程的堆内存上限（MB）。堆外内存不计入，所以真正拦住构造文件的是 `pdf_timeout_seconds` 超时 |
-| `import.max_concurrent_uploads` | `2` | 同时读取的简历上传最多几个，更多的会被拒绝并提示“读取的文件太多”，等一个结束再试 |
+| `import.upload_timeout_seconds` | `30` | 上传内容最长多久必须到齐，更慢的发送方会被切断 |
+| `import.max_concurrent_uploads` | `2` | 每个 web 进程同时读取的简历文件最多几个，更多的会被拒绝并提示“读取的文件太多”，等一个结束再试。粘贴文字和画像不计入 |
 | `import.draft_ttl_days` | `14` | 草稿等待审核的天数，过期删除，无论是否审核过 |
 | `questions.max_per_job` | `12` | 每个职位最多几题 |
 | `questions.text_max_chars` | `1000` | 问题原文最长字符数 |
