@@ -4,6 +4,7 @@
  * Only `config_version` is read here (a full load already reports problems of other kinds).
  */
 import fs from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { parse as parseYaml } from "yaml";
 
@@ -39,6 +40,38 @@ function fileVersion(file: string, cache: VersionCache): number | null {
   }
   cache.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, version });
   return version;
+}
+
+export interface VersionStopOptions {
+  /** Seconds to wait before exiting, read only when stopping. */
+  waitSeconds: () => number;
+  /** Puts a request this worker just claimed back in the queue. */
+  release: (requestId: number) => Promise<void>;
+  log: (message: string) => void;
+  /** Ends the process. */
+  exit: (code: number) => void;
+}
+
+/**
+ * The check the worker runs before touching the queue, before every claim and after it. Given the id of a request it has
+ * just claimed, that request goes back to the queue first, for the upgraded worker. A failed release still stops: the
+ * next start queues a request left `running` again.
+ */
+export function createVersionStop(options: VersionStopOptions): (claimedRequestId?: number) => Promise<void> {
+  const versions: VersionCache = new Map();
+  return async (claimedRequestId) => {
+    const newer = newerConfigFiles(versions);
+    if (newer.length === 0) return;
+    if (claimedRequestId !== undefined) {
+      await options.release(claimedRequestId).catch((error: unknown) => {
+        options.log(`could not put request #${claimedRequestId} back: ${error instanceof Error ? error.message : "unknown error"}`);
+      });
+    }
+    const waitSeconds = options.waitSeconds();
+    options.log(`config files newer than this code: ${newer.map((file) => `${file.name} v${file.version} (reads up to v${file.supported})`).join(", ")}. Exiting${waitSeconds > 0 ? ` in ${waitSeconds}s` : ""}; the upgraded worker takes over`);
+    if (waitSeconds > 0) await sleep(waitSeconds * 1000);
+    options.exit(1);
+  };
 }
 
 /** The user's config and profile files whose `config_version` is newer than this code reads. */
