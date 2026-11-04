@@ -4,10 +4,13 @@
  * Only `config_version` is read here (a full load already reports problems of other kinds).
  */
 import fs from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { parse as parseYaml } from "yaml";
 
-import { CONFIG_NAMES, currentConfigVersion, getUserConfigPath, type ConfigName } from "@/lib/config";
+import { CONFIG_NAMES, currentConfigVersion, getUserConfigPath, loadConfig, type ConfigName } from "@/lib/config";
+import type { Db } from "@/lib/db/client";
+import { releaseClaimedControlRequest } from "@/lib/db/repos/control-requests";
 
 export interface NewerConfigFile {
   name: ConfigName;
@@ -39,6 +42,38 @@ function fileVersion(file: string, cache: VersionCache): number | null {
   }
   cache.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, version });
   return version;
+}
+
+export interface VersionChecksOptions {
+  db: Db;
+  /** `--once` exits at once; a running worker first waits `host_worker.already_running_wait_seconds`. */
+  once: boolean;
+  log: (message: string) => void;
+  /** Ends the process. */
+  exit: (code: number) => void;
+}
+
+/**
+ * The checks the worker runs around every claim; `beforeClaim` also before it first touches the queue. `afterClaim` puts the
+ * request it was given back in the queue first, for the upgraded worker. A failed release still stops: the next start
+ * queues a request left `running` again, or fails it when its kind is not requeued.
+ */
+export function createVersionChecks(options: VersionChecksOptions): { beforeClaim: () => Promise<void>; afterClaim: (request: { id: number }) => Promise<void> } {
+  const versions: VersionCache = new Map();
+  const stopIfOutdated = async (claimedRequestId?: number): Promise<void> => {
+    const newer = newerConfigFiles(versions);
+    if (newer.length === 0) return;
+    if (claimedRequestId !== undefined) {
+      await releaseClaimedControlRequest(options.db, claimedRequestId).catch((error: unknown) => {
+        options.log(`could not put request #${claimedRequestId} back: ${error instanceof Error ? error.message : "unknown error"}`);
+      });
+    }
+    const waitSeconds = options.once ? 0 : loadConfig("ai").host_worker.already_running_wait_seconds;
+    options.log(`config files newer than this code: ${newer.map((file) => `${file.name} v${file.version} (reads up to v${file.supported})`).join(", ")}. Exiting${waitSeconds > 0 ? ` in ${waitSeconds}s` : ""}; the upgraded worker takes over`);
+    if (waitSeconds > 0) await sleep(waitSeconds * 1000);
+    options.exit(1);
+  };
+  return { beforeClaim: () => stopIfOutdated(), afterClaim: (request) => stopIfOutdated(request.id) };
 }
 
 /** The user's config and profile files whose `config_version` is newer than this code reads. */

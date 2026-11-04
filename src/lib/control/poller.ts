@@ -43,6 +43,12 @@ export interface ControlPollOptions {
   /** Runs before every claim; the ai-worker stops here when config files are newer than its code. */
   beforeClaim?: () => Promise<void>;
   /**
+   * Runs after a claim, before the handler; the ai-worker checks again here. `beforeClaim` alone leaves a window: a file
+   * can turn newer and a request can be queued between that check and the claim. Whatever was written before the claim is
+   * seen here, so a request queued after a file turned newer never runs.
+   */
+  afterClaim?: (request: ControlRequest) => Promise<void>;
+  /**
    * The kinds this process may claim, asked again for every claim (a hot-reloaded `ai.yaml: execution` takes effect
    * at once). Omitted: every kind. The runner and the ai-worker each pass their own.
    */
@@ -85,6 +91,7 @@ export async function processNextControlRequest(options: ControlPollOptions): Pr
   await options.beforeClaim?.();
   const request = await claimNextControlRequest(db, claimableKinds(options.kinds?.()), { lane: options.lane });
   if (!request) return null;
+  await options.afterClaim?.(request);
   const recorder = options.activity ?? noopRecorder;
   const cycle = z.object({ cycleId: z.number().int().positive() }).safeParse(request.payload);
   const job = z.object({ jobId: z.number().int().positive() }).safeParse(request.payload);
