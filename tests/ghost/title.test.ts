@@ -43,6 +43,12 @@ describe("title patterns", () => {
     "Platform Engineer - General Application",
     "Platform Engineer - Spontaneous Applications",
     "Future Openings",
+    "Talent Pool Engineering",
+    "Talent Pool Marketing (m/w/d)",
+    "Talent Pool Data Scientist",
+    "Engineering Manager - Talent Pool",
+    "Lead - Talent Pool",
+    "Talent Pool Design",
   ])("%s", (title) => {
     expect(hit(title)).not.toBeNull();
   });
@@ -76,6 +82,8 @@ describe("title patterns", () => {
     "Talent Community Team Lead",
     "Product Designer, Talent Pool Product",
     "Team Lead - Talent Pool",
+    "Talent Pool Squad",
+    "Talent Network Team",
     "Team Lead: Talent Community",
     // a business line, a department, a company
     "Software Engineer - General Applications",

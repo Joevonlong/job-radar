@@ -179,12 +179,14 @@ ghost:
   title_exclude:
     # the job is recruiting or running the pool: "Talent Pool Manager (m/w/d)", "Talent Community Lead"
     - '(?<![\p{L}\p{N}])talent[\s-]?(?:pool|community|network)\s{0,3}(?:manager|lead|specialist|coordinator|engineer|partner|owner|director|analyst|associate|consultant|administrator|programs?)(?![\p{L}\p{N}])'
-    # "Head of Talent Community", "Manager, Talent Pool", "Lead Talent Network", "Team Lead - Talent Pool"
-    - '(?<![\p{L}\p{N}])(?:head\s{1,3}of|director\s{1,3}of|vp\s{1,3}of|manager\s{1,3}of|(?:manager|lead|specialist|coordinator|director|head)\s{0,3}[,\-–—:]?)\s{0,3}(?:the\s{1,3})?(?:global\s{1,3})?talent[\s-]?(?:pool|community|network)(?![\p{L}\p{N}])'
+    # "Head of Talent Community", "Manager, Talent Pool", "Lead Talent Network", "Team Lead - Talent Pool" (a dash counts only after "Team Lead": "Engineering Manager - Talent Pool" and "Lead - Talent Pool" are still pools)
+    - '(?<![\p{L}\p{N}])(?:head\s{1,3}of|director\s{1,3}of|vp\s{1,3}of|manager\s{1,3}of|(?:manager|lead|specialist|coordinator|director|head)\s{0,3},?|team\s{1,3}lead\s{0,3}[\-–—:])\s{0,3}(?:the\s{1,3})?(?:global\s{1,3})?talent[\s-]?(?:pool|community|network)(?![\p{L}\p{N}])'
     # a team or product of that name: "Software Engineer, Talent Network", "Backend Engineer - Talent Community Platform",
-    # "Talent Network Team Lead" (after a comma the phrase names the team; a dash, "(" or the start keeps it a pool)
+    # "Talent Network Team Lead" (after a comma the phrase names the team: this misses some pools, "AI Engineer, Talent Pool", to avoid
+    # flagging real jobs; a dash, "(" or the start keeps it a pool). Only "team", "squad" and product words after the phrase exclude it:
+    # "Talent Pool Engineering", "Talent Pool Marketing (m/w/d)" and "Talent Pool Data Scientist" still count.
     - ',\s{0,3}talent[\s-]?(?:pool|community|network)(?![\p{L}\p{N}])'
-    - '(?<![\p{L}\p{N}])talent[\s-]?(?:pool|community|network)\s{1,3}(?:platform|products?|teams?|software|tools?|apps?|crm|ats|services?|infrastructure|engineering|marketing|growth|design|data|analytics|operations|ops|squad|group)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])talent[\s-]?(?:pool|community|network)\s{1,3}(?:platform|products?|teams?|squad|software|tools?|apps?|crm|ats|services?|infrastructure)(?![\p{L}\p{N}])'
     # a leader of a department of that name: "Director of Future Opportunities", "Head of Future Roles", "VP, Upcoming Openings"
     - '(?<![\p{L}\p{N}])(?:head|director|vp|vice\s{1,3}president|svp|evp|chief|manager|lead|officer)(?:\s{1,3}of\s{1,3}|\s{0,3}[,\-–—:]\s{0,3})(?:the\s{1,3})?(?:future|upcoming)\s{1,3}(?:openings|opportunities|vacancies|positions|roles)(?![\p{L}\p{N}])'
     # "Recruiter - Talent Community", "Sourcer", "Talent Acquisition Partner"
