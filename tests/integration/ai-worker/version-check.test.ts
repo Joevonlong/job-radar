@@ -4,11 +4,15 @@ import path from "node:path";
 
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
+import { parseDocument } from "yaml";
 
 import { currentConfigVersion, getUserConfigPath, type ConfigName } from "@/lib/config";
-import { createCycle, finishCycle, getControlRequest, insertControlRequest } from "@/lib/db";
+import type { ChannelLogger } from "@/lib/channels/types";
+import { processNextControlRequest } from "@/lib/control";
+import { createCycle, finishCycle, getControlRequest, insertControlRequest, releaseClaimedControlRequest } from "@/lib/db";
 import { createConnection } from "@/lib/db/client";
 
+import { createVersionChecks } from "../../../src/ai-worker/version-guard";
 import { makeTempConfig, type TempConfig } from "../../config/helpers";
 import { createIsolatedDb, type IsolatedDb } from "../../helpers/isolated-db";
 
@@ -96,6 +100,9 @@ async function interruptedRunAi(): Promise<number> {
   return id;
 }
 
+class Stopped extends Error {}
+const quiet: ChannelLogger = { debug() {}, info() {}, warn() {}, error() {}, child: () => quiet };
+
 const statusOf = async (id: number): Promise<string | undefined> => (await getControlRequest(conn.db, id))?.status;
 
 describe("the worker and a config file newer than its code", () => {
@@ -116,7 +123,11 @@ describe("the worker and a config file newer than its code", () => {
   it("newer while it runs: it exits before the next claim, and the queued request stays queued", async () => {
     const ai = path.join(temp.configDir, "ai.yaml");
     const text = fs.readFileSync(fs.existsSync(ai) ? ai : path.join(temp.defaultsDir, "ai.yaml"), "utf8");
-    fs.writeFileSync(ai, text.replace(/already_running_wait_seconds: \d+/, "already_running_wait_seconds: 0").replace(/poll_seconds: \d+/, "poll_seconds: 1"));
+    const doc = parseDocument(text);
+    // Not 0: exiting at once could end the process while the other lane holds a claim it has yet to put back.
+    doc.setIn(["host_worker", "already_running_wait_seconds"], 1);
+    doc.setIn(["host_worker", "poll_seconds"], 1);
+    fs.writeFileSync(ai, doc.toString());
 
     const child = spawn(process.execPath, ["--import", LOADER, WORKER], { cwd: REPO, env: workerEnv(), stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
@@ -139,6 +150,50 @@ describe("the worker and a config file newer than its code", () => {
       if (child.exitCode === null) child.kill("SIGKILL");
     }
   }, 90_000);
+
+  it("newer between the check and the claim: the claimed request goes back, its handler never runs, and the worker stops", async () => {
+    const messages: string[] = [];
+    const checks = createVersionChecks({
+      db: conn.db,
+      once: true,
+      log: (message) => messages.push(message),
+      exit: () => {
+        throw new Stopped();
+      },
+    });
+    let pending = 0;
+    const run = processNextControlRequest({
+      db: conn.db,
+      signal: new AbortController().signal,
+      logger: quiet,
+      kinds: () => ["run_ai"],
+      ...checks,
+      beforeClaim: async () => {
+        await checks.beforeClaim();
+        // the window: the check has passed, the claim has not happened
+        makeNewer("notify");
+        pending = await pendingRunAi();
+      },
+    });
+
+    await expect(run).rejects.toBeInstanceOf(Stopped);
+    expect(messages.join("\n")).toContain("config files newer than this code");
+    const request = await getControlRequest(conn.db, pending);
+    expect(request?.status).toBe("pending");
+    expect(request?.startedAt).toBeNull();
+    expect(request?.result).toBeNull(); // not counted as an interruption
+  });
+
+  it("putting a claim back leaves a request that has ended meanwhile as it is", async () => {
+    const id = await interruptedRunAi();
+    await conn.db.execute(sql`update control_requests set status = 'failed', finished_at = now(), result = '{"error":"expired"}'::jsonb where id = ${id}`);
+    const before = await getControlRequest(conn.db, id);
+
+    await releaseClaimedControlRequest(conn.db, id);
+
+    expect(await getControlRequest(conn.db, id)).toEqual(before);
+    expect(before?.status).toBe("failed");
+  });
 
   it("files at this code's version: it puts back what was interrupted and handles the queue, exit 0", async () => {
     const running = await interruptedRunAi();
