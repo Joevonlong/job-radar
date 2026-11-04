@@ -67,4 +67,12 @@ describe("how a domain is shown", () => {
     expect(displayDomain("xn--!!.de")).toBe("xn--!!.de");
     expect(displayDomain("xn--.de")).toBe("xn--.de");
   });
+
+  it("keeps the xn-- form of a label that could pass for another name or hides characters", () => {
+    // Cyrillic a among Latin letters; right-to-left override; zero-width character; C1 control
+    for (const name of ["xn--pple-43d.com", "xn--zvg.com", "xn--zug.com", "xn--a.com"]) expect(displayDomain(name), name).toBe(name);
+    // a whole-Cyrillic or whole-Latin label is fine, and other labels of the same name are judged on their own
+    expect(displayDomain("xn--mnchen-bau-9db.de")).toBe("münchen-bau.de");
+    expect(displayDomain("xn--pple-43d.xn--mnchen-bau-9db.de")).toBe("xn--pple-43d.münchen-bau.de");
+  });
 });

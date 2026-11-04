@@ -46,10 +46,34 @@ function decodePunycode(input: string): string | null {
   return output.length === 0 ? null : String.fromCodePoint(...output);
 }
 
-/** A domain as people read it: international labels (`xn--mnchen-bau-9db.de`) in their letters. Only for display: lookups and requests use the stored form. */
+/** The scripts a shown label may be written in; a label uses one of them (Japanese may combine Han with kana). Digits and hyphens belong to every script. */
+const SCRIPT_GROUPS: readonly (readonly string[])[] = [["Latin"], ["Cyrillic"], ["Greek"], ["Han", "Hiragana", "Katakana"], ["Han", "Bopomofo"], ["Han", "Hangul"], ["Arabic"], ["Hebrew"], ["Thai"], ["Devanagari"]];
+
+/** Looks like what it is: one script, no control, format, unassigned or separator characters, and the same label again when encoded. */
+function safeToShow(label: string, decoded: string): boolean {
+  if (/[\p{C}\p{Z}]/u.test(decoded)) return false;
+  const letters = [...decoded].filter((char) => /\p{L}|\p{M}/u.test(char));
+  const fits = SCRIPT_GROUPS.some((group) => letters.every((char) => group.some((script) => new RegExp(`\\p{Script_Extensions=${script}}`, "u").test(char))));
+  if (!fits) return false;
+  try {
+    return new URL(`https://${decoded}.test`).hostname === `${label.toLowerCase()}.test`;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A domain as people read it: international labels (`xn--mnchen-bau-9db.de`) in their letters. A label that mixes scripts (a Cyrillic
+ * letter among Latin ones), holds invisible or control characters, or does not encode back to itself stays in its `xn--` form, so a
+ * look-alike is not made to look right. Only for display: lookups and requests use the stored form.
+ */
 export function displayDomain(domain: string): string {
   return domain
     .split(".")
-    .map((label) => (label.toLowerCase().startsWith("xn--") ? (decodePunycode(label.slice(4)) ?? label) : label))
+    .map((label) => {
+      if (!label.toLowerCase().startsWith("xn--")) return label;
+      const decoded = decodePunycode(label.slice(4));
+      return decoded !== null && safeToShow(label, decoded) ? decoded : label;
+    })
     .join(".");
 }
