@@ -29,6 +29,7 @@
     "test:e2e:setup": "playwright test --config playwright.setup.config.ts",
     "demo:shots": "scripts/demo-shots.sh",
     "config:check": "tsx scripts/config-check.ts",
+    "release:changed-defaults": "tsx scripts/release/changed-defaults.ts",
     "i18n:catalog": "tsx scripts/i18n-catalog.ts",
     "i18n:check": "tsx scripts/i18n-catalog.ts --check",
     "docs:check": "node scripts/check-doc-links.mjs",

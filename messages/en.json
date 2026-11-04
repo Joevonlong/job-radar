@@ -6068,7 +6068,10 @@
           "missingVersionHint": "Add config_version to the file, or let the next deploy's write step convert it (pnpm config:plan --deploy shows it).",
           "notCopied": "{files} are still read from the defaults (not copied into the user directory)",
           "notCopiedHint": "pnpm config:init",
-          "summary": "User config {userDir} ({count} files), defaults {defaultsDir}"
+          "summary": "User config {userDir} ({count} files), defaults {defaultsDir}",
+          "summaryOverlay": "User config {userDir} ({count} files; {overrides, plural, one {# override} other {# overrides}}, {unsets, plural, one {# unset} other {# unsets}}), defaults {defaultsDir}",
+          "pins": "Pinned at the shipped value, so they no longer follow product updates (informational): {keys}",
+          "invalidUnsets": "{count, plural, one {# unset names a key} other {# unsets name keys}} the shipped file does not have (a typo, or a key a product update removed), so {count, plural, one {it does} other {they do}} nothing (informational): {keys}"
         },
         "market": {
           "title": "Market (market pack, home country, base currency, local language)",

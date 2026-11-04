@@ -17,11 +17,17 @@
  *   - the identity of the shipped defaults directory is printed (12 characters); a directory that cannot be identified (a
  *     symbolic link, an unsupported file name) is a failure.
  *
+ * Per user file that is an overlay, the summary lines say how many keys it overrides and unsets; a pin equal to the shipped
+ * value and an `!unset` of a key the shipped file does not have are listed as notes (neither is a failure).
+ *
  * Usage: pnpm config:check   (honours JOB_RADAR_DEFAULTS_DIR / JOB_RADAR_CONFIG_DIR / JOB_RADAR_PROFILE_DIR)
  *
  * `pnpm config:check --effective [--json]` instead prints, per config file, where it is read from and the canonical hash
  * of its effective value (what the loader makes of it; key order, comments and config_version do not change it). Compare
  * the hashes before and after an upgrade: equal hashes mean the same effective config. Exits 1 when a file is invalid.
+ *
+ * `pnpm config:check --overrides [--json]` lists every key each overlay file overrides or unsets. A protected key never
+ * shows a value; other values show only numbers, booleans and short plain strings; anything else shows its shape (`(list, 3 items)`). Reads only.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -51,6 +57,7 @@ import {
   documentConfigVersion,
   fileLacksVersion,
   hasOverlayFormat,
+  inspectOverlayFiles,
   isOverlayVersion,
   readConfigLayers,
   readConfigText,
@@ -85,6 +92,33 @@ if (process.argv.includes("--effective")) {
     }
   }
   process.exit(entries.some((entry) => entry.error !== null) ? 1 : 0);
+}
+
+if (process.argv.includes("--overrides")) {
+  const files = inspectOverlayFiles();
+  if (process.argv.includes("--json")) {
+    console.log(JSON.stringify({ files: files.map(({ file, format, overrides, unsets, pins, invalidUnsets, entries }) => ({ file, format, overrides, unsets, pins, invalidUnsets, entries })) }, null, 2));
+  } else {
+    for (const file of files) {
+      if (file.format !== "overlay") {
+        console.log(`- ${file.file} (${file.format === "whole" ? "a whole file, not an overlay" : "cannot be read, see pnpm config:check"})`);
+        continue;
+      }
+      console.log(`${file.file}  ${overlayCounts(file)}`);
+      for (const entry of file.entries) {
+        const note = entry.invalid ? "  (the shipped file has no such key)" : entry.pin ? "  (equals the shipped value)" : "";
+        if (entry.kind === "unset") console.log(`  ${entry.path}: !unset${note}`);
+        else console.log(`  ${entry.path}: ${entry.shown ?? "(protected key, value not shown)"}${note}`);
+      }
+    }
+  }
+  process.exit(0);
+}
+
+/** `3 overrides, 1 unset` */
+function overlayCounts(file: { overrides: number; unsets: number }): string {
+  const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
+  return `${plural(file.overrides, "override")}, ${plural(file.unsets, "unset")}`;
 }
 
 let failures = 0;
@@ -178,6 +212,16 @@ for (const name of CONFIG_NAMES.filter((n) => configRegistry[n].location === "pr
 // A user file without config_version is read as a whole file: keys it lacks take the schema's defaults, not the shipped values.
 for (const name of LAYERED_CONFIG_NAMES.filter(fileLacksVersion)) {
   console.log(`! ${rel(getUserConfigPath(name))} has no config_version: it is read as a whole file, so keys it lacks take the schema's defaults (a deploy's write step converts it; run pnpm config:plan --deploy)`);
+}
+
+// What each overlay file changes on the shipped file; a pin or an unset that does nothing is a note, not a failure.
+for (const file of inspectOverlayFiles()) {
+  if (file.format !== "overlay") continue;
+  console.log(`· ${file.file}  ${overlayCounts(file)}`);
+  const pins = file.entries.filter((entry) => entry.pin).map((entry) => entry.path);
+  if (pins.length > 0) console.log(`! ${file.file} pins ${pins.length} key(s) at the shipped value (${pins.join(", ")}): they stop following product updates; remove one to follow the product, or keep it on purpose`);
+  const invalid = file.entries.filter((entry) => entry.invalid).map((entry) => entry.path);
+  if (invalid.length > 0) console.log(`! ${file.file} unsets ${invalid.length} key(s) the shipped file does not have (${invalid.join(", ")}): a typo, or a key a product update removed; the line does nothing, remove it`);
 }
 
 // models.yaml is an overlay: the user's file lists only what it adds or changes
