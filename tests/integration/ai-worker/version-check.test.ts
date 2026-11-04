@@ -94,6 +94,17 @@ function setShippedHostWorker(values: Record<string, number>): void {
   fs.writeFileSync(file, doc.toString());
 }
 
+/**
+ * How long the worker's activity recorder may take to close. Past it `exitProcess` kills the process (work was abandoned), which
+ * `spawnSync` reports as status null; on a loaded machine the default is too short for a test that asserts the exit code.
+ */
+function setActivityFlushMs(ms: number): void {
+  const file = path.join(temp.defaultsDir, "activity-log.yaml");
+  const doc = parseDocument(fs.readFileSync(file, "utf8"));
+  doc.setIn(["writer", "shutdown_flush_ms"], ms);
+  fs.writeFileSync(file, doc.toString());
+}
+
 async function pendingRunAi(): Promise<number> {
   const cycle = await createCycle(conn.db, { kind: "manual" });
   await finishCycle(conn.db, cycle.id, { status: "succeeded", summary: { steps: [] } });
@@ -288,6 +299,7 @@ describe("the worker and a config file newer than its code", () => {
   });
 
   it("files at this code's version: it puts back what was interrupted and handles the queue, exit 0", async () => {
+    setActivityFlushMs(30_000);
     const running = await interruptedRunAi();
     const pending = await pendingRunAi();
 
@@ -301,6 +313,7 @@ describe("the worker and a config file newer than its code", () => {
   }, 90_000);
 
   it("a file with an older version does not stop it", async () => {
+    setActivityFlushMs(30_000);
     const pending = await pendingRunAi();
     const file = getUserConfigPath("notify");
     fs.writeFileSync(file, fs.readFileSync(path.join(REPO, "tests/fixtures/config/notify.v1.yaml"), "utf8").replace(/^(?!config_version)/, "config_version: 1\n"));
