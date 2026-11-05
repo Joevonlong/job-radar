@@ -8,6 +8,10 @@ import { normalizedText, PRINT_DAY, PRINT_DOCUMENTS, PRINT_OPTIONS, sampleResume
 import { renderResume } from "../src/lib/career/engine";
 import { openPrinter } from "../src/lib/career/print/print-pdf";
 
+export function matchesPrintBaseline(baselineText: string | undefined, baselinePages: number | undefined, text: string, pages: number): boolean {
+  return baselineText === text && baselinePages === pages;
+}
+
 export function firstDifference(expected: string, actual: string): string {
   let offset = 0;
   while (offset < Math.min(expected.length, actual.length) && expected[offset] === actual[offset]) offset++;
@@ -49,15 +53,15 @@ async function main(): Promise<number> {
       writeFileSync(path.join(out, `${document.key}.pdf`), result.pdf);
       writeFileSync(path.join(out, `${document.key}.txt`), text);
       const textFile = path.join(baseline, `${document.key}.txt`);
-      if (!existsSync(textFile) || baselinePages[document.key] === undefined) {
+      const expected = existsSync(textFile) ? readFileSync(textFile, "utf8") : undefined;
+      const same = matchesPrintBaseline(expected, baselinePages[document.key], text, result.pages);
+      if (!same) different = true;
+      if (expected === undefined || baselinePages[document.key] === undefined) {
         console.log(`${document.key}: no baseline`);
         continue;
       }
-      const expected = readFileSync(textFile, "utf8");
-      const same = expected === text && baselinePages[document.key] === result.pages;
       console.log(`${document.key}: ${same ? "same" : "different"}`);
       if (!same) {
-        different = true;
         console.log(`  pages: baseline ${baselinePages[document.key]}, output ${result.pages}`);
         console.log(expected === text ? "  text equal; page count differs" : firstDifference(expected, text));
       }

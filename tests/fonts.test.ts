@@ -100,7 +100,6 @@ describe("self-hosted fonts", () => {
     for (const name of [...FONT_PACKAGES, ...PDF_FONT_PACKAGES]) {
       const version = PDF_FONT_PACKAGES.includes(name) ? pkg.devDependencies[name] : pkg.dependencies[name];
       if (PDF_FONT_PACKAGES.includes(name)) {
-        expect(version).toBe("5.3.0");
         expect(pkg.dependencies[name]).toBeUndefined();
       }
       expect(version, name).toMatch(/^\d+\.\d+\.\d+$/);

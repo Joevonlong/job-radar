@@ -165,7 +165,7 @@ function violations(file: string, text: string): string[] {
       out.push(`${file}: core imports ${to}`);
     }
     const isPrintTarget = to !== undefined && within(to, "src/lib/career/print");
-    const isPrintConsumer = within(file, "src/career-pdf") || within(file, "src/lib/career/print") || within(file, "e2e") || file === "scripts/career-print-baseline.ts";
+    const isPrintConsumer = within(file, "src/career-pdf") || within(file, "src/lib/career/print") || within(file, "e2e") || file === "scripts/career-print-baseline.ts" || file === "tests/career/print-pdf.test.ts";
     if (isPrintTarget && !isPrintConsumer) out.push(`${file}: imports printing outside the PDF entry point`);
   }
   function visit(node: ts.Node) {
@@ -316,11 +316,11 @@ describe("boundary scanner negative controls", () => {
     expect(violations(`${ENGINE}/probe.ts`, code), code).not.toEqual([]);
   });
 
-  test("printing is confined to PDF entry points, e2e and the baseline script", () => {
+  test("printing is confined to PDF entry points, e2e, the baseline script and printer unit tests", () => {
     for (const file of ["tests/career/probe.ts", "scripts/probe.ts", "src/lib/core.ts"]) {
       for (const code of allImportForms("@/lib/career/print/print-pdf")) expect(violations(file, code)).not.toEqual([]);
     }
-    for (const file of ["e2e/career-print.spec.ts", "scripts/career-print-baseline.ts"]) {
+    for (const file of ["e2e/career-print.spec.ts", "scripts/career-print-baseline.ts", "tests/career/print-pdf.test.ts"]) {
       for (const code of allImportForms("@/lib/career/print/print-pdf")) expect(violations(file, code)).toEqual([]);
     }
     expect(violations("src/lib/career/preview.ts", 'import "./print/print-pdf";')).not.toEqual([]);
