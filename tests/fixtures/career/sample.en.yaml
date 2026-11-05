@@ -1,0 +1,89 @@
+# Fictional person — demo data for developing themes. Real resumes live outside this repo.
+meta:
+  lang: en
+  theme: minimal
+  accent: "#2f54eb"
+  pages: 1
+
+basics:
+  name: Lena Hartmann
+  title: AI Engineer — LLM applications & agents
+  location: Berlin, Germany
+  email: lena.hartmann@example.com
+  phone: "+49 30 0000000"
+  workAuth: EU citizen
+  links:
+    - { label: GitHub, url: "https://github.com/example" }
+    - { label: LinkedIn, url: "https://linkedin.com/in/example" }
+    - { label: Portfolio, url: "https://example.dev" }
+  summary: >-
+    AI engineer in software since 2019, shipping LLM products to production since 2024.
+    I turn fuzzy business problems into **measurable** agent and retrieval systems — with evals,
+    cost budgets and a clear path from prototype to on-call.
+
+approach:
+  - title: Evals before features
+    text: Every prompt or model change ships with a regression set and an LLM-as-judge rubric.
+  - title: Agents as teammates
+    text: I pair with coding agents daily and keep a reviewed library of skills and guardrails.
+  - title: Cost is a feature
+    text: Routing, caching and small-model fallbacks are designed in from day one, not bolted on.
+
+experience:
+  - company: Northwind Analytics
+    role: Senior AI Engineer
+    start: 2024-02
+    end: present
+    location: Berlin · hybrid
+    bullets:
+      - Led the document-intelligence agent used by **40+ enterprise customers**; cut manual review time by **63%**.
+      - Built a hybrid RAG stack (BM25 + embeddings + reranker), lifting answer accuracy from **71% to 89%** on a 1.2k-question eval set.
+      - Introduced prompt caching and routing to a LoRA-tuned small model, reducing inference cost per request by **48%** at equal quality.
+    stack: [Python, FastAPI, Claude, pgvector, LangGraph, Langfuse, AWS]
+  - company: Fieldline
+    role: Machine Learning Engineer
+    start: 2021-06
+    end: 2024-01
+    location: Munich
+    bullets:
+      - Shipped a support-ticket triage model handling **12k tickets/day** with 94% routing precision.
+      - Designed the team's first offline evaluation harness and CI gate for model releases.
+    stack: [PyTorch, scikit-learn, Airflow, Docker, GCP]
+  - company: Tessera Labs
+    role: Software Engineer
+    start: 2019-09
+    end: 2021-05
+    location: Munich
+    bullets:
+      - Built data pipelines and internal tools in TypeScript, Python and SQL for a 30-person analytics team.
+    stack: [TypeScript, Node.js, PostgreSQL]
+
+projects:
+  - name: Receipt Copilot
+    tagline: Open-source bookkeeping agent
+    url: "https://github.com/example/receipt-copilot"
+    bullets:
+      - Vision + tool-calling agent that files German receipts into accounting categories; **1.3k GitHub stars**.
+    stack: [TypeScript, Claude, MCP, Playwright]
+  - name: AI Energy Berlin hackathon
+    tagline: Winner, 1st of 38 teams
+    bullets:
+      - Built a multi-agent planner for household energy usage in 24 hours.
+    stack: [Python, Next.js]
+
+skills:
+  - { group: LLM & Agents, items: [RAG, tool use / MCP, multi-agent orchestration, evals, fine-tuning (LoRA)] }
+  - { group: Programming, items: [Python, TypeScript, SQL] }
+  - { group: Infra, items: [Docker, AWS, GCP, Postgres, CI/CD, observability] }
+
+education:
+  - school: Technical University of Munich
+    degree: M.Sc. Informatics
+    start: 2017
+    end: 2019
+    summary: Thesis on retrieval-augmented question answering.
+
+languages:
+  - { name: English, level: fluent (C1) }
+  - { name: German, level: professional (B2) }
+  - { name: Chinese, level: native }
