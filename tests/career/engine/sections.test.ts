@@ -74,8 +74,8 @@ sections:
 
 test("meta.colors is quiet or accent; only accent marks the body", async () => {
   const err = errorOf("meta: { colors: loud }\n");
-  expect(err).toMatchObject({"code":"career.schema.invalid","path":"meta.colors"});
-  expect(err).toMatchObject({"code":"career.schema.invalid","params":{"values":"quiet, accent"}});
+  expect(err).toMatchObject({ code: "career.schema.invalid", path: "meta.colors" });
+  expect(err).toMatchObject({ code: "career.schema.invalid", params: { values: "quiet, accent" } });
   const body = async (y: string) => (await renderResume(parseResume(BASICS + y), { today: DAY })).match(/<body[^>]*>/)![0];
   expect(!(await body("")).includes("data-colors")).toBeTruthy();
   expect(!(await body("meta: { colors: quiet }\n")).includes("data-colors")).toBeTruthy();
@@ -173,12 +173,12 @@ test("parseTag splits at the last colon", () => {
 
 test("unknown and duplicate built-in names", () => {
   const unknown = errorOf("sections:\n  - summary\n  - expirience\n");
-  expect(unknown).toMatchObject({"code":"career.schema.builtin_unknown","params":{"name":"expirience"}});
-  expect(unknown).toMatchObject({"code":"career.schema.builtin_unknown","params":{"available":expect.stringMatching("^summary, approach, experience")}});
-  expect(unknown).toMatchObject({"path":"sections.1"});
+  expect(unknown).toMatchObject({ code: "career.schema.builtin_unknown", params: { name: "expirience" } });
+  expect(unknown).toMatchObject({ code: "career.schema.builtin_unknown", params: { available: expect.stringMatching("^summary, approach, experience") } });
+  expect(unknown).toMatchObject({ path: "sections.1" });
   const dup = errorOf("sections:\n  - summary\n  - experience\n  - summary\n");
-  expect(dup).toMatchObject({"code":"career.schema.section_duplicate","params":{"name":"summary"}});
-  expect(dup).toMatchObject({"path":"sections.2"});
+  expect(dup).toMatchObject({ code: "career.schema.section_duplicate", params: { name: "summary" } });
+  expect(dup).toMatchObject({ path: "sections.2" });
 });
 
 test("{ use, title } gives a built-in its own heading; mistakes name the position", () => {
@@ -187,11 +187,11 @@ test("{ use, title } gives a built-in its own heading; mistakes name the positio
   expect(resolveSections(r).map((s) => s.kind === "builtin" && s.name)).toEqual(["summary", "experience"]);
   expect(headingOf(r, "experience")).toBe("Work Experience");
   expect(headingOf(r, "skills")).toBe("Skills");
-  expect(errorOf("sections:\n  - { use: experience }\n")).toMatchObject({"code":"career.schema.invalid","path":"sections.0.title"});
-  expect(errorOf("sections:\n  - { use: experience, title: \" \" }\n")).toMatchObject({"code":"career.schema.empty","path":"sections.0.title"});
-  expect(errorOf("sections:\n  - { use: experiance, title: X }\n")).toMatchObject({"code":"career.schema.rename_unknown","params":{"name":"experiance"},"path":"sections.0.use"});
-  expect(errorOf("sections:\n  - { use: experience, title: X, items: [a] }\n")).toMatchObject({"code":"career.schema.invalid","params":{"keys":"items"},"path":"sections.0"});
-  expect(errorOf("sections:\n  - experience\n  - { use: experience, title: X }\n")).toMatchObject({"code":"career.schema.section_duplicate","params":{"name":"experience"},"path":"sections.1"});
+  expect(errorOf("sections:\n  - { use: experience }\n")).toMatchObject({ code: "career.schema.invalid", path: "sections.0.title" });
+  expect(errorOf("sections:\n  - { use: experience, title: \" \" }\n")).toMatchObject({ code: "career.schema.empty", path: "sections.0.title" });
+  expect(errorOf("sections:\n  - { use: experiance, title: X }\n")).toMatchObject({ code: "career.schema.rename_unknown", params: { name: "experiance" }, path: "sections.0.use" });
+  expect(errorOf("sections:\n  - { use: experience, title: X, items: [a] }\n")).toMatchObject({ code: "career.schema.invalid", params: { keys: "items" }, path: "sections.0" });
+  expect(errorOf("sections:\n  - experience\n  - { use: experience, title: X }\n")).toMatchObject({ code: "career.schema.section_duplicate", params: { name: "experience" }, path: "sections.1" });
 });
 
 test("heading hints say what each built-in prints, its place, or why it is not printed", () => {
@@ -208,62 +208,62 @@ test("heading hints say what each built-in prints, its place, or why it is not p
 
 test("unknown field in a custom section", () => {
   const msg = errorOf("sections:\n  - title: X\n    itmes: [a]\n    items: [b]\n");
-  expect(msg).toMatchObject({"code":"career.schema.invalid","params":{"keys":"itmes"}});
-  expect(msg).toMatchObject({"path":"sections.0"});
+  expect(msg).toMatchObject({ code: "career.schema.invalid", params: { keys: "itmes" } });
+  expect(msg).toMatchObject({ path: "sections.0" });
 });
 
 test("YAML traps get a quoting hint with the item path", () => {
   const list = errorOf("sections:\n  - title: X\n    items:\n      - a\n      - [x]\n");
-  expect(list).toMatchObject({"code":"career.schema.item_list"});
-  expect(list).toMatchObject({"path":"sections.0.items.1"});
+  expect(list).toMatchObject({ code: "career.schema.item_list" });
+  expect(list).toMatchObject({ path: "sections.0.items.1" });
   const nested = errorOf("sections:\n  - title: X\n    items:\n      - [[GA]]\n");
-  expect(nested).toMatchObject({"code":"career.schema.item_list"});
-  expect(nested).toMatchObject({"path":"sections.0.items.0"});
+  expect(nested).toMatchObject({ code: "career.schema.item_list" });
+  expect(nested).toMatchObject({ path: "sections.0.items.0" });
   const single = errorOf("sections:\n  - title: X\n    items:\n      - ok\n      - Led migration: cut 30%\n");
-  expect(single).toMatchObject({"code":"career.schema.item_mapping"});
-  expect(single).toMatchObject({"path":"sections.0.items.1"});
+  expect(single).toMatchObject({ code: "career.schema.item_mapping" });
+  expect(single).toMatchObject({ path: "sections.0.items.1" });
 });
 
 test("unquoted `- [ ] todo` and `- [[GA]] shipped` are YAML errors; the message says to quote", () => {
   for (const item of ["[ ] todo", "[x] done", "[[GA]] shipped"]) {
     const msg = errorOf(`sections:\n  - title: X\n    items:\n      - ${item}\n`);
-    expect(msg).toMatchObject({"code":"career.schema.yaml_invalid","params":{"hint":"quote_item"}});
+    expect(msg).toMatchObject({ code: "career.schema.yaml_invalid", params: { hint: "quote_item" } });
   }
   expect(errorOf("a: [1\nb: 2\n")).not.toMatchObject({ code: "career.schema.yaml_invalid", params: { hint: "quote_item" } });
 });
 
 test("mixed kinds, layout and item combinations", () => {
   const mixed = errorOf("sections:\n  - title: X\n    items:\n      - a\n      - { label: L, items: [b] }\n");
-  expect(mixed).toMatchObject({"code":"career.schema.mixed_kinds"});
-  expect(mixed).toMatchObject({"path":"sections.0.items.1"});
+  expect(mixed).toMatchObject({ code: "career.schema.mixed_kinds" });
+  expect(mixed).toMatchObject({ path: "sections.0.items.1" });
   expect(parseResume(BASICS + 'sections:\n  - title: X\n    items:\n      - a\n      - "[x] b"\n').sections?.length).toBe(1);
 
   const grid = errorOf("sections:\n  - title: X\n    layout: grid\n    items:\n      - { heading: H }\n");
-  expect(grid).toMatchObject({"code":"career.schema.layout_kind","params":{"layout":"grid","kind":"entry"}});
-  expect(grid).toMatchObject({"path":"sections.0.items.0"});
+  expect(grid).toMatchObject({ code: "career.schema.layout_kind", params: { layout: "grid", kind: "entry" } });
+  expect(grid).toMatchObject({ path: "sections.0.items.0" });
   const gridMix = errorOf("sections:\n  - title: X\n    layout: grid\n    items:\n      - a\n      - { label: L, items: [b] }\n");
-  expect(gridMix).toMatchObject({"code":"career.schema.mixed_kinds"});
-  expect(gridMix).toMatchObject({"path":"sections.0.items.1"});
+  expect(gridMix).toMatchObject({ code: "career.schema.mixed_kinds" });
+  expect(gridMix).toMatchObject({ path: "sections.0.items.1" });
   expect(parseResume(BASICS + 'sections:\n  - title: X\n    layout: grid\n    items:\n      - a\n      - "[x] b"\n').sections?.length).toBe(1);
   const tags = errorOf("sections:\n  - title: X\n    layout: tags\n    items:\n      - a\n      - { text: t }\n");
-  expect(tags).toMatchObject({"code":"career.schema.layout_kind","params":{"layout":"tags","kind":"text"}});
-  expect(tags).toMatchObject({"path":"sections.0.items.1"});
+  expect(tags).toMatchObject({ code: "career.schema.layout_kind", params: { layout: "tags", kind: "text" } });
+  expect(tags).toMatchObject({ path: "sections.0.items.1" });
 });
 
 test("columns needs grid", () => {
   const msg = errorOf("sections:\n  - title: X\n    columns: 3\n    items: [a]\n");
-  expect(msg).toMatchObject({"code":"career.schema.columns_layout"});
-  expect(msg).toMatchObject({"path":"sections.0.columns"});
+  expect(msg).toMatchObject({ code: "career.schema.columns_layout" });
+  expect(msg).toMatchObject({ path: "sections.0.columns" });
 });
 
 test("date rules", () => {
   const both = errorOf("sections:\n  - title: X\n    items:\n      - { heading: H, date: 2025-04, start: 2024 }\n");
-  expect(both).toMatchObject({"code":"career.schema.date_range"});
-  expect(both).toMatchObject({"path":"sections.0.items.0.date"});
-  expect(errorOf("sections:\n  - title: X\n    items:\n      - { heading: H, date: present }\n")).toMatchObject({"code":"career.schema.date_present"});
+  expect(both).toMatchObject({ code: "career.schema.date_range" });
+  expect(both).toMatchObject({ path: "sections.0.items.0.date" });
+  expect(errorOf("sections:\n  - title: X\n    items:\n      - { heading: H, date: present }\n")).toMatchObject({ code: "career.schema.date_present" });
   const end = errorOf("sections:\n  - title: X\n    items:\n      - { heading: H, end: 2024 }\n");
-  expect(end).toMatchObject({"code":"career.schema.start_missing"});
-  expect(end).toMatchObject({"path":"sections.0.items.0.end"});
+  expect(end).toMatchObject({ code: "career.schema.start_missing" });
+  expect(end).toMatchObject({ path: "sections.0.items.0.end" });
 });
 
 test("empty content is rejected, with paths", () => {
@@ -284,9 +284,9 @@ test("empty content is rejected, with paths", () => {
 test("entry end must not be before start (compared on the shared prefix)", () => {
   const e = (start: string, end: string) => `sections:\n  - title: X\n    items:\n      - { heading: H, start: ${start}, end: ${end} }\n`;
   const msg = errorOf(e("2025", "2023-05"));
-  expect(msg).toMatchObject({"code":"career.schema.end_before_start","params":{"end":"2023-05","start":"2025"}});
-  expect(msg).toMatchObject({"path":"sections.0.items.0.end"});
-  expect(errorOf(e("2024-06", "2024-02"))).toMatchObject({"code":"career.schema.end_before_start"});
+  expect(msg).toMatchObject({ code: "career.schema.end_before_start", params: { end: "2023-05", start: "2025" } });
+  expect(msg).toMatchObject({ path: "sections.0.items.0.end" });
+  expect(errorOf(e("2024-06", "2024-02"))).toMatchObject({ code: "career.schema.end_before_start" });
   for (const [s, en] of [["2023", "2023-05"], ["2023-05", "2023"], ["2020", "present"], ["2023-01", "2023-01"]]) expect(parseResume(BASICS + e(s, en))).toBeTruthy();
 });
 
@@ -303,7 +303,7 @@ projects: [{ name: P, url: "JavaScript:alert(3)" }]
   }
 
   for (const accent of ["red}</style><script>alert(1)</script>", 'red;"x', "a\\b", "a\nb", "url(http://track.example/b)", "rgb(url(x))", "var(--x)", "#12345"])
-    expect(errorOf(`meta: { accent: ${JSON.stringify(accent)} }\n`), accent).toMatchObject({"code":"career.schema.accent_invalid"});
+    expect(errorOf(`meta: { accent: ${JSON.stringify(accent)} }\n`), accent).toMatchObject({ code: "career.schema.accent_invalid" });
   for (const accent of ["#2f54eb", "#25e", "#2f54ebcc", "rgb(47 84 235)", "rgba(47, 84, 235, .9)", "hsl(220deg 80% 55% / 0.9)", "oklch(0.55 0.2 260)", "teal"])
     expect(parseResume(BASICS + `meta: { accent: "${accent}" }\n`), accent).toBeTruthy();
 });

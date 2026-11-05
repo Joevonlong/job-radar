@@ -2,12 +2,10 @@
 import { LIMITS, COMPILED, OPTIONS, resumeFromYaml as parseResume, fixture } from "./helpers/fixtures";
 import { expect, test } from "vitest";
 import { parse, stringify } from "yaml";
-
 import { textPdf } from "./helpers/pdf";
 import { runCheck } from "../../../src/lib/career/engine/check";
 import { shipBlockers } from "../../../src/lib/career/engine/gate";
 import { jdMatch, orGroups, parseJd } from "../../../src/lib/career/engine/jd";
-import { } from "../../../src/lib/career/engine/render";
 
 test("shipBlockers: placeholders and the page budget block; a finished one-pager doesn't", async () => {
   const r = parseResume(fixture("sample.en.yaml"));

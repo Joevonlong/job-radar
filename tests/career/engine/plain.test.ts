@@ -2,7 +2,6 @@
 import { resumeFromYaml as parseResume, fixture } from "./helpers/fixtures";
 import { expect, test } from "vitest";
 import { plainResume } from "../../../src/lib/career/engine/plain";
-import { } from "../../../src/lib/career/engine/render";
 
 const doc = `
 meta: { lang: en }

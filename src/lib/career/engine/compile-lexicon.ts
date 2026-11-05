@@ -2,8 +2,6 @@ import { CareerEngineError } from "./errors";
 import { keywordTerms } from "./keywords";
 import type { CheckLexicon, LanguageLexicon } from "./lexicon";
 
-const cache = new WeakMap<CheckLexicon, ReturnType<typeof compile>>();
-
 function pattern(list: string, entries: string[], before = "", after = "", flags = "i", transform: (entry: string, index: number) => string = (entry) => entry): RegExp {
   const alternatives: string[] = [];
   for (const [index, entry] of entries.entries()) {
@@ -19,7 +17,7 @@ function pattern(list: string, entries: string[], before = "", after = "", flags
 
 type ListName = { [K in keyof LanguageLexicon]: LanguageLexicon[K] extends string[] ? K : never }[keyof LanguageLexicon];
 
-function compile(data: CheckLexicon) {
+export function compileLexicon(data: CheckLexicon) {
   const both = <K extends keyof LanguageLexicon>(key: K) => [data.en[key], data.de[key]];
   const entries = (key: ListName) => [...data.en[key], ...data.de[key]];
   const re = (key: ListName, before = "", after = "", flags = "i") => pattern(key, entries(key), before, after, flags);
@@ -71,12 +69,4 @@ function compile(data: CheckLexicon) {
   };
 }
 
-export type CompiledLexicon = ReturnType<typeof compile>;
-
-export function compileLexicon(lexicon: CheckLexicon): CompiledLexicon {
-  const found = cache.get(lexicon);
-  if (found) return found;
-  const result = compile(lexicon);
-  cache.set(lexicon, result);
-  return result;
-}
+export type CompiledLexicon = ReturnType<typeof compileLexicon>;

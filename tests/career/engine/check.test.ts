@@ -1,9 +1,6 @@
 // @vitest-environment node
 import { LEXICON, issuesOf, OPTIONS, LIMITS, COMPILED, DAY, resumeFromYaml as parseResume, fixture } from "./helpers/fixtures";
 import { compileLexicon } from "../../../src/lib/career/engine/compile-lexicon";
-
-
-
 import { expect, test } from "vitest";
 import { runCheck } from "../../../src/lib/career/engine/check";
 import { extractText, headingIn, missingContent, parserProblems } from "../../../src/lib/career/engine/extract";
@@ -27,10 +24,10 @@ const has = (issues: Issue[], code: string | string[], params?: Record<string, u
 
 test("experience / education end before start is a schema error at the entry", () => {
   const exp = errorOf(`${BASICS}experience:\n  - { company: A, role: R, start: 2021-06, end: 2019-01 }\n`);
-  expect(exp).toMatchObject({"code":"career.schema.end_before_start","params":{"end":"2019-01","start":"2021-06"}});
-  expect(exp).toMatchObject({"path":"experience.0.end"});
+  expect(exp).toMatchObject({ code: "career.schema.end_before_start", params: { end: "2019-01", start: "2021-06" } });
+  expect(exp).toMatchObject({ path: "experience.0.end" });
   const edu = errorOf(`${BASICS}education:\n  - { school: S, degree: D, start: 2018, end: 2017 }\n`);
-  expect(edu).toMatchObject({"path":"education.0.end"});
+  expect(edu).toMatchObject({ path: "education.0.end" });
   for (const [s, e] of [["2023", "2023-05"], ["2023-05", "2023"], ["2020", "present"]])
     expect(parseResume(`${BASICS}experience:\n  - { company: A, role: R, start: ${s}, end: ${e} }\n`)).toBeTruthy();
 });
@@ -483,11 +480,11 @@ test("JD terms — architecture terms are in the dictionary; quantities are not 
 
 test("schema for address, availability and meta.signature", () => {
   const B = "basics: { name: A B, title: T, location: Berlin";
-  expect(errorOf(`${B}, address: [a, b, c] }\n`)).toMatchObject({"code":"career.schema.lines","params":{"what":"address","min":1,"max":2}});
-  expect(errorOf(`${B}, address: [] }\n`)).toMatchObject({"code":"career.schema.lines","params":{"what":"address","min":1,"max":2}});
-  expect(errorOf(`${B}, availability: "" }\n`)).toMatchObject({"code":"career.schema.empty"});
-  expect(errorOf(`meta: { signature: { date: 2026-02-30 } }\n${B} }\n`)).toMatchObject({"code":"career.schema.day_invalid"});
-  expect(errorOf(`meta: { signature: { date: 09.10.2026 } }\n${B} }\n`)).toMatchObject({"code":"career.schema.day_format"});
+  expect(errorOf(`${B}, address: [a, b, c] }\n`)).toMatchObject({ code: "career.schema.lines", params: { what: "address", min: 1, max: 2 } });
+  expect(errorOf(`${B}, address: [] }\n`)).toMatchObject({ code: "career.schema.lines", params: { what: "address", min: 1, max: 2 } });
+  expect(errorOf(`${B}, availability: "" }\n`)).toMatchObject({ code: "career.schema.empty" });
+  expect(errorOf(`meta: { signature: { date: 2026-02-30 } }\n${B} }\n`)).toMatchObject({ code: "career.schema.day_invalid" });
+  expect(errorOf(`meta: { signature: { date: 09.10.2026 } }\n${B} }\n`)).toMatchObject({ code: "career.schema.day_format" });
   expect(errorOf(`meta: { signature: { sign: x } }\n${B} }\n`)).toEqual({ code: "career.schema.invalid", path: "meta.signature", params: { keys: "sign" } });
   const r = parseResume(`meta: { signature: {} }\n${B}, address: "Musterstraße 1, 10115 Berlin" }\n`);
   expect(r.basics.address).toEqual(["Musterstraße 1, 10115 Berlin"]);

@@ -23,10 +23,10 @@ const has = (issues: Issue[], code: string | string[], params?: Record<string, u
 );
 
 test("letter schema: body required and non-empty, real dates, no unknown keys; recipient may be one string", () => {
-  expect(errorOf(`${BASICS}letter: { subject: S }\n`)).toMatchObject({"code":"career.schema.invalid","path":"letter.body"});
-  expect(errorOf(`${BASICS}letter: { body: [] }\n`)).toMatchObject({"code":"career.schema.body_empty","path":"letter.body"});
-  expect(errorOf(`${BASICS}letter: { body: [""] }\n`)).toMatchObject({"code":"career.schema.empty"});
-  expect(errorOf(`${BASICS}letter: { body: [a], date: 2026-13-01 }\n`)).toMatchObject({"code":"career.schema.day_invalid"});
+  expect(errorOf(`${BASICS}letter: { subject: S }\n`)).toMatchObject({ code: "career.schema.invalid", path: "letter.body" });
+  expect(errorOf(`${BASICS}letter: { body: [] }\n`)).toMatchObject({ code: "career.schema.body_empty", path: "letter.body" });
+  expect(errorOf(`${BASICS}letter: { body: [""] }\n`)).toMatchObject({ code: "career.schema.empty" });
+  expect(errorOf(`${BASICS}letter: { body: [a], date: 2026-13-01 }\n`)).toMatchObject({ code: "career.schema.day_invalid" });
   expect(errorOf(`${BASICS}letter: { body: [a], greeting: Hi }\n`)).toEqual({ code: "career.schema.invalid", path: "letter", params: { keys: "greeting" } });
   const r = parseResume(`${BASICS}letter: { recipient: Acme GmbH, body: [a] }\n`);
   expect(r.letter?.recipient).toEqual(["Acme GmbH"]);

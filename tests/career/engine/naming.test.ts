@@ -2,7 +2,6 @@
 import { issuesOf, DAY, resumeFromYaml as parseResume } from "./helpers/fixtures";
 import { expect, test } from "vitest";
 import { contentDisposition, exportStem } from "../../../src/lib/career/engine/naming";
-import { } from "../../../src/lib/career/engine/render";
 
 const resume = (extra: string, name = "Lena Hartmann", meta = "") =>
   parseResume(`meta:\n${meta || "  lang: en\n"}basics: { name: ${name}, title: AI Engineer }\n${extra}`);

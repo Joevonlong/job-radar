@@ -128,14 +128,34 @@ test("lexicon changes affect keywords, filler, letters and job-ad segmentation",
   expect(segmentJd("## Extras\nPython", compiled).nice).toBe("Python");
 });
 
-test("both language lists apply, native is explicit, caches are scoped to the lexicon object", () => {
-  expect(compileLexicon(LEXICON)).toBe(COMPILED);
-  const copy = structuredClone(LEXICON);
-  expect(compileLexicon(copy)).not.toBe(COMPILED);
+test("both language lists apply and native is explicit", () => {
   expect([...findHits("KI and artificial intelligence", COMPILED).keys()]).toEqual(["AI"]);
   expect(titleGap("Backend Engineer", "Senior Backend-Entwickler", COMPILED)).toEqual([]);
   expect(LEXICON.en.levelWords.native).not.toEqual([]);
   expect(LEXICON.de.levelWords.native).not.toEqual([]);
+});
+
+test("lint reflects mutations to the same lexicon and matches a fresh equivalent clone", () => {
+  const lexicon = structuredClone(LEXICON);
+  const word = "quorvexian";
+  const resume = resumeFromYaml(`basics: { name: Test, title: Engineer, summary: ${word} }`);
+  expect(has(lint(resume, { ...OPTIONS, lexicon }), "career.lint.filler")).toBe(false);
+  lexicon.en.filler.push(word);
+  const changed = lint(resume, { ...OPTIONS, lexicon });
+  expect(changed).toContainEqual({ level: "warn", where: "basics.summary", code: "career.lint.filler", params: { terms: word } });
+  expect(lint(resume, { ...OPTIONS, lexicon: structuredClone(lexicon) })).toEqual(changed);
+});
+
+test("runCheck reflects mutations to the same lexicon and matches a fresh equivalent clone", async () => {
+  const lexicon = structuredClone(LEXICON);
+  const word = "quorvexian";
+  const resume = resumeFromYaml(`basics: { name: Test, title: Engineer, summary: ${word} }`);
+  const pdf = textPdf([["Test", "Engineer", word]]);
+  expect(has((await runCheck(resume, pdf, { ...OPTIONS, lexicon })).issues, "career.lint.filler")).toBe(false);
+  lexicon.en.filler.push(word);
+  const changed = await runCheck(resume, pdf, { ...OPTIONS, lexicon });
+  expect(changed.issues).toContainEqual({ level: "warn", where: "basics.summary", code: "career.lint.filler", params: { terms: word } });
+  expect(await runCheck(resume, pdf, { ...OPTIONS, lexicon: structuredClone(lexicon) })).toEqual(changed);
 });
 
 test("invalid fragments identify their list and original entry", () => {
