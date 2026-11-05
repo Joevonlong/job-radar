@@ -4,8 +4,8 @@
 # cities: spelling in a location -> [canonical name, country]. The canonical name is part of the dedup key; don't change it.
 
 countries:
-  - {code: GB, currency: GBP, name: United Kingdom, aliases: [UK, Great Britain, England, Scotland, Wales, Northern Ireland], indeed: uk, pattern: northern ireland|\b(?:united kingdom|great britain|england|scotland|wales)\b|\buk\b}
-  - {code: DE, currency: EUR, name: Germany, aliases: [Deutschland], indeed: germany, pattern: germany|deutschland}
+  - {code: GB, currency: GBP, name: United Kingdom, aliases: [UK, U.K., Great Britain, England, Scotland, Wales, Northern Ireland], indeed: uk, pattern: northern ireland|\b(?:united kingdom|great britain|england|scotland|wales)\b|\buk\b}
+  - {code: DE, currency: EUR, name: Germany, aliases: [Deutschland, Deutschlands], indeed: germany, pattern: germany|deutschland}
   - {code: FR, currency: EUR, name: France, indeed: france, pattern: \bfrance\b}
   - {code: NL, currency: EUR, name: Netherlands, aliases: [Nederland, Holland, The Netherlands], indeed: netherlands, pattern: netherlands|nederland|holland}
   - {code: BE, currency: EUR, name: Belgium, aliases: [België, Belgique], indeed: belgium, pattern: belgium|belgië|belgie|belgique}
@@ -18,7 +18,7 @@ countries:
   - {code: IE, currency: EUR, name: Ireland, aliases: [Éire], indeed: ireland, pattern: \bireland\b|éire}
   - {code: ES, currency: EUR, name: Spain, aliases: [España], indeed: spain, pattern: \bspain\b|españa|espana}
   - {code: PT, currency: EUR, name: Portugal, indeed: portugal, pattern: portugal}
-  - {code: AT, currency: EUR, name: Austria, aliases: [Österreich], indeed: austria, pattern: austria|österreich|osterreich}
+  - {code: AT, currency: EUR, name: Austria, aliases: [Österreich, Österreichs], indeed: austria, pattern: austria|österreich|osterreich}
   - {code: IT, currency: EUR, name: Italy, aliases: [Italia], indeed: italy, pattern: \bitaly\b|italia}
   - {code: PL, currency: PLN, name: Poland, aliases: [Polska], indeed: poland, pattern: poland|polska}
   - {code: CZ, currency: CZK, name: Czech Republic, aliases: [Czechia, Česko], indeed: czech republic, pattern: czech republic|czechia|česko}

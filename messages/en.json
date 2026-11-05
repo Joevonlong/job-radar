@@ -945,6 +945,7 @@
       "seniority_mismatch": "Seniority does not match: {detail}",
       "deal_breaker": "Deal-breaker: {detail}",
       "remote_scope_unknown": "Remote, but the posting does not say where it can hire",
+      "remote_area_unknown": "Remote: the posting does not say for sure where you can work from",
       "location_unknown": "The posting does not name a city",
       "remote_scope_description": "Remote, located outside your scope ({detail}), but the description says it hires in your home country or region",
       "location_country_level": "The location is only a country or region ({detail}); the job may be anywhere in it",

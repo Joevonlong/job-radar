@@ -7,7 +7,9 @@ import { normalizeLocation } from "@/lib/pipeline/geography";
 import { fixtureMarket, pipelineWith, pipelineWithPack, shippedPipeline } from "../pipeline/helpers";
 import { filterWith, job, loc, prefs, salary } from "./helpers";
 
-const run = (j: ReturnType<typeof job>, filter = filterWith()) => evaluateJob(j, filter);
+/** Check 2 has its own tests: the fixture pack has no phrases for it, so every remote job here would carry its note. */
+const withoutAreaNote = <V extends { reasons: string[] }>(verdict: V): V => ({ ...verdict, reasons: verdict.reasons.filter((reason) => reason !== "remote_area_unknown") });
+const run = (j: ReturnType<typeof job>, filter = filterWith()) => withoutAreaNote(evaluateJob(j, filter));
 
 describe("a job that matches", () => {
   it("passes with no reasons", () => {
@@ -403,7 +405,7 @@ describe("user override", () => {
 
   it("keep on a job that passed keeps its notes; no override changes nothing", () => {
     const remoteUnknown = job({ workplace: "remote", locations: [loc("Remote", null, null)] });
-    expect(evaluateJob(remoteUnknown, filterWith(), "keep")).toEqual({ result: "passed", reasons: ["override_keep", "remote_scope_unknown"] });
+    expect(withoutAreaNote(evaluateJob(remoteUnknown, filterWith(), "keep"))).toEqual({ result: "passed", reasons: ["override_keep", "remote_scope_unknown"] });
     expect(evaluateJob(hamburg, filterWith(), null)).toEqual(evaluateJob(hamburg, filterWith()));
     expect(applyOverride({ result: "passed", reasons: [] }, null)).toEqual({ result: "passed", reasons: [] });
   });

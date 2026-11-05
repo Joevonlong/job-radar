@@ -9,6 +9,7 @@ import * as cheerio from "cheerio";
 
 import { ChannelError } from "@/lib/channels/errors";
 import { unsafePhraseReason } from "@/lib/config/schemas/common";
+import { QUOTE_MAX } from "@/lib/signals/quote";
 import { defaultSleep, readTextUpTo, type SleepFn } from "@/lib/channels/http";
 import type { HttpClient, HttpResponse } from "@/lib/channels/types";
 import type { LinkCheckEvidence } from "@/lib/jobs/link-check-evidence";
@@ -34,8 +35,7 @@ export interface PageCheck {
 export const MAX_SEARCHED_CHARS = 200_000;
 /** Time budget of the phrase search on one page; when it runs out before a match the page counts as not checked (`unknown`). */
 export const PHRASE_BUDGET_MS = 250;
-/** Longest quote kept as evidence. */
-export const QUOTE_MAX = 200;
+export { QUOTE_MAX };
 /** Characters of context on each side of the matched phrase. */
 const QUOTE_CONTEXT = 80;
 const GONE_STATUSES: readonly number[] = [404, 410];

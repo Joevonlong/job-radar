@@ -207,7 +207,18 @@ On the form, "Locations outside home city" shows each place as "✈ I'd move her
 | a title such as "AI Engineer - US" or "(Americas)" | excluded; the description cannot rescue it. A title that also names EMEA or Europe is not excluded |
 | "Remote" without a place, or no location | kept, noted that it does not say where it hires |
 
-Worldwide keeps all of them. Listed places add to home and never replace it. To stop seeing remote jobs, take Remote out of Workplace.
+Worldwide keeps all of them, as far as their location goes. Listed places add to home and never replace it. To stop seeing remote jobs, take Remote out of Workplace.
+
+**What the posting says about where you can work from.** Every remote job that passes reads its title and description again, on each filter pass, for a clear statement such as "You must live in France" or "Open to candidates in Spain or Portugal":
+
+| What the posting says | Result |
+|---|---|
+| A place in your home country or a ✈ place | Passes |
+| Anywhere in the world | Passes |
+| Clearly somewhere else, with no mention of your home country or a ✈ place | Hidden as `remote_out_of_scope`, with the phrase as the reason |
+| Nothing clear: no phrase, a bare place name, a statement naming a city (the same name may be a town near you), a negation, a place the tables don't know, statements that disagree, or a statement elsewhere that also names your home country or a ✈ place | Kept, with a note on the job page saying so. The note doesn't lower its rank |
+
+Only where you'd live counts here, so a remote-only place doesn't cover such a statement, and a remote-only Worldwide doesn't either: it opens the job's location, not a posting that says you must live in France. With Worldwide or a name the tables don't know as a ✈ place, such a job keeps the note instead. The phrases are in the market pack, see [Market packs](market-packs.md).
 
 **Searches.** The same settings decide what is searched, once for each keyword group. There is one on-site search for the home city (the country's name without one) and one for each ✈ place. With Remote in Workplace, there is also one remote search for home and one for each listed place:
 

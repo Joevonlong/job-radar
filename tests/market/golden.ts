@@ -97,7 +97,8 @@ function filterJob(over: Partial<FilterJob>): FilterJob {
   };
 }
 
-const verdictText = (v: { result: string; reasons: readonly string[] }): string => `${v.result}|${v.reasons.join(",")}`;
+/** The recording is older than check 2's note, the one allowed difference; the frozen pack has no phrases, so check 2 hides nothing here. */
+const verdictText = (v: { result: string; reasons: readonly string[] }): string => `${v.result}|${v.reasons.filter((reason) => reason !== "remote_area_unknown").join(",")}`;
 
 /**
  * A salary as the golden recorded it (before the market packs): the base-currency figure (`basePerYear` / `baseCurrency`) is

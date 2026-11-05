@@ -138,6 +138,9 @@ export type PackLanguage = z.infer<typeof packLanguageSchema>;
 
 const optionalList = regexList.default([]);
 
+/** Phrases that state where a job may be done from: each says which words are the place. */
+export const workAreaPatterns = z.array(z.string().refine((source) => source.includes("(?<place>"), "needs a (?<place>...) capture")).pipe(regexList);
+
 /**
  * A pattern of the visa check: a regular expression, or `{ pattern, combo: true }` for one that only matches a visa word together
  * with its context ("visa sponsorship", "Arbeitsvisum", "work permit") or names no visa at all. On postings of a company that
@@ -448,10 +451,10 @@ export const packRulesSchema = z.strictObject({
     .strictObject({
       generic_location_patterns: optionalList,
       remote: z
-        .strictObject({ worldwide_patterns: optionalList, outside_patterns: optionalList, title_outside_patterns: optionalList, description_in_scope_patterns: optionalList })
-        .default({ worldwide_patterns: [], outside_patterns: [], title_outside_patterns: [], description_in_scope_patterns: [] }),
+        .strictObject({ worldwide_patterns: optionalList, outside_patterns: optionalList, title_outside_patterns: optionalList, description_in_scope_patterns: optionalList, work_area_patterns: workAreaPatterns.default([]), work_area_title_patterns: workAreaPatterns.default([]), work_area_anywhere_patterns: optionalList, work_area_negation_patterns: optionalList, work_area_connectors: optionalList, work_area_continuations: optionalList, work_area_endings: optionalList, work_area_articles: optionalList })
+        .default({ worldwide_patterns: [], outside_patterns: [], title_outside_patterns: [], description_in_scope_patterns: [], work_area_patterns: [], work_area_title_patterns: [], work_area_anywhere_patterns: [], work_area_negation_patterns: [], work_area_connectors: [], work_area_continuations: [], work_area_endings: [], work_area_articles: [] }),
     })
-    .default({ generic_location_patterns: [], remote: { worldwide_patterns: [], outside_patterns: [], title_outside_patterns: [], description_in_scope_patterns: [] } }),
+    .default({ generic_location_patterns: [], remote: { worldwide_patterns: [], outside_patterns: [], title_outside_patterns: [], description_in_scope_patterns: [], work_area_patterns: [], work_area_title_patterns: [], work_area_anywhere_patterns: [], work_area_negation_patterns: [], work_area_connectors: [], work_area_continuations: [], work_area_endings: [], work_area_articles: [] } }),
   /** Phrases (regex) in a posting page's visible text that say it no longer takes applications (the watched-job recheck). */
   // Run on untrusted pages, so only the safe pattern subset (see unsafePhraseReason)
   closed_posting: z.strictObject({ phrases: z.array(phraseRegexString).default([]) }).default({ phrases: [] }),

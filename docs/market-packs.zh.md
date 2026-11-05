@@ -68,6 +68,25 @@ pnpm run doctor --only config.market
 
 所以 pipeline.yaml 只需要放你自己加的内容。pipeline.yaml 的配置迁移已经删掉了现在由包提供的条目。
 
+## 远程职位可以在哪里工作
+
+`rules.yaml` 的 `filter.remote` 里放着过滤时在远程职位的标题和职位说明里找的说法。它们是不区分大小写的正则，`pipeline.yaml` 可以再加：
+
+| 键 | 内容 |
+|---|---|
+| `work_area_patterns` | 写明范围的说法。每条都要有 `(?<place>...)` 捕获，否则配置文件会被拒绝 |
+| `work_area_title_patterns` | 同上，但只在标题里读：职位说明里的 `France only` 也可能说的是某项福利 |
+| `work_area_anywhere_patterns` | 表示全球任何地方的说法 |
+| `work_area_negation_patterns` | 句子里有这些词就另有所指，算作不确定 |
+| `work_area_continuations` | 下一句有这些词，说明范围更宽或语气更松，算作不确定 |
+| `work_area_connectors` | 列表里分隔地点的写法 |
+| `work_area_endings` | 地点后面允许出现的内容，比如 `Germany to apply`。后面有别的内容，这句话就算不确定 |
+| `work_area_articles` | 地点前面要去掉的词 |
+
+这些说法来自你可以编辑的市场包，所以读一份职位的时间上限是 `filter.deal_breakers.match_ms`。被中断的职位如果原本被隐藏就继续隐藏，否则算作不确定，下一轮再读。被中断的读取在每轮共用 `filter.deal_breakers.rule_budget_ms`；用完后，这一轮不再读其余职位。
+
+这些说法可能让职位被隐藏，所以要放在句首，写被招聘的人，不要写公司、福利或数据：`we are hiring in France` 就不算。问句一律不算，`work_area_anywhere_patterns` 里的说法也一样。捕获到的每一部分都走和地点设置相同的查找，但单独的 ISO 代码和非大写的短名称不算：`hiring in IT` 不是意大利。只要有一部分不在市场数据表里，这句话就算不确定，所以只有整句都读懂时才会隐藏职位。列表可能在下一句里继续时，也算不确定。没有这些说法的市场包不会隐藏任何职位，每个远程职位都会带上提示 `remote_area_unknown`。没有地名可捕获的说法，比如德语的 `bundesweit`，除非市场包写出国家，否则不起作用。`description_in_scope_patterns` 是另一回事：它只能救回职位，而且只针对本国和所在区域。
+
 ## 幽灵岗位说法
 
 `rules.yaml` 的 `ghost` 一节是[幽灵岗位检查](ghost-jobs.zh.md)用的说法。`generic` 放英文，`de` 放德文。带 `id`（小写字母、数字和 `_`）的条目把 id 存进原因里，检查卡和 `pnpm ghost:check` 能说出是哪条说法命中的。
