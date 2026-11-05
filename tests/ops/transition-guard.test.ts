@@ -231,6 +231,23 @@ describe("clean-env.sh and run.sh", () => {
     expect(seen.length).toBeGreaterThan(1);
     for (const name of Object.keys(HOSTILE)) expect(seen, name).not.toContain(name);
   });
+
+  it("reports a missing release tag before calling Docker", () => {
+    const bin = path.join(tmp, "missing-tag-bin");
+    const dockerLog = path.join(tmp, "missing-tag-docker.log");
+    fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, "git"), '#!/usr/bin/env bash\nexit 1\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, "docker"), `#!/usr/bin/env bash\necho called > '${dockerLog}'\nexit 1\n`, { mode: 0o755 });
+    const r = spawnSync("/bin/bash", [path.join(dir, "run.sh"), "--scenarios", "F"], {
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("tag v2.0.1 is missing");
+    expect(r.stderr).toContain("git fetch --tags");
+    expect(r.stderr).toContain("fetch-depth: 0");
+    expect(fs.existsSync(dockerLog)).toBe(false);
+  });
 });
 
 describe("step-retry.sh", () => {

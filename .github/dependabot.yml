@@ -2,6 +2,7 @@ version: 2
 updates:
   - package-ecosystem: npm
     directory: /
+    target-branch: main
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -18,6 +19,7 @@ updates:
   # pip-compile layout: Dependabot changes a pin in requirements*.in and regenerates the hashed requirements*.txt from it
   - package-ecosystem: pip
     directory: /jobspy
+    target-branch: main
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
@@ -25,11 +27,13 @@ updates:
   # Node major checked against engines, the Playwright version that must match @playwright/test), which this cannot update.
   - package-ecosystem: docker
     directory: /jobspy
+    target-branch: main
     schedule:
       interval: weekly
     open-pull-requests-limit: 2
   - package-ecosystem: github-actions
     directory: /
+    target-branch: main
     schedule:
       interval: weekly
     open-pull-requests-limit: 3

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterAll, afterEach, beforeAll, describe as suite, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe as suite, expect, it } from "vitest";
 
 // Real deployments require a regular user; keep the explicit root preflight regression active below.
 const describe = suite.skipIf(process.getuid?.() === 0);
@@ -183,6 +183,7 @@ exec "${realReadlink}" "$@"
     `#!/usr/bin/env bash
 echo "git $*" >> "$DEPLOY_TEST_LOG.git"
 if [[ "\${GIT_FAIL_ARCHIVE:-}" == 1 && " $* " == *" archive "* ]]; then echo "fatal: archive failed (test)" >&2; exit 1; fi
+if [[ -n "\${GIT_FAIL_NOTICE_PROBE:-}" && "\${*: -1}" == "$GIT_FAIL_NOTICE_PROBE" ]]; then echo "fatal: notice probe failed" >&2; exit 1; fi
 # GIT_TARGET_HOOK runs once, right after the first plain \`rev-parse HEAD\` (the one that fixes TARGET).
 if [[ -n "\${GIT_TARGET_HOOK:-}" && "$*" == *" rev-parse HEAD" && ! -e "$DEPLOY_TEST_LOG.hooked" ]]; then
   "${realGit}" "$@"; rc=$?; : > "$DEPLOY_TEST_LOG.hooked"; bash -c "$GIT_TARGET_HOOK"; exit $rc
@@ -647,7 +648,8 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     try {
       const r = deploy(["--dry-run"]);
       expect(r.status).toBe(0);
-      expect(r.out).toContain("a real run would stop here: the current branch is feature, not main");
+      expect(r.out).toContain("a real run would stop here: the current branch is feature; without --branch or --ref, only main or stable can be deployed");
+      expect(r.out).not.toContain("$ git fetch");
       expect(r.out).toContain("[13/13] doctor");
     } finally {
       git(work, "checkout", "-q", "main");
@@ -664,6 +666,28 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     expect(r.out).toContain("up -d --no-deps --wait --wait-timeout 45 jobspy");
     expect(r.out).toContain("--no-ai-worker: no wait for the ai-worker");
     expect(r.out).not.toContain("sleep");
+  });
+
+  it.each(["detached", "feature", "stable"])("--skip-pull accepts a clean %s checkout without changing git", (checkout) => {
+    const base = head();
+    const tag = "skip-pull-checkout";
+    git(work, "tag", tag);
+    if (checkout === "detached") git(work, "checkout", "-q", "--detach", tag);
+    else git(work, "checkout", "-q", "-B", checkout);
+    try {
+      for (const extra of [[], ["--branch", "main"], ["--ref", "missing-tag"], ["--dry-run"]]) {
+        const r = deploy(["--skip-pull", "--settle", "0", ...extra]);
+        expect(r.status, r.out).toBe(0);
+        expect(r.out).toContain("--skip-pull: git is left alone");
+        expect(r.gitCalls.filter((call) => / (fetch|merge|checkout|switch|pull) /.test(` ${call} `))).toEqual([]);
+        expect(head()).toBe(base);
+        expect(git(work, "rev-parse", "--abbrev-ref", "HEAD")).toBe(checkout === "detached" ? "HEAD" : checkout);
+      }
+    } finally {
+      restore(base);
+      git(work, "tag", "-d", tag);
+      if (checkout === "stable") git(work, "branch", "-D", "stable");
+    }
   });
 
   it.each([["3", "3"], ["08", "8"]])("--dry-run --settle %s prints a maximum wait of %s without probing", (arg, seconds) => {
@@ -731,7 +755,7 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     const wrongBranch = deploy([]);
     git(work, "checkout", "-q", "main");
     expect(wrongBranch.status).toBe(1);
-    expect(wrongBranch.out).toContain('step 2/13 "pull: update the code" failed: the current branch is feature, not main');
+    expect(wrongBranch.out).toContain('step 2/13 "pull: update the code" failed: the current branch is feature; without --branch or --ref, only main or stable can be deployed');
     expect(wrongBranch.calls).toEqual(["docker info"]);
 
     write(path.join(work, "scripts/ops/backup.sh"), `${LOGGING_STUB("backup.sh")}# changed\n`, 0o755);
@@ -1177,7 +1201,7 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       }
     });
 
-    it("checks out a release tag (detached), and the default keeps following main", () => {
+    it("checks out a release tag (detached), then follows main after switching back", () => {
       const other = path.join(tmp, "other-ref");
       git(tmp, "clone", origin, other);
       const tagged = git(other, "rev-parse", "HEAD");
@@ -1193,7 +1217,7 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
         expect(fs.existsSync(path.join(work, "AFTER_TAG"))).toBe(false);
         expect(r.calls.some((c) => c.includes("backup.sh"))).toBe(true);
         // without --ref from a detached HEAD the branch guard applies
-        expect(deploy(["--dry-run"]).out).toContain("a real run would stop here: the current branch is HEAD, not main");
+        expect(deploy(["--dry-run"]).out).toContain("a real run would stop here: the current branch is HEAD; without --branch or --ref, only main or stable can be deployed");
       } finally {
         git(work, "checkout", "-q", "main");
       }
@@ -1256,6 +1280,195 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       expect(r.out).toContain("v404.0.0 is neither a tag nor a branch");
       expect(r.calls.some((c) => c.includes("build"))).toBe(false);
     });
+  });
+});
+
+describe("scripts/ops/deploy.sh: branch selection", { timeout: TEST_TIMEOUT_MS }, () => {
+  const args = ["--settle", "0", "--no-ai-worker", "--no-backup", "--no-prune", "--no-drain"];
+
+  it.each(["main", "stable"])("follows only the current %s branch and never switches branches", (branch) => {
+    const base = head();
+    const other = path.join(tmp, `follow-${branch}`);
+    git(tmp, "clone", origin, other);
+    git(other, "checkout", "-q", "-B", branch, base);
+    write(path.join(other, "BRANCH_UPDATE"), `${branch}\n`);
+    git(other, "add", "BRANCH_UPDATE");
+    git(other, "commit", "-m", "branch update");
+    git(other, "push", "origin", branch);
+    const target = git(other, "rev-parse", "HEAD");
+    if (branch === "stable") git(work, "checkout", "-q", "-B", branch, base);
+    try {
+      const r = deploy(args);
+      expect(r.status, r.out).toBe(0);
+      expect(head()).toBe(target);
+      expect(git(work, "rev-parse", "--abbrev-ref", "HEAD")).toBe(branch);
+      expect(r.gitCalls.filter((call) => / (fetch|merge|checkout|switch) /.test(` ${call} `))).toEqual([
+        `git -C ${realWork} fetch origin ${branch}`,
+        `git -C ${realWork} merge --ff-only origin/${branch}`,
+      ]);
+    } finally {
+      restore(base);
+      if (branch === "main") git(origin, "update-ref", "refs/heads/main", base);
+      else {
+        git(origin, "update-ref", "-d", "refs/heads/stable");
+        git(work, "update-ref", "-d", "refs/remotes/origin/stable");
+        git(work, "branch", "-D", "stable");
+      }
+    }
+  });
+
+  it.each([
+    ["feature", false], ["feature", true], ["detached", false], ["detached", true],
+  ] as const)("refuses %s without an explicit selector; local origin/stable=%s", (checkout, stable) => {
+    const base = head();
+    if (stable) git(work, "update-ref", "refs/remotes/origin/stable", base);
+    if (checkout === "detached") git(work, "checkout", "-q", "--detach", base);
+    else git(work, "checkout", "-q", "-B", checkout);
+    try {
+      const r = deploy(args);
+      expect(r.status, r.out).toBe(1);
+      expect(r.out).toContain("--ref <tag>");
+      expect(r.out.includes("git switch stable")).toBe(stable);
+      expect(r.out).not.toContain("git switch main");
+      expect(r.gitCalls.filter((call) => / (fetch|merge|checkout|switch) /.test(` ${call} `))).toEqual([]);
+      expect(r.calls).toEqual(["docker info"]);
+      expect(head()).toBe(base);
+      expect(git(work, "rev-parse", "--abbrev-ref", "HEAD")).toBe(checkout === "detached" ? "HEAD" : checkout);
+    } finally {
+      restore(base);
+      git(work, "update-ref", "-d", "refs/remotes/origin/stable");
+    }
+  });
+
+  it("uses the selected remote when deciding whether to suggest stable", () => {
+    const base = head();
+    git(work, "checkout", "-q", "-B", "feature");
+    git(work, "update-ref", "refs/remotes/origin/stable", base);
+    try {
+      expect(deploy(["--remote", "upstream"]).out).not.toContain("git switch stable");
+      git(work, "update-ref", "refs/remotes/upstream/stable", base);
+      expect(deploy(["--remote", "upstream"]).out).toContain("git switch stable");
+    } finally {
+      restore(base);
+      for (const remote of ["origin", "upstream"]) git(work, "update-ref", "-d", `refs/remotes/${remote}/stable`);
+    }
+  });
+
+  it("keeps --branch main explicit and refuses a mismatching checkout", () => {
+    const r = deploy([...args, "--branch", "main"]);
+    expect(r.status, r.out).toBe(0);
+    expect(r.gitCalls).toContain(`git -C ${realWork} fetch origin main`);
+    expect(r.gitCalls).toContain(`git -C ${realWork} merge --ff-only origin/main`);
+    const base = head();
+    git(work, "checkout", "-q", "-B", "stable");
+    try {
+      const refused = deploy(["--branch", "main"]);
+      expect(refused.status, refused.out).toBe(1);
+      expect(refused.out).toContain("the current branch is stable, not main");
+      expect(refused.out).not.toContain("git switch main");
+    } finally {
+      restore(base);
+      git(work, "branch", "-D", "stable");
+    }
+  });
+});
+
+describe("scripts/ops/deploy.sh: development-build notice", { timeout: TEST_TIMEOUT_MS }, () => {
+  const version = "1.2.3";
+  const tag = `v${version}`;
+  const args = ["--skip-pull", "--settle", "0", "--no-ai-worker", "--no-backup", "--no-prune", "--no-drain"];
+  let base = "";
+
+  beforeEach(() => {
+    base = head();
+    write(path.join(work, "package.json"), JSON.stringify({ name: "job-radar", version }));
+    git(work, "add", "package.json");
+    git(work, "commit", "-m", "version fixture");
+    git(work, "tag", "-a", tag, "-m", "release fixture");
+  });
+  afterEach(() => {
+    restore(base);
+    if (git(work, "tag", "--list", tag)) git(work, "tag", "-d", tag);
+    for (const remote of ["origin", "upstream"]) git(work, "update-ref", "-d", `refs/remotes/${remote}/stable`);
+  });
+
+  const changeTree = () => {
+    write(path.join(work, "DEVELOPMENT"), "changed\n");
+    git(work, "add", "DEVELOPMENT");
+    git(work, "commit", "-m", "development fixture");
+  };
+
+  it.each([false, true])("prints nothing extra for the release tree, including an empty commit: %s", (emptyCommit) => {
+    if (emptyCommit) git(work, "commit", "--allow-empty", "-m", "same tree");
+    git(work, "update-ref", "refs/remotes/origin/stable", head());
+    const r = deploy(args);
+    expect(r.status, r.out).toBe(0);
+    expect(r.out).not.toContain("development build");
+    expect(r.out).not.toContain("git switch stable");
+  });
+
+  it.each([false, true])("prints the commit count after doctor and offers stable only when present: %s", (stable) => {
+    changeTree();
+    git(work, "commit", "--allow-empty", "-m", "another commit");
+    if (stable) git(work, "update-ref", "refs/remotes/origin/stable", head());
+    const r = deploy(args, { PNPM_doctor_HOOK: "echo doctor-finished" });
+    expect(r.status, r.out).toBe(0);
+    expect(r.out).toContain(`This is a development build: 2 commits after ${tag}`);
+    expect(r.out.indexOf("This is a development build")).toBeGreaterThan(r.out.indexOf("doctor-finished"));
+    expect(r.out.includes("git switch stable")).toBe(stable);
+    if (stable) expect(r.out).toContain("$ git switch stable\n  $ scripts/ops/deploy.sh");
+    expect(r.out).not.toContain("git switch main");
+  });
+
+  it.each([false, true])("a missing version tag only reports its absence; local origin/stable=%s", (stable) => {
+    git(work, "tag", "-d", tag);
+    if (stable) git(work, "update-ref", "refs/remotes/origin/stable", head());
+    const r = deploy(args);
+    expect(r.status, r.out).toBe(0);
+    expect(r.out).toContain(`development build based on version ${version}`);
+    expect(r.out).toContain(`tag ${tag} was not found`);
+    expect(r.out.includes("git switch stable")).toBe(stable);
+  });
+
+  it.each([
+    [{ PNPM_doctor_EXIT: "0" }, 0],
+    [{ PNPM_doctor_EXIT: "1" }, 0],
+    [{ PNPM_doctor_EXIT: "2" }, 2],
+    [{ PNPM_doctor_EXIT: "127" }, 1],
+    [{ STUB_CONTAINERS_web: "" }, 2],
+  ] as const)("preserves the result with and without a notice: %j", (env, status) => {
+    const released = deploy(args, env);
+    changeTree();
+    const development = deploy(args, env);
+    expect(released.status, released.out).toBe(status);
+    expect(development.status, development.out).toBe(released.status);
+    expect(released.out).not.toContain("development build");
+    expect(development.out).toContain(`1 commits after ${tag}`);
+  });
+
+  it.each(["HEAD^{tree}", `refs/tags/${tag}^{tree}`, `refs/tags/${tag}..HEAD`])("a failed git probe of %s cannot change the deploy result", (probe) => {
+    changeTree();
+    const r = deploy(args, { GIT_FAIL_NOTICE_PROBE: probe, PNPM_doctor_EXIT: "2" });
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).not.toContain("fatal: notice probe failed");
+    expect(r.out).not.toContain("commits after");
+  });
+
+  it("uses --remote for the switch-back hint too", () => {
+    changeTree();
+    git(work, "update-ref", "refs/remotes/origin/stable", head());
+    expect(deploy([...args, "--remote", "upstream"]).out).not.toContain("git switch stable");
+    git(work, "update-ref", "refs/remotes/upstream/stable", head());
+    expect(deploy([...args, "--remote", "upstream"]).out).toContain("git switch stable");
+  });
+
+  it("dry-run explicitly skips the notice and its git probes", () => {
+    changeTree();
+    const r = deploy([...args, "--dry-run"]);
+    expect(r.status, r.out).toBe(0);
+    expect(r.out).toContain("dry-run: development-build notice skipped (shown after a real deploy)");
+    expect(r.out).not.toContain("This is a development build");
+    expect(r.gitCalls.some((call) => call.includes("^{tree}") || call.includes(" rev-list "))).toBe(false);
   });
 });
 
