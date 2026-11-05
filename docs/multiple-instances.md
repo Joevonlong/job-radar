@@ -44,6 +44,10 @@ started from another checkout.
   (`io.jobradar.ai-worker` on macOS, `job-radar-ai-worker.service` on Linux) for the checkout it is run from; for a second
   instance on the same machine, run `pnpm ai-worker` from its checkout under your own supervisor, or use another machine
   user.
+  **Warning:** Deploying from the second checkout with `scripts/ops/deploy.sh` can replace the first instance's service.
+  Restoring the second instance's main database with `scripts/ops/restore.sh` stops that service and normally starts it again; `--no-restart`
+  leaves it stopped. Use a separate machine user for the second instance. Deploy's `--no-ai-worker` skips the service switch,
+  but an existing service can leave its config writes pending; restore has no equivalent worker-skip option.
 - **Phone access**: `tailscale serve` maps one HTTPS port to one local port; serve the second instance on another HTTPS
   port (`tailscale serve --bg --https 8443 3001`) and set its `notify.yaml: public_base_url` to that address.
 - **Profile**: copy settings from one instance to another by copying files from `data/config/`, never `data/profile/`

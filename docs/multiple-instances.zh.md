@@ -34,6 +34,7 @@ docker compose up -d --build
 
 - **Telegram**：每个实例要有自己的 bot（`TELEGRAM_BOT_TOKEN`）；两个程序轮询同一个 bot 会互相抢消息。
 - **AI worker**：一个数据库一个 ai-worker。`scripts/ops/install-ai-worker.sh` 在每个系统用户下只装一个服务（macOS 上是 `io.jobradar.ai-worker`，Linux 上是 `job-radar-ai-worker.service`），对应运行它的那份检出；同一台机器上的第二个实例，请在它的检出里用你自己的进程管理器运行 `pnpm ai-worker`，或换一个系统用户。
+  **警告：**从第二份检出运行 `scripts/ops/deploy.sh` 可能替换第一个实例的服务。用 `scripts/ops/restore.sh` 恢复第二个实例的主数据库时，会停止该服务并通常再启动；`--no-restart` 则让它保持停止。第二个实例请使用单独的系统用户。部署时的 `--no-ai-worker` 会跳过服务切换，但已有服务可能使配置写入处于待处理状态；恢复命令没有对应的跳过 worker 选项。
 - **手机访问**：`tailscale serve` 把一个 HTTPS 端口映射到一个本地端口；第二个实例用另一个 HTTPS 端口（`tailscale serve --bg --https 8443 3001`），并把它的 `notify.yaml: public_base_url` 设成那个地址。
 - **个人画像**：在实例之间复制设置时，只复制 `data/config/` 里的文件，不要复制 `data/profile/`（`me.yaml` 是这个人，`preferences.yaml` 是他要找什么）；新的人在设置向导里建立自己的画像。
 - **网页口令**：每个实例各有自己的口令（在各自的检出里 `pnpm web:password`）；一个实例的会话打不开另一个。
