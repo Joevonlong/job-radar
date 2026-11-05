@@ -68,20 +68,20 @@ Job Radar 是一个跑在你自己电脑上的岗位推送。
 
 <table>
   <tr>
-    <td width="50%"><img alt="今日页" src="https://joevonlong.github.io/job-radar-site/readme/V-02.webp"><p align="center"><b>今日页</b></p></td>
+    <td width="50%"><img alt="今日页" src="https://jobradar.bid/readme/V-02.webp"><p align="center"><b>今日页</b></p></td>
     <td width="50%"><img alt="岗位拆解和技能对照" src="images/demo/breakdown.webp"><p align="center"><b>岗位拆解和技能对照</b></p></td>
   </tr>
   <tr>
-    <td width="50%"><img alt="让 AI 读到真实的岗位" src="https://joevonlong.github.io/job-radar-site/readme/V-06.webp"><p align="center"><b>让 AI 读到真实的岗位</b></p></td>
-    <td width="50%"><img alt="筛选和保存的视图" src="https://joevonlong.github.io/job-radar-site/readme/V-10.webp"><p align="center"><b>筛选和保存的视图</b></p></td>
+    <td width="50%"><img alt="让 AI 读到真实的岗位" src="https://jobradar.bid/readme/V-06.webp"><p align="center"><b>让 AI 读到真实的岗位</b></p></td>
+    <td width="50%"><img alt="筛选和保存的视图" src="https://jobradar.bid/readme/V-10.webp"><p align="center"><b>筛选和保存的视图</b></p></td>
   </tr>
   <tr>
-    <td width="50%"><img alt="跟进申请" src="https://joevonlong.github.io/job-radar-site/readme/V-13.webp"><p align="center"><b>跟进申请</b></p></td>
-    <td width="50%"><img alt="键盘流" src="https://joevonlong.github.io/job-radar-site/readme/V-11.webp"><p align="center"><b>键盘流</b></p></td>
+    <td width="50%"><img alt="跟进申请" src="https://jobradar.bid/readme/V-13.webp"><p align="center"><b>跟进申请</b></p></td>
+    <td width="50%"><img alt="键盘流" src="https://jobradar.bid/readme/V-11.webp"><p align="center"><b>键盘流</b></p></td>
   </tr>
   <tr>
-    <td width="50%"><img alt="你挑的来源" src="https://joevonlong.github.io/job-radar-site/readme/V-16.webp"><p align="center"><b>你挑的来源</b></p></td>
-    <td width="50%"><img alt="你的 AI，你的订阅" src="https://joevonlong.github.io/job-radar-site/readme/V-17.webp"><p align="center"><b>你的 AI，你的订阅</b></p></td>
+    <td width="50%"><img alt="你挑的来源" src="https://jobradar.bid/readme/V-16.webp"><p align="center"><b>你挑的来源</b></p></td>
+    <td width="50%"><img alt="你的 AI，你的订阅" src="https://jobradar.bid/readme/V-17.webp"><p align="center"><b>你的 AI，你的订阅</b></p></td>
   </tr>
 </table>
 
