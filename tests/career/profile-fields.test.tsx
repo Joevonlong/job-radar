@@ -17,7 +17,7 @@ import { TextEditor } from "@/components/career/text-editor";
 import { careerSchema } from "@/lib/config/schemas/career";
 import { assignIds } from "@/lib/career/schema/ids";
 import { careerProfileSchema, emptyProfile, type Text } from "@/lib/career/schema/profile";
-import { profile } from "./fixtures";
+import { profile, text } from "./fixtures";
 
 it("clears optional facts to null after entering a URL or date", () => {
   let current = profile().experience[0]!;
@@ -121,4 +121,51 @@ it("keeps a custom item's text and wordings when its kind changes", () => {
   expect(entry).toMatchObject({ id: "itm_aaaaaaaaaa", kind: "entry", heading: body, text: null, bullets: [] });
   expect(changeCustomItemKind(entry, "tag")).toEqual({ id: "itm_aaaaaaaaaa", kind: "tag", text: body });
   expect(changeCustomItemKind(entry, "entry")).toBe(entry);
+});
+
+it("keeps the wordings and primary when the kind is changed in the editor, and the result keeps its ids", () => {
+  const stored = assignIds(
+    careerProfileSchema.parse({
+      ...emptyProfile(),
+      custom_sections: [
+        {
+          id: "",
+          title: text("Talks"),
+          layout: "list",
+          side: "main",
+          items: [{ id: "", kind: "entry", heading: text("Heading"), text: text(""), bullets: [] }],
+        },
+      ],
+    }),
+    emptyProfile(),
+  );
+  const section = stored.custom_sections[0]!;
+  const heading = section.items[0]!.kind === "entry" ? section.items[0]!.heading : null;
+  heading!.wordings.push({ ...heading!.wordings[0]!, id: "wrd_bbbbbbbbbb", text: "Second" });
+  heading!.primary = "wrd_bbbbbbbbbb";
+  let current = section as unknown as DataObject;
+  function Form() {
+    const [value, setValue] = useState(current);
+    return (
+      <ObjectFields
+        value={value}
+        fields={sectionFields.custom_sections}
+        limits={careerSchema.parse({}).profile}
+        onChange={(next) => {
+          current = next;
+          setValue(next);
+        }}
+      />
+    );
+  }
+  render(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      <Form />
+    </NextIntlClientProvider>,
+  );
+  fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "tag" } });
+  const items = current.items as DataObject[];
+  expect(items[0]).toEqual({ id: section.items[0]!.id, kind: "tag", text: heading });
+  const saved = careerProfileSchema.parse({ ...emptyProfile(), custom_sections: [current] });
+  expect(() => assignIds(saved, stored)).not.toThrow();
 });
