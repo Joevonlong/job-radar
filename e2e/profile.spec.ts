@@ -245,6 +245,23 @@ test("places: a city to move to, a remote-only region and an unknown name are sa
   expect(saved.places.slice(-3)).toEqual([{ place: "Amsterdam", relocate: true }, { place: "eu", relocate: false }, { place: "Atlantis", relocate: true }]);
 });
 
+test("places: the old search.yaml keys are compared with them in both directions", async ({ page }) => {
+  const searchFile = path.join(process.env.E2E_CONFIG_DIR ?? "", "search.yaml");
+  const before = fs.readFileSync(searchFile, "utf8");
+  fs.writeFileSync(searchFile, `${before.trimEnd()}\nlocations: [Oldtown]\n`);
+  try {
+    await open(page);
+    const prefs = page.getByTestId("preferences-card");
+    await expect(prefs.getByTestId("search-leftovers")).toContainText("Oldtown");
+    const input = prefs.getByTestId("places-field").getByRole("combobox");
+    await input.fill("Addedtown");
+    await input.press("Enter");
+    await expect(prefs.getByTestId("search-added")).toContainText("Addedtown");
+  } finally {
+    fs.writeFileSync(searchFile, before);
+  }
+});
+
 test("experience library: add a story, save, reload, reorder and see it in the history", async ({ page }) => {
   await open(page);
   const card = page.getByTestId("stories-card");

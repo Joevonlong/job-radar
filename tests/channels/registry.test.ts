@@ -8,6 +8,10 @@ import { createFixtureChannel, FIXTURE_SETTINGS } from "@/lib/channels/fixture";
 import { channelsWith, shippedChannels } from "./helpers";
 
 describe("CHANNEL_CONFIG_TABLE", () => {
+  it.each(["arbeitsagentur", "jsearch", "stepstone", "xing"] as const)("%s sends no place on a remote search", (id) => {
+    expect(CHANNEL_CONFIG_TABLE[id].supportsRemotePlaces).toBe(false);
+  });
+
   it("maps every block of sources.yaml to exactly one channel id", () => {
     const config = shippedChannels();
     const expected = [

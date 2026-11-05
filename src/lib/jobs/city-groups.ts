@@ -59,7 +59,7 @@ function compileTargets(config: CityGroupConfig): Target[] {
   const targets: Target[] = [];
   for (const location of config.targets) {
     const looked = lookupPlace(location, geo);
-    if (looked !== null && looked.kind !== "city") continue;
+    if (looked !== null && looked.kind !== "city" && location !== config.homeCity) continue;
     const key = canonical(location);
     if (targets.some((t) => t.key === key)) continue;
     const names = new Set<string>(spellings(location));
@@ -71,7 +71,8 @@ function compileTargets(config: CityGroupConfig): Target[] {
     for (const name of names) {
       for (const folded of [foldText(name), foldTransliterated(name, config.market.transliterations)]) if (!patterns.has(folded)) patterns.set(folded, wholeWordPattern(folded));
     }
-    const countries = location === config.homeCity ? [config.market.country] : looked?.countries ?? [];
+    const tableCountries = looked?.countries ?? [];
+    const countries = location === config.homeCity ? [config.market.country] : tableCountries.length > 0 ? [...tableCountries, config.market.country] : [];
     targets.push({ key, patterns: [...patterns.values()], countries: countries.length === 0 ? null : new Set(countries) });
   }
   return targets;

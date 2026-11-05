@@ -88,7 +88,8 @@ export function buildQueries(search: SearchConfig, places: QueryPlaces | null, k
 
 /** The texts the on-site searches use: the home city (or country) and the places I'd move to. Board discovery searches these only. */
 export function onsiteSearchTexts(places: QueryPlaces): string[] {
-  return plannedSearches(places.preferences, places.geo, places.home).flatMap((search) => (search.remote || search.location === null ? [] : [search.location]));
+  const texts = plannedSearches(places.preferences, places.geo, places.home).flatMap((search) => (search.remote || search.location === null ? [] : [search.location]));
+  return texts.filter((text, index) => texts.findIndex((other) => other.toLowerCase() === text.toLowerCase()) === index);
 }
 
 /** A remote search that names a place rather than a scope. */

@@ -167,7 +167,7 @@ pnpm run doctor --only config.market
 
 结果有变化的情况：设为 `none` 时，地点在允许城市的远程职位过去会显示，现在会以 `workplace_not_wanted` 隐藏；设为 `none` 且 `workplace: [remote]` 时，远程职位现在会被检查，不再被隐藏；`{region: [...]}` 没有包含本国时，本国的远程职位现在会显示；`locations` 里的国外城市变成 ✈ 地点并开始匹配。如果 `locations` 的第一项是国外城市，它会成为常住城市，那里的职位按本国比较。
 
-`search.yaml` 的 `locations` 和 `remote_scope` 仍可接受但不再生效，也没有迁移步骤：搜索来自 `places`，`config:check` 和 `/me` 会提醒 `places` 里没有的内容。两个文件一致时，升级后查询和查询 id 不变，轮转历史得以延续。这些配置会增加或改变搜索：
+`search.yaml` 的 `locations` 和 `remote_scope` 仍可接受但不再生效，也没有迁移步骤：搜索来自 `places`，`config:check` 和 `/me` 会提醒 `places` 里没有的内容，以及 `places` 新增、而这两个键没列出的搜索。两个文件一致时，升级后查询和查询 id 不变，轮转历史得以延续。这些配置会增加或改变搜索：
 
 | 旧配置 | 变化 |
 |---|---|

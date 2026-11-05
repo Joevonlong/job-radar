@@ -200,7 +200,7 @@ EUR are read as EUR.
 
 Results that change: with `none`, a remote job in an allowed city was shown and is now hidden as `workplace_not_wanted`; with `none` and `workplace: [remote]`, remote jobs are now checked instead of hidden; with `{region: [...]}` that leaves out home, home-country remote jobs now show; a foreign city in `locations` becomes a ✈ place and starts matching. If the first of `locations` was a foreign city, it becomes the home city, and a job there is compared with the home country.
 
-`search.yaml`'s `locations` and `remote_scope` are accepted and ignored, with no migration step: searches come from `places`, and `config:check` and `/me` warn about entries that `places` doesn't list. When the two files agreed, the upgrade keeps the same queries and query ids, so the rotation history carries over. These configs add or change a search:
+`search.yaml`'s `locations` and `remote_scope` are accepted and ignored, with no migration step: searches come from `places`, and `config:check` and `/me` warn about entries that `places` doesn't list, and about searches `places` adds that those keys didn't list. When the two files agreed, the upgrade keeps the same queries and query ids, so the rotation history carries over. These configs add or change a search:
 
 | Old config | Change |
 |---|---|

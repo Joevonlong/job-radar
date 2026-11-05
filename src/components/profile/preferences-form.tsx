@@ -11,7 +11,7 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { changedPaths } from "@/lib/draft-diff";
 import type { SalaryMedian, StatedSalary } from "@/lib/profile/floor-preview";
-import { searchEntriesOutsidePlaces, type OldSearchEntries } from "@/lib/market/places";
+import { placesBeyondSearchEntries, searchEntriesOutsidePlaces, type OldSearchEntries } from "@/lib/market/places";
 import type { MarketView } from "@/lib/market/view";
 import {
   CONTRACT_MODES,
@@ -56,7 +56,9 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
   const [draft, setDraft] = useState<PreferencesDraft>(initial);
   const errors = fieldErrorMap(state, "preferences", hash);
   const dirtyCount = changedPaths(draft, initial).length;
-  const leftovers = draft.market.pack === market.packId && market.error === null ? searchEntriesOutsidePlaces(oldSearch, draft, market.placeGeo) : [];
+  const sameMarket = draft.market.pack === market.packId && market.error === null;
+  const leftovers = sameMarket ? searchEntriesOutsidePlaces(oldSearch, draft, market.placeGeo) : [];
+  const added = sameMarket ? placesBeyondSearchEntries(oldSearch, draft, market.placeGeo, { country: market.country, countryName: market.countryName }) : [];
 
   function patch(next: Partial<PreferencesDraft>) {
     setDraft((current) => ({ ...current, ...next }));
@@ -125,6 +127,11 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
       {leftovers.length > 0 ? (
         <p role="status" className="text-body-sm font-bold" data-testid="search-leftovers">
           {t("fields.searchLeftovers", { names: leftovers.join(", ") })}
+        </p>
+      ) : null}
+      {added.length > 0 ? (
+        <p role="status" className="text-body-sm font-bold" data-testid="search-added">
+          {t("fields.searchAdded", { names: added.join(", ") })}
         </p>
       ) : null}
 

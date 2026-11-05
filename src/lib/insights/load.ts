@@ -1,5 +1,6 @@
 /** Reads everything /insights shows (server only): the config, the aggregates, and the view model. */
-import { wantedLocations } from "@/lib/market/places";
+import { loadPipeline } from "@/lib/market";
+import { placeGeo, wantedCities } from "@/lib/market/places";
 import { reloadConfig } from "@/lib/config";
 import { cityMembers } from "@/lib/jobs/city-groups";
 import { loadCityGroups } from "@/lib/jobs/cities";
@@ -26,7 +27,7 @@ export function insightsCities(configured: readonly string[], locations: () => r
 
 function preferredLocations(): readonly string[] {
   try {
-    return wantedLocations(reloadConfig("preferences"));
+    return wantedCities(reloadConfig("preferences"), placeGeo(loadPipeline()));
   } catch {
     return [];
   }

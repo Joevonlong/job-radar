@@ -160,10 +160,21 @@ export interface PlacePreferences {
   places: readonly { place: string; relocate: boolean }[];
 }
 
+/** Worldwide is always remote only, whatever a hand-written file or the command-line setup marks it as. */
+const isWorldwide = (text: string): boolean => placeKey(text) === WORLDWIDE;
+
 /** The wanted places as text, for pages and prompts: the home city, then the places I'd move to. */
 export function wantedLocations(preferences: PlacePreferences): string[] {
-  const moves = preferences.places.filter((entry) => entry.relocate).map((entry) => entry.place);
+  const moves = preferences.places.filter((entry) => entry.relocate && !isWorldwide(entry.place)).map((entry) => entry.place);
   return preferences.home_city.trim() === "" ? moves : [preferences.home_city, ...moves];
+}
+
+/** The wanted places that can be a city: what a page lists as cities. A country or region I'd move to is left out, a name the tables do not know stays. */
+export function wantedCities(preferences: PlacePreferences, geo: PlaceGeo): string[] {
+  return wantedLocations(preferences).filter((text) => {
+    const kind = lookupPlace(text, geo)?.kind;
+    return kind === undefined || kind === "city" || text === preferences.home_city;
+  });
 }
 
 /** A code that stands for a country the tables do not list: kept as written, so a scope token from an old file still counts. */
@@ -184,8 +195,8 @@ function scopeToken(text: string, geo: PlaceGeo): string | null {
  * wording is part of what a stored score means, so it stays as it was; the filter reads `placeAreas`.
  */
 export function wantedRemoteScope(preferences: PlacePreferences, geo: PlaceGeo): Exclude<RemoteScopeValue, "none"> {
+  if (preferences.places.some((entry) => isWorldwide(entry.place))) return "worldwide";
   const remoteOnly = preferences.places.filter((entry) => !entry.relocate).map((entry) => entry.place);
-  if (remoteOnly.some((text) => lookupPlace(text, geo)?.kind === "worldwide")) return "worldwide";
   const tokens = [...new Set(remoteOnly.flatMap((text) => scopeToken(text, geo) ?? []))];
   return tokens.length > 0 ? { region: tokens } : "home_country";
 }
@@ -193,7 +204,7 @@ export function wantedRemoteScope(preferences: PlacePreferences, geo: PlaceGeo):
 /** A city, or a name the tables do not know, that a job's location is compared with by its text. */
 export interface NamedPlace {
   text: string;
-  /** The countries it lies in; null when not known, and then the text counts in any country. */
+  /** The countries it counts in; null when not known, and then the text counts in any country. A place I'd move to also counts at home, where the same name may be meant. */
   countries: readonly string[] | null;
   /** On-site and hybrid jobs count here: the home city or a place I'd move to. */
   relocate: boolean;
@@ -229,7 +240,8 @@ export function placeAreas(preferences: PlacePreferences, geo: PlaceGeo, homeCou
     if (place?.kind === "worldwide") {
       worldwide = true;
     } else if (place?.kind === "city") {
-      named.push({ text, countries: place.countries.length > 0 ? place.countries : null, relocate });
+      const inHomeToo = relocate && !place.countries.includes(homeCountry) ? [homeCountry] : [];
+      named.push({ text, countries: place.countries.length > 0 ? [...place.countries, ...inHomeToo] : null, relocate });
       for (const country of place.countries) abroad.add(country);
     } else if (place === null && !isCountryCode(text)) {
       named.push({ text, countries: null, relocate });
@@ -277,14 +289,15 @@ function remoteSearchOf(text: string, relocate: boolean, geo: PlaceGeo, homeCoun
 /**
  * The searches of the location settings, for each keyword group: the home city (the home country's name without one) and each place
  * I'd move to, then, when remote jobs are wanted, the home country unless a listed scope token or Worldwide covers it, and one per listed place. An
- * upgraded config gets the queries it had, with the same ids, so its rotation history carries over. Pure: the form counts with it too.
+ * upgraded config whose preferences.yaml and search.yaml agreed keeps the queries it had, with the same ids, so its rotation history carries over,
+ * and gains the remote search of a place abroad; `searchEntriesOutsidePlaces` and `placesBeyondSearchEntries` name the differences. Pure: the form counts with it too.
  */
 export function plannedSearches(preferences: PlacePreferences & { workplace: readonly string[] }, geo: PlaceGeo, home: { country: string; countryName: string }): PlannedSearch[] {
   const onsite = { remote: false, remoteScope: null };
   const homeCity = preferences.home_city.trim();
   const searches: PlannedSearch[] = [{ ...onsite, location: homeCity === "" ? home.countryName : homeCity, country: home.country, place: null }];
   for (const { place: text, relocate } of preferences.places) {
-    if (!relocate) continue;
+    if (!relocate || isWorldwide(text)) continue;
     const place = lookupPlace(text, geo);
     searches.push({ ...onsite, location: place?.token ? place.searchName : text, country: singleCountry(place), place: text });
   }
@@ -307,14 +320,47 @@ export interface OldSearchEntries {
   remote_scope?: unknown;
 }
 
+const textsOf = (value: unknown): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : []);
+
+const hasScopeRegion = (scope: unknown): scope is { region: unknown } => typeof scope === "object" && scope !== null && "region" in scope;
+
+/** The places search.yaml's old keys name. */
+function oldSearchNames(search: OldSearchEntries): string[] {
+  const scope = search.remote_scope;
+  return [...textsOf(search.locations), ...(scope === "worldwide" ? ["Worldwide"] : hasScopeRegion(scope) ? textsOf(scope.region) : [])];
+}
+
 /** What search.yaml's old `locations` and `remote_scope` name that the location settings do not list: they are not searched any more. */
 export function searchEntriesOutsidePlaces(search: OldSearchEntries, preferences: PlacePreferences, geo: PlaceGeo): string[] {
-  const texts = (value: unknown): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : []);
-  const scope = search.remote_scope;
-  const names = [
-    ...texts(search.locations),
-    ...(scope === "worldwide" ? ["Worldwide"] : typeof scope === "object" && scope !== null && "region" in scope ? texts(scope.region) : []),
-  ];
+  const names = oldSearchNames(search);
   const listed = new Set([preferences.home_city, ...preferences.places.map((entry) => entry.place)].map((text) => samePlaceKey(text, geo)));
   return [...new Set(names.filter((name) => !listed.has(samePlaceKey(name, geo))))];
+}
+
+/**
+ * What the location settings search that search.yaml's old keys did not: the searches an upgrade adds, each a cost on a paid board. A key the
+ * file does not have says nothing. A search of the home country's remote jobs is named by the country.
+ */
+export function placesBeyondSearchEntries(search: OldSearchEntries, preferences: PlacePreferences & { workplace: readonly string[] }, geo: PlaceGeo, home: { country: string; countryName: string }): string[] {
+  const hasLocations = Array.isArray(search.locations);
+  const scope = search.remote_scope;
+  if (!hasLocations && scope === undefined) return [];
+  const HOME = "\0home";
+  const scopeKey = (name: string): string => (samePlaceKey(name, geo) === samePlaceKey(home.country, geo) ? HOME : samePlaceKey(name, geo));
+  const onsite = new Set(textsOf(search.locations).map((name) => samePlaceKey(name, geo)));
+  const remote = new Set(scope === "worldwide" ? [WORLDWIDE] : scope === "home_country" ? [HOME] : hasScopeRegion(scope) ? textsOf(scope.region).map(scopeKey) : []);
+  const remoteKey = (entry: PlannedSearch): string | null => {
+    if (entry.remoteScope === "worldwide") return WORLDWIDE;
+    if (entry.remoteScope === "home_country") return HOME;
+    const token = entry.remoteScope?.region[0];
+    return token === undefined ? null : scopeKey(token);
+  };
+  const isNew = (entry: PlannedSearch): boolean => {
+    if (!entry.remote) return hasLocations && !onsite.has(samePlaceKey(entry.location ?? "", geo));
+    if (scope === undefined) return false;
+    const key = remoteKey(entry);
+    return key === null || !remote.has(key);
+  };
+  const names = plannedSearches(preferences, geo, home).filter(isNew).map((entry) => entry.place ?? entry.location ?? home.countryName);
+  return [...new Set(names)];
 }

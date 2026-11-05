@@ -652,6 +652,7 @@
       "exclude_keywords": {
         "label": "Excluded keywords"
       },
+      "searchAdded": "search.yaml's old keys did not list {names}, but your settings here do, so these are searched now. Change your places or workplace here if you don't want the extra searches.",
       "searchLeftovers": "search.yaml still lists {names}, which your places lack. Those keys are ignored now, so they are not searched. Add them here if you still want them."
     },
     "options": {

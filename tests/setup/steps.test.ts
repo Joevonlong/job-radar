@@ -83,6 +83,25 @@ describe("market", () => {
     expect(stepStatus("market")).toBe("done");
   });
 
+  it("stores places as the form does, whatever the command line wrote, each once", async () => {
+    const places = [{ place: "European Union", relocate: false }, { place: "eu", relocate: false }, { place: "netherlands", relocate: false }, { place: "Poing", relocate: true }];
+    expect(await saveMarketStep({ ...MARKET, places })).toEqual({ status: "saved", step: "market" });
+    expect(reloadConfig("preferences").places).toEqual([{ place: "eu", relocate: false }, { place: "NL", relocate: false }, { place: "Poing", relocate: true }]);
+  });
+
+  it("keeps a ✈ given on any spelling of a place, and leaves out the home city", async () => {
+    const places = [{ place: "NL", relocate: false }, { place: "netherlands", relocate: true }, { place: "amsterdam", relocate: true }];
+    expect(await saveMarketStep({ ...MARKET, places })).toEqual({ status: "saved", step: "market" });
+    expect(reloadConfig("preferences").places).toEqual([{ place: "NL", relocate: true }]);
+  });
+
+  it("the profile step is not offered a country or region as a city", async () => {
+    expect(await saveMarketStep({ ...MARKET, home_city: " ", places: [{ place: "NL", relocate: true }, { place: "eu", relocate: true }] })).toEqual({ status: "saved", step: "market" });
+    const draft = (await loadSetupView({ locale: "en", acceptLanguage: null })).profile.draft;
+    expect(draft?.city).not.toBe("NL");
+    expect(draft?.city).not.toBe("eu");
+  });
+
   it("takes no home city: anywhere in the home country then counts", async () => {
     expect(await saveMarketStep({ ...MARKET, home_city: " " })).toEqual({ status: "saved", step: "market" });
     expect(reloadConfig("preferences").home_city).toBe("");

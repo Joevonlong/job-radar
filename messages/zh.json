@@ -652,6 +652,7 @@
       "exclude_keywords": {
         "label": "排除的关键词"
       },
+      "searchAdded": "search.yaml 的旧键没有列出 {names}，但你在这里的设置里有，所以现在会搜索它们。如果不需要这些额外的搜索，请在这里修改地点或工作方式。",
       "searchLeftovers": "search.yaml 里还列着 {names}，但你的地点里没有。这些键现在已被忽略，不会再用来搜索。如果还需要，请在这里添加。"
     },
     "options": {

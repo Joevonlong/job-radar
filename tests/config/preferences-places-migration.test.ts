@@ -75,3 +75,13 @@ describe("wantedRemoteScope", () => {
     expect(wantedRemoteScope({ home_city: "Berlin", places: [{ place: "eu", relocate: true }] }, geo)).toBe("home_country");
   });
 });
+
+describe("preferences.yaml 2 -> 3, run on its own result", () => {
+  it("changes nothing the second time", () => {
+    const doc = parseDocument("target_titles: [Engineer]\nlocations: [Berlin, Amsterdam]\nremote_scope: {region: [CH]}\n");
+    preferences003.migrate(doc);
+    const once = doc.toJS() as unknown;
+    preferences003.migrate(doc);
+    expect(doc.toJS()).toEqual(once);
+  });
+});

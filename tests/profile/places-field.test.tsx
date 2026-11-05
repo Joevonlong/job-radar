@@ -32,6 +32,13 @@ async function add(text: string): Promise<void> {
 }
 
 describe("PlacesField", () => {
+  it("does not list the home city again", async () => {
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} />);
+    await add("berlin");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("starts a city as a place to move to, a country or region as remote only", async () => {
     const onChange = vi.fn();
     render(<Harness onChange={onChange} />);

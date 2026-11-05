@@ -2,10 +2,10 @@
 import { parseDocument } from "yaml";
 import { describe, expect, it } from "vitest";
 
-import { buildQueries, queryId } from "@/lib/channels/query";
+import { buildQueries, onsiteSearchTexts, queryId } from "@/lib/channels/query";
 import { preferences003 } from "@/lib/config/migrations/preferences/003-places";
 import type { SearchConfig } from "@/lib/config";
-import { placeAreas, plannedSearches, searchEntriesOutsidePlaces, type PlaceGeo } from "@/lib/market/places";
+import { placeAreas, placesBeyondSearchEntries, plannedSearches, searchEntriesOutsidePlaces, wantedCities, wantedLocations, wantedRemoteScope, type PlaceGeo } from "@/lib/market/places";
 
 import { shippedSearch } from "../channels/helpers";
 
@@ -165,5 +165,77 @@ describe("old search.yaml entries", () => {
 
   it("ignore a value of the wrong shape", () => {
     expect(searchEntriesOutsidePlaces({ locations: "Paris", remote_scope: 3 }, prefs, geo)).toEqual([]);
+  });
+});
+
+describe("Worldwide marked as a place to move to", () => {
+  const preferences = { home_city: "Berlin", places: [moving("Worldwide")], workplace: all };
+
+  it("is read as remote only by the searches, the texts and the prompt's scope", () => {
+    expect(plannedSearches(preferences, geo, home).filter((search) => !search.remote).map((search) => search.location)).toEqual(["Berlin"]);
+    expect(wantedLocations(preferences)).toEqual(["Berlin"]);
+    expect(wantedRemoteScope(preferences, geo)).toBe("worldwide");
+  });
+});
+
+describe("wantedCities", () => {
+  it("keeps the home city, cities and unknown names, and drops countries and regions", () => {
+    const places = [moving("Amsterdam"), moving("NL"), moving("eu"), moving("Poing"), remoteOnly("Paris")];
+    expect(wantedCities({ home_city: "Berlin", places }, geo)).toEqual(["Berlin", "Amsterdam", "Poing"]);
+  });
+
+  it("keeps a home city the tables call a country", () => {
+    expect(wantedCities({ home_city: "Xaland", places: [] }, geo)).toEqual(["Xaland"]);
+  });
+});
+
+describe("placeAreas of a place to move to", () => {
+  it("adds home to a city's countries when it is marked so, and leaves an unknown name open", () => {
+    const { named } = placeAreas({ home_city: "", places: [moving("Paris"), remoteOnly("Amsterdam"), moving("Poing")] }, geo, "XA");
+    expect(named.map(({ text, countries }) => [text, countries])).toEqual([["Paris", ["FR", "XA"]], ["Amsterdam", ["NL"]], ["Poing", null]]);
+  });
+});
+
+describe("onsiteSearchTexts", () => {
+  it("names a place once, whatever its case", () => {
+    const places = { preferences: { home_city: "Berlin", places: [moving("berlin"), moving("Paris")], workplace: all }, geo, home };
+    expect(onsiteSearchTexts(places)).toEqual(["Berlin", "Paris"]);
+  });
+});
+
+describe("searches the old keys did not list", () => {
+  const beyond = (search: Parameters<typeof placesBeyondSearchEntries>[0], places: { place: string; relocate: boolean }[], workplace = all, home_city = "Berlin") => placesBeyondSearchEntries(search, { home_city, places, workplace }, geo, home);
+
+  it("are quiet without the keys, and when the two files agree", () => {
+    expect(beyond({}, [moving("Paris")])).toEqual([]);
+    expect(beyond({ locations: ["Berlin", "Paris"], remote_scope: { region: ["CH", "XA"] } }, [moving("Paris"), remoteOnly("CH")], ["onsite"])).toEqual([]);
+  });
+
+  it("name a place or home city the old list lacked", () => {
+    expect(beyond({ locations: ["Berlin"], remote_scope: "home_country" }, [moving("Paris"), remoteOnly("NL")])).toEqual(["Paris", "NL"]);
+    expect(beyond({ locations: ["Paris"] }, [moving("Paris")])).toEqual(["Berlin"]);
+  });
+
+  it("read only the keys the file has", () => {
+    expect(beyond({ remote_scope: "home_country" }, [moving("Paris")], ["onsite"])).toEqual([]);
+    expect(beyond({ locations: ["Berlin"] }, [remoteOnly("Paris")])).toEqual([]);
+    expect(beyond({ locations: ["Berlin"] }, [moving("Worldwide")])).toEqual([]);
+  });
+
+  it("name the remote search a place abroad gains, even when the old list had the place", () => {
+    expect(beyond({ locations: ["Berlin", "Paris"], remote_scope: "home_country" }, [moving("Paris")])).toEqual(["Paris"]);
+    expect(beyond({ locations: ["Berlin", "NL"], remote_scope: "home_country" }, [remoteOnly("NL")])).toEqual(["NL"]);
+  });
+
+  it("do not name a remote search nobody runs, or home under another token", () => {
+    expect(beyond({ remote_scope: "home_country" }, [remoteOnly("NL")], ["onsite"])).toEqual([]);
+    expect(beyond({ remote_scope: "home_country" }, [remoteOnly("XA")])).toEqual([]);
+  });
+
+  it("name the home country when remote search of it is new", () => {
+    expect(beyond({ remote_scope: "none" }, [])).toEqual(["Xaland"]);
+    expect(beyond({ remote_scope: { region: ["CH"] } }, [remoteOnly("CH")])).toEqual(["Xaland"]);
+    expect(beyond({ remote_scope: "none" }, [], ["onsite"])).toEqual([]);
+    expect(beyond({ remote_scope: "home_country" }, [])).toEqual([]);
   });
 });

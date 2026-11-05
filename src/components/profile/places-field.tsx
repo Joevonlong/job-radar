@@ -59,12 +59,12 @@ export function PlacesField({ id, value, onChange, geo, options, known, search, 
     const typed = fromLabel(text, options, worldwide);
     setText("");
     const key = samePlaceKey(typed, geo);
-    if (value.some((entry) => samePlaceKey(entry.place, geo) === key)) return;
+    if (key === samePlaceKey(search.homeCity, geo) || value.some((entry) => samePlaceKey(entry.place, geo) === key)) return;
     const kind = lookupPlace(typed, geo)?.kind;
     onChange([...value, { place: storedPlaceName(typed, geo), relocate: kind === undefined || kind === "city" }]);
   };
 
-  const chosen = new Set(value.map((entry) => samePlaceKey(entry.place, geo)));
+  const chosen = new Set([search.homeCity, ...value.map((entry) => entry.place)].map((place) => samePlaceKey(place, geo)));
   const cities = [...new Set(Object.values(geo.cities).map(([city]) => city))];
   const choices = [worldwide, ...options.map((option) => option.label), ...cities].filter((name) => !chosen.has(samePlaceKey(fromLabel(name, options, worldwide), geo)));
   const unknown = known ? value.filter((entry) => lookupPlace(entry.place, geo) === null) : [];

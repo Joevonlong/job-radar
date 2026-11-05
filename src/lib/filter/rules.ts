@@ -1,6 +1,6 @@
 import type { PipelineConfig, PreferencesConfig } from "@/lib/config";
 import type { GermanLevel, JobLocation, JobSalary } from "@/lib/domain/types";
-import { canonicalCity, citySpellings, placeAreas, placeGeo } from "@/lib/market/places";
+import { canonicalCity, citySpellings, lookupPlace, placeAreas, placeGeo } from "@/lib/market/places";
 import type { Market } from "@/lib/market/types";
 import { buildBlacklistedCompanyKeys, buildWatchedCompanyKeys, isCompanyExcluded, isCompanyWatched } from "@/lib/companies/marks";
 import { visaRulesFor } from "@/lib/visa/rules";
@@ -125,6 +125,8 @@ export interface CompiledFilter {
   moveCountries: ReadonlySet<string>;
   /** Texts that name only a country ("Germany"). */
   countryLevel: readonly RegExp[];
+  /** Folded names of the countries that hold a city I'd move to, the home country aside: such a text may still be that city. */
+  cityCountryNames: ReadonlySet<string>;
   countryLevelOnsitePolicy: "keep_note" | "exclude";
   genericLocation: readonly RegExp[];
   /** The market's home country. */
@@ -133,6 +135,8 @@ export interface CompiledFilter {
   baseCurrency: string;
   /** Where a remote job may be based: the home country and the listed countries and regions; null = all (Worldwide is listed). */
   scopeCountries: ReadonlySet<string> | null;
+  /** Names of the countries of `scopeCountries`; a short one only as written, in capitals, because "us" is also a word. */
+  scopeNames: readonly RegExp[];
   /** Location texts that name a wide area covering home or a listed place ("EU", "Europe"). */
   scopeWide: readonly RegExp[];
   worldwide: readonly RegExp[];
@@ -202,7 +206,10 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
       relocate: place.relocate,
     };
   });
+  const cityCountries = new Set(areas.named.flatMap((place) => (place.relocate ? (place.countries ?? []) : [])).filter((country) => country !== market.country));
+  const cityCountryNames = new Set(market.countries.filter((country) => cityCountries.has(country.code)).flatMap((country) => [country.name, ...country.aliases]).map((name) => foldText(name)));
   const remoteCountries = areas.worldwide ? null : areas.remoteCountries;
+  const scopeNames = market.countries.filter((country) => remoteCountries?.has(country.code)).flatMap((country) => [country.name, ...country.aliases]).map((name) => (name.length <= 3 ? new RegExp(wholeWordSource([name], false), "u") : wholeWordPattern(foldText(name))));
   const wideRegions = [...new Set([...(market.homeRegion === null ? [] : [market.homeRegion]), ...areas.wideRegions])];
 
   const blacklistedCompanyKeys = buildBlacklistedCompanyKeys(preferences.exclude_companies, pipeline);
@@ -215,11 +222,13 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
     anywhereInHome: areas.anywhereInHome,
     moveCountries: areas.moveCountries,
     countryLevel: compilePatterns(cfg.country_level.patterns),
+    cityCountryNames,
     countryLevelOnsitePolicy: cfg.country_level.onsite_policy,
     genericLocation: compilePatterns(cfg.generic_location_patterns),
     homeCountry: market.country,
     baseCurrency: market.currency,
     scopeCountries: remoteCountries,
+    scopeNames,
     scopeWide: compilePatterns(areas.worldwide ? [] : wideRegions.flatMap((token) => market.regions[token]?.patterns ?? [])),
     worldwide: compilePatterns(cfg.remote.worldwide_patterns),
     outside: compilePatterns(cfg.remote.outside_patterns),
@@ -264,18 +273,20 @@ function namesPlace(location: JobLocation, target: NamedTarget): boolean {
   return texts.some((text) => target.patterns.some((p) => p.test(text)));
 }
 
-/** An on-site or hybrid job counts here: the home city (the stated home country without one), a place I'd move to, or a country I'd move to. */
-function isAllowedCity(location: JobLocation, filter: CompiledFilter): boolean {
+/** The location names the home city or a place I'd move to. */
+const isWantedCity = (location: JobLocation, filter: CompiledFilter): boolean => filter.named.some((target) => target.relocate && namesPlace(location, target));
+
+/** The location states a country that counts as a whole: one I'd move to, or the home country without a home city. */
+function isWholeCountry(location: JobLocation, filter: CompiledFilter): boolean {
   const country = location.countryCode;
-  if (country !== null && (filter.moveCountries.has(country) || (filter.anywhereInHome && country === filter.homeCountry))) return true;
-  return filter.named.some((target) => target.relocate && namesPlace(location, target));
+  return country !== null && (filter.moveCountries.has(country) || (filter.anywhereInHome && country === filter.homeCountry));
 }
 
-/** The location names only a country ("Germany", "Deutschland", "bundesweit"). */
+/** The location names only a country that may hold a wanted place ("Germany", "Deutschland", "bundesweit", or "Netherlands" with Amsterdam listed). */
 function isCountryLevel(location: JobLocation, filter: CompiledFilter): boolean {
-  if (!inHomeOrUnstated(location, filter)) return false;
   const text = cityOf(location) !== "" ? cityOf(location) : location.label.trim();
-  return filter.countryLevel.some((p) => p.test(text));
+  if (filter.cityCountryNames.has(foldText(text.replace(/\s*\([^)]*\)\s*$/u, "")))) return true;
+  return inHomeOrUnstated(location, filter) && filter.countryLevel.some((p) => p.test(text));
 }
 
 /** The location names only a region that contains an allowed city ("Bavaria", "Bavaria, Germany"): the place itself is the region. */
@@ -302,10 +313,12 @@ function classifyRemoteLocation(location: JobLocation, filter: CompiledFilter): 
 
 /**
  * The region marker of a title that says the posting hires outside the remote scope ("Staff AI Engineer - US" -> "US"),
- * or null. A title that also names an in-scope region ("EMEA / Americas") has none.
+ * or null. A title that also names an in-scope region or country ("EMEA / Americas", "- Canada, Germany" with Germany in scope) has none.
  */
 function titleOutsideMarker(title: string, filter: CompiledFilter): string | null {
   if (filter.scopeWide.some((p) => p.test(title)) || filter.worldwide.some((p) => p.test(title))) return null;
+  const folded = foldText(title);
+  if (filter.scopeNames.some((p) => p.test(title) || p.test(folded))) return null;
   for (const pattern of filter.titleOutside) {
     const match = pattern.exec(title);
     if (match) return match[0].replace(/^[\s\-–—|,(/:]+|[\s\-–—|,)/]+$/gu, "") || match[0].trim();
@@ -318,21 +331,27 @@ interface PartialVerdict {
   notes: string[];
 }
 
+/**
+ * The location rule. A location naming a wanted city settles it. Then, for a remote job, a title that says which region it hires in ("- US",
+ * "US East Coast") wins over the locations and the description. A location in a country that counts as a whole gives way only to a title naming
+ * another country: "East Coast" or "Americas" says nothing against it.
+ */
 function checkLocation(job: FilterJob, filter: CompiledFilter, out: PartialVerdict): void {
   const locations = job.locations;
-  if (locations.some((l) => isAllowedCity(l, filter))) return;
+  if (locations.some((l) => isWantedCity(l, filter))) return;
+  const marker = job.workplace === "remote" && filter.scopeCountries !== null ? titleOutsideMarker(job.title, filter) : null;
+  const wholeCountry = locations.some((l) => isWholeCountry(l, filter));
+  if (marker !== null && (!wholeCountry || lookupPlace(marker, placeGeo(filter.pipeline))?.kind === "country")) {
+    out.excluded.push(encodeReason("remote_out_of_scope", marker));
+    return;
+  }
+  if (wholeCountry) return;
 
   const countryLevel = locations.find((l) => isCountryLevel(l, filter));
   const regionLevel = locations.find((l) => isRegionLevel(l, filter));
   const levelNote = (): string => encodeReason("location_country_level", placeOf((countryLevel ?? regionLevel) as JobLocation));
 
   if (job.workplace === "remote") {
-    // the title says which region it hires in ("- US", "US East Coast"): that wins over locations and the description
-    const marker = filter.scopeCountries === null ? null : titleOutsideMarker(job.title, filter);
-    if (marker !== null) {
-      out.excluded.push(encodeReason("remote_out_of_scope", marker));
-      return;
-    }
     const classes = locations.map((l) => classifyRemoteLocation(l, filter));
     if (classes.includes("in")) {
       if (countryLevel) out.notes.push(levelNote());
