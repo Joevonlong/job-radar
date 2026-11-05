@@ -195,6 +195,10 @@ same placeholders as the English one) and verifies that the generated catalog fi
 text names the key or file. Fix: edit the messages, then `pnpm i18n:catalog` and commit the regenerated files. A few
 seconds.
 
+#### Resume fonts (generated table current)
+
+`pnpm career:fonts --check` (`tsx scripts/career-engine-fonts.ts --check`). Verifies that the embedded resume font table matches the pinned Fontsource files and CSS metadata. Missing files, metadata or stale output fail with the affected file name. Fix: run `pnpm career:fonts` and commit the regenerated table. A few seconds.
+
 #### Lint
 
 `pnpm lint` (`eslint .`). Whole repository, including tests and scripts. Failures print `file:line rule`. Fix locally with
@@ -645,6 +649,12 @@ with the UI text (the specs run in English), a spec that writes shared config bu
 that counts a whole list or changes shared rows without the `@exclusive` tag, a race that only shows up with two workers
 (the trace shows it).
 
+`e2e/career-print.spec.ts` compares the text layer of printed resumes with `tests/fixtures/career/print-baseline/` character
+by character. That comparison runs on Linux only, because the same document can break a line differently on macOS. This
+job always runs it. A run on macOS, including a full local CI run, reports it as skipped, and still checks page counts,
+engine checks, whole words and embedded fonts. To compare on a Mac, run `scripts/career-print-baseline-linux.sh <directory>`,
+which prints in the runner image.
+
 #### Setup wizard end-to-end tests
 
 `pnpm test:e2e:setup --fail-on-flaky-tests`, only in the `parallel` part (`if: matrix.part == 'parallel'`), after its
@@ -761,8 +771,8 @@ Always: `docker compose down -v --remove-orphans` on the throwaway runner.
 
 Upgrade transitions with real Docker and the real deploy, install and uninstall scripts of each version, the ai-worker
 under the systemd simulator (`tests/transition/run.sh`). Runs when `changes` sets `transition` (pull requests that touch
-the deploy side or toolchain, every push to `main`, manual runs). The matrix creates `upgrade-transition (A)` and
-`upgrade-transition (B)` on separate runners with `fail-fast: false`: one failure does not cancel the other.
+the deploy side, including `tests/transition/`, or toolchain, every push to `main`, manual runs). The matrix creates
+`upgrade-transition (A)` and `upgrade-transition (B)` on separate runners with `fail-fast: false`: one failure does not cancel the other.
 No service container: each compose project of the script runs its own database. Each leg keeps the 120-minute job limit,
 65-minute launch-time deadline and 66-minute wait cap. Setup and launch caps total 25 minutes; allowing 1 minute for
 reporting, 5 minutes for cleanup (including its 240-second grace), and one 5-minute upload gives a conservative
@@ -776,7 +786,9 @@ First step of the transition job. Some runners come with a 72 GB root disk inste
 
 #### Check out the repository
 
-`actions/checkout` with `fetch-depth: 0`: the scenarios check out the earlier versions.
+`actions/checkout` with `fetch-depth: 0`: the pinned action fetches all branches and tags, including `v2.0.1`.
+When scenario F is selected, the script checks `refs/tags/v2.0.1^{commit}` before its first Docker call and stops with a message to run
+`git fetch --tags` if the release tag is missing.
 
 #### Set up pnpm
 
@@ -792,14 +804,17 @@ First step of the transition job. Some runners come with a 72 GB root disk inste
 
 #### Start transition scenarios
 
-Starts only the matrix-selected scenario in the background: `bash tests/transition/run.sh --scenarios A <artifacts-A>`
-or `--scenarios B <artifacts-B>`, using `SCENARIO` from `matrix.scenario`. Limit 2 minutes. Each leg has its own runner,
-Docker daemon and layer cache, runner-temp artifacts, random `RUN_ID`, temporary root, compose-project prefix,
+Starts the matrix-selected scenarios in the background: `bash tests/transition/run.sh --scenarios A <artifacts-A>`
+or `--scenarios B,F <artifacts-B>`, using `SCENARIO` from `matrix.scenario`. F follows B, D, C and E in the B process,
+with its own clone and compose project after B's project is removed. B has three successful image deployments and one deliberate build failure,
+versus A's five successful deployments, so F's two deployments go on B to balance the work.
+The matrix entries, job names and wait-step names are unchanged. Limit 2 minutes. Each leg has its own
+runner, Docker daemon and layer cache, runner-temp artifacts, random `RUN_ID`, temporary root, compose-project prefix,
 HOME/XDG directories and simulator state. Images have project-specific names and deploys use `--no-prune`.
 
 Prints `df -h`, `free -h` and `docker system df` before launch. Each selected wait prints them at its start, every
 minute while waiting and on exit. Every diagnostic command is non-fatal and cannot change a scenario's result.
-Measure the wall-clock gain on hosted runs: A and B previously competed for resources on one runner.
+A and B previously competed for resources on one runner.
 
 #### Transition scenario A
 
@@ -816,8 +831,8 @@ In clones with isolated compose projects (`jrtransition-<random>-*`), ports, vol
 #### Transition scenario B
 
 Runs only in `upgrade-transition (B)` (`matrix.scenario == 'B'`), with the exact step name `Transition scenario B`.
-The same independent wait and 66-minute limit for B, measured from its own launch. B builds its own starting
-version and keeps D, C and E inside its process because they depend on its state:
+The same independent wait and 66-minute limit for B and F together, measured from its own launch. B builds its own
+starting version and keeps D, C and E inside its process because they depend on its state; F then starts a separate project:
 
 - B: 62d7ad9; the new `install-ai-worker.sh --release` of a release whose worker throws at start must roll back to the
   worker installed from the checkout; the same with a good release succeeds; then the strict stop and the deploy of the
@@ -826,12 +841,19 @@ version and keeps D, C and E inside its process because they depend on its state
   worker and leaves no lock; the same deploy without it succeeds.
 - C: a release with a broken tsx loader is rolled back.
 - E: the emergency restore of the previous release; the doctor reports release != HEAD. Then the uninstall.
+- F: install the `v2.0.1` tag (24 commits before 62d7ad9) with its own `deploy.sh --skip-pull`, then follow
+  [the first upgrade to release directories](upgrade.md#first-upgrade-release-dir): run that tag's uninstall, confirm
+  the worker stopped, stop web and runner, check out the tested commit and run its `deploy.sh --skip-pull`.
+  The tag's deploy, install and uninstall scripts match 62d7ad9's; the same isolated environment, config folders,
+  systemd unit template and off-Linux `uname` shim apply. Its own lockfile and Dockerfile provide its older dependencies
+  (including Playwright 1.63.0), and its containers still mount `config/`. All worker operations use the systemd
+  simulator; no real launchd steps run. After the upgrade checks, uninstall the worker.
 
 After each step: `/app/config` of the web and runner containers equals `config/` of the deployed commit (sha256 of every
 file); the worker's MainPID runs from the expected directory and `install-ai-worker.sh --print-release` agrees; a
 `run_ai` request is done by the worker; the doctor's JSON (`--only config.shipped --only ops`) has the shipped config
-check, and from the release-directory version on confirms the reports and finds no lock and no switch backup. Safety: before
-anything runs, the caller's compose, docker and database variables (`COMPOSE_*`, `DOCKER_HOST`, `JOBRADAR_*`,
+check from 4dd8d03 onward (absent at `v2.0.1` and 62d7ad9), and from the release-directory version on confirms the reports
+and finds no lock and no switch backup. Safety: before anything runs, the caller's compose, docker and database variables (`COMPOSE_*`, `DOCKER_HOST`, `JOBRADAR_*`,
 `JOB_RADAR_*`, `POSTGRES_*`, `PG*`, `DATABASE_URL` and every name the compose files interpolate) are unset, so none of
 them can override a project's `.env` (`tests/transition/clean-env.sh`). A docker guard (`tests/transition/docker-guard.sh`)
 lets through read-only commands; a compose command that changes something runs only for the script's own projects, and
@@ -840,8 +862,10 @@ named with the run's prefix and not external, every bind mount and build context
 `container_name`, only the ports registered for the project); `down`, prune and `volume rm` are refused. Cleanup checks
 the configuration and the containers' mounts the same way, runs `down` without `-v` and removes only volumes named with
 the project's prefix. `launchctl` and `systemctl` must resolve to the simulator. `tests/ops/transition-guard.test.ts`
-covers these rails with fake docker binaries. These checks apply to both scenarios. Locally (Linux or macOS, Docker
-with compose v2), run each command with a distinct artifact directory; the temporary directory and the script's compose projects, images and volumes are removed at the end.
+covers these rails with fake docker binaries. These checks apply to every scenario. Locally (Linux or macOS, Docker
+with compose v2), run each command with a distinct artifact directory; `bash tests/transition/run.sh --scenarios F <artifacts-F>`
+runs only the release-tag upgrade, and omitting `--scenarios` runs A, B and F. The temporary directory and the script's
+compose projects, images and volumes are removed at the end.
 
 Not covered: launchd (the integration tests run the switch against the launchd simulator; real launchd is the manual
 drill), and `deploy.sh`'s own git pull (each hop checks out the commit and uses `--skip-pull`). Off Linux the doctor's
@@ -894,6 +918,9 @@ combination (including a job that must run and was skipped or cancelled) prints 
 | `pip` | `/jobspy` | at most 3 open PRs; the sidecar's Python dependencies, in the pip-compile layout: a PR changes a pin in `requirements*.in` and regenerates the hashed lock files `requirements*.txt` |
 | `docker` | `/jobspy` | at most 2 open PRs; the digest of the base image in `jobspy/Dockerfile` (the root `Dockerfile` takes its image tags from build arguments, which Dependabot cannot update) |
 | `github-actions` | `/` | at most 3 open PRs; the action versions pinned in the workflows |
+
+Version-update PRs explicitly target `main`, even if the repository's default branch changes. Security updates always
+target the default branch and are not affected by `target-branch`.
 
 Dependabot PRs run the same pipeline as any other. An action bump changes `.github/`, so it selects full coverage and runs
 everything; if it renames a step, `ci-docs` fails until this page is updated. This page names no action versions, so a

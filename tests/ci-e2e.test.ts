@@ -151,7 +151,7 @@ describe("independent slow CI jobs", () => {
     expect(free).toBeLessThan(job.steps.indexOf(launch));
     expect(job.steps[free]!.run).toContain("df -h /");
     expect(launch.run).toContain('for shard in "$SCENARIO"; do');
-    expect(launch.run).toContain('bash tests/transition/run.sh --scenarios "$shard" "$state/$shard/artifacts"');
+    expect(launch.run).toContain('bash tests/transition/run.sh --scenarios "$scenarios" "$state/$shard/artifacts"');
     for (const scenario of ["A", "B"]) {
       const step = job.steps.find((step) => step.name === `Transition scenario ${scenario}`)!;
       expect(step.if).toBe(`\${{ !cancelled() && matrix.scenario == '${scenario}' }}`);
