@@ -26,7 +26,7 @@ Replace `v2.0.0` with the release you want (`git fetch --tags && git tag --list 
 section of that release first: it says whether you have to do something.
 
 `--ref` accepts a tag or a branch. The checkout ends up on that commit (for a tag, git calls this a detached HEAD, which is
-expected). Without `--ref` the script follows `main`.
+expected). By default, without `--ref` the script follows the current branch, `main` or `stable`.
 
 Deploy does not verify signatures by default. Pass `--verify` to run `git verify-tag` on the tag first and stop if it is
 invalid. It uses the maintainer's public key shipped as [`signing-key.pub`](signing-key.pub) (an `allowed_signers` file;
