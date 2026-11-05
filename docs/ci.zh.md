@@ -465,7 +465,7 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 ### Job `upgrade-transition`
 
-用真 Docker 和每个版本自己的 deploy、install、uninstall 脚本测升级迁移，ai-worker 跑在模拟的 systemd 下（`tests/transition/run.sh`）。`changes` 设了 `transition` 时运行（改到部署相关文件或工具链的 PR、每次推送到 `main`、手动运行）。矩阵生成 `upgrade-transition (A)` 和 `upgrade-transition (B)`，各用独立 runner；`fail-fast: false` 保证一个失败不会取消另一个。没有 service 容器：脚本的每个 compose 项目自带数据库。每条腿保留 120 分钟任务上限、从启动算起的 65 分钟截止时间和 66 分钟等待上限。准备和启动上限合计 25 分钟，加上 1 分钟报告余量、5 分钟清理（含 240 秒宽限期）、一次 5 分钟上传，保守合计 101 分钟，留出 19 分钟余量。
+用真 Docker 和每个版本自己的 deploy、install、uninstall 脚本测升级迁移，ai-worker 跑在模拟的 systemd 下（`tests/transition/run.sh`）。`changes` 设了 `transition` 时运行（改到部署相关文件，包括 `tests/transition/`，或工具链的 PR、每次推送到 `main`、手动运行）。矩阵生成 `upgrade-transition (A)` 和 `upgrade-transition (B)`，各用独立 runner；`fail-fast: false` 保证一个失败不会取消另一个。没有 service 容器：脚本的每个 compose 项目自带数据库。每条腿保留 120 分钟任务上限、从启动算起的 65 分钟截止时间和 66 分钟等待上限。准备和启动上限合计 25 分钟，加上 1 分钟报告余量、5 分钟清理（含 240 秒宽限期）、一次 5 分钟上传，保守合计 101 分钟，留出 19 分钟余量。
 
 部署步骤若构建输出显示历史提交取 Google Fonts 失败（`internal/font/google`），会重试（最多两次，间隔递增，每次重试都写进日志）；其他失败立即报错。
 
@@ -475,7 +475,7 @@ transition 作业的第一步。有的 runner 根盘只有 72 GB（正常 145 GB
 
 #### Check out the repository
 
-`actions/checkout`，`fetch-depth: 0`：场景要检出更早的版本。
+`actions/checkout`，`fetch-depth: 0`：当前固定的 action 会获取所有分支和标签，包括 `v2.0.1`。选中场景 F 时，脚本在第一次调用 Docker 前检查 `refs/tags/v2.0.1^{commit}`；缺少发布标签时停止，并提示运行 `git fetch --tags`。
 
 #### Set up pnpm
 
@@ -491,9 +491,9 @@ transition 作业的第一步。有的 runner 根盘只有 72 GB（正常 145 GB
 
 #### Start transition scenarios
 
-只后台启动矩阵选中的场景：`bash tests/transition/run.sh --scenarios A <产物目录-A>` 或 `--scenarios B <产物目录-B>`，`SCENARIO` 取自 `matrix.scenario`。步骤上限 2 分钟。每条腿有独立 runner、Docker daemon 和层缓存、runner 临时产物目录、随机 `RUN_ID`、临时根目录、compose 项目前缀、HOME/XDG 和模拟器状态。镜像名随项目区分，deploy 都带 `--no-prune`。
+后台启动矩阵选中的场景：`bash tests/transition/run.sh --scenarios A <产物目录-A>` 或 `--scenarios B,F <产物目录-B>`，`SCENARIO` 取自 `matrix.scenario`。F 在 B 进程内的 B、D、C、E 之后执行，移除 B 的项目后再用自己的 clone 和 compose 项目启动。B 有三次成功的镜像部署和一次刻意失败的构建，A 则有五次成功部署，因此把 F 的两次部署放到 B 来均衡工作量。矩阵条目、作业名和等待步骤名保持不变。步骤上限 2 分钟。每条腿有独立 runner、Docker daemon 和层缓存、runner 临时产物目录、随机 `RUN_ID`、临时根目录、compose 项目前缀、HOME/XDG 和模拟器状态。镜像名随项目区分，deploy 都带 `--no-prune`。
 
-启动前打印 `df -h`、`free -h`、`docker system df`；选中的等待步骤开始、等待中每分钟、退出时也打印。诊断失败不影响场景结果。实际耗时收益需要托管 CI 测量：原先 A/B 在同一 runner 内并发，争用资源。
+启动前打印 `df -h`、`free -h`、`docker system df`；选中的等待步骤开始、等待中每分钟、退出时也打印。诊断失败不影响场景结果。原先 A/B 在同一 runner 内并发，争用资源。
 
 #### Transition scenario A
 
@@ -503,14 +503,15 @@ transition 作业的第一步。有的 runner 根盘只有 72 GB（正常 145 GB
 
 #### Transition scenario B
 
-只在 `upgrade-transition (B)`（`matrix.scenario == 'B'`）运行，步骤精确名为 `Transition scenario B`。独立等待 B，上限同为 66 分钟，从本条腿自己的启动时间计算截止时间。B 自己建立起始版本；D、C、E 依赖它的状态，因此仍在 B 进程内执行：
+只在 `upgrade-transition (B)`（`matrix.scenario == 'B'`）运行，步骤精确名为 `Transition scenario B`。独立等待 B 和 F 全部完成，上限同为 66 分钟，从本条腿自己的启动时间计算截止时间。B 自己建立起始版本；D、C、E 依赖它的状态，因此仍在 B 进程内执行；之后 F 建立独立项目：
 
 - B：62d7ad9；新的 `install-ai-worker.sh --release` 换上一个启动就抛错的发布，必须回滚到从 checkout 安装的 worker；换上正常的发布则成功；然后严格停止，部署检出的提交。
 - D：runner 镜像构建失败的部署（构建参数 `FAIL_RUNNER_BUILD=1`）不改任何容器、镜像和 worker，也不留锁；去掉参数再部署成功。
 - C：tsx loader 坏掉的发布被回滚。
 - E：应急恢复上一个发布；doctor 报告 release != HEAD。最后卸载。
+- F：先用 `v2.0.1` 标签（比 62d7ad9 早 24 个提交）自己的 `deploy.sh --skip-pull` 安装，再按[首次升级到发布目录的步骤](upgrade.zh.md#first-upgrade-release-dir)操作：运行该标签的卸载脚本，确认 worker 已停，停止 web 和 runner，检出待测提交，运行新版本的 `deploy.sh --skip-pull`。该标签的 deploy、install、uninstall 脚本与 62d7ad9 相同，沿用隔离环境、配置目录、systemd unit 模板，以及非 Linux 下的 `uname` shim。它自己的 lockfile 和 Dockerfile 提供旧版依赖（包括 Playwright 1.63.0），容器仍挂载 `config/`。所有 worker 操作都经过 systemd 模拟器，不执行真实 launchd 步骤。升级检查结束后卸载 worker。
 
-每一步之后：web 和 runner 容器里的 `/app/config` 等于所部署提交的 `config/`（逐文件 sha256）；worker 的 MainPID 在预期目录里运行，`install-ai-worker.sh --print-release` 一致；worker 完成一个 `run_ai` 请求；doctor 的 JSON（`--only config.shipped --only ops`）有 shipped config 检查，从发布目录版本起确认各进程的报告，并且没有锁和替换备份。安全措施：开始前清掉调用方环境里所有 compose、docker 和数据库相关变量（`COMPOSE_*`、`DOCKER_HOST`、`JOBRADAR_*`、`JOB_RADAR_*`、`POSTGRES_*`、`PG*`、`DATABASE_URL`，以及 compose 文件里插值用到的每个变量名），它们因此无法覆盖项目的 `.env`（`tests/transition/clean-env.sh`）。docker 包装（`tests/transition/docker-guard.sh`）放行只读命令；会改动东西的 compose 命令只对脚本自己的项目执行，而且要先让同一条命令的 `docker compose config` 通过 `tests/transition/compose-check.mjs`（每个卷都带本次运行的前缀且不是 external，每个 bind mount 和构建上下文都在本次运行的目录里，没有 `container_name`，只发布为该项目登记的端口）；`down`、prune 和 `volume rm` 一律拒绝。清理时用同样的方式检查配置和容器的挂载，执行不带 `-v` 的 `down`，只删除名字带项目前缀的卷。`launchctl` 和 `systemctl` 必须指向模拟器。`tests/ops/transition-guard.test.ts` 用假的 docker 测这些防护。这些检查对两个场景都适用。本地（Linux 或 macOS，Docker 带 compose v2）：分别运行两个命令并传不同产物目录；结束时删除临时目录和脚本自己的 compose 项目、镜像、卷。
+每一步之后：web 和 runner 容器里的 `/app/config` 等于所部署提交的 `config/`（逐文件 sha256）；worker 的 MainPID 在预期目录里运行，`install-ai-worker.sh --print-release` 一致；worker 完成一个 `run_ai` 请求；doctor 的 JSON（`--only config.shipped --only ops`）从 4dd8d03 起有 shipped config 检查（`v2.0.1` 和 62d7ad9 尚无此项），从发布目录版本起确认各进程的报告，并且没有锁和替换备份。安全措施：开始前清掉调用方环境里所有 compose、docker 和数据库相关变量（`COMPOSE_*`、`DOCKER_HOST`、`JOBRADAR_*`、`JOB_RADAR_*`、`POSTGRES_*`、`PG*`、`DATABASE_URL`，以及 compose 文件里插值用到的每个变量名），它们因此无法覆盖项目的 `.env`（`tests/transition/clean-env.sh`）。docker 包装（`tests/transition/docker-guard.sh`）放行只读命令；会改动东西的 compose 命令只对脚本自己的项目执行，而且要先让同一条命令的 `docker compose config` 通过 `tests/transition/compose-check.mjs`（每个卷都带本次运行的前缀且不是 external，每个 bind mount 和构建上下文都在本次运行的目录里，没有 `container_name`，只发布为该项目登记的端口）；`down`、prune 和 `volume rm` 一律拒绝。清理时用同样的方式检查配置和容器的挂载，执行不带 `-v` 的 `down`，只删除名字带项目前缀的卷。`launchctl` 和 `systemctl` 必须指向模拟器。`tests/ops/transition-guard.test.ts` 用假的 docker 测这些防护。这些检查对所有场景都适用。本地（Linux 或 macOS，Docker 带 compose v2）：每次运行传不同产物目录；`bash tests/transition/run.sh --scenarios F <产物目录-F>` 只运行发布标签升级，省略 `--scenarios` 则运行 A、B、F。结束时删除临时目录和脚本自己的 compose 项目、镜像、卷。
 
 不覆盖：launchd（集成测试在 launchd 模拟器上测替换；真 launchd 靠手动演练），以及 `deploy.sh` 自己的 git pull（每跳先检出提交再用 `--skip-pull`）。不在 Linux 上时跳过 doctor 把 worker 报告和 systemd 对照的那部分。
 
