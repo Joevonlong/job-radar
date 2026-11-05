@@ -339,7 +339,7 @@ if (fs.existsSync(path.join(getProfileDir(), "preferences.yaml"))) {
     const pipeline = loadPipeline();
     const added = placesBeyondSearchEntries(readEffectiveConfig("search"), preferences, placeGeo(pipeline), { country: pipeline.market.country, countryName: pipeline.market.countryName });
     if (added.length > 0) console.log(`! preferences.yaml: ${added.join(", ")} searched now, though search.yaml's old locations, remote_scope did not list them`);
-    const names = searchEntriesOutsidePlaces(readEffectiveConfig("search"), preferences, placeGeo(pipeline));
+    const names = searchEntriesOutsidePlaces(readEffectiveConfig("search"), preferences, placeGeo(pipeline), { country: pipeline.market.country, countryName: pipeline.market.countryName });
     if (names.length > 0) console.log(`! search.yaml locations, remote_scope: ${names.join(", ")} not in preferences.yaml places; these keys are ignored, so they are not searched`);
   } catch {
     // an unreadable file is reported by its own check above

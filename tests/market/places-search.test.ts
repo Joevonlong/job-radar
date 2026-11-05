@@ -153,18 +153,24 @@ describe("old search.yaml entries", () => {
   const prefs = { home_city: "Berlin", places: [moving("Amsterdam"), remoteOnly("eu")] };
 
   it("are quiet when the location settings list them, in any spelling", () => {
-    expect(searchEntriesOutsidePlaces({ locations: ["berlin", "Amsterdam"], remote_scope: { region: ["eu"] } }, prefs, geo)).toEqual([]);
-    expect(searchEntriesOutsidePlaces({ remote_scope: "home_country" }, prefs, geo)).toEqual([]);
-    expect(searchEntriesOutsidePlaces({}, prefs, geo)).toEqual([]);
+    expect(searchEntriesOutsidePlaces({ locations: ["berlin", "Amsterdam"], remote_scope: { region: ["eu"] } }, prefs, geo, home)).toEqual([]);
+    expect(searchEntriesOutsidePlaces({ remote_scope: "home_country" }, prefs, geo, home)).toEqual([]);
+    expect(searchEntriesOutsidePlaces({}, prefs, geo, home)).toEqual([]);
+  });
+
+  it("count the home country as searched when there is no home city", () => {
+    const noHomeCity = { home_city: "", places: [remoteOnly("eu")] };
+    expect(searchEntriesOutsidePlaces({ locations: ["Xaland", "XA"] }, noHomeCity, geo, home)).toEqual([]);
+    expect(searchEntriesOutsidePlaces({ locations: ["Xaland"] }, prefs, geo, home)).toEqual(["Xaland"]);
   });
 
   it("are named when they are not listed", () => {
-    expect(searchEntriesOutsidePlaces({ locations: ["Berlin", "Paris"], remote_scope: { region: ["CH", "eu"] } }, prefs, geo)).toEqual(["Paris", "CH"]);
-    expect(searchEntriesOutsidePlaces({ remote_scope: "worldwide" }, prefs, geo)).toEqual(["Worldwide"]);
+    expect(searchEntriesOutsidePlaces({ locations: ["Berlin", "Paris"], remote_scope: { region: ["CH", "eu"] } }, prefs, geo, home)).toEqual(["Paris", "CH"]);
+    expect(searchEntriesOutsidePlaces({ remote_scope: "worldwide" }, prefs, geo, home)).toEqual(["Worldwide"]);
   });
 
   it("ignore a value of the wrong shape", () => {
-    expect(searchEntriesOutsidePlaces({ locations: "Paris", remote_scope: 3 }, prefs, geo)).toEqual([]);
+    expect(searchEntriesOutsidePlaces({ locations: "Paris", remote_scope: 3 }, prefs, geo, home)).toEqual([]);
   });
 });
 

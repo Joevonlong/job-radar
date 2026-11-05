@@ -26,6 +26,16 @@ describe("pnpm config:check on the location settings", () => {
     expect(run.out).toContain("Addedtown searched now");
   });
 
+  it("does not call the home country unsearched when there is no home city", () => {
+    writeLocationSettings(tmp, { home_city: "", places: [], workplace: ["onsite"] });
+    const file = path.join(tmp.configDir, "search.yaml");
+    const search = parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+    fs.writeFileSync(file, stringify({ ...search, locations: ["Germany", "Oldtown"] }));
+    const run = runConfigScript(tmp, "config-check.ts");
+    expect(run.out).toContain("Oldtown not in preferences.yaml places");
+    expect(run.out).toContain(": Oldtown not in");
+  });
+
   it("stays quiet about it without the old keys", () => {
     const run = runConfigScript(tmp, "config-check.ts");
     expect(run.out).not.toContain("searched now");

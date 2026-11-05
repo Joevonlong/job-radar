@@ -330,10 +330,11 @@ function oldSearchNames(search: OldSearchEntries): string[] {
   return [...textsOf(search.locations), ...(scope === "worldwide" ? ["Worldwide"] : hasScopeRegion(scope) ? textsOf(scope.region) : [])];
 }
 
-/** What search.yaml's old `locations` and `remote_scope` name that the location settings do not list: they are not searched any more. */
-export function searchEntriesOutsidePlaces(search: OldSearchEntries, preferences: PlacePreferences, geo: PlaceGeo): string[] {
+/** What search.yaml's old `locations` and `remote_scope` name that the location settings do not list: they are not searched any more. With no home city the home country is searched by name, so it counts as listed. */
+export function searchEntriesOutsidePlaces(search: OldSearchEntries, preferences: PlacePreferences, geo: PlaceGeo, home: { country: string; countryName: string }): string[] {
   const names = oldSearchNames(search);
-  const listed = new Set([preferences.home_city, ...preferences.places.map((entry) => entry.place)].map((text) => samePlaceKey(text, geo)));
+  const homeNames = preferences.home_city.trim() === "" ? [home.country, home.countryName] : [preferences.home_city];
+  const listed = new Set([...homeNames, ...preferences.places.map((entry) => entry.place)].map((text) => samePlaceKey(text, geo)));
   return [...new Set(names.filter((name) => !listed.has(samePlaceKey(name, geo))))];
 }
 

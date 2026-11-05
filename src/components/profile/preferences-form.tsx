@@ -57,7 +57,7 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
   const errors = fieldErrorMap(state, "preferences", hash);
   const dirtyCount = changedPaths(draft, initial).length;
   const sameMarket = draft.market.pack === market.packId && market.error === null;
-  const leftovers = sameMarket ? searchEntriesOutsidePlaces(oldSearch, draft, market.placeGeo) : [];
+  const leftovers = sameMarket ? searchEntriesOutsidePlaces(oldSearch, draft, market.placeGeo, { country: market.country, countryName: market.countryName }) : [];
   const added = sameMarket ? placesBeyondSearchEntries(oldSearch, draft, market.placeGeo, { country: market.country, countryName: market.countryName }) : [];
 
   function patch(next: Partial<PreferencesDraft>) {
