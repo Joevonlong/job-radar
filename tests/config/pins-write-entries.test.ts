@@ -9,7 +9,6 @@ import { applyExamplePlan, ensureProfileFiles, getConfigPath, loadConfig, overla
 import { valueAt } from "@/lib/config/merge";
 import { parseConfigYaml } from "@/lib/config/yaml-options";
 import { saveView } from "@/lib/interests/service";
-import { syncSearchLocations } from "@/lib/profile/search-locations";
 import { resetSetupStateCache } from "@/lib/setup/state";
 import { saveAiStep } from "@/lib/setup/steps/ai";
 import { saveLanguageStep } from "@/lib/setup/steps/language";
@@ -64,7 +63,7 @@ function pin(name: ConfigName, keyPath: readonly string[]): unknown {
 
 const overlayOf = (name: ConfigName): unknown => parseConfigYaml(bytes(name), { unset: "overlay" });
 
-const MARKET = { market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, locations: ["Amsterdam", "Utrecht"], remote_scope: "region:eu", timezone: "Europe/Amsterdam" };
+const MARKET = { market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, home_city: "Amsterdam", places: [{ place: "Utrecht", relocate: true }, { place: "eu", relocate: false }], timezone: "Europe/Amsterdam" };
 const TARGETS = { target_titles: ["Data Engineer", "Analytics Engineer"], seniority: "senior", workplace: ["hybrid", "remote"], salary_floor_year: "60000", contracts: { permanent: "allow", fixed_term: "none", freelance: "none", temp_agency: "exclude" }, exclude_student_roles: true, exclude_companies: ["Example Staffing"], exclude_keywords: ["unpaid"] };
 const BOARD = { name: "Example Co", ats: "greenhouse", token: "exampleco", enabled: true };
 
@@ -129,11 +128,10 @@ const ENTRIES: Entry[] = [
       again: () => saveAtsBoard({ original: { ats: BOARD.ats, token: BOARD.token }, board: BOARD }),
     }),
   },
-  { name: "profile page: search locations", config: "search", keyPath: ["max_per_group_per_location"], prepare: () => save(() => syncSearchLocations(["Austin"])) },
   {
     name: "config:example",
     config: "search",
-    keyPath: ["remote_scope"],
+    keyPath: ["window_hours", "morning"],
     prepare: () => {
       const dir = path.join(tmp.defaultsDir, "examples", "demo");
       fs.mkdirSync(dir, { recursive: true });

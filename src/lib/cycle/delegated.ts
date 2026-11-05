@@ -80,7 +80,7 @@ function storedAiSummary(summary: unknown): DelegatedStepSummary | null {
 async function createStepContext(options: DelegatedRunOptions, cycle: Cycle): Promise<CycleStepContext> {
   const now = options.now ?? (() => new Date());
   const registry = options.registry ?? defaultRegistry;
-  const config = { channels: loadConfig("channels"), search: loadConfig("search"), schedule: loadConfig("schedule") };
+  const config = { channels: loadConfig("channels"), search: loadConfig("search"), schedule: loadConfig("schedule"), places: null };
   const store = createDbStateStore(options.db);
   const breaker = new CircuitBreaker(
     store,

@@ -45,6 +45,17 @@ export interface SearchParams {
 }
 
 /** `veroeffentlichtseit` for a look-back window: whole days, rounded up, within what the API accepts. */
+type CountryNames = { code: string; name: string; aliases?: readonly string[] };
+
+/** The name to search a place under: the API matches German names, so `Germany` finds nothing and `Deutschland` does. */
+export function germanLocation(location: string, names: Readonly<Record<string, string>>, countries: readonly CountryNames[]): string {
+  const key = location.trim().toLowerCase();
+  const named = Object.entries(names).find(([spelling]) => spelling.toLowerCase() === key);
+  if (named !== undefined) return named[1];
+  const country = countries.find((entry) => [entry.name, ...(entry.aliases ?? [])].some((name) => name.toLowerCase() === key));
+  return country === undefined ? location : (new Intl.DisplayNames(["de"], { type: "region" }).of(country.code) ?? location);
+}
+
 export function publishedDays(windowHours: number): number {
   return Math.min(MAX_PUBLISHED_DAYS, Math.max(MIN_PUBLISHED_DAYS, Math.ceil(windowHours / 24)));
 }

@@ -61,7 +61,8 @@ beforeEach(async () => {
   // a German market (it has a local-language step) around Berlin, no salary floor in the way
   editProfile("preferences", (raw) => {
     raw.market = { pack: "de" };
-    raw.locations = ["Berlin"];
+    raw.home_city = "Berlin";
+    raw.places = [];
     raw.salary_floor_year = 0;
     delete raw.deal_breakers;
   });
@@ -253,7 +254,8 @@ describe("the filter step applies deal-breakers", () => {
   it("a gate in a market without a local-language step does nothing", async () => {
     editProfile("preferences", (raw) => {
       raw.market = { pack: "generic", country: "US", currency: "USD", home_language: "en" };
-      raw.locations = ["New York"];
+      raw.home_city = "New York";
+      raw.places = [];
     });
     const job = await addJob({ germanLevelRequired: "C2", locationsJson: [{ label: "New York", city: "New York", countryCode: "US", isPrimary: true }] });
     setRules([GATE]);

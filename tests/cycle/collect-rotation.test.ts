@@ -17,6 +17,7 @@ import * as deliveries from "@/lib/db/repos/deliveries";
 import * as runs from "@/lib/db/repos/runs";
 
 import { config, pinnedSearch } from "./helpers";
+import { oneCityPlaces, testPlaces } from "../channels/helpers";
 
 const now = new Date("2026-01-03T00:00:00Z");
 const old = new Date("2026-01-01T00:00:00Z");
@@ -41,7 +42,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 async function setup() {
-  const cfg = config({ search: { ...pinnedSearch(), keyword_groups: { a: ["alpha"], b: ["beta"], c: ["gamma"] }, locations: ["Test City"], remote_scope: "none" } });
+  const cfg = config({ places: oneCityPlaces(), search: { ...pinnedSearch(), keyword_groups: { a: ["alpha"], b: ["beta"], c: ["gamma"] } } });
   const registry = new ChannelRegistry();
   const first = registerFixtureChannel(registry, { id: "first", family: "linkedin", postings: [] });
   const second = registerFixtureChannel(registry, { id: "second", family: "linkedin", postings: [] });
@@ -58,11 +59,27 @@ async function setup() {
       runtime: { sleep: async () => {} },
     },
   };
-  const queries = buildQueries(cfg.search, "manual");
+  const queries = buildQueries(cfg.search, cfg.places, "manual");
   return { context, first, second, other, queries, logs, run: async () => (await collectStep(context)).result as CollectResult };
 }
 
 describe("collect rotation wiring", () => {
+  it("drops place queries of a board that cannot send one before rotation, and counts them", async () => {
+    const test = await setup();
+    const places = testPlaces({ home_city: "Test City", places: [{ place: "Netherlands", relocate: false }], workplace: ["remote"] });
+    test.context.config = { ...test.context.config, places };
+    const all = buildQueries(test.context.config.search, places, "manual");
+    const scopeOnly = registerFixtureChannel(test.context.channels.registry, { id: "scope-only", postings: [], supportsRemotePlaces: false });
+    test.context.dryRun = true;
+    test.context.db = null;
+    const result = await test.run();
+    const placeQueries = all.filter((query) => query.remote && query.location !== null);
+    expect(placeQueries.length).toBeGreaterThan(0);
+    expect(result.rotation).toMatchObject({ "scope-only": { remotePlacesSkipped: placeQueries.length, queries: all.length - placeQueries.length } });
+    expect(scopeOnly.seen.some((query) => query.remote && query.location !== null)).toBe(false);
+    expect(test.other.seen.filter((query) => query.remote && query.location !== null)).toHaveLength(placeQueries.length);
+  });
+
   it("never reads history or writes runs in a dry run and logs the config-order reason", async () => {
     const test = await setup();
     test.context.dryRun = true;

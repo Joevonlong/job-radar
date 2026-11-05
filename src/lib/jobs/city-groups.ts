@@ -1,4 +1,5 @@
 import type { PipelineConfig } from "@/lib/config";
+import { canonicalCity, citySpellings, lookupPlace, placeGeo } from "@/lib/market/places";
 import { foldText, foldTransliterated, wholeWordPattern } from "@/lib/filter/rules";
 import type { Market } from "@/lib/market/types";
 import { normalizeLocation } from "@/lib/pipeline/geography";
@@ -6,7 +7,7 @@ import { normalizeLocation } from "@/lib/pipeline/geography";
 /**
  * The city dropdown of /jobs. Sources spell places in many ways ("Garching", "Greater Munich
  * Metropolitan Area", "Nürnberg, Mittelfranken", "Munich"): the raw `locations_json[].city` values are folded
- * into one entry per city. A target city (preferences.yaml `locations`) takes in its aliases and the towns of
+ * into one entry per city. A target city (the home city or a place to move to in preferences.yaml) takes in its aliases and the towns of
  * its metro area (pipeline.yaml `filter.city_aliases` / `filter.metro_areas`: the same tables the hard filter
  * uses), the other values go through the pipeline's city normalization. Pure: the database rows come in as data.
  */
@@ -22,7 +23,7 @@ export interface CityRow {
 export interface CityGroup {
   /** What the dropdown shows and the URL carries (`?city=`): the canonical city name. */
   key: string;
-  /** One of the cities in preferences.yaml `locations`: listed first. */
+  /** The home city or a place to move to: listed first. */
   target: boolean;
   /** Distinct jobs with a location in this group. */
   jobCount: number;
@@ -31,8 +32,10 @@ export interface CityGroup {
 }
 
 export interface CityGroupConfig {
-  /** preferences.yaml `locations`, in the user's order. */
+  /** The home city and the places to move to, in the user's order. */
   targets: readonly string[];
+  /** The one among them that lies in the home country whatever the tables say, as in the filter. */
+  homeCity?: string;
   filter: Pick<PipelineConfig["filter"], "city_aliases" | "metro_areas" | "metro_regions" | "country_level" | "generic_location_patterns">;
   /** The market: home country, transliterations and the city table. */
   market: Market;
@@ -41,23 +44,22 @@ export interface CityGroupConfig {
 interface Target {
   key: string;
   patterns: RegExp[];
+  /** The countries a location of it can state; null: its text counts in any country. */
+  countries: ReadonlySet<string> | null;
 }
 
-/** A location with no country, or the home country: the only places a target city (or its metro area) can be. */
-const inHomeOrUnstated = (row: Pick<CityRow, "countryCode">, market: Pick<Market, "country">): boolean => row.countryCode === null || row.countryCode === market.country;
+/** A location with no country, or one of the target's countries. */
+const inCountriesOf = (row: Pick<CityRow, "countryCode">, target: Target): boolean => target.countries === null || row.countryCode === null || target.countries.has(row.countryCode);
 
 function compileTargets(config: CityGroupConfig): Target[] {
-  const canonicalOf = new Map<string, string>();
-  const spellingsOf = new Map<string, string[]>();
-  for (const [canonical, aliases] of Object.entries(config.filter.city_aliases)) {
-    spellingsOf.set(canonical, [canonical, ...aliases]);
-    for (const name of [canonical, ...aliases]) canonicalOf.set(foldText(name), canonical);
-  }
-  const canonical = (name: string): string => canonicalOf.get(foldText(name)) ?? name;
-  const spellings = (name: string): string[] => spellingsOf.get(canonical(name)) ?? [name];
+  const geo = placeGeo(config);
+  const canonical = (name: string): string => canonicalCity(name, geo);
+  const spellings = (name: string): string[] => citySpellings(name, geo);
 
   const targets: Target[] = [];
   for (const location of config.targets) {
+    const looked = lookupPlace(location, geo);
+    if (looked !== null && looked.kind !== "city" && location !== config.homeCity) continue;
     const key = canonical(location);
     if (targets.some((t) => t.key === key)) continue;
     const names = new Set<string>(spellings(location));
@@ -69,7 +71,9 @@ function compileTargets(config: CityGroupConfig): Target[] {
     for (const name of names) {
       for (const folded of [foldText(name), foldTransliterated(name, config.market.transliterations)]) if (!patterns.has(folded)) patterns.set(folded, wholeWordPattern(folded));
     }
-    targets.push({ key, patterns: [...patterns.values()] });
+    const tableCountries = looked?.countries ?? [];
+    const countries = location === config.homeCity ? [config.market.country] : tableCountries.length > 0 ? [...tableCountries, config.market.country] : [];
+    targets.push({ key, patterns: [...patterns.values()], countries: countries.length === 0 ? null : new Set(countries) });
   }
   return targets;
 }
@@ -110,7 +114,7 @@ export function buildCityGroups(rows: readonly CityRow[], config: CityGroupConfi
 
   const place = (row: CityRow): Placement => {
     const text = [foldText(row.city), foldText(row.label)];
-    const target = inHomeOrUnstated(row, config.market) ? targets.find((t) => text.some((value) => value !== "" && t.patterns.some((pattern) => pattern.test(value)))) : undefined;
+    const target = targets.find((t) => inCountriesOf(row, t) && text.some((value) => value !== "" && t.patterns.some((pattern) => pattern.test(value))));
     if (target) return { key: target.key, target: true };
     if (nonCities.some((pattern) => pattern.test(foldText(row.city)))) return null;
     let city = otherCities.get(row.city);

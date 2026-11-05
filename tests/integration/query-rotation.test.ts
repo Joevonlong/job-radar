@@ -17,6 +17,7 @@ import { addMonthUsage, upsertChannelRows } from "@/lib/db/repos/channels";
 import * as rawRepo from "@/lib/db/repos/raw-postings";
 import * as runRepo from "@/lib/db/repos/runs";
 
+import { oneCityPlaces } from "../channels/helpers";
 import { jsearchWith, MONTH, NOW, response, SEARCH_EMPTY } from "../channels/jsearch/helpers";
 import { apifyConfig, ENV as APIFY_ENV, fakeApify } from "../channels/linkedin/apify/helpers";
 import { collectOf, config, pinnedSearch, quietLogger } from "../cycle/helpers";
@@ -49,7 +50,7 @@ async function pinRuns(result: CycleRunResult, startedAt: Date) {
 
 /** One query per group, with no remote query or extra location. */
 function searchFor(keywordGroups: Record<string, string[]>): SearchConfig {
-  return { ...pinnedSearch(), keyword_groups: keywordGroups, locations: ["Test City"], remote_scope: "none" };
+  return { ...pinnedSearch(), keyword_groups: keywordGroups };
 }
 
 function requestQueries(queries: readonly SearchQuery[]): string[] {
@@ -57,7 +58,7 @@ function requestQueries(queries: readonly SearchQuery[]): string[] {
 }
 
 function fixtureCycles(search = searchFor({ a: ["alpha"], b: ["beta"], c: ["gamma"] }), collect?: Channel["collect"]) {
-  const cfg = config({ search });
+  const cfg = config({ search, places: oneCityPlaces() });
   const registry = new ChannelRegistry();
   const fixture = createFixtureChannel({ id: "rotation-fixture", postings: [] });
   let attempts: SearchQuery[] = [];
@@ -109,7 +110,7 @@ function setupJsearch() {
     const result = await runCycle("manual", {
       registry,
       cascades: [],
-      config: { ...config({ search }), channels },
+      config: { ...config({ search, places: oneCityPlaces() }), channels },
       channelIds: ["jsearch"],
       logger: quietLogger,
       now: () => now,
@@ -124,7 +125,7 @@ function setupJsearch() {
     await pinRuns(result, now);
     return result;
   };
-  return { calls, queries: buildQueries(search, "manual"), run };
+  return { calls, queries: buildQueries(search, oneCityPlaces(), "manual"), run };
 }
 
 describe("query rotation across cycles", () => {
@@ -132,7 +133,7 @@ describe("query rotation across cycles", () => {
     const test = fixtureCycles();
     test.cfg.search.window_hours = { morning: 24, evening: 24, weekend: 24 };
     test.cfg.channels.collect.max_catch_up_hours = 0;
-    const ids = buildQueries(test.cfg.search, "manual").map((query) => query.id);
+    const ids = buildQueries(test.cfg.search, test.cfg.places, "manual").map((query) => query.id);
     const first = await test.run({ backfillHours: 36, limit: 1 });
     expect(first.rows[0]).toMatchObject({ queryHash: ids[0], status: "succeeded", windowHours: 36, windowExtended: true });
     expect(first.result.summary.backfillHours).toBe(36);
@@ -149,7 +150,7 @@ describe("query rotation across cycles", () => {
       support: ["Support Specialist"],
       finance: ["Finance Analyst"],
     });
-    const queries = buildQueries(search, "manual");
+    const queries = buildQueries(search, oneCityPlaces(), "manual");
     expect(queries).toHaveLength(5);
     const ids = queries.map((query) => query.id);
     const registry = new ChannelRegistry();
@@ -169,7 +170,7 @@ describe("query rotation across cycles", () => {
     }, { settings: FIXTURE_SETTINGS });
 
     const servedByCycle: string[][] = [];
-    const cfg = config({ search });
+    const cfg = config({ search, places: oneCityPlaces() });
     cfg.channels.collect.query_rotation = enabled;
     for (let cycle = 0; cycle < 3; cycle += 1) {
       served = [];
@@ -250,7 +251,7 @@ describe("collect rotation edge cases", () => {
       long: ["platform engineering ".repeat(6).trim(), "distributed systems ".repeat(6).trim()],
       short: ["designer"],
     });
-    const queries = buildQueries(search, "manual");
+    const queries = buildQueries(search, oneCityPlaces(), "manual");
     const fake = fakeApify();
     const registry = new ChannelRegistry();
     registry.register(createApifyChannel({ pricePer1kUsd: () => 0.4, environment: APIFY_ENV, now: () => NOW }));
@@ -263,7 +264,7 @@ describe("collect rotation edge cases", () => {
         block.throttle = { min_delay_ms: 0, max_delay_ms: 0 };
       });
       const result = await runCycle("manual", {
-        registry, cascades: [], config: { ...config({ search }), channels }, logger: quietLogger,
+        registry, cascades: [], config: { ...config({ search, places: oneCityPlaces() }), channels }, logger: quietLogger,
         now: () => atCycle(cycle), sleep: async () => {}, fetch: fake.fetch,
       });
       return pinRuns(result, atCycle(cycle));
@@ -288,7 +289,7 @@ describe("collect rotation edge cases", () => {
 
   it("serves every query over twice as many cycles when alternate cycles refuse before any request", async () => {
     const test = fixtureCycles(searchFor({ a: ["alpha"], b: ["beta"], c: ["gamma"], d: ["delta"], e: ["epsilon"] }));
-    const ids = buildQueries(test.cfg.search, "manual").map((query) => query.id);
+    const ids = buildQueries(test.cfg.search, test.cfg.places, "manual").map((query) => query.id);
     const served: string[] = [];
     for (let cycle = 0; cycle < 2 * ids.length; cycle += 1) {
       const allowed = cycle % 2 === 1;
@@ -310,7 +311,7 @@ describe("collect rotation edge cases", () => {
     const first = await test.run();
     const oldIds = first.attempts.map((query) => query.id);
     test.cfg.search.keyword_groups.d = ["delta"];
-    const added = buildQueries(test.cfg.search, "manual")[3]!;
+    const added = buildQueries(test.cfg.search, test.cfg.places, "manual")[3]!;
     const second = await test.run();
     expect(second.attempts.map((query) => query.id)).toEqual([added.id, ...oldIds]);
 
@@ -322,7 +323,7 @@ describe("collect rotation edge cases", () => {
 
   it("uses reordered config only to break ties, not to put a recent query ahead of waiting ones", async () => {
     const test = fixtureCycles();
-    const ids = buildQueries(test.cfg.search, "manual").map((query) => query.id);
+    const ids = buildQueries(test.cfg.search, test.cfg.places, "manual").map((query) => query.id);
     await test.run({ limit: 1 });
     test.cfg.search.keyword_groups = { a: ["alpha"], c: ["gamma"], b: ["beta"] };
     const second = await test.run();
@@ -336,7 +337,7 @@ describe("collect rotation edge cases", () => {
     const test = fixtureCycles();
     const first = await test.run();
     test.cfg.search.keyword_groups.c = ["changed keyword"];
-    const changed = buildQueries(test.cfg.search, "manual")[2]!;
+    const changed = buildQueries(test.cfg.search, test.cfg.places, "manual")[2]!;
     expect(changed.id).not.toBe(first.attempts[2]!.id);
     const second = await test.run();
     expect(second.attempts.map((query) => query.id)).toEqual([changed.id, first.attempts[0]!.id, first.attempts[1]!.id]);
@@ -346,7 +347,7 @@ describe("collect rotation edge cases", () => {
   it("advances rotation in manual and catchup cycles while keeping each requested base window", async () => {
     const test = fixtureCycles();
     test.cfg.search.window_hours = { morning: 11, evening: 7, weekend: 29 };
-    const ids = buildQueries(test.cfg.search, "manual").map((query) => query.id);
+    const ids = buildQueries(test.cfg.search, test.cfg.places, "manual").map((query) => query.id);
     const cases = [
       { kind: "manual", window: 29 },
       { kind: "catchup", windowKind: "weekday_evening", window: 7 },
@@ -372,7 +373,7 @@ describe("collect rotation edge cases", () => {
       }
       return [];
     });
-    const queries = buildQueries(test.cfg.search, "manual");
+    const queries = buildQueries(test.cfg.search, test.cfg.places, "manual");
     const first = await test.run({ signal: controller.signal });
     expect(first.result.status).toBe("failed");
     expect(first.rows).toHaveLength(1);
@@ -385,7 +386,7 @@ describe("collect rotation edge cases", () => {
 
   it("counts an orphaned running row as a turn after the runner cleanup marks it failed", async () => {
     const test = fixtureCycles();
-    const queries = buildQueries(test.cfg.search, "manual");
+    const queries = buildQueries(test.cfg.search, test.cfg.places, "manual");
     const old = atCycle(-48);
     await upsertChannelRows(getDb(), [{ id: test.fixture.id, family: test.fixture.family, kind: test.fixture.kind, enabled: true }]);
     const orphan = await createCycle(getDb(), { kind: "manual", startedAt: old });
@@ -407,7 +408,7 @@ describe("collect rotation edge cases", () => {
     const { result, attempts, rows } = await test.run({ logger: createLogger({ sink: (record) => logs.push(record) }) });
     expect(history).toHaveBeenCalledTimes(1);
     expect(result.status).toBe("succeeded");
-    expect(attempts.map((query) => query.id)).toEqual(buildQueries(test.cfg.search, "manual").map((query) => query.id));
+    expect(attempts.map((query) => query.id)).toEqual(buildQueries(test.cfg.search, test.cfg.places, "manual").map((query) => query.id));
     expect(rows).toHaveLength(3);
     expect(rows.every((row) => row.status === "succeeded")).toBe(true);
     expect(collectOf(result).rotation[test.fixture.id]).toMatchObject({ historyUnavailable: true, neverRun: 0, oldestWaitHours: null, reached: 3 });
@@ -418,12 +419,12 @@ describe("collect rotation edge cases", () => {
   it("keeps config order and base windows on an empty database", async () => {
     const test = fixtureCycles();
     test.cfg.search.window_hours = { morning: 13, evening: 9, weekend: 31 };
-    const queries = buildQueries(test.cfg.search, "manual");
+    const queries = buildQueries(test.cfg.search, test.cfg.places, "manual");
     const { result, attempts, rows } = await test.run();
     expect(attempts).toEqual(queries);
     expect(rows.map((row) => [row.queryHash, row.windowHours, row.windowExtended, row.usageUnits])).toEqual(queries.map((query) => [query.id, query.windowHours, false, 0]));
     expect(collectOf(result).rotation[test.fixture.id]).toEqual({
-      sortChannel: test.fixture.id, queries: 3, reached: 3, neverRun: 3,
+      sortChannel: test.fixture.id, queries: 3, remotePlacesSkipped: 0, reached: 3, neverRun: 3,
       oldestWaitHours: null, oldestWaiting: null, stretched: 0, maxWindowHours: 31, capped: 0, historyUnavailable: false,
     });
   });
@@ -435,7 +436,7 @@ describe("collect rotation edge cases", () => {
     const logs: LogRecord[] = [];
     const { result } = await test.run({ limit: 1, logger: createLogger({ sink: (record) => logs.push(record), now: () => atCycle(1) }) });
     const expected = {
-      sortChannel: test.fixture.id, queries: 3, reached: 1, neverRun: 2, oldestWaitHours: 1,
+      sortChannel: test.fixture.id, queries: 3, remotePlacesSkipped: 0, reached: 1, neverRun: 2, oldestWaitHours: 1,
       oldestWaiting: { id: oldest.id, keywordGroup: oldest.keywordGroup, location: oldest.location, remoteScope: null },
       stretched: 0, maxWindowHours: oldest.windowHours, capped: 0, historyUnavailable: false,
     };
@@ -459,7 +460,7 @@ describe("collect rotation edge cases", () => {
     expect(rows[0]).toMatchObject({ status: "skipped", fetched: 0, usageUnits: 0, windowHours: null, windowExtended: false });
     expect(Number(rows[0]!.cost)).toBe(0);
     expect(collectOf(result).rotation[test.fixture.id]).toEqual({
-      sortChannel: null, queries: 3, reached: 0, neverRun: 0, oldestWaitHours: null,
+      sortChannel: null, queries: 3, remotePlacesSkipped: 0, reached: 0, neverRun: 0, oldestWaitHours: null,
       oldestWaiting: null, stretched: 0, maxWindowHours: null, capped: 0, historyUnavailable: false,
     });
   });

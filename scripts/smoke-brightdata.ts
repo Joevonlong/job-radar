@@ -8,6 +8,8 @@
  * capped at 10. Nothing is written to the database: usage is tracked in memory and printed, together
  * with how the records parse. Needs BRIGHT_DATA_API_KEY in the environment; the key is never printed.
  */
+import { onsiteSearchTexts } from "../src/lib/channels/query";
+import { loadQueryPlaces } from "../src/lib/channels/query-places";
 import { parseArgs } from "node:util";
 
 import { BudgetTracker, monthKey } from "../src/lib/channels/budget";
@@ -44,7 +46,7 @@ async function main(): Promise<number> {
   const schedule = loadConfig("schedule");
   const groupId = values.group ?? Object.keys(search.keyword_groups)[0];
   const keywords = groupId ? search.keyword_groups[groupId] : undefined;
-  const location = values.location ?? search.locations[0];
+  const location = values.location ?? onsiteSearchTexts(loadQueryPlaces())[0];
   if (!groupId || !keywords || !location) {
     console.error("smoke:brightdata: unknown keyword group or no location configured");
     return 2;
@@ -74,7 +76,8 @@ async function main(): Promise<number> {
     keywordGroup: groupId,
     location,
     remote: false,
-    remoteScope: null, company: null,
+    remoteScope: null,
+    country: null, company: null,
     windowHours,
     maxResults: limit,
   };

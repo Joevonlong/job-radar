@@ -102,3 +102,18 @@ describe("city dropdown and search", () => {
     expect(locationSearchTerms("  ", filter.city_aliases, market.transliterations)).toEqual([]);
   });
 });
+
+describe("targets of the location settings", () => {
+  it("keeps a home city that the tables call a country", () => {
+    const groups = buildCityGroups([row("Xaland", { countryCode: "DE" })], { targets: ["Xaland"], homeCity: "Xaland", filter, market: { ...market, countries: [...market.countries, { code: "XA", name: "Xaland", aliases: [], match: true }] } });
+    expect(groups[0]).toMatchObject({ key: "Xaland", target: true });
+  });
+
+  it("a place to move to also counts at home, where the same name may be meant", () => {
+    const withTown = { ...market, cities: { ...market.cities, cambridge: ["Cambridge", "GB"] as [string, string] } };
+    const targets = (countryCode: string) => buildCityGroups([row("Cambridge", { countryCode })], { targets: ["Cambridge"], filter, market: withTown })[0]?.target;
+    expect(targets("GB")).toBe(true);
+    expect(targets(market.country)).toBe(true);
+    expect(targets("FR")).toBe(false);
+  });
+});

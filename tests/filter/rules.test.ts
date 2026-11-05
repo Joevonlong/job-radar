@@ -7,7 +7,9 @@ import { normalizeLocation } from "@/lib/pipeline/geography";
 import { fixtureMarket, pipelineWith, pipelineWithPack, shippedPipeline } from "../pipeline/helpers";
 import { filterWith, job, loc, prefs, salary } from "./helpers";
 
-const run = (j: ReturnType<typeof job>, filter = filterWith()) => evaluateJob(j, filter);
+/** Check 2 has its own tests: the fixture pack has no phrases for it, so every remote job here would carry its note. */
+const withoutAreaNote = <V extends { reasons: string[] }>(verdict: V): V => ({ ...verdict, reasons: verdict.reasons.filter((reason) => reason !== "remote_area_unknown") });
+const run = (j: ReturnType<typeof job>, filter = filterWith()) => withoutAreaNote(evaluateJob(j, filter));
 
 describe("a job that matches", () => {
   it("passes with no reasons", () => {
@@ -72,7 +74,7 @@ describe("location", () => {
   });
 
   it("allows other cities the user adds to preferences", () => {
-    const hamburg = filterWith(prefs((raw) => ((raw.locations as string[]).push("Hamburg"))));
+    const hamburg = filterWith(prefs((raw) => ((raw.places as unknown[]).push({ place: "Hamburg", relocate: true }))));
     expect(run(job({ locations: [loc("Hamburg", "Hamburg", "DE")] }), hamburg).result).toBe("passed");
   });
 
@@ -161,17 +163,23 @@ describe("remote", () => {
   });
 
   it("eu_any also accepts other EU countries; the UK is not in the EU", () => {
-    const euAny = filterWith(prefs((raw) => (raw.remote_scope = { region: ["eu"] })));
+    const euAny = filterWith(prefs((raw) => (raw.places = [{ place: "eu", relocate: false }])));
     expect(run(remote(loc("Remote - Spain", null, "ES")), euAny).result).toBe("passed");
     expect(run(remote(loc("Remote - UK", null, "GB")), euAny).reasons).toEqual(["remote_out_of_scope:Remote - UK"]);
   });
 
-  it("worldwide accepts everything; none refuses remote jobs outside the allowed cities", () => {
-    const worldwide = filterWith(prefs((raw) => (raw.remote_scope = "worldwide")));
+  it("a remote-only Worldwide accepts everything; without remote in workplace a remote job is hidden, also in an allowed city", () => {
+    const worldwide = filterWith(prefs((raw) => (raw.places = [{ place: "Worldwide", relocate: false }])));
     expect(run(remote(loc("Remote, USA", null, "US")), worldwide).result).toBe("passed");
-    const none = filterWith(prefs((raw) => (raw.remote_scope = "none")));
-    expect(run(remote(loc("Germany", null, "DE")), none).reasons).toEqual(["remote_not_wanted"]);
-    expect(run(remote(loc("Berlin", "Berlin", "DE")), none).result).toBe("passed");
+    const noRemote = filterWith(prefs((raw) => (raw.workplace = ["onsite", "hybrid"])));
+    expect(run(remote(loc("Germany", null, "DE")), noRemote).reasons).toEqual(expect.arrayContaining(["workplace_not_wanted:remote"]));
+    expect(run(remote(loc("Berlin", "Berlin", "DE")), noRemote).reasons).toEqual(["workplace_not_wanted:remote"]);
+  });
+
+  it("with only remote in workplace, a remote job is checked for its area rather than hidden", () => {
+    const remoteOnly = filterWith(prefs((raw) => (raw.workplace = ["remote"])));
+    expect(run(remote(loc("Berlin", "Berlin", "DE")), remoteOnly).result).toBe("passed");
+    expect(run(remote(loc("Remote - UK", null, "GB")), remoteOnly).reasons).toEqual(["remote_out_of_scope:Remote - UK"]);
   });
 
   it("keeps a remote job in Germany but marks a country-level location", () => {
@@ -256,7 +264,7 @@ describe("remote", () => {
 
     it("only applies to remote postings and not to remote_scope worldwide", () => {
       expect(run(job({ title: "AI Engineer - US", workplace: "hybrid", locations: [loc("Berlin", "Berlin", "DE")] })).result).toBe("passed");
-      const worldwide = filterWith(prefs((raw) => (raw.remote_scope = "worldwide")));
+      const worldwide = filterWith(prefs((raw) => (raw.places = [{ place: "Worldwide", relocate: false }])));
       expect(run(titled("Staff AI Engineer - US", loc("United States (Remote)", null, null)), worldwide).result).toBe("passed");
     });
 
@@ -397,7 +405,7 @@ describe("user override", () => {
 
   it("keep on a job that passed keeps its notes; no override changes nothing", () => {
     const remoteUnknown = job({ workplace: "remote", locations: [loc("Remote", null, null)] });
-    expect(evaluateJob(remoteUnknown, filterWith(), "keep")).toEqual({ result: "passed", reasons: ["override_keep", "remote_scope_unknown"] });
+    expect(withoutAreaNote(evaluateJob(remoteUnknown, filterWith(), "keep"))).toEqual({ result: "passed", reasons: ["override_keep", "remote_scope_unknown"] });
     expect(evaluateJob(hamburg, filterWith(), null)).toEqual(evaluateJob(hamburg, filterWith()));
     expect(applyOverride({ result: "passed", reasons: [] }, null)).toEqual({ result: "passed", reasons: [] });
   });
@@ -420,7 +428,7 @@ describe("remote scope home_country: what it keeps (rules unchanged)", () => {
   const market = fixtureMarket();
   const remote = (label: string, title = "Applied AI Engineer", description: string | null = "Build LLM features for our platform.") =>
     job({ title, description, workplace: "remote", locations: [normalizeLocation(label, market)] });
-  const homeCountry = filterWith(prefs((raw) => (raw.remote_scope = "home_country")));
+  const homeCountry = filterWith(prefs((raw) => (raw.places = [])));
 
   it.each([
     ["Remote - Berlin", []],
@@ -467,7 +475,7 @@ describe("remote scope home_country: what it keeps (rules unchanged)", () => {
 
   it("has the same rules in the generic market (no region: only the home country and worldwide)", () => {
     const genericMarket = fixtureMarket({ pack: "generic", country: "DE", currency: "EUR", home_language: "de" });
-    const generic = filterWith(prefs((raw) => (raw.remote_scope = "home_country")), shippedPipeline(genericMarket));
+    const generic = filterWith(prefs((raw) => (raw.places = [])), shippedPipeline(genericMarket));
     const place = (label: string) => job({ workplace: "remote", locations: [normalizeLocation(label, genericMarket)] });
     expect(run(place("Germany (Remote)"), generic).result).toBe("passed");
     expect(run(place("Remote - Worldwide"), generic).result).toBe("passed");

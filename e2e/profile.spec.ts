@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import postgres from "postgres";
+import { parse } from "yaml";
 
 import { minimalPdf } from "../tests/fixtures/pdf";
 import { expect, test, type Page } from "./fixtures";
@@ -227,6 +228,38 @@ test("an incomplete profile is announced on Today and /me until a summary is sav
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(page.getByTestId("profile-incomplete-banner")).toHaveCount(0);
+});
+
+test("places: a city to move to, a remote-only region and an unknown name are saved, and the unknown one gets a warning", async ({ page }) => {
+  await open(page);
+  const prefs = page.getByTestId("preferences-card");
+  const input = prefs.getByTestId("places-field").getByRole("combobox");
+  for (const place of ["Amsterdam", "EU", "Atlantis"]) {
+    await input.fill(place);
+    await input.press("Enter");
+  }
+  await expect(prefs.getByTestId("places-unknown")).toContainText("Atlantis");
+  await prefs.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(() => read(PREFS_FILE)).toContain("place: Atlantis");
+  const saved = parse(read(PREFS_FILE)) as { places: Array<{ place: string; relocate: boolean }> };
+  expect(saved.places.slice(-3)).toEqual([{ place: "Amsterdam", relocate: true }, { place: "eu", relocate: false }, { place: "Atlantis", relocate: true }]);
+});
+
+test("places: the old search.yaml keys are compared with them in both directions", async ({ page }) => {
+  const searchFile = path.join(process.env.E2E_CONFIG_DIR ?? "", "search.yaml");
+  const before = fs.readFileSync(searchFile, "utf8");
+  fs.writeFileSync(searchFile, `${before.trimEnd()}\nlocations: [Oldtown]\n`);
+  try {
+    await open(page);
+    const prefs = page.getByTestId("preferences-card");
+    await expect(prefs.getByTestId("search-leftovers")).toContainText("Oldtown");
+    const input = prefs.getByTestId("places-field").getByRole("combobox");
+    await input.fill("Addedtown");
+    await input.press("Enter");
+    await expect(prefs.getByTestId("search-added")).toContainText("Addedtown");
+  } finally {
+    fs.writeFileSync(searchFile, before);
+  }
 });
 
 test("experience library: add a story, save, reload, reorder and see it in the history", async ({ page }) => {

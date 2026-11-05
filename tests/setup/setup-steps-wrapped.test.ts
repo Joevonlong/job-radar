@@ -39,7 +39,7 @@ afterEach(() => {
   if (savedUrl !== undefined) process.env.DATABASE_URL = savedUrl;
 });
 
-const MARKET = { market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, locations: ["Amsterdam"], remote_scope: "region:eu", timezone: "Europe/Amsterdam" };
+const MARKET = { market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, home_city: "Amsterdam", places: [{ place: "eu", relocate: false }], timezone: "Europe/Amsterdam" };
 const TARGETS = { target_titles: ["Data Engineer"], seniority: "senior", workplace: ["remote"], salary_floor_year: "60000", contracts: { permanent: "allow", fixed_term: "none", freelance: "none", temp_agency: "exclude" }, exclude_student_roles: true, exclude_companies: [], exclude_keywords: [] };
 
 /** The seven saving steps, each with an input that is valid on an empty directory. */

@@ -37,7 +37,7 @@ pnpm run doctor --only config.market
 | Area | Behaviour |
 |---|---|
 | Locations | A location that names a country gets that country's code (`Remote - USA` → US, `Dublin, CA` → US). The city before the home country's name (`Gütersloh, Germany`) is read only in the home market. |
-| Remote scope | `none`, `home_country`, `worldwide`, or `{region: [eu, CH, …]}` (named regions and ISO countries) in preferences.yaml and search.yaml. Old values: `eu_hire_in_de` = `home_country`, `eu_any` = `{region: [eu]}`. `home_country` keeps remote jobs located in the home country, those that name the pack's `region` (the Germany pack: EU, Europe, EMEA, EEA) or worldwide, and shows as "Remote from Germany (incl. EU / Europe / EMEA / worldwide remote)"; a market without a `region` shows "Remote from <country>". Row by row: [Remote jobs and watched companies](usage.md#remote-jobs-and-watched-companies). |
+| Remote scope | It follows from `places` in preferences.yaml: `home_country` without one, `worldwide`, or `{region: [eu, CH, …]}` (named regions and ISO countries) for a listed token. Old values: `eu_hire_in_de` = `home_country`, `eu_any` = `{region: [eu]}`. `home_country` keeps remote jobs located in the home country, those that name the pack's `region` (the Germany pack: EU, Europe, EMEA, EEA) or worldwide, and shows as "Remote from Germany (incl. EU / Europe / EMEA / worldwide remote)"; a market without a `region` shows "Remote from <country>". Row by row: [Remote jobs and watched companies](usage.md#remote-jobs-and-watched-companies). |
 | Local language | When the pack has requirement rules for its language and `home_language` is that language, the level a posting requires is read and a level above yours (me.yaml `languages`) costs points (ai.yaml `scoring.language_penalty`). Otherwise the step is off: no level is read, nothing is deducted, the scoring prompt does not ask for it, and the pages hide its filter and badges. |
 | Base currency | Salary floor, "minimum salary" filter, statistics and the high-pay threshold are in the market's currency. Amounts in other currencies are converted with pipeline.yaml `salary.fx_pivot` + `fx_rates`; an amount in a currency without a rate is never compared. |
 | Channels | A channel with `markets: [DE]` in sources.yaml runs only in those markets; elsewhere it is shown folded under "Other markets" and is not counted as a failure. Country parameters left empty (`country`, `country_name`, `country_indeed`) and remote-location keys left out follow the market. |
@@ -78,6 +78,25 @@ The code reads `pipeline.yaml` together with the packs (`loadPipeline()`):
 
 So pipeline.yaml keeps only what you add yourself. The config migration of pipeline.yaml removed the entries that are
 now in the packs.
+
+## Where a remote job may be done from
+
+`rules.yaml` holds the phrases the filter reads in the title and description of a remote job, under `filter.remote`. They are regexes, case-insensitive, and `pipeline.yaml` can add to them:
+
+| Key | What it holds |
+|---|---|
+| `work_area_patterns` | Phrases that state the area. Each must have a `(?<place>...)` capture, or the file is refused |
+| `work_area_title_patterns` | The same, read in the title only: `France only` in a description is as likely to be about a benefit |
+| `work_area_anywhere_patterns` | Phrases that say anywhere in the world |
+| `work_area_negation_patterns` | A sentence with one of these says something else, so it isn't sure |
+| `work_area_continuations` | A next sentence with one of these widens or softens the statement, so it isn't sure |
+| `work_area_connectors` | What separates the places of a list |
+| `work_area_endings` | What may follow the place, as in `Germany to apply`. Anything else there and the sentence isn't sure |
+| `work_area_articles` | Words left off the front of a place |
+
+Patterns come from a pack you can edit, so reading one posting is stopped after `filter.deal_breakers.match_ms`. A stopped posting keeps a hide it had, or else isn't sure, and is read again next cycle. Stopped readings share `filter.deal_breakers.rule_budget_ms` per run; once that's used up, postings aren't read for the rest of the run.
+
+A phrase can hide a job, so it should start the sentence and be about the person hired, not the company, a benefit or the data: `we are hiring in France` isn't one. A question never counts, for a phrase or for `work_area_anywhere_patterns`. Every part of a capture goes through the same lookup as the location settings, except that a bare ISO code or a short name not in capitals doesn't count: `hiring in IT` isn't Italy. One part the tables don't know makes the sentence not sure, so a job is hidden only on a phrase read in full. The same goes for a list that may carry on in the next sentence. A pack with no phrases hides nothing, and every remote job gets the note `remote_area_unknown`. A phrase with no place to capture, such as German `bundesweit`, stays silent unless the pack spells the country out. `description_in_scope_patterns` is separate: it can only rescue a job, for the home country and its region.
 
 ## Ghost job patterns
 
@@ -185,6 +204,33 @@ The columns keep their names; their meaning is now "the local language of the ma
 Salaries in `jobs.salary_json` and T1 signals carry `basePerYear` + `baseCurrency`; rows written while the base was always
 EUR are read as EUR.
 
+## The location settings migration
+
+`preferences.yaml` converts itself from version 2 to 3, on read and with `pnpm config:migrate --write`. Scores don't go stale because of it:
+
+| Old | New |
+|---|---|
+| First of `locations` | `home_city` |
+| Other `locations` | Places with `relocate: true` |
+| `remote_scope: home_country` | Nothing to add |
+| `remote_scope: {region: [...]}` | Each token as written, as a remote-only place |
+| `remote_scope: worldwide` | `Worldwide` as a remote-only place |
+| `remote_scope: none` | `remote` removed from `workplace`, unless it's the only value |
+
+Results that change: with `none`, a remote job in an allowed city was shown and is now hidden as `workplace_not_wanted`; with `none` and `workplace: [remote]`, remote jobs are now checked instead of hidden; with `{region: [...]}` that leaves out home, home-country remote jobs now show; a foreign city in `locations` becomes a ✈ place and starts matching. If the first of `locations` was a foreign city, it becomes the home city, and a job there is compared with the home country.
+
+`search.yaml`'s `locations` and `remote_scope` are accepted and ignored, with no migration step: searches come from `places`, and `config:check` and `/me` warn about entries that `places` doesn't list, and about searches `places` adds that those keys didn't list. When the two files agreed, the upgrade keeps the same queries and query ids, so the rotation history carries over. These configs add or change a search:
+
+| Old config | Change |
+|---|---|
+| A scope with several tokens | One search per token, with new ids |
+| A scope that doesn't cover home | The home remote search is added |
+| `none` with `workplace: [remote]` | The home remote search is added |
+| A foreign city in `locations` | Its remote search is added |
+| `workplace` without `remote`, and a scope other than `none` | The remote search is dropped, because this can't be told apart from a migrated `none` |
+
+Older code can't read version 3. Before going back to it, restore the file from a backup taken before the upgrade or from the profile history on `/me`.
+
 ## Renamed configuration keys
 
 The config migrations (`pnpm config:migrate --write`) rename them; old files keep working in memory until then.
@@ -192,7 +238,7 @@ The config migrations (`pnpm config:migrate --write`) rename them; old files kee
 | File | Before | Now |
 |---|---|---|
 | preferences.yaml | `salary_floor_eur_year` | `salary_floor_year`, plus `market` |
-| preferences.yaml, search.yaml | `remote_scope: eu_hire_in_de / eu_any` | `home_country` / `{region: [eu]}` |
+| preferences.yaml, search.yaml | `remote_scope: eu_hire_in_de / eu_any` | `home_country` / `{region: [eu]}`, and in preferences.yaml on to places (above) |
 | sources.yaml | `remote_locations.eu_hire_in_de / eu_any` | `home_country` / `region`; German boards get `markets: [DE]` |
 | pipeline.yaml | `language.german_*`, `salary.fx_to_eur` | the DE pack's `requirement`; `salary.fx_pivot: EUR` + `fx_rates` |
 | ai.yaml | `scoring.german_penalty`, `priority.weights.german_gap` | `language_penalty`, `language_gap` |

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { expect, test, type Page } from "./fixtures";
 import postgres from "postgres";
-import { listRow, listRows } from "./list-rows";
+import { expectNoLeavingRows, listRow, listRows } from "./list-rows";
 
 /** The graphic columns of the job list, the hover actions, the summary blocks and the phone cards on the seeded e2e database. */
 
@@ -116,6 +116,8 @@ test.describe("Today and /jobs v3", () => {
     await expect(listRows(page)).toHaveCount(1);
     await expect(page.getByTestId("filter-company")).toHaveText("Brumbach Analytics GmbH");
 
+    // the row moves up when the rows the filter removed finish leaving: a click before that can land on empty space
+    await expectNoLeavingRows(page);
     await listRows(page).first().getByRole("link", { name: "LLM Engineer" }).click();
     await expect(page).toHaveURL(/\/jobs\/\d+/);
     await page.getByTestId("job-company").click();

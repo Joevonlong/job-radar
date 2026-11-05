@@ -26,7 +26,7 @@ const job = (over: Partial<ScorePromptJob> = {}): ScorePromptJob => ({
 });
 
 const build = (over: Partial<ScorePromptJob> = {}, limits: { max?: number; head?: number } = {}) =>
-  buildScorePrompt({ me: exampleMe(), preferences: examplePreferences(), job: job(over), jdMaxChars: limits.max ?? 6000, jdHeadShare: limits.head ?? 0.7, language: GERMAN, currency: "EUR" });
+  buildScorePrompt({ me: exampleMe(), preferences: examplePreferences(), job: job(over), jdMaxChars: limits.max ?? 6000, jdHeadShare: limits.head ?? 0.7, language: GERMAN, currency: "EUR", geo: { cityAliases: {}, cities: {}, countries: [], regions: {} } });
 
 describe("truncateJd", () => {
   it("leaves a text that fits unchanged", () => {
@@ -69,7 +69,7 @@ describe("buildScorePrompt", () => {
   });
 
   it("does not send the city or the visa status", () => {
-    const { user } = buildScorePrompt({ me: exampleMe((raw) => { raw.city = "Springfield"; raw.needs_visa_sponsorship = true; }), preferences: examplePreferences(), job: job(), jdMaxChars: 6000, jdHeadShare: 0.7, language: GERMAN, currency: "EUR" });
+    const { user } = buildScorePrompt({ me: exampleMe((raw) => { raw.city = "Springfield"; raw.needs_visa_sponsorship = true; }), preferences: examplePreferences(), job: job(), jdMaxChars: 6000, jdHeadShare: 0.7, language: GERMAN, currency: "EUR", geo: { cityAliases: {}, cities: {}, countries: [], regions: {} } });
     expect(user).not.toContain("Springfield");
     expect(user.toLowerCase()).not.toContain("visa");
   });
@@ -112,7 +112,7 @@ describe("buildScorePrompt", () => {
 
   it("puts only the glossary terms found in the posting into the prompt and keeps titles English", () => {
     const glossary = { "Forward Deployed Engineer": "Forward Deployed Engineer", "AI Engineer": "AI Engineer" };
-    const withHit = buildScorePrompt({ me: exampleMe(), preferences: examplePreferences(), job: job({ title: "Forward Deployed Engineer" }), jdMaxChars: 6000, jdHeadShare: 0.7, glossary, language: GERMAN, currency: "EUR" });
+    const withHit = buildScorePrompt({ me: exampleMe(), preferences: examplePreferences(), job: job({ title: "Forward Deployed Engineer" }), jdMaxChars: 6000, jdHeadShare: 0.7, glossary, language: GERMAN, currency: "EUR", geo: { cityAliases: {}, cities: {}, countries: [], regions: {} } });
     expect(withHit.user).toContain('"Forward Deployed Engineer" -> "Forward Deployed Engineer"');
     expect(withHit.user).not.toContain('"AI Engineer" ->');
     expect(withHit.system).toContain("Job titles and role names stay in English");

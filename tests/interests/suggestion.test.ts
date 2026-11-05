@@ -81,7 +81,7 @@ describe("applySuggestion", () => {
     const kw = applySuggestion(filter("exclude_keyword", "Cobol"), current(), normalizeCompany);
     expect(kw).toMatchObject({ interestsChanged: false, preferencesChanged: true });
     expect(kw.preferences.exclude_keywords).toEqual([...before.exclude_keywords, "Cobol"]);
-    expect(applySuggestion(filter("add_location", "Hamburg"), current(), normalizeCompany).preferences.locations).toEqual([...before.locations, "Hamburg"]);
+    expect(applySuggestion(filter("add_location", "Hamburg"), current(), normalizeCompany).preferences.places).toEqual([...before.places, { place: "Hamburg", relocate: true }]);
     expect(applySuggestion(filter("exclude_company", "Legacy Bank"), current(), normalizeCompany).preferences.exclude_companies).toEqual([...before.exclude_companies, "Legacy Bank"]);
   });
 

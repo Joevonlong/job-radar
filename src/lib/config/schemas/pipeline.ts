@@ -3,7 +3,7 @@ import { z } from "zod";
 import { CHANNEL_FAMILIES, SALARY_PERIODS } from "@/lib/channels/types";
 import { SENIORITIES } from "@/lib/domain/types";
 
-import { languageRequirementSchema, type GhostPack, type LanguageRequirement, type VisaPack } from "@/lib/market/schema";
+import { languageRequirementSchema, workAreaPatterns, type GhostPack, type LanguageRequirement, type VisaPack } from "@/lib/market/schema";
 import type { Market } from "@/lib/market/types";
 
 import { nonEmptyString, nonNegativeInt, nonNegativeNumber, positiveInt, regexString } from "./common";
@@ -405,7 +405,7 @@ export const pipelineSchema = z.strictObject({
     remote: z.strictObject({
       /** Added to the location texts of the region `eu` (generic pack). Kept for files from before the market packs. */
       eu_wide_patterns: extraRegexList,
-      /** Location text that says "anywhere in the world" (counts as in scope unless remote_scope is none). */
+      /** Location text that says "anywhere in the world" (counts as in scope). */
       worldwide_patterns: extraRegexList,
       /** Location text of regions outside the home region where no country code was found (USA, APAC ...): out of scope. */
       outside_patterns: extraRegexList,
@@ -422,6 +422,22 @@ export const pipelineSchema = z.strictObject({
        * location is outside the scope is kept (with a note) when the description matches one of them.
        */
       description_in_scope_patterns: extraRegexList,
+      /** Phrases of the title or description that state where the job may be done from; each has a `(?<place>...)` capture. Check 2 reads them on every remote job. */
+      work_area_patterns: workAreaPatterns.default([]),
+      /** The same, read in the title only. */
+      work_area_title_patterns: workAreaPatterns.default([]),
+      /** Phrases that say the job may be done from anywhere. */
+      work_area_anywhere_patterns: extraRegexList,
+      /** A sentence with one of these says something else: it is not sure. */
+      work_area_negation_patterns: extraRegexList,
+      /** A next sentence with one of these widens or softens the statement before it, so it is not sure. */
+      work_area_continuations: extraRegexList,
+      /** What separates the places of a list. */
+      work_area_connectors: extraRegexList,
+      /** What may follow the place; anything else after it and the sentence is not sure. */
+      work_area_endings: extraRegexList,
+      /** Words left off the front of a place. */
+      work_area_articles: extraRegexList,
     }),
     /** preferences.yaml `seniority` -> job seniorities that match it (a posting that does not state one is kept). */
     seniority_map: z.strictObject({

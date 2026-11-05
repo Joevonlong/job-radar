@@ -1,9 +1,9 @@
 import { z } from "zod";
 
-import { remoteLocationFor } from "@/lib/market/remote-scope";
+import { remoteQueryLocation } from "@/lib/market/remote-scope";
 
 import type { ChannelMarket } from "../../market";
-import { searchKind } from "../../query";
+import { locatedText, searchKind } from "../../query";
 import type { SearchQuery } from "../../types";
 import { keywordStrings } from "../brightdata/contract";
 import { postedWithinSeconds } from "../date-window";
@@ -140,12 +140,13 @@ export function remoteTemplate(template: Readonly<Record<string, unknown>>, remo
   return merged;
 }
 
-/** The location sent to the actor: `City, Country` for a located query, the configured location for a remote one, the home country for a company query. */
+/** The location sent to the actor: `City, Country` for a located query, the place or the configured location for a remote one, the home country for a company query. */
 export function locationFor(query: SearchQuery, settings: Pick<ApifySettings, "remote_locations" | "country_name">, market: ChannelMarket): string {
   if (searchKind(query) === "company") return settings.country_name || market.countryName;
-  if (query.remote) return remoteLocationFor(query.remoteScope ?? "worldwide", settings.remote_locations, market);
-  if (query.location === null) throw new Error("apify: a located query needs a location");
-  return `${query.location}, ${settings.country_name || market.countryName}`;
+  if (query.remote) return remoteQueryLocation(query, settings.remote_locations, market);
+  const located = locatedText(query, settings.country_name || market.countryName, market);
+  if (located === null) throw new Error("apify: a located query needs a location");
+  return located;
 }
 
 /** The actor inputs for one query: one per keyword string (usually exactly one), from the configured template. */

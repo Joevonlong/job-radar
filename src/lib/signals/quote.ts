@@ -1,5 +1,8 @@
 import type { Span } from "./types";
 
+/** Longest quote kept as evidence. */
+export const QUOTE_MAX = 200;
+
 /** Start and end (exclusive, without the newline) of the line containing `index`. */
 export function lineBounds(text: string, index: number): Span {
   const start = index <= 0 ? 0 : text.lastIndexOf("\n", index - 1) + 1;

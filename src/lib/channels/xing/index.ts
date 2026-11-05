@@ -173,6 +173,7 @@ export function createXingChannel(deps: XingDeps = {}): Channel {
     kind: "guest",
     usesQueries: true,
     supportsCompanyQueries: true,
+    supportsRemotePlaces: false,
     // the ghost job check: XING ids are stable and the full text is stored
     stableExternalIds: true,
     fullDescription: true,

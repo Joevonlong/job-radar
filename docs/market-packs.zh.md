@@ -34,7 +34,7 @@ pnpm run doctor --only config.market
 | 方面 | 行为 |
 |---|---|
 | 地点 | 写出国家的地点得到该国代码（`Remote - USA` → US，`Dublin, CA` → US）。本国国名前面的城市（`Gütersloh, Germany`）只在本国市场下读取。 |
-| 远程范围 | preferences.yaml 和 search.yaml 里写 `none`、`home_country`、`worldwide` 或 `{region: [eu, CH, …]}`（命名区域和 ISO 国家）。旧值：`eu_hire_in_de` = `home_country`，`eu_any` = `{region: [eu]}`。`home_country` 保留地点在本国的远程岗、写明包里 `region`（德国包：EU、Europe、EMEA、EEA）或全球的远程岗，显示为“能从德国远程（含面向欧盟 / 欧洲 / EMEA / 全球的远程岗）”；没有 `region` 的市场显示“能从某国远程”。逐行的结果见 [远程岗和关注公司](usage.zh.md#远程岗和关注公司)。 |
+| 远程范围 | 由 preferences.yaml 的 `places` 得出：没有时是 `home_country`，也可以是 `worldwide`，或列出代码时的 `{region: [eu, CH, …]}`（命名区域和 ISO 国家）。旧值：`eu_hire_in_de` = `home_country`，`eu_any` = `{region: [eu]}`。`home_country` 保留地点在本国的远程岗、写明包里 `region`（德国包：EU、Europe、EMEA、EEA）或全球的远程岗，显示为“能从德国远程（含面向欧盟 / 欧洲 / EMEA / 全球的远程岗）”；没有 `region` 的市场显示“能从某国远程”。逐行的结果见 [远程岗和关注公司](usage.zh.md#远程岗和关注公司)。 |
 | 本地语言 | 包里有该语言的要求规则、并且 `home_language` 就是这门语言时，才读岗位要求的等级；高于你在 me.yaml `languages` 里的等级会扣分（ai.yaml `scoring.language_penalty`）。否则这一步关闭：不读等级、不扣分、打分提示词不问这一项，页面也隐藏相关筛选和标签。 |
 | 基准货币 | 薪资底线、"最低年薪"筛选、统计和高薪门槛都用市场的货币。其他货币按 pipeline.yaml 的 `salary.fx_pivot` + `fx_rates` 换算；没有汇率的货币不参与比较。 |
 | 渠道 | sources.yaml 里写了 `markets: [DE]` 的渠道只在这些市场运行；在别的市场下折叠在"其他市场"里，不算失败。国家参数留空（`country`、`country_name`、`country_indeed`）、远程地点不写的键，都跟随市场。 |
@@ -67,6 +67,25 @@ pnpm run doctor --only config.market
 - `ghost` 和 `visa`：generic 和市场包的列表合并（generic 在前）；pipeline.yaml 里没有它们自己的说法。
 
 所以 pipeline.yaml 只需要放你自己加的内容。pipeline.yaml 的配置迁移已经删掉了现在由包提供的条目。
+
+## 远程职位可以在哪里工作
+
+`rules.yaml` 的 `filter.remote` 里放着过滤时在远程职位的标题和职位说明里找的说法。它们是不区分大小写的正则，`pipeline.yaml` 可以再加：
+
+| 键 | 内容 |
+|---|---|
+| `work_area_patterns` | 写明范围的说法。每条都要有 `(?<place>...)` 捕获，否则配置文件会被拒绝 |
+| `work_area_title_patterns` | 同上，但只在标题里读：职位说明里的 `France only` 也可能说的是某项福利 |
+| `work_area_anywhere_patterns` | 表示全球任何地方的说法 |
+| `work_area_negation_patterns` | 句子里有这些词就另有所指，算作不确定 |
+| `work_area_continuations` | 下一句有这些词，说明范围更宽或语气更松，算作不确定 |
+| `work_area_connectors` | 列表里分隔地点的写法 |
+| `work_area_endings` | 地点后面允许出现的内容，比如 `Germany to apply`。后面有别的内容，这句话就算不确定 |
+| `work_area_articles` | 地点前面要去掉的词 |
+
+这些说法来自你可以编辑的市场包，所以读一份职位的时间上限是 `filter.deal_breakers.match_ms`。被中断的职位如果原本被隐藏就继续隐藏，否则算作不确定，下一轮再读。被中断的读取在每轮共用 `filter.deal_breakers.rule_budget_ms`；用完后，这一轮不再读其余职位。
+
+这些说法可能让职位被隐藏，所以要放在句首，写被招聘的人，不要写公司、福利或数据：`we are hiring in France` 就不算。问句一律不算，`work_area_anywhere_patterns` 里的说法也一样。捕获到的每一部分都走和地点设置相同的查找，但单独的 ISO 代码和非大写的短名称不算：`hiring in IT` 不是意大利。只要有一部分不在市场数据表里，这句话就算不确定，所以只有整句都读懂时才会隐藏职位。列表可能在下一句里继续时，也算不确定。没有这些说法的市场包不会隐藏任何职位，每个远程职位都会带上提示 `remote_area_unknown`。没有地名可捕获的说法，比如德语的 `bundesweit`，除非市场包写出国家，否则不起作用。`description_in_scope_patterns` 是另一回事：它只能救回职位，而且只针对本国和所在区域。
 
 ## 幽灵岗位说法
 
@@ -152,6 +171,33 @@ pnpm run doctor --only config.market
 
 `jobs.salary_json` 和 T1 信号里的薪资带 `basePerYear` + `baseCurrency`；基准货币一直是 EUR 时写的旧行按 EUR 读取。
 
+## 地点设置的迁移
+
+`preferences.yaml` 会从版本 2 转换到版本 3，读取时和运行 `pnpm config:migrate --write` 时都会转换。分数不会因此过期：
+
+| 旧 | 新 |
+|---|---|
+| `locations` 的第一项 | `home_city` |
+| `locations` 的其他项 | `relocate: true` 的地点 |
+| `remote_scope: home_country` | 不新增 |
+| `remote_scope: {region: [...]}` | 每个代码按原样成为仅远程地点 |
+| `remote_scope: worldwide` | `Worldwide` 成为仅远程地点 |
+| `remote_scope: none` | 从 `workplace` 去掉 `remote`，除非它是唯一的值 |
+
+结果有变化的情况：设为 `none` 时，地点在允许城市的远程职位过去会显示，现在会以 `workplace_not_wanted` 隐藏；设为 `none` 且 `workplace: [remote]` 时，远程职位现在会被检查，不再被隐藏；`{region: [...]}` 没有包含本国时，本国的远程职位现在会显示；`locations` 里的国外城市变成 ✈ 地点并开始匹配。如果 `locations` 的第一项是国外城市，它会成为常住城市，那里的职位按本国比较。
+
+`search.yaml` 的 `locations` 和 `remote_scope` 仍可接受但不再生效，也没有迁移步骤：搜索来自 `places`，`config:check` 和 `/me` 会提醒 `places` 里没有的内容，以及 `places` 新增、而这两个键没列出的搜索。两个文件一致时，升级后查询和查询 id 不变，轮转历史得以延续。这些配置会增加或改变搜索：
+
+| 旧配置 | 变化 |
+|---|---|
+| 含多个代码的范围 | 每个代码一次搜索，id 是新的 |
+| 不覆盖本国的范围 | 增加本国的远程搜索 |
+| `none` 且 `workplace: [remote]` | 增加本国的远程搜索 |
+| `locations` 里的国外城市 | 增加它的远程搜索 |
+| `workplace` 没有 `remote`，范围不是 `none` | 去掉远程搜索，因为这和迁移后的 `none` 无法区分 |
+
+旧版本的代码读不了版本 3。要退回旧版本，请先用升级前的备份或 `/me` 上的画像历史恢复这个文件。
+
 ## 改名的配置键
 
 配置迁移（`pnpm config:migrate --write`）会改名；改之前旧文件在内存里照常可用。
@@ -159,7 +205,7 @@ pnpm run doctor --only config.market
 | 文件 | 之前 | 现在 |
 |---|---|---|
 | preferences.yaml | `salary_floor_eur_year` | `salary_floor_year`，并新增 `market` |
-| preferences.yaml、search.yaml | `remote_scope: eu_hire_in_de / eu_any` | `home_country` / `{region: [eu]}` |
+| preferences.yaml、search.yaml | `remote_scope: eu_hire_in_de / eu_any` | `home_country` / `{region: [eu]}`，在 preferences.yaml 里再转为地点（见上文） |
 | sources.yaml | `remote_locations.eu_hire_in_de / eu_any` | `home_country` / `region`；德国的招聘网站加 `markets: [DE]` |
 | pipeline.yaml | `language.german_*`、`salary.fx_to_eur` | DE 包的 `requirement`；`salary.fx_pivot: EUR` + `fx_rates` |
 | ai.yaml | `scoring.german_penalty`、`priority.weights.german_gap` | `language_penalty`、`language_gap` |

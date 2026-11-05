@@ -239,7 +239,7 @@ button does not write runs and does not affect rotation.
 Each completed unit emits a `query rotation` log and a `steps[collect].result.rotation` summary, stored in the cycle's
 `cycles.summary_json.steps` entry whose `name` is `collect`. They show the starting channel (`sortChannel`), query count,
 served/failed outcomes (`reached`), never-run count, oldest known wait and query, and largest requested window
-(`maxWindowHours`, including catch-up); the log also includes `notReached`. `stretched` counts queries with at least one
+(`maxWindowHours`, including catch-up); the log also includes `notReached`. `remotePlacesSkipped` counts remote searches for a place that the unit's boards can't send; they are dropped before rotation, so they never count as never run, and Sources shows the count. `stretched` counts queries with at least one
 stretched attempt; `capped` counts queries whose catch-up gap was limited by the cap. Unknown waits are null. Dry runs use
 config order and base windows and mark `historyUnavailable: true`. A history read failure warns once and uses the same
 fallback. With rotation off the CLI says `query order: config order (collect.query_rotation is false)`; a history read
@@ -444,7 +444,7 @@ the same block from the config update (`pnpm config:migrate`), with the title pr
   names the site and links to it. A 401, 404 (on the first page) or 410, or a 403, counts as blocked and opens the channel's
   circuit breaker; the other channels keep running.
 - **Limits.** Small (roughly 140 postings, about a third of them technical, fewer after the end-date rule). The site only lists
-  Berlin: with other cities in `search.yaml: locations` the location filter drops everything. Company names are the site's, mostly
+  Berlin: with no Berlin in your home city or places the location filter drops everything. Company names are the site's, mostly
   without "GmbH", and a brand name can differ from the one in the title, so the cross-source merge sometimes misses a duplicate.
 - **Settings**: `base_url`, `user_agent`, `per_page`, `max_pages`, `skip_expired`, `max_age_days`, `max_results`, `throttle` and
   `title_prefilter` under `sources.berlinstartupjobs` (also on the settings page). Switch it off with `enabled: false` or the
@@ -462,12 +462,12 @@ block, switched off, from the config update (`pnpm config:migrate`).
 
 - **What a run reads.** One request for the index, then the description of each new posting it keeps (at most
   `max_details_per_run`, 30 by default, 1 to 3 seconds apart; postings it already stored are not fetched again, and the rest
-  waits for the next run). It keeps a posting if it is in one of your places (`search.yaml: locations`, with the spellings of the
-  city aliases, so "München" also matches the site's `munich`; or remote in your country when your remote scope is not `none`),
+  waits for the next run). It keeps a posting if it is in your home city or a ✈ place (with the spellings of the
+  city aliases, so "München" also matches the site's `munich`; with no home city, anywhere in your country), or remote in your country or a listed country when Workplace has Remote,
   is at most `max_age_days` old (14; the index has dates, not times), its title passes `title_prefilter` (a search keyword or an
   `include_terms` entry, or a watched company; `exclude_terms` drops student and intern jobs) and, with `skip_known_boards: true`,
   it is not on a company board you already list in `ats_boards` (enabled or not): the ATS channel reads those first-hand. The
-  index only covers Berlin, Munich, Hamburg and German remote; with other cities in `locations` the channel runs and finds nothing.
+  index only covers Berlin, Munich, Hamburg and German remote; with other places the channel runs and finds nothing.
 - **What a posting has.** Title, company, one or more places, a work mode (the site's "onsite" is not taken as a fact), an
   optional salary range as text, and the full description (HTML, read as text; e-mail addresses and phone numbers are removed
   from the text, the stored original keeps them; the trap scan reads it for hidden text, [ai-traps.md](ai-traps.md)). The job's
@@ -553,6 +553,8 @@ breaker; the shared HTTP retry setting does not repeat these scrape requests.
 If you switch scraping channels on: read the terms of every site, keep volumes low (few keywords, few cities, the
 default schedule), do not republish collected data, and prefer official APIs, company career boards and your own job-alert
 emails. You are responsible for how you use them.
+
+**Arbeitsagentur and place names.** The API matches German names only: `Germany` and `Munich` find nothing where `Deutschland` and `München` do. So a country name is translated to German, and `sources.arbeitsagentur.location_names` holds cities with another name in German (`spelling: name`). Any other place is searched as written. The API also found nothing for countries abroad in a test with `Frankreich` and `Niederlande`, so a place abroad costs a request here and usually adds nothing.
 
 **StepStone and its robots.txt.** StepStone's `robots.txt` (checked 2026-11-03) disallows `/jobs/*?*` and allows only a search
 URL with a single `q=` parameter. The channel therefore sends exactly one form,

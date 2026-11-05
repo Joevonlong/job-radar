@@ -17,7 +17,7 @@ import { addMonthUsage, upsertChannelRows } from "@/lib/db/repos/channels";
 import * as runRepo from "@/lib/db/repos/runs";
 
 import { atsChannelsWith, company, depsWith, fixtureJson, inputs, routedFetch } from "../channels/ats/helpers";
-import { channelsWith } from "../channels/helpers";
+import { channelsWith, oneCityPlaces } from "../channels/helpers";
 import { jsearchWith, KEY_ENV, MONTH, NOW, RECORDS, response, SEARCH_EMPTY } from "../channels/jsearch/helpers";
 import { ENV as BRIGHT_ENV, fakeProvider } from "../channels/linkedin/brightdata/helpers";
 import { collectOf, config, pinnedSearch, quietLogger } from "../cycle/helpers";
@@ -45,7 +45,7 @@ afterAll(async () => {
 
 function searchFor(groups: Record<string, string[]> = { engineering: ["Platform Engineer"] }): SearchConfig {
   return {
-    ...pinnedSearch(), keyword_groups: groups, locations: ["Test City"], remote_scope: "none",
+    ...pinnedSearch(), keyword_groups: groups,
     max_per_group_per_location: 5, window_hours: { morning: 14, evening: 10, weekend: 24 },
   };
 }
@@ -53,7 +53,7 @@ function searchFor(groups: Record<string, string[]> = { engineering: ["Platform 
 const threeQueries = () => searchFor({ a: ["alpha"], b: ["beta"], c: ["gamma"] });
 
 function catchUpConfig(search = searchFor()) {
-  const cfg = config({ search, concurrency: 1 });
+  const cfg = config({ search, concurrency: 1, places: oneCityPlaces() });
   return {
     ...cfg,
     channels: {
@@ -120,7 +120,7 @@ describe("catch-up attempt windows", () => {
     cfg.channels.collect.max_catch_up_hours = cap;
     const registry = new ChannelRegistry();
     const fixture = registerFixtureChannel(registry, { postings: [], supportsCatchUp: () => supports });
-    const [query] = buildQueries(cfg.search, "manual");
+    const [query] = buildQueries(cfg.search, cfg.places, "manual");
     expect(query!.windowHours).toBe(24);
     await seedHistory(fixture, query!, gap);
     const result = await run(registry, cfg, "manual", { backfillHours: backfill });
@@ -179,7 +179,7 @@ describe("catch-up attempt windows", () => {
     const cfg = catchUpConfig();
     const registry = new ChannelRegistry();
     const fixture = registerFixtureChannel(registry, { postings: [] });
-    const [query] = buildQueries(cfg.search, "weekday_evening");
+    const [query] = buildQueries(cfg.search, cfg.places, "weekday_evening");
     const result = await run(registry, cfg);
     expect(fixture.seen).toEqual([expect.objectContaining({ id: query.id, windowHours: query.windowHours })]);
     expect(await rowsOf(result)).toEqual([expect.objectContaining({ queryHash: query!.id, status: "succeeded", windowHours: 10, windowExtended: false })]);
@@ -192,7 +192,7 @@ describe("catch-up attempt windows", () => {
     { gap: 240, hours: 168, stretched: 1, capped: 1 },
   ])("shares guest coverage from $gap hours ago while calculating each cascade attempt separately", async ({ gap, hours, stretched, capped }) => {
     const cfg = catchUpConfig(threeQueries());
-    const queries = buildQueries(cfg.search, "weekday_evening");
+    const queries = buildQueries(cfg.search, cfg.places, "weekday_evening");
     const registry = new ChannelRegistry();
     const paid = registerFixtureChannel(registry, {
       id: "paid-fixture", family: "linkedin", kind: "paid", postings: [], costPerRecordUsd: 0.001,
@@ -218,7 +218,7 @@ describe("catch-up attempt windows", () => {
 
   it("uses coverage from unselected family members", async () => {
     const cfg = catchUpConfig();
-    const [query] = buildQueries(cfg.search, "weekday_evening");
+    const [query] = buildQueries(cfg.search, cfg.places, "weekday_evening");
     const registry = new ChannelRegistry();
     const paid = registerFixtureChannel(registry, { id: "unselected-paid", family: "linkedin", postings: [], supportsCatchUp: () => false });
     const guest = registerFixtureChannel(registry, { id: "selected-guest", family: "linkedin", postings: [] });
@@ -236,7 +236,7 @@ describe("catch-up attempt windows", () => {
     const cfg = catchUpConfig();
     const registry = new ChannelRegistry();
     const fixture = registerFixtureChannel(registry, { postings: [] });
-    const [query] = buildQueries(cfg.search, "weekday_evening");
+    const [query] = buildQueries(cfg.search, cfg.places, "weekday_evening");
     await seedHistory(fixture, query!, 72.2, { status: "failed" });
     await seedHistory(fixture, query!, 2, { status: "failed" });
     const result = await run(registry, cfg);
@@ -249,7 +249,7 @@ describe("catch-up attempt windows", () => {
     const cfg = catchUpConfig();
     const registry = new ChannelRegistry();
     const fixture = registerFixtureChannel(registry, { postings: [] });
-    const [query] = buildQueries(cfg.search, "weekday_evening");
+    const [query] = buildQueries(cfg.search, cfg.places, "weekday_evening");
     await seedHistory(fixture, query!, 72, { status: "failed" });
     await seedHistory(fixture, query!, 1, { status: "skipped", fetched: 2, usageUnits: 0 });
     const result = await run(registry, cfg);
@@ -262,7 +262,7 @@ describe("catch-up attempt windows", () => {
     const cfg = catchUpConfig();
     const registry = new ChannelRegistry();
     const fixture = registerFixtureChannel(registry, { postings: [] });
-    const [query] = buildQueries(cfg.search, "catchup", { windowKind: "weekday_evening" });
+    const [query] = buildQueries(cfg.search, cfg.places, "catchup", { windowKind: "weekday_evening" });
     if (history) await seedHistory(fixture, query!, 20);
     const result = await run(registry, cfg, "catchup", { windowKind: "weekday_evening" });
     const hours = history ? 20 : 10;
@@ -278,7 +278,7 @@ describe("catch-up attempt windows", () => {
   ] as const)("with cap zero preserves buildQueries' entire window sequence for $kind / $windowKind", async ({ kind, windowKind }) => {
     const cfg = catchUpConfig(threeQueries());
     cfg.channels.collect.max_catch_up_hours = 0;
-    const expected = buildQueries(cfg.search, kind, { windowKind });
+    const expected = buildQueries(cfg.search, cfg.places, kind, { windowKind });
     const registry = new ChannelRegistry();
     const fixture = registerFixtureChannel(registry, { postings: [] });
     // Equal history timestamps keep config order while making every query old enough to extend.
@@ -295,7 +295,7 @@ describe("catch-up attempt windows", () => {
     cfg.channels.collect.max_catch_up_hours = 5;
     const registry = new ChannelRegistry();
     const fixture = registerFixtureChannel(registry, { postings: [] });
-    const [query] = buildQueries(cfg.search, "weekday_evening");
+    const [query] = buildQueries(cfg.search, cfg.places, "weekday_evening");
     await seedHistory(fixture, query!, 48);
     const result = await run(registry, cfg);
     expect(fixture.seen).toEqual([expect.objectContaining({ id: query.id, windowHours: query.windowHours })]);
@@ -308,7 +308,7 @@ describe("catch-up attempt windows", () => {
     const registry = new ChannelRegistry();
     const first = registerFixtureChannel(registry, { id: "first-guest", family: "linkedin", postings: [], failure: { code: "budget_exceeded" } });
     const next = registerFixtureChannel(registry, { id: "next-guest", family: "linkedin", postings: [] });
-    const [query] = buildQueries(cfg.search, "weekday_evening");
+    const [query] = buildQueries(cfg.search, cfg.places, "weekday_evening");
     await seedHistory(first, query!, 240);
     const result = await run(registry, cfg, "weekday_evening", { cascades: [{ family: "linkedin", order: [first.id, next.id] }] });
     expect(first.seen).toEqual([{ ...query, windowHours: 168 }]);
@@ -333,7 +333,7 @@ describe("catch-up attempt windows", () => {
     // No registry override: the capability must receive the block from this cycle's config.
     registry.register(configurable);
     const disabled = registerFixtureChannel(registry, { id: "always-base", postings: [], supportsCatchUp: () => false });
-    for (const query of buildQueries(cfg.search, "weekday_evening")) {
+    for (const query of buildQueries(cfg.search, cfg.places, "weekday_evening")) {
       await seedHistory(configurable, query, 48);
       await seedHistory(disabled, query, 48);
     }
@@ -365,7 +365,7 @@ describe("catch-up attempt windows", () => {
         return result;
       },
     }, { settings: FIXTURE_SETTINGS });
-    for (const query of buildQueries(cfg.search, "weekday_evening")) await seedHistory(fixture, query, 24);
+    for (const query of buildQueries(cfg.search, cfg.places, "weekday_evening")) await seedHistory(fixture, query, 24);
     const result = await run(registry, cfg, "weekday_evening", { now: () => now });
     expect(fixture.seen.map((query) => query.windowHours)).toEqual([24, 25]);
     expect((await rowsOf(result)).map((row) => row.windowHours)).toEqual([24, 25]);
@@ -376,7 +376,7 @@ describe("catch-up attempt windows", () => {
     const cfg = catchUpConfig();
     const registry = new ChannelRegistry();
     const fixture = registerFixtureChannel(registry, { postings: [] });
-    const [query] = buildQueries(cfg.search, "weekday_evening");
+    const [query] = buildQueries(cfg.search, cfg.places, "weekday_evening");
     await seedHistory(fixture, query!, 240);
     const before = await getDb().select().from(schema.runs);
     const result = await run(registry, cfg, "weekday_evening", { dryRun: true, db: getDb() });
@@ -390,7 +390,7 @@ describe("catch-up attempt windows", () => {
     const cfg = catchUpConfig();
     const registry = new ChannelRegistry();
     const fixture = registerFixtureChannel(registry, { postings: [] });
-    const [query] = buildQueries(cfg.search, "weekday_evening");
+    const [query] = buildQueries(cfg.search, cfg.places, "weekday_evening");
     await seedHistory(fixture, query!, 240);
     vi.spyOn(runRepo, "getQueryRunHistory").mockRejectedValue(new Error("test: history read failed"));
     const result = await run(registry, cfg);
@@ -437,7 +437,7 @@ describe("catch-up preserves provider spending controls", () => {
 
   it("widens JSearch to 3days while limiting details to the configured number of job ids", async () => {
     const { cfg, registry, channel } = jsearchSetup();
-    const [query] = buildQueries(cfg.search, "weekday_evening");
+    const [query] = buildQueries(cfg.search, cfg.places, "weekday_evening");
     await seedHistory(channel, query!, 49);
     const records = Array.from({ length: 8 }, (_, index) => ({ ...RECORDS[2], job_id: `catch-up-${index}`, job_description: null }));
     const calls: URL[] = [];
@@ -463,7 +463,7 @@ describe("catch-up preserves provider spending controls", () => {
 
   it("records a skipped extended attempt when JSearch's paced allowance refuses before a request", async () => {
     const { cfg, registry, channel } = jsearchSetup();
-    const [query] = buildQueries(cfg.search, "weekday_evening");
+    const [query] = buildQueries(cfg.search, cfg.places, "weekday_evening");
     await seedHistory(channel, query!, 49);
     // On day 7 of a 31-day month the paced share of 200 is 46; the monthly allowance is not exhausted.
     await addMonthUsage(getDb(), channel.id, MONTH, { records: 46, usd: 0 });
@@ -482,7 +482,7 @@ describe("catch-up preserves provider spending controls", () => {
   it("keeps JSearch on today for the 24.5-hour Saturday-to-Sunday gap", async () => {
     const now = new Date("2026-10-18T09:30:00Z");
     const { cfg, registry, channel } = jsearchSetup(now);
-    const [query] = buildQueries(cfg.search, "weekend");
+    const [query] = buildQueries(cfg.search, cfg.places, "weekend");
     await seedHistory(channel, query!, 24.5, {}, now);
     const calls: URL[] = [];
     const result = await run(registry, cfg, "weekend", {
@@ -510,7 +510,7 @@ describe("catch-up preserves provider spending controls", () => {
     const registry = new ChannelRegistry();
     const channel = createBrightDataChannel({ costPer1kUsd: () => 1.5, environment: BRIGHT_ENV, now: () => NOW, sleep: async () => {} });
     registry.register(channel);
-    const [query] = buildQueries(cfg.search, "weekday_evening");
+    const [query] = buildQueries(cfg.search, cfg.places, "weekday_evening");
     await seedHistory(channel, query!, gap);
     const provider = fakeProvider({ records: [] });
     const result = await run(registry, cfg, "weekday_evening", { fetch: provider.fetch });
@@ -534,7 +534,7 @@ describe("catch-up preserves provider spending controls", () => {
     const bright = createBrightDataChannel({ costPer1kUsd: () => 1.5, environment: BRIGHT_ENV, now: () => NOW, sleep: async () => {} });
     registry.register(bright);
     const guest = registerFixtureChannel(registry, { id: "guest-after-budget", family: "linkedin", postings: [] });
-    const queries = buildQueries(cfg.search, "weekday_evening");
+    const queries = buildQueries(cfg.search, cfg.places, "weekday_evening");
     for (const query of queries) await seedHistory(bright, query, 240);
     const provider = fakeProvider({ records: Array.from({ length: 5 }, (_, index) => ({
       job_posting_id: String(9000 + index), url: `https://www.linkedin.com/jobs/view/${9000 + index}`,

@@ -220,7 +220,6 @@ describe("the prepare scripts on a database that does not exist yet", () => {
 
     readDirectories(path.join(REPO, "config"));
     expect(readSetupState().pending).toBe(false);
-    expect(loadConfig("search").locations).toEqual(["Berlin"]);
     expect(loadConfig("channels").linkedin.brightdata.enabled).toBe(false);
     expect(loadConfig("schedule").timezone).toBe("Europe/Berlin");
     expect(loadConfig("notify").public_base_url).toBe("http://127.0.0.1:3000");

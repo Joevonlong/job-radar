@@ -3,9 +3,8 @@ import { describe, expect, it } from "vitest";
 import { AI_API_PROVIDERS, AI_PROVIDER_IDS, AI_PROVIDER_KINDS, AI_TASK_NAMES, AI_TASK_PROVIDERS, CODEX_REASONING_EFFORTS } from "@/lib/config/ai-options";
 import { configRegistry } from "@/lib/config/registry";
 import { LINKEDIN_CHANNEL_IDS } from "@/lib/config/schemas/channels";
-import { remoteScope } from "@/lib/config/schemas/common";
 import { getAt } from "@/lib/settings/draft";
-import { fieldPrefix, fieldsOf, HIDDEN_PATHS, LINKEDIN_CASCADE_OPTIONS, REMOTE_SCOPES, SETTINGS_SECTIONS } from "@/lib/settings/fields";
+import { fieldPrefix, fieldsOf, HIDDEN_PATHS, LINKEDIN_CASCADE_OPTIONS, SETTINGS_SECTIONS } from "@/lib/settings/fields";
 import { SETTINGS_FILES, SETTINGS_FORMS, type SettingsForm } from "@/lib/settings/tabs";
 
 import en from "../../messages/en.json";
@@ -63,8 +62,6 @@ describe("the settings form covers the config files", () => {
   });
 
   it("option lists mirror the zod enums", () => {
-    // The plain values of the remote scope (a region list is the other member of the union)
-    expect([...REMOTE_SCOPES]).toEqual((remoteScope.options[0] as { options: readonly string[] }).options);
     expect([...LINKEDIN_CASCADE_OPTIONS]).toEqual([...LINKEDIN_CHANNEL_IDS]);
     const aiOrder = SETTINGS_SECTIONS.ai.flatMap((s) => s.fields).find((f) => f.path === "order");
     expect(aiOrder?.options).toEqual(configRegistry.ai.schema.shape.order.element.options);

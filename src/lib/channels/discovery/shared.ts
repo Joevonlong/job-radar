@@ -99,7 +99,7 @@ export function boardsFromHits(hits: readonly SearchHit[], known: ReadonlySet<st
 /** Dependencies both discovery channels take. */
 export interface DiscoveryDeps {
   /** Live config read on every run, including sources.yaml collect.query_rotation, not the cycle's frozen config. */
-  inputs(): { search: SearchConfig; companies: CompaniesConfig; queryRotation: boolean };
+  inputs(): { search: SearchConfig; cities: readonly string[]; companies: CompaniesConfig; queryRotation: boolean };
   /** Candidate storage; only asked for in real runs. */
   store(): DiscoveryStore;
   /** Environment holding the API key (read at collect time, never logged). */
@@ -119,7 +119,8 @@ export interface DiscoveryProvider<S extends DiscoverySettings> {
   keyEnv: string;
   /** The channel's validated sources.yaml block; throws a ChannelError when it is unusable. */
   settingsOf(ctx: ChannelContext): S;
-  buildQueries(search: SearchConfig, settings: S): DiscoveryQuery[];
+  /** `cities`: the home city and the places I'd move to. */
+  buildQueries(search: SearchConfig, cities: readonly string[], settings: S): DiscoveryQuery[];
   /** The service and base URL the key is sent to (checked once per run, see `assertCredentialEndpoint`). */
   endpoint(settings: S): { service: Exclude<CredentialService, "gmail">; url: string };
   /** Run one search; throw a classified ChannelError on failure. May throw BudgetExceededError before sending. */
@@ -162,7 +163,7 @@ export function createDiscoveryChannel<S extends DiscoverySettings>(provider: Di
 
       const inputs = deps.inputs();
       const known = knownBoardKeys(inputs.companies);
-      const all = provider.buildQueries(inputs.search, settings);
+      const all = provider.buildQueries(inputs.search, inputs.cities, settings);
       let previous = new Map<string, Date>();
       let turnsReadable = store !== null;
       if (store) {

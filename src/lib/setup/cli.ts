@@ -161,6 +161,16 @@ async function statusReport(ctx: Context): Promise<{ text: string[]; json: unkno
 
 type StepRun = (ctx: Context, view: SetupView, answers: SetupAnswers) => Promise<SetupStepResult>;
 
+const REMOTE_PREFIX = "remote:";
+
+/** Places as one line: `Amsterdam, remote:eu`. */
+export const placesToText = (places: readonly { place: string; relocate: boolean }[]): string =>
+  places.map(({ place, relocate }) => (relocate ? place : `${REMOTE_PREFIX}${place}`)).join(", ");
+
+/** The places of such a line. */
+export const placesFromText = (line: string): Array<{ place: string; relocate: boolean }> =>
+  split(line).map((item) => (item.startsWith(REMOTE_PREFIX) ? { place: item.slice(REMOTE_PREFIX.length).trim(), relocate: false } : { place: item, relocate: true }));
+
 const split = (line: string): string[] =>
   line
     .split(",")
@@ -221,13 +231,12 @@ async function interview(ctx: Context, step: Exclude<SetupStepId, "review" | "te
       const country = await ask(ctx, p("cli.prompts.country"), pack === d.market.pack ? d.market.country : "");
       const currency = await ask(ctx, p("cli.prompts.currency"), pack === d.market.pack ? d.market.currency : "");
       const language = await ask(ctx, p("cli.prompts.homeLanguage"), pack === d.market.pack ? d.market.home_language : "");
-      const locations = split(await ask(ctx, p("cli.prompts.locations"), d.locations.join(", ")));
-      const scope = await ask(ctx, p("cli.prompts.remoteScope"), d.remote_scope);
+      const homeCity = await ask(ctx, p("cli.prompts.homeCity"), d.home_city);
+      const places = placesFromText(await ask(ctx, p("cli.prompts.places"), placesToText(d.places)));
       // like the web wizard (browser zone): until the step is done, suggest this computer's zone, not the shipped placeholder
       const hostZone = view.steps.market.status === null ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined;
       const timezone = await ask(ctx, p("cli.prompts.timezone"), hostZone !== undefined && hostZone !== "" ? hostZone : d.timezone);
-      const remote = scope.startsWith("region:") ? { region: split(scope.slice("region:".length)) } : scope;
-      return parseOrThrow({ market: { pack, country, currency, home_language: language, locations, remote_scope: remote, timezone } });
+      return parseOrThrow({ market: { pack, country, currency, home_language: language, home_city: homeCity, places, timezone } });
     }
     case "profile": {
       const d = view.profile.draft;

@@ -45,7 +45,7 @@ afterEach(() => temp.cleanup());
 describe("setup steps against the database", () => {
   it("profile and market saves record profile snapshots", async () => {
     expect(await saveProfileStep({ ...meConfigToDraft(reloadConfig("me")), summary: "Data engineer." })).toEqual({ status: "saved", step: "profile" });
-    expect(await saveMarketStep({ market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, locations: ["Amsterdam"], remote_scope: "home_country", timezone: "Europe/Amsterdam" })).toEqual({ status: "saved", step: "market" });
+    expect(await saveMarketStep({ market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, home_city: "Amsterdam", places: [], timezone: "Europe/Amsterdam" })).toEqual({ status: "saved", step: "market" });
     const db = getDb();
     expect((await listProfileSnapshots(db, "me", 10)).length).toBeGreaterThan(0);
     expect((await listProfileSnapshots(db, "preferences", 10)).length).toBeGreaterThan(0);

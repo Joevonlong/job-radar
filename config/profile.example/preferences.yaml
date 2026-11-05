@@ -1,6 +1,6 @@
 # What I want (template). Copied to data/profile/preferences.yaml on first run; after that, edit only the copy in data/profile/.
 
-config_version: 2
+config_version: 3
 market:
   # Market: pack = market pack (directory name under config/packs/); country / currency / home_language default to the pack's values when unset.
   # The generic pack sets no country, currency or language, so fill them all in; countries with their own market pack (e.g. de) only need pack
@@ -12,13 +12,15 @@ market:
 target_titles:
   - Software Engineer
 
-locations:
-  - New York
+# Where a job counts as local. It is sent to your AI provider with every job.
+home_city: New York
+
+# Other places a job can be based. relocate: true = I'd move here; false = remote only.
+# A city, a country, a region or Worldwide, e.g. {place: Amsterdam, relocate: true} or {place: eu, relocate: false}.
+places: []
 
 # onsite | hybrid | remote
 workplace: [onsite, hybrid, remote]
-# none | home_country | worldwide | {region: [eu, CH …]}
-remote_scope: home_country
 # all | entry | mid | senior | lead
 seniority: all
 

@@ -54,7 +54,7 @@
     },
     "pipeline": {
       "layer": "user",
-      "hash": "1660f570442987b14b328ae91429b0ac3ed568a0fc1ea33dc3daf86d8fb6a196",
+      "hash": "f198e64f894351298e2d985cceeb2ee3d7aadcede31e81463cc593fcbb8bed34",
       "valid": true
     },
     "pipelineBoard": {
@@ -144,7 +144,7 @@
     },
     "preferences": {
       "layer": "user",
-      "hash": "ec1351bc4a1f9742ff4bf987f8b7e3032bc9519c32e7a80578d1808164c1f1ec",
+      "hash": "5b46b879e650dc7c5f4291d72baf7e56af9e854d9fcc85a38911b227ee708bce",
       "valid": true
     },
     "stories": {

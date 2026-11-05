@@ -24,6 +24,7 @@ import { detectAgency, detectContract } from "@/lib/pipeline/contract";
 import { normalizeDraftLocations, normalizeLocation } from "@/lib/pipeline/geography";
 import { detectLanguage, explicitRequiredGermanLevels, extractGermanLevel } from "@/lib/pipeline/language";
 import { normalizeSalary } from "@/lib/pipeline/salary";
+import { placeGeo, wantedLocations } from "@/lib/market/places";
 import { migrateRemoteScope } from "@/lib/market/remote-scope";
 import { languagePenalty } from "@/lib/scoring/german";
 import { scoreLanguageOf } from "@/lib/scoring/score-task";
@@ -52,7 +53,7 @@ export function readGoldenInputs(): GoldenInputs {
 }
 
 /** The legacy remote scopes and what they are called today (keys of the golden). */
-export const LEGACY_SCOPES = ["none", "eu_hire_in_de", "eu_any", "worldwide"] as const;
+export const LEGACY_SCOPES = ["eu_hire_in_de", "eu_any", "worldwide"] as const;
 export type LegacyScope = (typeof LEGACY_SCOPES)[number];
 
 /** Everything the golden records, computed under one configuration. */
@@ -62,11 +63,18 @@ export interface GoldenContext {
   preferences: (scope: LegacyScope) => PreferencesConfig;
 }
 
+/** What the migration makes of a scope: its tokens, or Worldwide, as remote-only places. */
+function scopeAsPlaces(scope: unknown): Array<{ place: string; relocate: boolean }> {
+  if (scope === "worldwide") return [{ place: "Worldwide", relocate: false }];
+  if (typeof scope !== "object" || scope === null) return [];
+  return (scope as { region: string[] }).region.map((place) => ({ place, relocate: false }));
+}
+
 export function deContext(): GoldenContext {
   return {
     pipeline: shippedPipeline(),
     // the legacy scope names map to the new values (market migration); the golden keys keep the old names
-    preferences: (scope) => examplePreferences((raw) => void (raw.remote_scope = migrateRemoteScope(scope))),
+    preferences: (scope) => examplePreferences((raw) => void (raw.places = [...(raw.places as unknown[]), ...scopeAsPlaces(migrateRemoteScope(scope))])),
   };
 }
 
@@ -89,7 +97,8 @@ function filterJob(over: Partial<FilterJob>): FilterJob {
   };
 }
 
-const verdictText = (v: { result: string; reasons: readonly string[] }): string => `${v.result}|${v.reasons.join(",")}`;
+/** The recording is older than check 2's note, the one allowed difference; the frozen pack has no phrases, so check 2 hides nothing here. */
+const verdictText = (v: { result: string; reasons: readonly string[] }): string => `${v.result}|${v.reasons.filter((reason) => reason !== "remote_area_unknown").join(",")}`;
 
 /**
  * A salary as the golden recorded it (before the market packs): the base-currency figure (`basePerYear` / `baseCurrency`) is
@@ -248,11 +257,12 @@ export function computeGolden(inputs: GoldenInputs, ctx: GoldenContext, legacyCo
     const l = loc(s);
     return cityRowEligible(s, legacyCountryOf(s)) ? [{ jobId: i + 1, city: l.city ?? s, label: s, countryCode: l.countryCode }] : [];
   });
-  const cityGroups = buildCityGroups(rows, { targets: ctx.preferences("eu_hire_in_de").locations, filter: pipeline.filter, market });
+  const cityGroups = buildCityGroups(rows, { targets: wantedLocations(ctx.preferences("eu_hire_in_de")), filter: pipeline.filter, market });
 
   const prompt = buildScorePrompt({
     me,
     preferences: ctx.preferences("eu_hire_in_de"),
+    geo: placeGeo(ctx.pipeline),
     job: {
       title: "Senior AI Engineer (m/w/d)",
       company: "Northwind Labs",
