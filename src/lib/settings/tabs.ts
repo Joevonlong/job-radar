@@ -2,7 +2,22 @@
  * The editable config files that have a form on /settings (one form per file, saved on its own), in display order.
  * Insights, resume and writer were added later; a page tab can hold several forms (`TAB_LAYOUT`).
  */
-export const SETTINGS_FORMS = ["schedule", "search", "channels", "ai", "breakdown", "salary", "research", "notify", "language", "ui", "insights", "resume", "writer"] as const;
+export const SETTINGS_FORMS = [
+  "schedule",
+  "search",
+  "channels",
+  "ai",
+  "breakdown",
+  "salary",
+  "research",
+  "notify",
+  "language",
+  "ui",
+  "insights",
+  "resume",
+  "writer",
+  "career",
+] as const;
 export type SettingsForm = (typeof SETTINGS_FORMS)[number];
 
 export function isSettingsForm(value: string): value is SettingsForm {
@@ -24,6 +39,7 @@ export const SETTINGS_FILES: Record<SettingsForm, string> = {
   insights: "insights.yaml",
   resume: "resume.yaml",
   writer: "writer.yaml",
+  career: "career.yaml",
 };
 
 /** The tabs that edit config: form tabs and the application workflow tab (a status table plus the resume and writer forms). */
@@ -50,7 +66,7 @@ export const TAB_LAYOUT: Record<ConfigPageTab, readonly SettingsForm[]> = {
   notify: ["notify"],
   // The languages head the interface tab
   ui: ["language", "ui", "insights"],
-  workflow: ["resume", "writer"],
+  workflow: ["resume", "writer", "career"],
 };
 
 /** The tab a form is shown in (where the "fix it in the advanced editor" link of a form that cannot load comes from). */
@@ -73,4 +89,4 @@ export function isAckName(value: string): value is AckName {
  * Configs the runner does not watch: saving them takes effect on the next page load, so there is nothing for the runner to
  * acknowledge. writer.yaml and research.yaml are also read by the ai-worker, afresh for every request.
  */
-export const WEB_ONLY_CONFIGS = ["ui", "insights", "resume", "writer", "research"] as const;
+export const WEB_ONLY_CONFIGS = ["ui", "insights", "resume", "writer", "research", "career"] as const;

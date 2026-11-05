@@ -12,7 +12,9 @@ const READONLY_PSQL_DYNAMIC = {
   message: "src/lib/db/readonly-psql.ts is for scripts/ only: it runs docker, and must not reach the web or runner builds.",
 };
 
-export const CORE_IMPORTING_CAREER = {};
+export const CORE_IMPORTING_CAREER = {
+  "src/app/me/page.tsx": ["src/components/career/career-card.tsx"],
+};
 export const ENGINE_FORBIDDEN_GLOBALS = [
   "Buffer", "process", "__dirname", "__filename", "require", "fetch", "XMLHttpRequest", "WebSocket",
 ];
@@ -146,6 +148,64 @@ const eslintConfig = defineConfig([
     rules: {
       "@typescript-eslint/no-restricted-imports": ["error", { paths: DATABASE_PATHS, patterns: [DATABASE_PATTERN, READONLY_PSQL_PATTERN] }],
       "no-restricted-syntax": ["error", DATABASE_DYNAMIC, READONLY_PSQL_DYNAMIC],
+    },
+  },
+  ...Object.entries(CORE_IMPORTING_CAREER).map(([file, targets]) => {
+    const allowed = targets.map((target) => target.replace(/^src\//, "@/").replace(/\.tsx?$/, ""));
+    const except = allowed.map((target) => target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+    const regex = `^(?!(?:${except})$)@/(?:lib/career|components/career|app/career|app/api/career|career-pdf)(?:/|$)`;
+    const forbidden = { regex, message: CAREER_PATTERN.message, allowTypeImports: false };
+    return {
+      files: [file.replace(/[\[\]]/g, "\\$&")],
+      rules: {
+        "@typescript-eslint/no-restricted-imports": [
+          "error",
+          { paths: DATABASE_PATHS, patterns: [DATABASE_PATTERN, READONLY_PSQL_PATTERN, forbidden] },
+        ],
+        "no-restricted-syntax": [
+          "error",
+          DATABASE_DYNAMIC,
+          READONLY_PSQL_DYNAMIC,
+          { selector: `ImportExpression[source.value=/${new RegExp(regex).source}/]`, message: CAREER_PATTERN.message },
+        ],
+      },
+    };
+  }),
+  {
+    files: ["src/lib/career/{schema,store,contact}/**"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          paths: DATABASE_PATHS,
+          patterns: [
+            DATABASE_PATTERN,
+            READONLY_PSQL_PATTERN,
+            {
+              group: [
+                "@/lib/career/engine",
+                "@/lib/career/engine/*",
+                "@/lib/career/print",
+                "@/lib/career/print/*",
+                "@fontsource/*",
+                "@fontsource-variable/*",
+                "**/fonts/*",
+              ],
+              message: "Career storage and schema modules must not load the rendering engine, printer or fonts.",
+              allowTypeImports: false,
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        DATABASE_DYNAMIC,
+        READONLY_PSQL_DYNAMIC,
+        {
+          selector: "ImportExpression[source.value=/(career\\/(engine|print)|@fontsource|\\/fonts\\/)/]",
+          message: "Career storage and schema modules must not load rendering dependencies.",
+        },
+      ],
     },
   },
   {

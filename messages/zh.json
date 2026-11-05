@@ -1957,6 +1957,7 @@
     },
     "tabFile": "保存到 {file}，注释保留。",
     "tabTitle": {
+      "career": "职业档案",
       "schedule": "处理时间",
       "search": "搜索条件",
       "channels": "采集通道",
@@ -1972,6 +1973,7 @@
       "writer": "申请写作"
     },
     "tabDescription": {
+      "career": "可选的本机档案、手动编辑和历史。关闭功能会保留本机数据。",
       "schedule": "每天几点跑哪几轮，错过了怎么办。",
       "search": "搜什么、在哪搜、回看多久。",
       "channels": "每个来源的开关、预算、节流和 LinkedIn 级联顺序。",
@@ -2058,6 +2060,7 @@
       "languageTag": "语言代码，如 en、zh、de、pt-BR"
     },
     "sections": {
+      "career_general": "职业档案与上限",
       "schedule_general": "基本",
       "cycle_weekday_morning": "工作日早轮",
       "cycle_weekday_evening": "工作日晚轮",
@@ -2202,6 +2205,33 @@
       "lockedHint": "已锁定：请手动编辑配置文件来修改。"
     },
     "fields": {
+      "career_enabled": {
+        "label": "开启职业档案"
+      },
+      "career_timeout": {
+        "label": "请求超时（秒）"
+      },
+      "career_grace": {
+        "label": "过期余量（秒）"
+      },
+      "career_queue": {
+        "label": "排队超时（秒）"
+      },
+      "career_entries": {
+        "label": "最大条目数"
+      },
+      "career_bullets": {
+        "label": "每条目的要点数"
+      },
+      "career_wordings": {
+        "label": "每条文本的写法数"
+      },
+      "career_chars": {
+        "label": "每条文本的字符数"
+      },
+      "career_versions": {
+        "label": "保留版本数"
+      },
       "timezone": {
         "label": "时区",
         "hint": "IANA 时区，下面的 cron 按它解释，例如 Europe/Berlin。"
@@ -7911,6 +7941,152 @@
     "rebuilt": "已重建 {count} 个岗位投影。",
     "checked": "投影存在差异的岗位：{count}。",
     "migrated": "数据库迁移已完成。"
+  },
+  "career": {
+    "title": "职业档案",
+    "description": "在本机维护职业档案、多种写法和版本历史。此页面只支持手动编辑，不调用 AI。",
+    "disabled": "职业档案尚未开启。",
+    "settings": "打开工作流设置",
+    "entries": "{count, plural, other {# 个条目}}",
+    "updated": "最后更新：{time}",
+    "open": "编辑职业档案",
+    "empty": "职业档案为空，添加条目开始编辑。",
+    "save": "保存档案",
+    "saveContact": "保存联系方式",
+    "saved": "已保存",
+    "saving": "保存中…",
+    "reload": "重新加载",
+    "history": "版本历史",
+    "noHistory": "暂无历史版本。",
+    "refresh": "刷新版本",
+    "diff": "与当前档案对比",
+    "restore": "恢复此版本",
+    "diffTitle": "所选版本 → 当前档案",
+    "added": "新增",
+    "removed": "删除",
+    "unchanged": "未变",
+    "contact": "联系方式",
+    "contactNote": "只存本机，不发给 AI；所在地的城市名可能随经历地点发出。此手动编辑页面不调用 AI。",
+    "delete": "删除数据",
+    "deleteNote": "已有备份、恢复前保留的目录和已发给 AI 服务商的内容不受影响。恢复旧备份可能带回之后删除的数据。",
+    "clearHistory": "清空历史",
+    "deleteProfile": "删除全部职业档案数据",
+    "confirm": "确认删除",
+    "cancel": "取消",
+    "add": "添加",
+    "remove": "删除",
+    "addWording": "另一种写法",
+    "primary": "主写法",
+    "setPrimary": "设为主写法",
+    "deleteWording": "删除写法",
+    "wording": "写法 {number}",
+    "pii": "档案可能含有邮箱或电话号码。用于其他场景前请检查；这不会阻止保存。",
+    "listHint": "每行一个值。",
+    "dateHint": "YYYY、YYYY-MM 或 present。",
+    "unsaved": "档案有未保存的修改，请先保存再恢复历史版本。",
+    "fields": {
+      "headline": "标题",
+      "summary": "简介",
+      "company": "公司",
+      "url": "网址",
+      "location": "地点",
+      "start": "开始日期",
+      "end": "结束日期",
+      "role": "职位",
+      "bullets": "要点",
+      "stack": "技术栈",
+      "name": "名称",
+      "tagline": "项目介绍",
+      "school": "学校",
+      "degree": "学位",
+      "issuer": "颁发机构",
+      "date": "日期",
+      "level": "水平",
+      "code": "语言代码",
+      "cefr": "CEFR 等级",
+      "group": "分组",
+      "items": "条目",
+      "years": "年数",
+      "title": "标题",
+      "text": "正文",
+      "layout": "布局",
+      "side": "位置",
+      "kind": "类型",
+      "heading": "标题",
+      "sub": "副标题",
+      "tags": "标签",
+      "lang": "语言",
+      "label": "标签",
+      "address": "地址",
+      "email": "邮箱",
+      "phone": "电话",
+      "work_auth": "工作许可",
+      "availability": "到岗时间",
+      "links": "联系链接"
+    },
+    "sections": {
+      "experience": "经历",
+      "projects": "项目",
+      "education": "教育",
+      "certifications": "证书",
+      "skills": "技能",
+      "languages": "语言",
+      "approach": "工作方法",
+      "custom_sections": "自定义章节"
+    },
+    "options": {
+      "list": "列表",
+      "grid": "网格",
+      "tags": "标签",
+      "main": "主栏",
+      "aside": "侧栏",
+      "entry": "条目",
+      "text": "正文",
+      "bullet": "要点",
+      "tag": "标签"
+    },
+    "notCreated": "职业档案尚未创建，添加条目开始编辑。",
+    "addField": "添加{label}",
+    "removeField": "删除{label}",
+    "sectionEntry": "{section} {number}",
+    "nouns": {
+      "experience": "经历",
+      "projects": "项目",
+      "education": "教育经历",
+      "certifications": "证书",
+      "skills": "技能组",
+      "languages": "语言",
+      "approach": "工作方法",
+      "custom_sections": "自定义章节",
+      "headline": "标题",
+      "summary": "简介",
+      "sub": "副标题",
+      "text": "正文",
+      "tagline": "项目介绍",
+      "bullets": "要点",
+      "items": "技能",
+      "customItems": "条目",
+      "links": "联系链接"
+    },
+    "clearHistoryTitle": "清空职业档案历史？",
+    "clearHistoryDescription": "此操作会永久删除本机所有职业档案历史版本，当前档案和联系方式会保留。已有备份、恢复前保留的目录和已发给 AI 服务商的内容不受影响；恢复旧备份可能带回已删除的版本。",
+    "deleteProfileTitle": "删除全部职业档案数据？",
+    "deleteProfileDescription": "此操作会永久删除本机职业档案、联系方式和版本历史。已有备份、恢复前保留的目录和已发给 AI 服务商的内容不受影响；恢复旧备份可能带回已删除的数据。",
+    "errors": {
+      "profileInvalid": "职业档案无法读取或包含无效字段，请检查后重试。",
+      "contactInvalid": "联系方式无法读取或包含无效字段，请检查后重试。",
+      "unknownId": "有档案条目已无法识别，请重新加载页面后再编辑。",
+      "limits": "档案超出条目、写法或文字限制，请精简内容或在设置中调整上限。",
+      "historyInvalid": "版本历史无法读取，请刷新版本后重试。",
+      "versionMissing": "此版本已不可用，请刷新版本列表。",
+      "writeFailed": "更改无法写入，请重试。",
+      "stale": "文件已被修改，请重新加载后再保存。",
+      "disabled": "职业档案已关闭，请在工作流设置中开启后继续。",
+      "confirmationRequired": "请先确认删除操作。",
+      "requestFailed": "请求未完成，请重试。",
+      "historyFailed": "档案更改已写入，但未能创建历史版本。",
+      "generic": "操作未完成，请重试。"
+    }
   },
   "writer": {
     "pageTitle": "申请回答 · {title} · {company}",

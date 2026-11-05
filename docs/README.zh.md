@@ -1,5 +1,7 @@
 # 文档
 
+- [职业档案](career-profile.zh.md)：可选的本机手动编辑、多写法和历史版本。
+
 [English](README.md) | [中文](README.zh.md)
 
 文中的 `ai.yaml` 或 `data/config/ai.yaml` 指你自己在 `data/config/` 里的那份；`config/` 里随产品发布的默认配置是只读的（见 [configuration.zh.md](configuration.zh.md)）。大多数设置也能在设置页或其"高级"标签里改。
