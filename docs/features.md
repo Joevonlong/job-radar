@@ -1,5 +1,7 @@
 # Features and screenshots
 
+- [Career profile](career-profile.md): optional local manual editing, wordings and history.
+
 [English](features.md) | [中文](features.zh.md)
 
 ## What it is

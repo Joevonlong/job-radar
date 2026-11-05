@@ -1957,6 +1957,7 @@
     },
     "tabFile": "Saved to {file}; comments are kept.",
     "tabTitle": {
+      "career": "Career profile",
       "schedule": "Schedule",
       "search": "Search criteria",
       "channels": "Collection channels",
@@ -1972,6 +1973,7 @@
       "writer": "Application writer"
     },
     "tabDescription": {
+      "career": "Optional local profile, manual editing and history. Turning it off retains existing data.",
       "schedule": "Which cycles run when, and what happens when one is missed.",
       "search": "What to search for, where, and how far back.",
       "channels": "Switch, budget and throttling of every source, and the LinkedIn cascade order.",
@@ -2058,6 +2060,7 @@
       "languageTag": "A language code such as en, zh, de or pt-BR"
     },
     "sections": {
+      "career_general": "Career profile and limits",
       "schedule_general": "General",
       "cycle_weekday_morning": "Weekday morning cycle",
       "cycle_weekday_evening": "Weekday evening cycle",
@@ -2202,6 +2205,33 @@
       "lockedHint": "Locked: change it by editing the config file by hand."
     },
     "fields": {
+      "career_enabled": {
+        "label": "Enable career profile"
+      },
+      "career_timeout": {
+        "label": "Request timeout (seconds)"
+      },
+      "career_grace": {
+        "label": "Expiry margin (seconds)"
+      },
+      "career_queue": {
+        "label": "Queue timeout (seconds)"
+      },
+      "career_entries": {
+        "label": "Maximum entries"
+      },
+      "career_bullets": {
+        "label": "Bullets per entry"
+      },
+      "career_wordings": {
+        "label": "Wordings per text"
+      },
+      "career_chars": {
+        "label": "Characters per text"
+      },
+      "career_versions": {
+        "label": "Versions to keep"
+      },
       "timezone": {
         "label": "Time zone",
         "hint": "IANA time zone the cron expressions below are read in, for example Europe/Berlin."
@@ -7911,6 +7941,152 @@
     "rebuilt": "Rebuilt {count} job projections.",
     "checked": "Jobs with projection differences: {count}.",
     "migrated": "Database migrations complete."
+  },
+  "career": {
+    "title": "Career profile",
+    "description": "Keep a local career profile with alternative wordings and version history. Manual editing only; no AI is used here.",
+    "disabled": "Career profile is not enabled.",
+    "settings": "Open workflow settings",
+    "entries": "{count, plural, one {# entry} other {# entries}}",
+    "updated": "Last updated: {time}",
+    "open": "Edit career profile",
+    "empty": "Your career profile is empty. Add an entry to start.",
+    "save": "Save profile",
+    "saveContact": "Save contact details",
+    "saved": "Saved",
+    "saving": "Saving…",
+    "reload": "Reload",
+    "history": "Version history",
+    "noHistory": "No saved versions.",
+    "refresh": "Refresh versions",
+    "diff": "Compare with current",
+    "restore": "Restore this version",
+    "diffTitle": "Selected version → current profile",
+    "added": "Added",
+    "removed": "Removed",
+    "unchanged": "Unchanged",
+    "contact": "Contact details",
+    "contactNote": "Stored only on this machine, never sent to AI. The city of your location may still be sent as part of an experience’s location. This manual editor makes no AI requests.",
+    "delete": "Delete data",
+    "deleteNote": "Existing backups, before-restore directories and content already sent to an AI provider are not affected. Restoring an older backup can bring deleted data back.",
+    "clearHistory": "Clear history",
+    "deleteProfile": "Delete all career data",
+    "confirm": "Confirm deletion",
+    "cancel": "Cancel",
+    "add": "Add",
+    "remove": "Remove",
+    "addWording": "Another wording",
+    "primary": "Primary wording",
+    "setPrimary": "Set primary",
+    "deleteWording": "Delete wording",
+    "wording": "Wording {number}",
+    "pii": "This profile may contain an email or phone number. Check it before using the content elsewhere; saving is allowed.",
+    "listHint": "One value per line.",
+    "dateHint": "YYYY, YYYY-MM, or present.",
+    "unsaved": "You have unsaved profile changes. Save before restoring a version.",
+    "fields": {
+      "headline": "Headline",
+      "summary": "Summary",
+      "company": "Company",
+      "url": "URL",
+      "location": "Location",
+      "start": "Start date",
+      "end": "End date",
+      "role": "Role",
+      "bullets": "Bullets",
+      "stack": "Technology stack",
+      "name": "Name",
+      "tagline": "Tagline",
+      "school": "School",
+      "degree": "Degree",
+      "issuer": "Issuer",
+      "date": "Date",
+      "level": "Level",
+      "code": "Language code",
+      "cefr": "CEFR",
+      "group": "Group",
+      "items": "Items",
+      "years": "Years",
+      "title": "Title",
+      "text": "Text",
+      "layout": "Layout",
+      "side": "Side",
+      "kind": "Kind",
+      "heading": "Heading",
+      "sub": "Subheading",
+      "tags": "Tags",
+      "lang": "Language",
+      "label": "Label",
+      "address": "Address",
+      "email": "Email",
+      "phone": "Phone",
+      "work_auth": "Work authorization",
+      "availability": "Availability",
+      "links": "Contact links"
+    },
+    "sections": {
+      "experience": "Experience",
+      "projects": "Projects",
+      "education": "Education",
+      "certifications": "Certifications",
+      "skills": "Skills",
+      "languages": "Languages",
+      "approach": "Approach",
+      "custom_sections": "Custom sections"
+    },
+    "options": {
+      "list": "List",
+      "grid": "Grid",
+      "tags": "Tags",
+      "main": "Main",
+      "aside": "Aside",
+      "entry": "Entry",
+      "text": "Text",
+      "bullet": "Bullet",
+      "tag": "Tag"
+    },
+    "notCreated": "Your career profile has not been created yet. Add an entry to start.",
+    "addField": "Add {label}",
+    "removeField": "Remove {label}",
+    "sectionEntry": "{section} {number}",
+    "nouns": {
+      "experience": "experience",
+      "projects": "project",
+      "education": "education",
+      "certifications": "certification",
+      "skills": "skill group",
+      "languages": "language",
+      "approach": "approach",
+      "custom_sections": "custom section",
+      "headline": "headline",
+      "summary": "summary",
+      "sub": "subheading",
+      "text": "text",
+      "tagline": "tagline",
+      "bullets": "bullet",
+      "items": "skill",
+      "customItems": "item",
+      "links": "contact link"
+    },
+    "clearHistoryTitle": "Clear career history?",
+    "clearHistoryDescription": "This permanently removes all local career profile versions. The current profile and contact details remain. Existing backups, before-restore directories and content already sent to an AI provider are unaffected; restoring an older backup can bring deleted versions back.",
+    "deleteProfileTitle": "Delete all career data?",
+    "deleteProfileDescription": "This permanently removes the local career profile, contact details and version history. Existing backups, before-restore directories and content already sent to an AI provider are unaffected; restoring an older backup can bring deleted data back.",
+    "errors": {
+      "profileInvalid": "The career profile could not be read or contains invalid fields. Check the profile and try again.",
+      "contactInvalid": "The contact details could not be read or contain invalid fields. Check the details and try again.",
+      "unknownId": "A profile entry is no longer recognized. Reload the page before editing again.",
+      "limits": "The profile exceeds an entry, wording or text limit. Shorten it or adjust the maximum values in settings.",
+      "historyInvalid": "The version history could not be read. Refresh the versions and try again.",
+      "versionMissing": "This version is no longer available. Refresh the version list.",
+      "writeFailed": "The changes could not be written. Try again.",
+      "stale": "This file changed. Reload before saving again.",
+      "disabled": "Career profile is off. Enable it in workflow settings to continue.",
+      "confirmationRequired": "Confirm the deletion before continuing.",
+      "requestFailed": "The request could not be completed. Try again.",
+      "historyFailed": "Your profile changes are stored, but the history version could not be created.",
+      "generic": "Something went wrong. Try again."
+    }
   },
   "writer": {
     "pageTitle": "Application answers · {title} · {company}",

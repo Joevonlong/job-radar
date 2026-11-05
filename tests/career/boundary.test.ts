@@ -164,6 +164,11 @@ function violations(file: string, text: string): string[] {
     if (within(file, "src") && !isCareer(file) && to && isCareer(to) && !CORE_IMPORTING_CAREER[file]?.includes(to)) {
       out.push(`${file}: core imports ${to}`);
     }
+    const isStorage = ["schema", "store", "contact"].some((part) => within(file, `src/lib/career/${part}`));
+    const importsRendering = to && (within(to, ENGINE) || within(to, "src/lib/career/print") || to.includes("/fonts/"));
+    if (isStorage && (importsRendering || /@fontsource/.test(dependency.source))) {
+      out.push(`${file}: storage imports rendering dependency`);
+    }
     const isPrintTarget = to !== undefined && within(to, "src/lib/career/print");
     const isPrintConsumer = within(file, "src/career-pdf") || within(file, "src/lib/career/print") || within(file, "e2e") || file === "scripts/career-print-baseline.ts" || file === "tests/career/print-pdf.test.ts";
     if (isPrintTarget && !isPrintConsumer) out.push(`${file}: imports printing outside the PDF entry point`);
@@ -239,8 +244,8 @@ test("all source dependencies respect the career and engine boundaries", () => {
   expect(coreCareerImports(sources)).toEqual(CORE_IMPORTING_CAREER);
 });
 
-test("the core career import whitelist stays empty", () => {
-  expect(CORE_IMPORTING_CAREER).toEqual({});
+test("the core career import whitelist contains only the profile card", () => {
+  expect(CORE_IMPORTING_CAREER).toEqual({ "src/app/me/page.tsx": ["src/components/career/career-card.tsx"] });
 });
 
 test("core career import comparison rejects unlisted imports and unused whitelist entries", () => {
@@ -403,4 +408,31 @@ test("date parsing is allowed by both purity layers", async () => {
   const code = 'new Date("2026-01-01")';
   expect(violations(`${ENGINE}/probe.ts`, code)).toEqual([]);
   expect(await restricted(`${ENGINE}/probe.ts`, code)).toBe(0);
+});
+
+test("storage dependencies reject rendering imports by every syntax and relative path", async () => {
+  for (const directory of ["schema", "store", "contact"]) {
+    const file = `src/lib/career/${directory}/probe.ts`;
+    for (const specifier of [
+      "@/lib/career/engine",
+      "../engine",
+      "@/lib/career/print/print-pdf",
+      "../print/print-pdf",
+      "@fontsource/archivo",
+    ]) {
+      for (const code of allImportForms(specifier)) expect(violations(file, code)).not.toEqual([]);
+    }
+    for (const specifier of ["@/lib/career/engine", "@fontsource/archivo", ...DATABASE_SPECIFIERS]) {
+      for (const code of eslintImportForms(specifier)) expect(await restricted(file, code)).toBeGreaterThan(0);
+    }
+  }
+});
+
+test("the core profile page may import only the card and retains database restrictions", async () => {
+  const file = "src/app/me/page.tsx";
+  for (const code of allImportForms("@/components/career/career-card")) expect(violations(file, code)).toEqual([]);
+  for (const specifier of ["@/lib/career/store/profile", "@/components/career/career-editor", ...DATABASE_SPECIFIERS]) {
+    for (const code of importForms(specifier).declarations) expect(await restricted(file, code)).toBeGreaterThan(0);
+  }
+  expect(await restricted(file, 'import { CareerCard } from "@/components/career/career-card";')).toBe(0);
 });

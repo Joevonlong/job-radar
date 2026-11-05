@@ -72,6 +72,12 @@ export function defaultFigureUnits(): { scale: Record<string, number>; multiple:
   };
 }
 
+/** Shared figure units used to check evidence in independent optional features. */
+export const figureUnitsSchema = z.strictObject({
+  scale: z.record(nonEmptyString.max(12), z.number().positive().max(1e12)).default(() => defaultFigureUnits().scale),
+  multiple: z.array(nonEmptyString.max(12)).max(20).default(() => defaultFigureUnits().multiple),
+});
+
 /**
  * config/writer.yaml: the application writer and its experience library (`data/profile/stories.yaml`). Every key has a
  * default, so a missing file or section means "off" and the defaults below (a file written before a section existed keeps working).
@@ -215,12 +221,7 @@ export const writerSchema = z.strictObject({
        * Words written right after a digit that change what the figure means: `scale` multiplies it (5万 is 50,000, so it
        * matches 50,000 and not 5), `multiple` makes it a multiple (40倍), which matches only a multiple, never 40 or 40%.
        */
-      figure_units: z
-        .strictObject({
-          scale: z.record(nonEmptyString.max(12), z.number().positive().max(1e12)).default(() => defaultFigureUnits().scale),
-          multiple: z.array(nonEmptyString.max(12)).max(20).default(() => defaultFigureUnits().multiple),
-        })
-        .prefault({}),
+      figure_units: figureUnitsSchema.prefault({}),
       /** Which words count as names to check (language-independent; a name not found in the sentence's valid quotes is flagged; a sentence about the job or company may also find it in the JD or company background). */
       names: z
         .strictObject({

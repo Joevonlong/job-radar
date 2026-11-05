@@ -29,6 +29,7 @@ import { searchSchema } from "./schemas/search";
 import { setupSchema } from "./schemas/setup";
 import { trapsSchema } from "./schemas/traps";
 import { uiSchema } from "./schemas/ui";
+import { careerSchema } from "./schemas/career";
 import { writerSchema } from "./schemas/writer";
 
 /**
@@ -76,6 +77,7 @@ export const configRegistry = {
   activityLog: { file: "activity-log.yaml", location: "config", kind: "shipped", schema: activityLogSchema },
   /** Source listing baselines and relist rules (shipped, independent of filtering fingerprints). */
   jobArchive: { file: "job-archive.yaml", location: "config", kind: "shipped", schema: jobArchiveSchema },
+  career: { file: "career.yaml", location: "config", kind: "user", schema: careerSchema },
   /** The application writer and the limits of the experience library; off by default, every key has a default. */
   writer: { file: "writer.yaml", location: "config", kind: "user", schema: writerSchema },
   /** Job-reply emails of one Gmail label: rules, matching and suggested changes the user confirms; off by default. */

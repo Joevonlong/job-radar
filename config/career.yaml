@@ -1,0 +1,65 @@
+# File format version.
+config_version: 2
+enabled: false
+# Maximum running time for an extraction request (reserved for extraction).
+timeout_seconds: 300
+# Margin before an abandoned running request expires.
+expiry_grace_seconds: 60
+# Maximum wait for a queued request.
+queue_timeout_seconds: 900
+# Upload and extraction limits, reserved for extraction.
+import:
+  # Accepted file extensions.
+  formats: [pdf, md, txt]
+  # Maximum uploaded file size in bytes.
+  max_file_bytes: 2000000
+  # Maximum time to read an upload.
+  upload_timeout_seconds: 30
+  # Maximum source text length.
+  max_chars: 30000
+  # Minimum source text length.
+  min_chars: 20
+  # Maximum time to parse a PDF.
+  pdf_timeout_seconds: 15
+  # Maximum PDF parser memory in megabytes.
+  pdf_max_memory_mb: 256
+  # Maximum simultaneous uploads.
+  max_concurrent_uploads: 2
+  # Days before an unreviewed draft expires.
+  draft_ttl_days: 14
+  # Maximum unreviewed drafts.
+  max_pending_drafts: 5
+  # Output token budget share at which truncation is suspected.
+  output_truncated_share: 0.95
+  # Shorter work authorization and availability values are highlighted only.
+  stored_value_min_chars: 3
+  # Title lines that must never be guessed as a person's name.
+  title_words: [Lebenslauf, Curriculum Vitae, CV, Resume, Résumé, Tabellarischer Lebenslauf]
+  # Labels that are highlighted without replacing their values.
+  sensitive_labels: [Geburtsdatum, Geburtsort, Staatsangehörigkeit, Nationalität, Familienstand, Anschrift, Date of birth, Place of birth, Nationality, Marital status, Address]
+# Limits checked whenever the career profile is saved.
+profile:
+  # Maximum number of entries across profile sections.
+  max_entries: 100
+  # Maximum bullets within one entry.
+  max_bullets_per_entry: 30
+  # Maximum alternative wordings of one text.
+  max_wordings_per_text: 10
+  # Maximum characters in a text value.
+  text_max_chars: 4000
+# Local profile version retention.
+history:
+  # Maximum versions kept, oldest removed first.
+  keep_versions: 50
+# Evidence verification limits, reserved for extraction.
+evidence:
+  # Minimum supporting quote length.
+  min_quote_chars: 4
+  # Maximum supporting quote length.
+  quote_max_chars: 160
+  # Figure units use the same scale and multiple defaults as writer.yaml.
+  figure_units:
+    # Magnitude suffixes mapped to their numeric scale.
+    scale: { 万: 10000, 萬: 10000, 亿: 100000000, 億: 100000000, 千: 1000, thousand: 1000, tausend: 1000, m: 1000000, mn: 1000000, mio: 1000000, million: 1000000, millionen: 1000000, b: 1000000000, bn: 1000000000, mrd: 1000000000, billion: 1000000000, milliarden: 1000000000 }
+    # Suffixes expressing a multiple rather than a magnitude.
+    multiple: [倍, x]

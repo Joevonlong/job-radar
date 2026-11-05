@@ -1,5 +1,7 @@
 # Documentation
 
+- [Career profile](career-profile.md): optional local manual editing, wordings and history.
+
 [English](README.md) | [中文](README.zh.md)
 
 File names such as `ai.yaml` or `data/config/ai.yaml` mean your own copy in `data/config/`; the shipped defaults in

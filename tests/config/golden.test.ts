@@ -22,8 +22,9 @@ import { fixtureText, migratedDocument, overlayDocument, plainValue, shippedValu
 
 /**
  * The golden effective configs were taken with the loader of an older commit (`sha` in each file, the merge base of the
- * change that added them; see `scripts/dev/gen-config-golden.ts`). The current loader must give the same canonical
- * hashes for the same inputs, and converting each full copy to an overlay must not change them either.
+ * change that added them; see `scripts/dev/gen-config-golden.ts`). A config registered later has its own reference
+ * entry frozen when its schema is registered; the older entries retain their original hashes. The current loader must
+ * give the same canonical hashes for the same inputs, and converting each full copy to an overlay must not change them either.
  */
 interface Golden {
   sha: string;

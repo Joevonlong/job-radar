@@ -1,5 +1,7 @@
 # 功能和截图
 
+- [职业档案](career-profile.zh.md)：可选的本机手动编辑、多写法和历史版本。
+
 [English](features.md) | [中文](features.zh.md)
 
 ## 这是什么

@@ -202,3 +202,15 @@ tar -xzf data/backups/<name>.config.tgz -C .
 - **Same disk**: the backups and the database are on the same disk, so they protect against mistakes, not against a failing disk. Copy `data/backups/` somewhere else on a schedule.
 - **Permissions**: backup files and config archives are created readable by their owner only (`0600`), because they hold your whole database and your settings.
 - **Disk space**: see `ls -lh` for the size of each backup; 14 + 8 backups (plus up to 5 safety backups of each kind) is about 22 times that size or more, so keep an eye on `df -h` as the data grows.
+
+## Career profile copies
+
+The configuration archive includes the whole `data/profile/career/` directory: profile, contact details and profile
+history. Scheduled archives follow `schedule.yaml: backup.config_archive`, `keep_daily` and `keep_weekly`.
+Pre-migration system archives follow `config_archive`; pre-deploy and pre-restore archives are always made. System
+archives use `keep_system` per kind (default five); manual archives are kept until you delete them. Scheduled defaults
+retain fourteen daily and eight weekly backups; your own configured policy takes precedence.
+
+Deleting career data in the app removes neither these archives nor `data/profile.before-restore-<time>` directories.
+Restoring an older backup with configuration replaces the profile directory and can bring a profile deleted later back.
+See [Career profile](career-profile.md#delete-and-backups) for the local delete controls.

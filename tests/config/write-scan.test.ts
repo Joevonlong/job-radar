@@ -18,6 +18,9 @@ const REPO = path.resolve(import.meta.dirname, "../..");
 
 /** Writes that are under the lock: what the second check below proves. */
 const LOCKED = new Map<string, string>([
+  ["src/lib/career/store/history.ts#prune", "profile history retention under its config write lock"],
+  ["src/lib/career/store/delete.ts#clearCareerHistory", "removes history under the profile and config write locks"],
+  ["src/lib/career/store/delete.ts#deleteCareerData", "removes career data under the profile, contact and config write locks"],
   ["src/lib/config/atomic.ts#commitConfigFile", "the commit of a config or profile file (it also refuses at run time outside the lock)"],
   ["src/lib/config/atomic.ts#publishNoReplace", "the last step of commitConfigFile"],
   ["src/lib/config/editor-backup.ts#backupConfigText", "the copy of the old text in .backup/editor/"],

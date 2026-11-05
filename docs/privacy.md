@@ -130,3 +130,19 @@ Do this when you stop using Job Radar or want to erase your job-search traces. I
 There is no function to delete a single job or application from the web interface in this version. Deleting the database
 volume (step 2) is the supported way to erase stored jobs and notes; start again with an empty one if you want to keep using
 Job Radar.
+
+## Optional career profile
+
+`career.yaml: enabled` is false by default. When enabled, manual career facts, alternative wordings and profile history
+are stored as local files under `data/profile/career/`. Contact fields live separately in `contact.yaml`, are never sent
+to an outbound service, and are overwritten without history. The local file can include an optional unused photo name.
+This release has no career extraction, generation or AI requests. The city of a contact location can also appear in
+experience text; that content may be sent by future AI features. An email or phone written into profile text is allowed
+with an advisory warning; it remains in profile history until you remove that history.
+
+The files are readable and writable by the local web process, have mode `0600` when written by the app and enter the
+configuration archive. They are not stored in long-lived database tables, do not change matching profile snapshots,
+and are not exposed over MCP. Disabling retains the data and performs no cleanup. Delete controls remove local career
+files only: backups, before-restore copies and content already sent to an AI provider remain. An older backup can
+restore data deleted later. Retention differs for scheduled, manual and system backups; see
+[Backup and restore](backup-restore.md#career-profile-copies) and [Career profile](career-profile.md).

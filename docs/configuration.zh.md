@@ -596,3 +596,19 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 `sources.yaml` 中支持的通道默认 `company_queries: true`：`linkedin.session`、`linkedin.guest`、`linkedin.brightdata`、`linkedin.apify`、`sources.arbeitsagentur`、`sources.indeed`、`sources.jobspy_google`、`sources.jsearch`、`sources.stepstone`、`sources.xing`。可在“来源 → 来源清单 → 详情”或“设置 → 通道”编辑。它允许把关注公司名外发，见[隐私](privacy.zh.md)及[查询规则与容量](sources.zh.md#关注公司查询)。“设置 → 搜索”可编辑总开关、每轮上限、间隔和结果上限。
 
 **回退：**只需停用时设 `watched_company_queries.enabled: false`。启动旧代码前，从用户 `data/config/search.yaml` 删除整个 `watched_company_queries` 块，从 `data/config/sources.yaml` 删除所有 `company_queries` 键（包括设置保存时写入的不支持通道块）；再用旧版 `pnpm config:check` 验证。旧版严格 schema 会拒绝新键。保留数据库历史和原始岗位。
+
+## 职业档案（`career.yaml`）
+
+默认关闭，独立于 `writer.enabled`。在**设置 → 工作流**中开启后，通过“我的画像”卡片进入。
+手动编辑、多写法、历史和删除见[职业档案](career-profile.zh.md)。关闭保留数据，此编辑器不提供 AI 操作。
+
+`profile.max_entries`、`profile.max_bullets_per_entry`、`profile.max_wordings_per_text` 和 `profile.text_max_chars`
+约束保存；`history.keep_versions` 限制档案历史，联系方式没有历史。schema 为每个键提供默认值，未知键会被拒绝。
+`config_version: 2` 使用标准分层覆盖格式；初始完整文件格式为版本 1，可用
+`pnpm config:migrate --write --convert-overlays` 转成覆盖层。
+
+以下提取配置为保留字段，本版本不会执行提取：顶层 `timeout_seconds`、`expiry_grace_seconds`、`queue_timeout_seconds`；
+`import` 下的 `formats`、`max_file_bytes`、`upload_timeout_seconds`、`max_chars`、`min_chars`、`pdf_timeout_seconds`、
+`pdf_max_memory_mb`、`max_concurrent_uploads`、`draft_ttl_days`、`max_pending_drafts`、`output_truncated_share`、
+`stored_value_min_chars`、`title_words`、`sensitive_labels`；`evidence` 下的 `min_quote_chars`、`quote_max_chars`、
+`figure_units`。数字单位共用申请写作的 scale 和 multiple 默认值。

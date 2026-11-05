@@ -814,3 +814,21 @@ larger sets use the job-scoped CTE (1–100000 jobs). All keys are required. Thi
 Supported channel blocks in `sources.yaml` have `company_queries: true` by default: `linkedin.session`, `linkedin.guest`, `linkedin.brightdata`, `linkedin.apify`, `sources.arbeitsagentur`, `sources.indeed`, `sources.jobspy_google`, `sources.jsearch`, `sources.stepstone` and `sources.xing`. Change them on Sources → Registry → Details, or Settings → Channels. These switches authorize sending watched company names to the provider; see [Privacy](privacy.md) and [query behavior and capacity](sources.md#watched-company-queries). Settings → Search edits the global switch, cap, interval and result limit.
 
 **Rollback:** to stop queries, set `watched_company_queries.enabled: false`. Before starting older code, remove the entire `watched_company_queries` block from `data/config/search.yaml` and every `company_queries` key from user `data/config/sources.yaml` (including any unsupported blocks written by a settings save). Run the older build's `pnpm config:check`; its strict schemas reject the new keys. Keep database history and raw postings.
+
+## Career profile (`career.yaml`)
+
+Off by default and independent of `writer.enabled`. Enable it under **Settings → Workflow**, then use the card on
+My profile. See [Career profile](career-profile.md) for manual editing, wordings, history and deletion. Turning it off
+keeps the files. No AI operation is provided by this editor.
+
+`profile.max_entries`, `profile.max_bullets_per_entry`, `profile.max_wordings_per_text` and `profile.text_max_chars`
+limit saves. `history.keep_versions` limits profile history; contact details have none. The schema supplies defaults for
+every key and rejects unknown keys. `config_version: 2` uses the standard layered overlay format; the initial whole-file
+format is version 1 and can be converted with `pnpm config:migrate --write --convert-overlays`.
+
+The reserved extraction settings are `timeout_seconds`, `expiry_grace_seconds`, `queue_timeout_seconds`,
+`import.formats`, `max_file_bytes`, `upload_timeout_seconds`, `max_chars`, `min_chars`, `pdf_timeout_seconds`,
+`pdf_max_memory_mb`, `max_concurrent_uploads`, `draft_ttl_days`, `max_pending_drafts`, `output_truncated_share`,
+`stored_value_min_chars`, `title_words`, `sensitive_labels` (all under `import` after `formats`), and
+`evidence.min_quote_chars`, `quote_max_chars`, `figure_units` (all under `evidence`). Figure units share the writer's
+scale and multiple defaults. These settings reserve the format for extraction; this version does not execute it.
