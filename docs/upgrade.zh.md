@@ -2,7 +2,7 @@
 
 [English](upgrade.md) | [中文](upgrade.zh.md)
 
-Job Radar 从一个 git 检出目录运行。发布版本是签名的 git 标签 `vX.Y.Z`（见[更新日志](../CHANGELOG.md)）。如果你只是使用它，**请停留在发布标签上**，从一个标签升级到下一个；`main` 是开发分支，两次发布之间可能变化。
+Job Radar 从一个 git 检出目录运行。发布版本是签名的 git 标签 `vX.Y.Z`（见[更新日志](../CHANGELOG.md)）。从 3.0.0 起，只使用 Job Radar 的用户跟随 **`stable`**，获取最新发布。发布标签仍可使用。`main` 是开发分支，两次发布之间可能变化。
 
 ## 岗位搜索行为变化
 
@@ -14,17 +14,22 @@ Job Radar 从一个 git 检出目录运行。发布版本是签名的 git 标签
 
 ## 升级到某个发布版本
 
-```bash
-git status                                   # 必须是干净的（data/ 和 .env 被 git 忽略，没有关系）
-scripts/ops/deploy.sh --ref v2.0.0 --dry-run # 先看它会做什么，不改任何东西
-scripts/ops/deploy.sh --ref v2.0.0           # 正式升级
-```
+先读目标版本的更新日志。需要手动做的事会写在里面。运行 `git status`，确认检出目录干净（`data/` 和 `.env` 被 git 忽略，没有关系）。
 
-把 `v2.0.0` 换成你想要的版本（`git fetch --tags && git tag --list 'v*'` 列出所有版本）。先读那个版本的更新日志：它会写明你是否需要手动做什么。
+从 3.0.0 起，可以选三个渠道：
 
-`--ref` 可以是标签或分支。检出会停在那个提交上（对标签来说 git 称之为 detached HEAD，这是正常的）。默认不加 `--ref` 时，脚本跟随当前的 `main` 或 `stable` 分支。
+- **`stable`（最新发布）：** 在 `stable` 上运行 `git pull --ff-only && scripts/ops/deploy.sh`。
+- **发布标签：** `scripts/ops/deploy.sh --ref vX.Y.Z` 部署指定版本。加 `--dry-run` 可先预览。
+  把 `vX.Y.Z` 换成目标版本（`git fetch --tags && git tag --list 'v*'` 列出所有版本）。
+  加 `--verify` 检查标签签名：`scripts/ops/deploy.sh --ref vX.Y.Z --verify`。
+  在 `stable` 上直接部署不会验证签名。
+- **`main`（开发）：** `git switch main && scripts/ops/deploy.sh`。两次发布之间可能变化。
 
-部署默认不验证签名。加 `--verify` 会先对标签运行 `git verify-tag`，无效就停止。它用的是随仓库发布的维护者公钥 [`signing-key.pub`](signing-key.pub)（`allowed_signers` 格式；指纹 `SHA256:HHRRfExpbUjcK0/pdc5E1qf94ogkREVkt9+1VP58JQc`，[SECURITY.md](../SECURITY.md) 里也有）；你自己用 `git config gpg.ssh.allowedSignersFile` 设置的公钥列表优先。有签名密钥时发布会签名，见 [RELEASING.md](../RELEASING.md)。手动检查：`git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=docs/signing-key.pub tag -v v2.0.0`。
+`--ref` 可以是标签或分支。检出会停在那个提交上（对标签来说，git 称之为 detached HEAD，这是正常的）。不加 `--ref` 或 `--branch` 时，脚本跟随当前分支：在 `stable` 上拉取 `stable`，在 `main` 上拉取 `main`。其他分支或 detached HEAD 会被拒绝。脚本会建议用 `--ref <tag>`；只有存在 `origin/stable` 时，才会建议 `git switch stable`。`--skip-pull` 仍按当前代码部署，不拉取。
+
+部署后的文件树与 `v<package.json version>` 标签不同时，脚本会显示“development build”提示，并说明比标签多了多少个提交。对这样的构建，存在 `origin/stable` 时，还会显示如何切回发布渠道。
+
+部署默认不验证签名。加 `--verify` 会先对标签运行 `git verify-tag`，无效就停止。它用的是随仓库发布的维护者公钥 [`signing-key.pub`](signing-key.pub)（`allowed_signers` 格式；指纹 `SHA256:HHRRfExpbUjcK0/pdc5E1qf94ogkREVkt9+1VP58JQc`，[SECURITY.md](../SECURITY.md) 里也有）；你自己用 `git config gpg.ssh.allowedSignersFile` 设置的公钥列表优先。有签名密钥时发布会签名，见 [RELEASING.md](../RELEASING.md)。手动检查：`git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=docs/signing-key.pub tag -v vX.Y.Z`。
 
 **从没有 config-write 步骤的版本升级：** 先运行 `git pull`（或 `git fetch --tags && git checkout --detach <标签>`），再运行新版本的 `scripts/ops/deploy.sh --skip-pull`。旧的 `deploy.sh` 自己拉取或切换时，运行的仍是旧脚本，它不认识这个目标，会在自己的第 4 步写配置，不经过第 11 步的闸门；如果已经这样跑过，再用 `--skip-pull` 运行一次新脚本。
 
@@ -146,6 +151,18 @@ scripts/ops/deploy.sh --skip-pull
 只回滚代码时，请保留新增列、索引和触发器；这项变更不需要修改配置或恢复数据库。触发器会为旧版本的源字段写入维护
 指纹，并在旧版本改变过滤结论或理由时清除相应缓存。再次升级会安全地重新评估这些结果。
 
+<a id="upgrade-to-3-0-0"></a>
+
+## 升级到 3.0.0
+
+3.0.0 发布后，按当前检出目录选择：
+
+- **停在 `v2.0.1` 标签：** 按[首次升级到发布目录](#first-upgrade-release-dir)、[出厂配置打进镜像](#跨过出厂配置打进镜像这一版的升级)和[升级期间的设置](#升级期间的设置)操作。阅读[查询运行历史](#带查询运行历史的升级)、[日期筛选](#带日期筛选的升级)和[变更指纹](#带变更指纹的升级)的说明。适用时，还要做 [Linux 所有权修复](#linux从容器以-root-运行的旧版本升级)。
+- **跟随 `main`：** 3.0.0 发布后，运行 `git fetch origin && git switch stable`，再运行 `scripts/ops/deploy.sh`。开发者可留在 `main`。
+- **已使用发布目录：** 在 `stable` 或 `main` 上直接运行 `scripts/ops/deploy.sh`。detached HEAD 则用 `scripts/ops/deploy.sh --ref v3.0.0`。
+
+要退回 `v2.0.1`，按[回滚](#回滚)和[降级到发布目录之前的版本](#downgrade-pre-release-dir)操作，包括其中的数据库和配置备份说明。
+
 ## 回滚
 
 **回滚到用户配置文件变成叠加层之前的版本：** 旧代码不接受它们。回去之前运行 `pnpm config:migrate --to-full --write`，顺序见 [deploy.zh.md](deploy.zh.md#5-回滚)。
@@ -206,7 +223,7 @@ scripts/ops/restore.sh data/backups/<那个 pre-deploy 备份> --target jobradar
 如果你离开的那个版本迁移过某个配置文件，旧代码会认为它“太新”（`pnpm run doctor` 的 `config.layers` 会提示）：把 `data/config/.backup/<时间戳>/` 里的原件复制回 `data/config/`。
 旧版本即使配置版本未变也会拒绝未知键：启动旧代码前，从 `schedule.yaml` 里删掉自己加的 `config_writes` 块，以及本版本之前的构建写进去的 `deploy.config_write_lock_*` 键。
 
-更多见 [deploy.zh.md](deploy.zh.md)（第 5 节）和 [backup-restore.zh.md](backup-restore.zh.md)。要重新跟随 `main`：`git switch main && scripts/ops/deploy.sh`。
+更多见 [deploy.zh.md](deploy.zh.md)（第 5 节）和 [backup-restore.zh.md](backup-restore.zh.md)。从 3.0.0 起，要回到最新发布，运行 `git switch stable && scripts/ops/deploy.sh`，或用 `--ref <tag>` 部署最新标签。开发者仍可用 `git switch main && scripts/ops/deploy.sh` 跟随 `main`。
 
 <a id="downgrade-pre-config-write-step"></a>
 

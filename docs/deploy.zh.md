@@ -62,7 +62,9 @@ scripts/ops/deploy.sh
 | 12 prune | 先释放部署锁、删除第 6 步的构建上下文。然后清理 Docker：构建缓存按最近使用只留 `schedule.yaml: deploy.build_cache_keep_gb`（`docker builder prune -f --max-used-space 5gb`），删悬空镜像（`docker image prune -f`，不带 `-a`）。从不碰数据卷，不删正在使用的镜像 | 不会让部署失败：命令出错只打印 ⚠ 继续（比如 Docker 太旧不认 `--max-used-space`） |
 | 13 doctor | `pnpm run doctor`，包括检查第 11 步未完成写入的 `config.pending`；实际部署后，如果部署的文件树与版本标签不同或标签不存在，会打印开发构建提示 | doctor 报错退出 2；仅告警退出 0 |
 
-选项：`--skip-pull`（不动 git，按当前代码部署，回滚用）、`--ref <标签|分支>`（部署 `v2.0.0` 这样的发布标签，而不是跟随当前分支，见 [upgrade.zh.md](upgrade.zh.md)）、`--no-backup`、`--no-prune`（跳过第 12 步的 Docker 清理）、`--no-ai-worker`（跳过第 7、10 步和第 11 步的 worker 等待）、`--no-drain`（第 8 步不等正在运行的轮次）、`--drain-timeout 秒`（代替 `deploy.drain_timeout_seconds`）、`--branch`、`--remote`、`--wait-timeout 秒`、`--settle 秒`（从 prune 前第 11 步开始计时的 worker 等待上限；0 不等）；`--help` 看全部。
+选项：`--skip-pull`（不动 git，按当前代码部署，回滚用）、`--ref <标签|分支>`（部署 `vX.Y.Z` 这样的指定发布标签，见 [upgrade.zh.md](upgrade.zh.md)）、`--no-backup`、`--no-prune`（跳过第 12 步的 Docker 清理）、`--no-ai-worker`（跳过第 7、10 步和第 11 步的 worker 等待）、`--no-drain`（第 8 步不等正在运行的轮次）、`--drain-timeout 秒`（代替 `deploy.drain_timeout_seconds`）、`--branch`、`--remote`、`--wait-timeout 秒`、`--settle 秒`（从 prune 前第 11 步开始计时的 worker 等待上限；0 不等）；`--help` 看全部。
+
+要检查标签签名，用 `scripts/ops/deploy.sh --ref vX.Y.Z --verify`；在 `stable` 或 `main` 上直接部署不验证签名。
 
 部署的设置在 `schedule.yaml` 的 `deploy` 和 `config_writes` 块，下次部署生效。部署脚本和备份脚本读 `schedule.yaml` 时和代码一样：先读用户配置 `data/config/schedule.yaml`，没有才读默认的 `config/schedule.yaml`：
 
@@ -262,9 +264,11 @@ doctor 的阈值和名字都在 `schedule.yaml`（用户配置 `data/config/` �
 
 ```bash
 scripts/ops/deploy.sh --dry-run     # 先看一眼
-scripts/ops/deploy.sh --ref v2.0.0   # 用户推荐：发布标签（见 upgrade.zh.md）
-scripts/ops/deploy.sh               # 或跟随 main：拉最新 main、备份、构建、重启、迁移、重启 ai-worker、清理 Docker 构建缓存、doctor
+scripts/ops/deploy.sh --ref vX.Y.Z  # 指定发布标签（见 upgrade.zh.md）
+scripts/ops/deploy.sh               # 从 3.0.0 起：跟随当前的 stable 或 main 分支
 ```
+
+从 3.0.0 起，用户用 `stable`（或最新发布标签）回到最新发布。开发者仍可跟随 `main`。见[发布渠道](upgrade.zh.md#升级到某个发布版本)。
 
 升级前脚本会自动做一份 `jobradar-manual-…-pre-deploy.dump` 备份（手动备份不会被自动清理）。升级期间 web 和 runner 会重启几十秒；轮次正在运行时重启 runner 会让这一轮中断，下次启动时 `catch_up` 会补跑。想避开轮次：早轮 07:00、晚轮 17:00（工作日）、周末 09:00，在两轮之间升级。
 
@@ -346,10 +350,10 @@ ai-worker 切换或配置写入。doctor 只有在当前市场实际启用了依
 ```bash
 git log --oneline -10                      # 找上一个好的提交
 git switch --detach <提交>                 # 部署前的 pre-deploy 备份名字里有日期，可以对照
-scripts/ops/deploy.sh --skip-pull          # 按当前 checkout 部署（不再拉 main）
+scripts/ops/deploy.sh --skip-pull          # 按当前 checkout 部署，不拉取
 ```
 
-之后要回到最新版本：`git switch main`，再 `scripts/ops/deploy.sh`。
+从 3.0.0 起，要回到最新发布，运行 `git switch stable`，再运行 `scripts/ops/deploy.sh`，或用 `--ref <tag>` 部署最新标签。开发者仍可用 `git switch main` 和 `scripts/ops/deploy.sh`。
 
 配置：回滚到配置分层之前的代码时，旧代码读的是 `config/`（切换前的内容），切换后在网页上的改动只在 `data/config/` 里，需要的话手工拷回 `config/`。回滚到一个迁移之前的版本时，`data/config` 里迁移过的文件对旧代码来说"版本太新"（`config.layers` ❌）：用 `data/config/.backup/<时间>/` 里的原文件替换回去。
 

@@ -64,7 +64,10 @@ Run it in the **main checkout** (not in a worktree or feature branch; by default
 | 12 prune | First releases the deploy lock and removes the build context of step 6. Then cleans up Docker: keeps the build cache by most recent use down to `schedule.yaml: deploy.build_cache_keep_gb` (`docker builder prune -f --max-used-space 5gb`), removes dangling images (`docker image prune -f`, without `-a`). Never touches data volumes and never removes images in use | Never fails the deployment: a command error just prints ⚠ and continues (for example an old Docker that does not know `--max-used-space`) |
 | 13 doctor | `pnpm run doctor`, including `config.pending` for writes that step 11 left undone; after a real deploy, a development-build notice is printed when the deployed tree differs from the version tag or the tag is missing | Doctor problems return exit 2; warnings alone return 0 |
 
-Options: `--skip-pull` (leave git alone and deploy the current code; used for rollback), `--no-backup`, `--no-prune` (skip the Docker cleanup in step 12), `--no-ai-worker` (skip steps 7 and 10 and the step 11 worker wait), `--no-drain` (do not wait for a running cycle in step 8), `--drain-timeout SECONDS` (instead of `deploy.drain_timeout_seconds`), `--ref <tag|branch>` (deploy a release tag such as `v2.0.0` instead of following the current branch, see [upgrade.md](upgrade.md)), `--branch`, `--remote`, `--wait-timeout SECONDS`, `--settle SECONDS` (maximum worker wait from the start of step 11, before config writes and prune; 0 skips it); see `--help` for all of them.
+Options: `--skip-pull` (leave git alone and deploy the current code; used for rollback), `--no-backup`, `--no-prune` (skip the Docker cleanup in step 12), `--no-ai-worker` (skip steps 7 and 10 and the step 11 worker wait), `--no-drain` (do not wait for a running cycle in step 8), `--drain-timeout SECONDS` (instead of `deploy.drain_timeout_seconds`), `--ref <tag|branch>` (deploy a specific release tag such as `vX.Y.Z`, see [upgrade.md](upgrade.md)), `--branch`, `--remote`, `--wait-timeout SECONDS`, `--settle SECONDS` (maximum worker wait from the start of step 11, before config writes and prune; 0 skips it); see `--help` for all of them.
+
+To verify a tag signature, use `scripts/ops/deploy.sh --ref vX.Y.Z --verify`; a plain deploy on `stable` or `main`
+does not verify a signature.
 
 The settings for deployment are in the `deploy` and `config_writes` blocks of `schedule.yaml` and take effect on the next deploy. The deploy and backup scripts read `schedule.yaml` the same way the code does: first the user config `data/config/schedule.yaml`, and only if it is absent the shipped default `config/schedule.yaml`:
 
@@ -314,9 +317,12 @@ of its own; see "Upgrading across the shipped config in the images" in [upgrade.
 
 ```bash
 scripts/ops/deploy.sh --dry-run     # take a look first
-scripts/ops/deploy.sh --ref v2.0.0   # recommended for users: a release tag (see upgrade.md)
-scripts/ops/deploy.sh               # or follow main:  pull latest main, back up, build, restart, migrate, restart ai-worker, prune Docker build cache, doctor
+scripts/ops/deploy.sh --ref vX.Y.Z  # a specific release tag (see upgrade.md)
+scripts/ops/deploy.sh               # from 3.0.0 on: follow the current stable or main branch
 ```
+
+From 3.0.0 on, use `stable` (or the newest release tag) for the newest release; developers can still follow `main`.
+See [release channels](upgrade.md#upgrade-to-a-release).
 
 Before upgrading the script automatically takes a `jobradar-manual-…-pre-deploy.dump` backup (manual backups are never pruned automatically). During the upgrade web and runner restart for a few tens of seconds; restarting the runner while a cycle is running interrupts that cycle, and on the next start `catch_up` re-runs it. To avoid cycles, upgrade between them: morning cycle 07:00, evening cycle 17:00 (weekdays), weekend 09:00.
 
@@ -419,10 +425,11 @@ Roll back the code:
 ```bash
 git log --oneline -10                      # find the last good commit
 git switch --detach <commit>               # the pre-deploy backup's name contains a date you can compare
-scripts/ops/deploy.sh --skip-pull          # deploy the current checkout (do not pull main again)
+scripts/ops/deploy.sh --skip-pull          # deploy the current checkout without pulling
 ```
 
-To return to the latest version afterwards: `git switch main`, then `scripts/ops/deploy.sh`.
+From 3.0.0 on, to return to the newest release afterwards: `git switch stable`, then `scripts/ops/deploy.sh`, or
+deploy the newest tag with `--ref <tag>`. Developers can still use `git switch main` and `scripts/ops/deploy.sh`.
 
 Config: when rolling back to code from before layered config, the old code reads `config/` (as it was before the switch); changes made in the web UI after the switch exist only in `data/config/`, so copy them back to `config/` by hand if needed. When rolling back to a version before a migration, files in `data/config` that were migrated are "too new" for the old code (`config.layers` ❌): replace them with the originals from `data/config/.backup/<timestamp>/`.
 
