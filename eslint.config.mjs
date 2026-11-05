@@ -13,6 +13,9 @@ const READONLY_PSQL_DYNAMIC = {
 };
 
 export const CORE_IMPORTING_CAREER = {};
+export const ENGINE_FORBIDDEN_GLOBALS = [
+  "Buffer", "process", "__dirname", "__filename", "require", "fetch", "XMLHttpRequest", "WebSocket",
+];
 
 const CAREER_PATTERN = {
   group: ["@/lib/career", "@/lib/career/*", "@/components/career", "@/components/career/*", "@/app/career", "@/app/career/*", "@/app/api/career", "@/app/api/career/*", "@/career-pdf", "@/career-pdf/*"],
@@ -36,7 +39,19 @@ const DATABASE_DYNAMIC = {
   selector: "ImportExpression[source.value=/^(drizzle-orm|postgres)(\\/.*)?$/]",
   message: DATABASE_PATHS[0].message,
 };
-const CAREER_FILES = ["src/lib/career/**", "src/components/career/**", "src/app/career/**", "src/app/api/career/**", "src/career-pdf/**", ...Object.keys(CORE_IMPORTING_CAREER)];
+/** @param {Record<string, unknown>} coreFiles */
+export function careerFiles(coreFiles) {
+  return [
+    "src/lib/career/**",
+    "src/components/career/**",
+    "src/app/career/**",
+    "src/app/api/career/**",
+    "src/career-pdf/**",
+    ...Object.keys(coreFiles).map((file) => file.replace(/[\[\]]/g, "\\$&")),
+  ];
+}
+
+const CAREER_FILES = careerFiles(CORE_IMPORTING_CAREER);
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -93,24 +108,9 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-restricted-imports": [
         "error",
         {
-          paths: [
-            {
-              name: "drizzle-orm",
-              message: "Import database packages only in src/lib/db/; use its queries or repos elsewhere.",
-              allowTypeImports: false,
-            },
-            {
-              name: "postgres",
-              message: "Import database packages only in src/lib/db/; use its queries or repos elsewhere.",
-              allowTypeImports: false,
-            },
-          ],
+          paths: DATABASE_PATHS,
           patterns: [
-            {
-              group: ["drizzle-orm/*"],
-              message: "Import database packages only in src/lib/db/; use its queries or repos elsewhere.",
-              allowTypeImports: false,
-            },
+            DATABASE_PATTERN,
             READONLY_PSQL_PATTERN,
             CAREER_PATTERN,
           ],
@@ -118,10 +118,7 @@ const eslintConfig = defineConfig([
       ],
       "no-restricted-syntax": [
         "error",
-        {
-          selector: "ImportExpression[source.value=/^(drizzle-orm|postgres)(\\/.*)?$/]",
-          message: "Import database packages only in src/lib/db/; use its queries or repos elsewhere.",
-        },
+        DATABASE_DYNAMIC,
         READONLY_PSQL_DYNAMIC,
         CAREER_DYNAMIC,
       ],
@@ -168,7 +165,7 @@ const eslintConfig = defineConfig([
         { selector: "CallExpression[callee.name='require']", message: "The engine uses static imports only." },
         { selector: "TSImportEqualsDeclaration", message: "The engine uses static imports only." },
       ],
-      "no-restricted-globals": ["error", "Buffer", "process", "__dirname", "require"],
+      "no-restricted-globals": ["error", ...ENGINE_FORBIDDEN_GLOBALS],
     },
   },
   globalIgnores([".next/**", "out/**", "build/**", "dist/**", "next-env.d.ts", "playwright-report/**", "test-results/**", ".local-demo/**", "data/**"]),
