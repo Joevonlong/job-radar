@@ -9,6 +9,7 @@ import {
   type SearchConfig,
 } from "@/lib/config";
 import { getDb } from "@/lib/db/client";
+import { placeGeo } from "@/lib/market/places";
 import { loadPipeline } from "@/lib/market";
 
 import { issuePaths } from "../ats/envelope";
@@ -103,7 +104,7 @@ export function createHandpickedChannel(deps: HandpickedDeps = defaultHandpicked
         watchedCompanies: inputs.interests.watched_companies,
         pipeline: inputs.pipeline,
       });
-      const places = buildPlaces({ locations: inputs.search.locations, cityAliases: inputs.pipeline.filter.city_aliases, remoteScope: inputs.search.remote_scope, country: inputs.country });
+      const places = buildPlaces({ locations: inputs.search.locations, geo: placeGeo(inputs.pipeline), remoteScope: inputs.search.remote_scope, country: inputs.country });
       const known = knownBoardKeys(inputs.companies);
 
       ctx.signal.throwIfAborted();

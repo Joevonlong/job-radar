@@ -1,6 +1,7 @@
 import type { PipelineConfig, PreferencesConfig } from "@/lib/config";
 import type { GermanLevel, JobLocation, JobSalary } from "@/lib/domain/types";
 import { scopeCountries, scopeWidePatterns } from "@/lib/market/remote-scope";
+import { canonicalCity, citySpellings, placeGeo } from "@/lib/market/places";
 import type { Market } from "@/lib/market/types";
 import { buildBlacklistedCompanyKeys, buildWatchedCompanyKeys, isCompanyExcluded, isCompanyWatched } from "@/lib/companies/marks";
 import { visaRulesFor } from "@/lib/visa/rules";
@@ -156,31 +157,24 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
   const market: Market = pipeline.market;
   const transliterations = market.transliterations;
 
-  // spelling (folded) -> canonical name, for every city of city_aliases
-  const canonicalOf = new Map<string, string>();
-  const spellingsOf = new Map<string, string[]>();
-  for (const [canonical, aliases] of Object.entries(cfg.city_aliases)) {
-    const names = [canonical, ...aliases];
-    spellingsOf.set(canonical, names);
-    for (const name of names) canonicalOf.set(foldText(name), canonical);
-  }
-  const spellings = (name: string): string[] => spellingsOf.get(canonicalOf.get(foldText(name)) ?? "") ?? [name];
+  const geo = placeGeo(pipeline);
+  const spellings = (name: string): string[] => citySpellings(name, geo);
 
   const metroOf = new Map<string, string[]>();
   for (const [city, towns] of Object.entries(cfg.metro_areas)) {
-    const key = foldText(canonicalOf.get(foldText(city)) ?? city);
+    const key = foldText(canonicalCity(city, geo));
     metroOf.set(key, [...(metroOf.get(key) ?? []), ...towns]);
   }
   const regionsOf = new Map<string, string[]>();
   for (const [city, regions] of Object.entries(cfg.metro_regions)) {
-    const key = foldText(canonicalOf.get(foldText(city)) ?? city);
+    const key = foldText(canonicalCity(city, geo));
     regionsOf.set(key, [...(regionsOf.get(key) ?? []), ...regions]);
   }
 
   const allowed = new Set<string>();
   const regions = new Set<string>();
   for (const location of preferences.locations) {
-    const canonical = canonicalOf.get(foldText(location)) ?? location;
+    const canonical = canonicalCity(location, geo);
     const addAllowed = (name: string): void => {
       allowed.add(foldText(name));
       allowed.add(foldTransliterated(name, transliterations));
