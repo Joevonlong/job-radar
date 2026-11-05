@@ -400,6 +400,13 @@
       "when": 1793800528164,
       "tag": "0056_control_requests_payload_job",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1793921158832,
+      "tag": "0057_career_extract_kind",
+      "breakpoints": true
     }
   ]
 }

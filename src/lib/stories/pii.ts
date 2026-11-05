@@ -40,3 +40,29 @@ export function findPiiIn(texts: readonly string[]): PiiKind[] {
   const kinds = new Set(texts.flatMap((text) => findPii(text)));
   return (["email", "phone"] as const).filter((kind) => kinds.has(kind));
 }
+
+export interface PiiSpan {
+  kind: PiiKind | "maybe_phone";
+  start: number;
+  end: number;
+}
+
+/** Résumé dates and grouped amounts are protected only for outbound scrubbing; story warnings retain their behavior. */
+export function findPiiSpans(text: string): PiiSpan[] {
+  const spans: PiiSpan[] = [...text.matchAll(new RegExp(EMAIL.source, "gu"))].map((match) => ({
+    kind: "email", start: match.index, end: match.index + match[0].length,
+  }));
+  const dates = /(?<!\d)(?:\(?[1-9]\d{3}\/\d{2}\s*[-–—]\s*[1-9]\d{3}\/\d{2}\)?|\(?[1-9]\d{3}\s*[-–—]\s*[1-9]\d{3}\)?|[1-9]\d{3}-(?:0[1-9]|1[0-2])|(?:0?[1-9]|1[0-2])\/[1-9]\d{3}|(?:0?[1-9]|[12]\d|3[01])\/(?:0?[1-9]|1[0-2])\/[1-9]\d{3})(?!\d)/gu;
+  const characters = text.split("");
+  for (const match of text.matchAll(dates)) characters.fill("x", match.index, match.index + match[0].length);
+  const masked = characters.join("");
+  for (const match of masked.matchAll(DIGIT_RUN)) {
+    let run = match[0].trimEnd();
+    if (run.startsWith("(") && text[match.index + run.length] === ")" && (run.match(/\(/g)?.length ?? 0) > (run.match(/\)/g)?.length ?? 0)) run += ")";
+    const digits = run.replace(/\D/g, "");
+    if (digits.length < 8) continue;
+    if (/^[1-9]\d{0,2}(?:[  ]\d{3})+$/.test(run)) continue;
+    spans.push({ kind: looksLikePhone(run) ? "phone" : "maybe_phone", start: match.index, end: match.index + run.length });
+  }
+  return spans.sort((a, b) => a.start - b.start);
+}

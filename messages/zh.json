@@ -899,7 +899,14 @@
         "aborted": "AI worker 被停止，文字已清除，请重试。",
         "invalid_payload": "请求无法读取，请重试。",
         "handler_error": "草稿无法保存，请重试。",
-        "no_handler": "AI worker 还不认识这种请求：更新后需要重启它。"
+        "no_handler": "AI worker 还不认识这种请求：更新后需要重启它。",
+        "scrub_mismatch": "确认后联系方式发生了变化。请重新检查预览后再试。",
+        "contact_unreadable": "无法读取联系方式。请检查本机文件后再试。",
+        "contact_invalid": "联系方式格式不正确。请检查本机文件后再试。",
+        "profile_invalid": "职业档案格式不正确。请检查后再试。",
+        "deleted": "职业档案已删除，此请求已取消。",
+        "draft_write_failed": "无法保存提取草稿，请重试。",
+        "handler_failed": "职业档案提取失败，请重试。"
       }
     }
   },
@@ -1426,7 +1433,14 @@
           "unknown": "失败",
           "score_profile_incomplete": "打分没有开始：画像不完整，缺少简介（summary）和技能（skills）。在“我的画像”里至少填一项后再打分",
           "score_ai_unavailable": "打分没有开始：AI 不可用（provider 都在冷却、超额或没有登录），见 /sources 的 AI 卡片",
-          "quota_guard": "打分没有开始：已达 Job Radar 的 AI 用量上限（只统计 Job Radar 自己的调用）。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}"
+          "quota_guard": "打分没有开始：已达 Job Radar 的 AI 用量上限（只统计 Job Radar 自己的调用）。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}",
+          "scrub_mismatch": "确认后联系方式发生了变化。请重新检查预览后再试。",
+          "contact_unreadable": "无法读取联系方式。请检查本机文件后再试。",
+          "contact_invalid": "联系方式格式不正确。请检查本机文件后再试。",
+          "profile_invalid": "职业档案格式不正确。请检查后再试。",
+          "deleted": "职业档案已删除，此请求已取消。",
+          "draft_write_failed": "无法保存提取草稿，请重试。",
+          "handler_failed": "职业档案提取失败，请重试。"
         }
       },
       "actionBar": {
@@ -3435,6 +3449,13 @@
       },
       "reasoning_effort_story_extract": {
         "label": "推理强度：提取素材"
+      },
+      "task_career_extract": {
+        "label": "职业档案提取",
+        "hint": "从确认的文本中提取职业档案，不搜索网页。"
+      },
+      "reasoning_effort_career_extract": {
+        "label": "推理强度：职业档案提取"
       }
     },
     "control": {
@@ -3496,7 +3517,8 @@
           "writer_job": "申请回答",
           "models_sync": "刷新模型列表",
           "story_extract": "提取素材",
-          "writer_fit": "申请契合要点"
+          "writer_fit": "申请契合要点",
+          "career_extract": "职业档案提取"
         },
         "status": {
           "pending": "排队中",
@@ -3528,7 +3550,14 @@
           "rescore_ai_unavailable": "重打没有开始：AI 不可用（provider 都在冷却、超额或没有登录），见 /sources 的 AI 卡片",
           "score_profile_incomplete": "打分没有开始：画像不完整，缺少简介（summary）和技能（skills）。在“我的画像”里至少填一项",
           "score_ai_unavailable": "打分没有开始：AI 不可用（provider 都在冷却、超额或没有登录），见 /sources 的 AI 卡片",
-          "quota_guard": "没有执行：已达 Job Radar 的 AI 用量上限（只统计 Job Radar 自己的调用）。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}"
+          "quota_guard": "没有执行：已达 Job Radar 的 AI 用量上限（只统计 Job Radar 自己的调用）。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}",
+          "scrub_mismatch": "确认后联系方式发生了变化。请重新检查预览后再试。",
+          "contact_unreadable": "无法读取联系方式。请检查本机文件后再试。",
+          "contact_invalid": "联系方式格式不正确。请检查本机文件后再试。",
+          "profile_invalid": "职业档案格式不正确。请检查后再试。",
+          "deleted": "职业档案已删除，此请求已取消。",
+          "draft_write_failed": "无法保存提取草稿，请重试。",
+          "handler_failed": "职业档案提取失败，请重试。"
         },
         "scoreResult": "打分完成：{scored} 条成功，{failed} 条失败",
         "timeBudget": "到了时间预算，还剩 {remaining} 条没打分。",
@@ -4034,7 +4063,8 @@
         "salary_lookup": "查薪资",
         "company_research": "公司背景",
         "write": "申请写作",
-        "story_extract": "提取素材"
+        "story_extract": "提取素材",
+        "career_extract": "职业档案提取"
       },
       "details": "详细统计 →"
     },
@@ -4480,7 +4510,14 @@
       "invalid_payload": "请求格式不对",
       "unknown": "失败",
       "quota_guard": "已达 Job Radar 的 AI 用量上限，这个 provider 暂停使用。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}",
-      "backfill_over_limit": "执行前补抓上限已改变（最多 {max} 小时），请缩小范围后重新提交。"
+      "backfill_over_limit": "执行前补抓上限已改变（最多 {max} 小时），请缩小范围后重新提交。",
+      "scrub_mismatch": "确认后联系方式发生了变化。请重新检查预览后再试。",
+      "contact_unreadable": "无法读取联系方式。请检查本机文件后再试。",
+      "contact_invalid": "联系方式格式不正确。请检查本机文件后再试。",
+      "profile_invalid": "职业档案格式不正确。请检查后再试。",
+      "deleted": "职业档案已删除，此请求已取消。",
+      "draft_write_failed": "无法保存提取草稿，请重试。",
+      "handler_failed": "职业档案提取失败，请重试。"
     },
     "done": {
       "testChannel": "抓到 {fetched} 条，解析成功 {parsed} 条（{seconds} 秒，没有保存）",
@@ -4921,7 +4958,14 @@
       "failed": "拆解失败，请重试。",
       "invalid_payload": "请求内容不合法。",
       "handler_error": "处理请求时出错，请重试。",
-      "no_handler": "没有进程处理拆解请求（ai-worker 没有运行？）。"
+      "no_handler": "没有进程处理拆解请求（ai-worker 没有运行？）。",
+      "scrub_mismatch": "确认后联系方式发生了变化。请重新检查预览后再试。",
+      "contact_unreadable": "无法读取联系方式。请检查本机文件后再试。",
+      "contact_invalid": "联系方式格式不正确。请检查本机文件后再试。",
+      "profile_invalid": "职业档案格式不正确。请检查后再试。",
+      "deleted": "职业档案已删除，此请求已取消。",
+      "draft_write_failed": "无法保存提取草稿，请重试。",
+      "handler_failed": "职业档案提取失败，请重试。"
     }
   },
   "sourcesRegistry": {
@@ -7136,7 +7180,14 @@
       "failed": "查询失败，请重试。",
       "invalid_payload": "请求内容不合法。",
       "handler_error": "处理请求时出错，请重试。",
-      "no_handler": "没有进程处理查薪资请求（ai-worker 没有运行？）。"
+      "no_handler": "没有进程处理查薪资请求（ai-worker 没有运行？）。",
+      "scrub_mismatch": "确认后联系方式发生了变化。请重新检查预览后再试。",
+      "contact_unreadable": "无法读取联系方式。请检查本机文件后再试。",
+      "contact_invalid": "联系方式格式不正确。请检查本机文件后再试。",
+      "profile_invalid": "职业档案格式不正确。请检查后再试。",
+      "deleted": "职业档案已删除，此请求已取消。",
+      "draft_write_failed": "无法保存提取草稿，请重试。",
+      "handler_failed": "职业档案提取失败，请重试。"
     },
     "cli": {
       "usage": "pnpm salary:benchmark [--json]\n\n用库里的岗位重算薪资基准，并打印各组。",
@@ -7271,7 +7322,14 @@
       "failed": "查询失败，请重试。",
       "invalid_payload": "请求无效。",
       "handler_error": "处理请求时出错。请重试。",
-      "no_handler": "没有进程处理公司背景查询（ai-worker 在运行吗？）。"
+      "no_handler": "没有进程处理公司背景查询（ai-worker 在运行吗？）。",
+      "scrub_mismatch": "确认后联系方式发生了变化。请重新检查预览后再试。",
+      "contact_unreadable": "无法读取联系方式。请检查本机文件后再试。",
+      "contact_invalid": "联系方式格式不正确。请检查本机文件后再试。",
+      "profile_invalid": "职业档案格式不正确。请检查后再试。",
+      "deleted": "职业档案已删除，此请求已取消。",
+      "draft_write_failed": "无法保存提取草稿，请重试。",
+      "handler_failed": "职业档案提取失败，请重试。"
     }
   },
   "mcp": {
@@ -7579,7 +7637,8 @@
       "request__writer_job": "写申请回答",
       "request__models_sync": "刷新模型列表",
       "request__story_extract": "提取素材",
-      "request__writer_fit": "生成申请契合要点"
+      "request__writer_fit": "生成申请契合要点",
+      "request__career_extract": "提取职业档案"
     },
     "event": {
       "item__ok": "单项处理成功",
@@ -7678,7 +7737,14 @@
       "budget": "AI 预算已用尽",
       "ai_unavailable": "AI 不可用",
       "translation_incomplete": "翻译未完成",
-      "error": "操作出错"
+      "error": "操作出错",
+      "scrub_mismatch": "确认后联系方式发生了变化。请重新检查预览后再试。",
+      "contact_unreadable": "无法读取联系方式。请检查本机文件后再试。",
+      "contact_invalid": "联系方式格式不正确。请检查本机文件后再试。",
+      "profile_invalid": "职业档案格式不正确。请检查后再试。",
+      "deleted": "职业档案已删除，此请求已取消。",
+      "draft_write_failed": "无法保存提取草稿，请重试。",
+      "handler_failed": "职业档案提取失败，请重试。"
     },
     "error": {
       "backfill_over_limit": "补抓范围超过配置上限",
@@ -7769,7 +7835,14 @@
       "budget": "AI 预算已用尽",
       "ai_unavailable": "AI 不可用",
       "translation_incomplete": "翻译未完成",
-      "error": "操作出错"
+      "error": "操作出错",
+      "scrub_mismatch": "确认后联系方式发生了变化。请重新检查预览后再试。",
+      "contact_unreadable": "无法读取联系方式。请检查本机文件后再试。",
+      "contact_invalid": "联系方式格式不正确。请检查本机文件后再试。",
+      "profile_invalid": "职业档案格式不正确。请检查后再试。",
+      "deleted": "职业档案已删除，此请求已取消。",
+      "draft_write_failed": "无法保存提取草稿，请重试。",
+      "handler_failed": "职业档案提取失败，请重试。"
     },
     "callbackResult": {
       "changed": "已更改",
@@ -7919,7 +7992,8 @@
       "writer_job": "写申请回答",
       "models_sync": "刷新模型列表",
       "story_extract": "提取素材",
-      "writer_fit": "申请契合要点"
+      "writer_fit": "申请契合要点",
+      "career_extract": "职业档案提取"
     },
     "level": {
       "all": "全部级别",
@@ -8085,7 +8159,16 @@
       "confirmationRequired": "请先确认删除操作。",
       "requestFailed": "请求未完成，请重试。",
       "historyFailed": "档案更改已写入，但未能创建历史版本。",
-      "generic": "操作未完成，请重试。"
+      "generic": "操作未完成，请重试。",
+      "scrub_mismatch": "确认后联系方式发生了变化。请重新检查预览后再试。",
+      "contact_unreadable": "无法读取联系方式。请检查本机文件后再试。",
+      "contact_invalid": "联系方式格式不正确。请检查本机文件后再试。",
+      "profile_invalid": "职业档案格式不正确。请检查后再试。",
+      "deleted": "职业档案已删除，此请求已取消。",
+      "draft_write_failed": "无法保存提取草稿，请重试。",
+      "handler_failed": "职业档案提取失败，请重试。",
+      "draft_invalid": "提取草稿格式不正确。",
+      "draft_missing": "提取草稿已不存在。"
     }
   },
   "writer": {
@@ -8251,7 +8334,14 @@
         "handler_error": "处理请求时出错，请重试。",
         "no_handler": "还没有 AI worker 处理这类请求，请确认 ai-worker 在运行。",
         "too_long": "文字超过 writer.yaml 里的长度上限（draft_max_chars）。",
-        "busy": "这道题已有别的请求在进行（可能来自另一个标签页或设备）。等它结束后再试。"
+        "busy": "这道题已有别的请求在进行（可能来自另一个标签页或设备）。等它结束后再试。",
+        "scrub_mismatch": "确认后联系方式发生了变化。请重新检查预览后再试。",
+        "contact_unreadable": "无法读取联系方式。请检查本机文件后再试。",
+        "contact_invalid": "联系方式格式不正确。请检查本机文件后再试。",
+        "profile_invalid": "职业档案格式不正确。请检查后再试。",
+        "deleted": "职业档案已删除，此请求已取消。",
+        "draft_write_failed": "无法保存提取草稿，请重试。",
+        "handler_failed": "职业档案提取失败，请重试。"
       },
       "versionsLabel": "版本",
       "manual": "你改过的",

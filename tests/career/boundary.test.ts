@@ -11,6 +11,7 @@ import { z } from "zod";
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const ENGINE = "src/lib/career/engine";
 const CAREER = ["src/lib/career", "src/components/career", "src/app/career", "src/app/api/career", "src/career-pdf"];
+const PREPARE_ROUTES = ["src/app/api/career/extract/prepare/route.ts", "src/app/api/me/story-extract/prepare/route.ts"];
 const PACKAGES = new Set(["yaml", "zod", "unpdf"]);
 const CORE_ALIASES = [
   "@/lib/career/engine",
@@ -89,6 +90,7 @@ function dependencies(source: ts.SourceFile): Dependency[] {
     else out.push({ source: "<computed>", kind });
   }
   function visit(node: ts.Node) {
+
     if (ts.isImportDeclaration(node) || (ts.isExportDeclaration(node) && node.moduleSpecifier)) {
       add(node.moduleSpecifier, "static");
     }
@@ -106,7 +108,16 @@ function dependencies(source: ts.SourceFile): Dependency[] {
   return out;
 }
 
+const targetCache = new Map<string, string | undefined>();
 function target(file: string, specifier: string): string | undefined {
+  const key = `${file}:${specifier}`;
+  if (targetCache.has(key)) return targetCache.get(key);
+  const value = resolveTarget(file, specifier);
+  targetCache.set(key, value);
+  return value;
+}
+
+function resolveTarget(file: string, specifier: string): string | undefined {
   const resolved = ts.resolveModuleName(
     specifier, path.join(ROOT, file), options, ts.sys, cache,
   ).resolvedModule?.resolvedFileName;
@@ -116,10 +127,15 @@ function target(file: string, specifier: string): string | undefined {
   return undefined;
 }
 
+const sourceCache = new Map<string, { text: string; source: ts.SourceFile }>();
 function sourceFile(file: string, text: string): ts.SourceFile {
+  const cached = sourceCache.get(file);
+  if (cached?.text === text) return cached.source;
   const isJavaScript = /\.(?:mjs|js)$/.test(file);
   const kind = file.endsWith(".tsx") ? ts.ScriptKind.TSX : isJavaScript ? ts.ScriptKind.JS : ts.ScriptKind.TS;
-  return ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, kind);
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, kind);
+  sourceCache.set(file, { text, source });
+  return source;
 }
 
 function sourceFiles(directory: string): string[] {
@@ -164,16 +180,26 @@ function violations(file: string, text: string): string[] {
     if (within(file, "src") && !isCareer(file) && to && isCareer(to) && !CORE_IMPORTING_CAREER[file]?.includes(to)) {
       out.push(`${file}: core imports ${to}`);
     }
-    const isStorage = ["schema", "store", "contact"].some((part) => within(file, `src/lib/career/${part}`));
+    const isStorage = ["schema", "store", "contact", "ai", "extract"].some((part) => within(file, `src/lib/career/${part}`));
     const importsRendering = to && (within(to, ENGINE) || within(to, "src/lib/career/print") || to.includes("/fonts/"));
     if (isStorage && (importsRendering || /@fontsource/.test(dependency.source))) {
       out.push(`${file}: storage imports rendering dependency`);
     }
+    const isAi = ["ai", "extract"].some((part) => within(file, `src/lib/career/${part}`));
+    if (isAi && to === "src/lib/career/contact/store.ts") out.push(`${file}: reads contact storage directly`);
+    if ((within(file, "src/lib/outbound") || within(file, "src/components/outbound")) && to && isCareer(to)) out.push(`${file}: outbound imports career`);
+    if (["src/lib/outbound/scrub.ts", "src/lib/outbound/outbound.ts"].includes(file) && /^(?:node:)?fs(?:\/|$)/.test(dependency.source)) out.push(`${file}: pure outbound reads files`);
     const isPrintTarget = to !== undefined && within(to, "src/lib/career/print");
     const isPrintConsumer = within(file, "src/career-pdf") || within(file, "src/lib/career/print") || within(file, "e2e") || file === "scripts/career-print-baseline.ts" || file === "tests/career/print-pdf.test.ts";
     if (isPrintTarget && !isPrintConsumer) out.push(`${file}: imports printing outside the PDF entry point`);
   }
   function visit(node: ts.Node) {
+    if (within(file, "src") && ts.isIdentifier(node)) {
+      if (node.text === "prepareScrub" && !["src/lib/outbound/scrub.ts", "src/lib/career/contact/scrub.ts", ...PREPARE_ROUTES].includes(file)) out.push(`${file}: reads preview candidates outside prepare`);
+      if (node.text === "prepareCareerScrub" && !["src/lib/career/contact/scrub.ts", ...PREPARE_ROUTES].includes(file)) out.push(`${file}: reads local candidates outside prepare`);
+      if (node.text === "readPrepareInput" && !["src/lib/outbound/prepare.ts", ...PREPARE_ROUTES].includes(file)) out.push(`${file}: reads uploads outside prepare`);
+    }
+    if (isCareer(file) && ts.isIdentifier(node) && node.text === "NO_STORED_VALUES") out.push(`${file}: bypasses stored contact values`);
     const isRuntimeGlobal = ts.isIdentifier(node) && ENGINE_FORBIDDEN_GLOBALS.includes(node.text);
     if (within(file, ENGINE) && (ts.isMetaProperty(node) || isRuntimeGlobal)) {
       out.push(`${file}: runtime dependency ${node.getText(source)}`);
@@ -244,8 +270,8 @@ test("all source dependencies respect the career and engine boundaries", () => {
   expect(coreCareerImports(sources)).toEqual(CORE_IMPORTING_CAREER);
 });
 
-test("the core career import whitelist contains only the profile card", () => {
-  expect(CORE_IMPORTING_CAREER).toEqual({ "src/app/me/page.tsx": ["src/components/career/career-card.tsx"] });
+test("the core career import whitelist contains only the card and extraction registration", () => {
+  expect(CORE_IMPORTING_CAREER).toEqual({ "src/app/me/page.tsx": ["src/components/career/career-card.tsx"], "src/lib/control/ai-handlers.ts": ["src/lib/career/extract/handler.ts"] });
 });
 
 test("core career import comparison rejects unlisted imports and unused whitelist entries", () => {
@@ -410,8 +436,19 @@ test("date parsing is allowed by both purity layers", async () => {
   expect(await restricted(`${ENGINE}/probe.ts`, code)).toBe(0);
 });
 
+test("preview candidates and stored-value bypasses stay at their permitted boundaries", async () => {
+  expect(violations("src/lib/career/ai/probe.ts", 'import { NO_STORED_VALUES } from "@/lib/outbound/outbound";')).not.toEqual([]);
+  expect(violations("src/lib/career/ai/probe.ts", 'import { prepareCareerScrub } from "../contact/scrub";')).not.toEqual([]);
+  expect(violations("src/lib/career/extract/probe.ts", 'import { prepareScrub } from "@/lib/outbound/scrub";')).not.toEqual([]);
+  expect(violations(PREPARE_ROUTES[0]!, 'import { prepareCareerScrub } from "@/lib/career/contact/scrub";')).toEqual([]);
+  for (const specifier of ["@/lib/career/contact/store", "../contact/store"]) {
+    for (const code of allImportForms(specifier)) expect(violations("src/lib/career/ai/probe.ts", code)).not.toEqual([]);
+    for (const code of eslintImportForms(specifier)) expect(await restricted("src/lib/career/ai/probe.ts", code)).toBeGreaterThan(0);
+  }
+});
+
 test("storage dependencies reject rendering imports by every syntax and relative path", async () => {
-  for (const directory of ["schema", "store", "contact"]) {
+  for (const directory of ["schema", "store", "contact", "ai", "extract"]) {
     const file = `src/lib/career/${directory}/probe.ts`;
     for (const specifier of [
       "@/lib/career/engine",

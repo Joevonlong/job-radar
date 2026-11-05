@@ -11,6 +11,7 @@ import { loadContact } from "@/lib/career/contact/store";
 import { listVersions } from "@/lib/career/store/history";
 import { loadCareerProfile } from "@/lib/career/store/profile";
 import { getDisplayTimeZone } from "@/lib/dashboard/context";
+import { cleanupExpiredDrafts } from "@/lib/career/extract/draft-store";
 import { logActionFailure } from "@/lib/logging/action-failure";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +42,7 @@ export default async function Page() {
       return fallback;
     }
   }
+  await safe(cleanupExpiredDrafts, undefined);
   const initial = await safe(async () => loadCareerProfile(), null);
   const contact = await safe(async () => loadContact(), null);
   const versions = await safe(listVersions, []);

@@ -14,6 +14,7 @@ const READONLY_PSQL_DYNAMIC = {
 
 export const CORE_IMPORTING_CAREER = {
   "src/app/me/page.tsx": ["src/components/career/career-card.tsx"],
+  "src/lib/control/ai-handlers.ts": ["src/lib/career/extract/handler.ts"],
 };
 export const ENGINE_FORBIDDEN_GLOBALS = [
   "Buffer", "process", "__dirname", "__filename", "require", "fetch", "XMLHttpRequest", "WebSocket",
@@ -172,7 +173,7 @@ const eslintConfig = defineConfig([
     };
   }),
   {
-    files: ["src/lib/career/{schema,store,contact}/**"],
+    files: ["src/lib/career/{schema,store,contact,ai,extract}/**"],
     rules: {
       "@typescript-eslint/no-restricted-imports": [
         "error",
@@ -206,6 +207,13 @@ const eslintConfig = defineConfig([
           message: "Career storage and schema modules must not load rendering dependencies.",
         },
       ],
+    },
+  },
+  {
+    files: ["src/lib/career/{ai,extract}/**"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": ["error", { paths: DATABASE_PATHS, patterns: [DATABASE_PATTERN, READONLY_PSQL_PATTERN, { group: ["@/lib/career/contact/store", "**/contact/store", "@/lib/career/engine", "@/lib/career/engine/*", "@/lib/career/print/*", "@fontsource/*", "@fontsource-variable/*", "**/fonts/*"], allowTypeImports: false, message: "AI modules must use the scrub boundary and must not load rendering dependencies." }] }],
+      "no-restricted-syntax": ["error", DATABASE_DYNAMIC, READONLY_PSQL_DYNAMIC, { selector: "ImportExpression[source.value=/(contact\\/store|career\\/(engine|print)|@fontsource|\\/fonts\\/)/]", message: "AI modules must use the scrub boundary." }, { selector: "Identifier[name='NO_STORED_VALUES']", message: "Career AI must scrub stored contact values." }],
     },
   },
   {
