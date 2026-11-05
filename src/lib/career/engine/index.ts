@@ -1,0 +1,17 @@
+export { CareerEngineError } from "./errors";
+export { parseResume, renderResume, listThemes, themeProblem, signaturePath } from "./render";
+export type { Doc, RenderOptions } from "./render";
+export type { Resume } from "./schema";
+export type { FontRef } from "./theme";
+export type { Images } from "./images";
+export { countPages, extractPages, extractText } from "./extract";
+export { runCheck } from "./check";
+export type { CheckResult, Finding, JdReport } from "./check";
+export { runLetterCheck } from "./letter-check";
+export { shipBlockers, pageBudget, unfinished } from "./gate";
+export { exportStem, contentDisposition } from "./naming";
+export { plainResume, plainLetter } from "./plain";
+export { parseJd } from "./jd";
+export type { Jd } from "./jd";
+export { makeDict } from "./keywords";
+export type { Dict } from "./keywords";

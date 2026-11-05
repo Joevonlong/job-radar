@@ -14,6 +14,8 @@ const ALLOWED: Record<string, string> = {
   "src/lib/market/load.ts": "market packs have their own schema and no overlay",
   "src/lib/db/queries/job-detail.ts": "profile text stored in the database",
   "src/lib/resume/export.ts": "writes a resume, does not read config",
+  "src/lib/career/engine/render.ts": "a resume document, not a config file",
+  "src/lib/career/engine/jd.ts": "a job description's front matter, not a config file",
   "src/lib/sources/registry/service.ts": "salvages proxies from a broken file: lenient on purpose, with the shared options",
   "src/ai-worker/version-guard.ts": "a compose file, not a config file",
   "scripts/check-ci-docs.ts": "workflow files, not config files",

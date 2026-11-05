@@ -1,0 +1,106 @@
+# Fictional person — demo of `sections:` (order, custom sections, layouts, labels). Real resumes live outside this repo.
+# Text that starts with [ or contains ": " must be quoted. A plain "- [ ] x" is a YAML trap.
+meta:
+  lang: en
+  theme: minimal
+  accent: "#2f54eb"
+  colors: accent      # links and the tech stack in the accent too (quiet = title and headings only)
+  pages: 1
+
+basics:
+  name: Mara Lindqvist
+  title: Platform Engineer — developer tooling & data infrastructure
+  location: Gothenburg, Sweden
+  email: mara.lindqvist@example.com
+  phone: "+46 31 000 00 00"
+  workAuth: EU citizen
+  links:
+    - { label: GitHub, url: "https://github.com/example" }
+    - { label: Blog, url: "https://example.dev/blog" }
+  summary: >-
+    Platform engineer building internal tooling since 2018. I make **slow pipelines fast**
+    and flaky deployments boring.
+
+experience:
+  - company: Brightwave Systems
+    role: Staff Platform Engineer
+    start: 2022-03
+    end: present
+    location: Gothenburg · hybrid
+    bullets:
+      - Rebuilt the CI pipeline for 120 services; median build time fell from **24 to 7 minutes**.
+      - Introduced a deploy-safety checklist and canary releases, cutting rollbacks by **60%**.
+    stack: [Go, Kubernetes, Terraform, GitHub Actions]
+  - company: Kestrel Data
+    role: Backend Engineer
+    start: 2018-08
+    end: 2022-02
+    bullets:
+      - Moved a batch ETL stack to streaming, cutting data latency from hours to **90 seconds**.
+    stack: [Python, Kafka, Postgres]
+
+education:
+  - school: Chalmers University of Technology
+    degree: M.Sc. Computer Science
+    start: 2013
+    end: 2018
+
+languages:
+  - { name: English, level: fluent }
+  - { name: Swedish, level: native }
+
+sections:
+  - summary
+  - title: Highlights
+    items:
+      - Cut CI cost by **38%** with [[Go:blue]] build caches and [[Bazel]] remote execution
+      - Led the move to [[GitOps:green]] for 120 services, zero downtime
+      - Open-source maintainer of `depgraph`, [[2.1k stars:orange]]
+  - { use: experience, title: Work Experience }   # a built-in section with its own heading
+  - title: Tech Stack
+    layout: grid
+    columns: 3
+    items:
+      - { label: Programming, items: [Go, Python, TypeScript] }
+      - { label: Infra, items: [Kubernetes, AWS] }
+      - { label: Data, items: [Kafka, Postgres, dbt] }
+  - title: Practices
+    layout: grid
+    columns: 2
+    items:
+      - Post-mortems within 48 hours
+      - Runbooks live next to the code
+      - Error budgets agreed with product
+      - One-click rollback on every service
+  - title: Selected Work
+    items:
+      - heading: depgraph
+        url: "https://github.com/example/depgraph"
+        sub: Open-source dependency analyzer
+        date: 2023-06
+        bullets:
+          - Maps service dependencies from build files; used by **300+ teams**.
+        tags: [Go, "CLI:blue", "OSS:green"]
+      - heading: Platform Guild
+        sub: Internal community of practice
+        start: 2022-09
+        end: present
+        text: Monthly talks and a shared library of deploy templates.
+  - title: Readiness
+    items:
+      - "[x] On-call rotation designed and documented"
+      - "[x] Disaster-recovery drill run twice a year"
+      - "[ ] SOC 2 evidence automation (in progress)"
+  - title: Focus Areas
+    layout: tags
+    items: [Developer experience, "Reliability:green", "Cost:orange", "Security:red", Observability]
+  - title: Approach
+    items:
+      - text: I remove the slowest wait in the feedback loop first, then measure.
+  - education
+  - title: Talks
+    side: aside
+    items:
+      - KubeCon Europe 2024 — fast CI at scale
+      - GOTO Gothenburg 2023 — boring deployments
+  - languages

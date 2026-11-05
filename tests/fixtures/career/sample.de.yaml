@@ -1,0 +1,80 @@
+# Fictional person — the German version of sample.en.yaml (Lebenslauf), with the German CV fields:
+# postal address, availability and "Ort, Datum" + signature. The "approach" block and the hackathon are left out
+# to keep the longer German text and the signature on one page — and with the hackathon goes the one skill only it
+# backs (multi-agent orchestration). Signature images are supplied as bytes by the caller.
+meta:
+  lang: de
+  theme: classic
+  accent: "#1f4e8c"
+  pages: 1
+  signature: { place: Berlin, date: auto, image: signature.png }
+
+basics:
+  name: Lena Hartmann
+  title: KI-Ingenieurin — LLM-Anwendungen & Agenten
+  address: ["Musterstraße 12", "10115 Berlin"]
+  email: lena.hartmann@example.com
+  phone: "+49 30 0000000"
+  workAuth: EU-Bürgerin
+  availability: ab 01/2027
+  links:
+    - { label: GitHub, url: "https://github.com/example" }
+    - { label: LinkedIn, url: "https://linkedin.com/in/example" }
+  summary: >-
+    KI-Ingenieurin, seit 2019 in der Softwareentwicklung und seit 2024 mit LLM-Produkten in Produktion.
+    Ich mache aus unscharfen Geschäftsproblemen **messbare** Agenten- und Retrieval-Systeme — mit Evals,
+    Kostenbudgets und einem klaren Weg vom Prototyp in den Betrieb.
+
+experience:
+  - company: Northwind Analytics
+    role: Senior AI Engineer
+    start: 2024-02
+    end: present
+    location: Berlin · hybrid
+    bullets:
+      - Leitung des Dokumenten-Agenten für **über 40 Unternehmenskunden**; manuelle Prüfzeit um **63 %** gesenkt.
+      - Hybriden RAG-Stack (BM25 + Embeddings + Reranker) aufgebaut; Antwortgenauigkeit von **71 % auf 89 %** auf einem Eval-Set mit 1.200 Fragen.
+      - Prompt-Caching und Routing auf ein per LoRA feinabgestimmtes kleines Modell eingeführt; Inferenzkosten pro Anfrage bei gleicher Qualität um **48 %** gesenkt.
+    stack: [Python, FastAPI, Claude, pgvector, LangGraph, Langfuse, AWS]
+  - company: Fieldline
+    role: Machine Learning Engineer
+    start: 2021-06
+    end: 2024-01
+    location: München
+    bullets:
+      - Modell zur Ticket-Triage in Produktion gebracht; **12.000 Tickets pro Tag** bei 94 % Routing-Präzision.
+      - Erstes Offline-Evaluations-Framework des Teams und CI-Gate für Modell-Releases entworfen.
+    stack: [PyTorch, scikit-learn, Airflow, Docker, GCP]
+  - company: Tessera Labs
+    role: Software Engineer
+    start: 2019-09
+    end: 2021-05
+    location: München
+    bullets:
+      - Datenpipelines und interne Tools in TypeScript, Python und SQL für ein Analytics-Team mit 30 Personen gebaut.
+    stack: [TypeScript, Node.js, PostgreSQL]
+
+projects:
+  - name: Receipt Copilot
+    tagline: Open-Source-Buchhaltungsagent
+    url: "https://github.com/example/receipt-copilot"
+    bullets:
+      - Vision- und Tool-Calling-Agent, der deutsche Belege Buchungskategorien zuordnet; **1.300 GitHub-Sterne**.
+    stack: [TypeScript, Claude, MCP, Playwright]
+
+skills:
+  - { group: LLM & Agenten, items: [RAG, Tool Use / MCP, Evals, Fine-Tuning (LoRA)] }
+  - { group: Programmiersprachen, items: [Python, TypeScript, SQL] }
+  - { group: Infrastruktur, items: [Docker, AWS, GCP, Postgres, CI/CD, Observability] }
+
+education:
+  - school: Technische Universität München
+    degree: M.Sc. Informatik
+    start: 2017
+    end: 2019
+    summary: Masterarbeit zu Retrieval-gestützter Fragebeantwortung.
+
+languages:
+  - { name: Englisch, level: fließend (C1) }
+  - { name: Deutsch, level: gut (B2) }
+  - { name: Chinesisch, level: Muttersprache }
