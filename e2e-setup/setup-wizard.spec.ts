@@ -121,7 +121,7 @@ test("market: the example's market is preselected; another country brings its cu
   await expect(currency).toHaveValue(market.currency);
 });
 
-test("market: the example's city, one added by hand, the browser's time zone and a chosen one land in preferences, search and schedule", async () => {
+test("market: the example's city, one added by hand, the browser's time zone and a chosen one land in preferences and schedule", async () => {
   const { market, home_city: exampleCity } = examplePreferences();
   await hydrated();
   // the example's city is in the field; add a place to move to by hand
@@ -136,7 +136,6 @@ test("market: the example's city, one added by hand, the browser's time zone and
   expect(prefs.market).toMatchObject({ pack: market.pack, country: market.country, currency: market.currency });
   expect(prefs.home_city).toBe(exampleCity);
   expect(prefs.places).toEqual([{ place: "Boston", relocate: true }]);
-  expect((config("search") as { locations: string[] }).locations).toEqual([exampleCity, "Boston"]);
   expect(config("schedule").timezone).toBe("America/Chicago");
   expect(setup().steps?.market?.status).toBe("done");
 });

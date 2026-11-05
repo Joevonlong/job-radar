@@ -34,7 +34,7 @@ pnpm run doctor --only config.market
 | 方面 | 行为 |
 |---|---|
 | 地点 | 写出国家的地点得到该国代码（`Remote - USA` → US，`Dublin, CA` → US）。本国国名前面的城市（`Gütersloh, Germany`）只在本国市场下读取。 |
-| 远程范围 | search.yaml 里写 `none`、`home_country`、`worldwide` 或 `{region: [eu, CH, …]}`（命名区域和 ISO 国家）；preferences.yaml 里由仅远程的 `places` 得出。旧值：`eu_hire_in_de` = `home_country`，`eu_any` = `{region: [eu]}`。`home_country` 保留地点在本国的远程岗、写明包里 `region`（德国包：EU、Europe、EMEA、EEA）或全球的远程岗，显示为“能从德国远程（含面向欧盟 / 欧洲 / EMEA / 全球的远程岗）”；没有 `region` 的市场显示“能从某国远程”。逐行的结果见 [远程岗和关注公司](usage.zh.md#远程岗和关注公司)。 |
+| 远程范围 | 由 preferences.yaml 的 `places` 得出：没有时是 `home_country`，也可以是 `worldwide`，或列出代码时的 `{region: [eu, CH, …]}`（命名区域和 ISO 国家）。旧值：`eu_hire_in_de` = `home_country`，`eu_any` = `{region: [eu]}`。`home_country` 保留地点在本国的远程岗、写明包里 `region`（德国包：EU、Europe、EMEA、EEA）或全球的远程岗，显示为“能从德国远程（含面向欧盟 / 欧洲 / EMEA / 全球的远程岗）”；没有 `region` 的市场显示“能从某国远程”。逐行的结果见 [远程岗和关注公司](usage.zh.md#远程岗和关注公司)。 |
 | 本地语言 | 包里有该语言的要求规则、并且 `home_language` 就是这门语言时，才读岗位要求的等级；高于你在 me.yaml `languages` 里的等级会扣分（ai.yaml `scoring.language_penalty`）。否则这一步关闭：不读等级、不扣分、打分提示词不问这一项，页面也隐藏相关筛选和标签。 |
 | 基准货币 | 薪资底线、"最低年薪"筛选、统计和高薪门槛都用市场的货币。其他货币按 pipeline.yaml 的 `salary.fx_pivot` + `fx_rates` 换算；没有汇率的货币不参与比较。 |
 | 渠道 | sources.yaml 里写了 `markets: [DE]` 的渠道只在这些市场运行；在别的市场下折叠在"其他市场"里，不算失败。国家参数留空（`country`、`country_name`、`country_indeed`）、远程地点不写的键，都跟随市场。 |
@@ -165,7 +165,17 @@ pnpm run doctor --only config.market
 | `remote_scope: worldwide` | `Worldwide` 成为仅远程地点 |
 | `remote_scope: none` | 从 `workplace` 去掉 `remote`，除非它是唯一的值 |
 
-结果有变化的情况：设为 `none` 时，地点在允许城市的远程职位过去会显示，现在会以 `workplace_not_wanted` 隐藏；设为 `none` 且 `workplace: [remote]` 时，远程职位现在会被检查，而不是直接隐藏。如果 `locations` 的第一项是外国城市，它会成为常住城市。
+结果有变化的情况：设为 `none` 时，地点在允许城市的远程职位过去会显示，现在会以 `workplace_not_wanted` 隐藏；设为 `none` 且 `workplace: [remote]` 时，远程职位现在会被检查，不再被隐藏；`{region: [...]}` 没有包含本国时，本国的远程职位现在会显示；`locations` 里的国外城市变成 ✈ 地点并开始匹配。如果 `locations` 的第一项是国外城市，它会成为常住城市，那里的职位按本国比较。
+
+`search.yaml` 的 `locations` 和 `remote_scope` 仍可接受但不再生效，也没有迁移步骤：搜索来自 `places`，`config:check` 和 `/me` 会提醒 `places` 里没有的内容。两个文件一致时，升级后查询和查询 id 不变，轮转历史得以延续。这些配置会增加或改变搜索：
+
+| 旧配置 | 变化 |
+|---|---|
+| 含多个代码的范围 | 每个代码一次搜索，id 是新的 |
+| 不覆盖本国的范围 | 增加本国的远程搜索 |
+| `none` 且 `workplace: [remote]` | 增加本国的远程搜索 |
+| `locations` 里的国外城市 | 增加它的远程搜索 |
+| `workplace` 没有 `remote`，范围不是 `none` | 去掉远程搜索，因为这和迁移后的 `none` 无法区分 |
 
 旧版本的代码读不了版本 3。要退回旧版本，请先用升级前的备份或 `/me` 上的画像历史恢复这个文件。
 

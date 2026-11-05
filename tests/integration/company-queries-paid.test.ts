@@ -13,7 +13,7 @@ import { runCycle } from "@/lib/cycle/run-cycle";
 import { closeDb, getDb, getMonthUsage, listChannelStates, listRunsForCycle } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 
-import { channelsWith } from "../channels/helpers";
+import { channelsWith, oneCityPlaces } from "../channels/helpers";
 import { fakeApify, response, ENV as APIFY_ENV } from "../channels/linkedin/apify/helpers";
 import { ENV as BRIGHT_ENV, MONTH, NOW, fakeProvider } from "../channels/linkedin/brightdata/helpers";
 import { makeTempConfig, type TempConfig } from "../config/helpers";
@@ -46,7 +46,7 @@ afterAll(async () => {
 });
 
 const search = () => ({
-  ...pinnedSearch(), keyword_groups: { a: ["alpha"] }, locations: ["Test City"], remote_scope: "none" as const, max_per_group_per_location: 2,
+  ...pinnedSearch(), keyword_groups: { a: ["alpha"] }, max_per_group_per_location: 2,
   watched_company_queries: { enabled: true, max_per_cycle: 1, min_interval_hours: 24, max_results: 3 },
 });
 
@@ -81,7 +81,7 @@ function setup(options: Parameters<typeof channels>[0]) {
   registerFixtureChannel(registry, { id: "fx-next", family: "linkedin" });
   const fetch: FetchLike = (u, init) => (new URL(u).host === "api.apify.com" ? apify.fetch(u, init) : bright.fetch(u, init));
   const run = () => runCycle("manual", {
-    registry, cascades: cascade, config: { ...config({ search: search() }), channels: channels(options) },
+    registry, cascades: cascade, config: { ...config({ search: search(), places: oneCityPlaces() }), channels: channels(options) },
     logger: quietLogger, fetch, sleep: async () => {}, now: () => NOW,
   });
   return { bright, apify, run };
@@ -96,7 +96,7 @@ describe("company queries on the paid LinkedIn channels", () => {
     expect(result.status).toBe("succeeded");
 
     const rows = await listRunsForCycle(getDb(), result.cycleId as number);
-    const keywordId = buildQueries(search(), "manual")[0]!.id;
+    const keywordId = buildQueries(search(), oneCityPlaces(), "manual")[0]!.id;
     expect(rows.map((r) => [r.channelId, r.status])).toEqual([[BRIGHT, "succeeded"], [BRIGHT, "succeeded"]]);
     const company = rows.filter((r) => r.queryHash !== keywordId);
     expect(company).toHaveLength(1);
@@ -120,7 +120,7 @@ describe("company queries on the paid LinkedIn channels", () => {
     expect(result.status).toBe("succeeded");
 
     const rows = await listRunsForCycle(getDb(), result.cycleId as number);
-    const keywordId = buildQueries(search(), "manual")[0]!.id;
+    const keywordId = buildQueries(search(), oneCityPlaces(), "manual")[0]!.id;
     expect(rows.filter((r) => r.channelId === BRIGHT).map((r) => r.queryHash)).toEqual([keywordId]);
     const company = rows.filter((r) => r.queryHash !== keywordId);
     expect(company.map((r) => [r.channelId, r.status])).toEqual([[APIFY, "succeeded"]]);
@@ -138,7 +138,7 @@ describe("company queries on the paid LinkedIn channels", () => {
     const result = await run();
     expect(result.status).toBe("succeeded");
     const rows = await listRunsForCycle(getDb(), result.cycleId as number);
-    expect(rows.map((r) => [r.channelId, r.queryHash])).toEqual([[BRIGHT, buildQueries(search(), "manual")[0]!.id]]);
+    expect(rows.map((r) => [r.channelId, r.queryHash])).toEqual([[BRIGHT, buildQueries(search(), oneCityPlaces(), "manual")[0]!.id]]);
     expect(bright.count("trigger")).toBe(1);
     expect(apify.requests).toHaveLength(0);
     expect(await failureStrikes(BRIGHT)).toBe(0);

@@ -250,7 +250,7 @@ footer { margin-top: 64px; color: var(--ink-3); font-size: 13px; border-top: 1px
           <div class="q">去网站上用什么关键词、在哪些城市搜？</div>
           <ul>
             <li>关键词组（每组 OR 合并成一次查询）</li>
-            <li>城市（每组按城市各查一次）、远程范围</li>
+            <li>在哪里搜来自 <code>/me</code> 上的常住城市和地点：每组按每次搜索各查一次</li>
             <li>每轮回看多少小时、每组每城市最多几条</li>
           </ul>
           <p class="meta" style="margin:8px 0 0">文件 <code>data/config/search.yaml</code> → <a href="#s4">第 4 步</a></p>
@@ -360,21 +360,18 @@ pnpm run doctor</code></pre>
         <div class="body">
           <div class="tabs"><span>处理时间</span><span class="on">搜索</span><span>通道</span><span>AI</span><span>推送</span></div>
           <div class="sec">关键词组</div>
-          <div class="secd">每个关键词组用 OR 合并成一次查询，再按城市各查一次。</div>
+          <div class="secd">每个关键词组用 OR 合并成一次查询，再按常住城市和地点的每次搜索各查一次。</div>
           <div class="f"><span class="num">1</span><span class="l mono">engineering</span><div class="tags"><span class="tag">AI Engineer</span><span class="tag">LLM Engineer</span><span class="tag">Machine Learning Engineer</span><span class="tag">…</span><span class="tag in">＋</span></div></div>
           <div class="f"><span class="l mono">fde_solutions</span><div class="tags"><span class="tag">Forward Deployed Engineer</span><span class="tag">AI Solutions Engineer</span><span class="tag">…</span><span class="tag in">＋</span></div></div>
           <div class="f"><span class="l mono">german</span><div class="tags"><span class="tag">KI Engineer</span><span class="tag">KI-Entwickler</span><span class="tag in">＋</span></div><span class="h">组 ID 用小写字母、数字和下划线。可以加新组。</span></div>
-          <div class="sec" style="margin-top:14px">地点与远程</div>
-          <div class="f"><span class="num">2</span><span class="l">城市</span><div class="tags"><span class="tag">Berlin</span><span class="tag">München</span><span class="tag in">＋</span></div><span class="h">每个关键词组按城市各查一次。</span></div>
-          <div class="f"><span class="l">远程范围</span><div class="seg"><span>无</span><span class="on">欧盟内可在德国雇佣</span><span>欧盟任意</span><span>全球</span></div></div>
           <div class="sec" style="margin-top:14px">时间窗与上限</div>
-          <div class="f"><span class="num">3</span><span class="l">回看时间窗（小时）</span><div class="row" style="font-size:12.5px">早轮 <span class="input" style="min-width:50px">24</span> 晚轮 <span class="input" style="min-width:50px">10</span> 周末 <span class="input" style="min-width:50px">24</span></div></div>
+          <div class="f"><span class="num">2</span><span class="l">回看时间窗（小时）</span><div class="row" style="font-size:12.5px">早轮 <span class="input" style="min-width:50px">24</span> 晚轮 <span class="input" style="min-width:50px">10</span> 周末 <span class="input" style="min-width:50px">24</span></div></div>
           <div class="f"><span class="l">每组每城市最多条数</span><span class="input" style="min-width:60px">40</span></div>
           <div class="row" style="margin-top:12px"><span class="btn primary">保存</span><span class="status">runner 已加载（04:12）</span></div>
         </div>
       </div>
       <div class="cmp">
-        <div><h4>查询次数怎么算</h4><p>每个通道每轮的查询数 ≈ 关键词组数 × 城市数（远程再加一次）。3 组 × 2 城 = 6 次。组越多越全，但付费通道花得越多、免费网站越容易限流。</p></div>
+        <div><h4>查询次数怎么算</h4><p>每个通道每轮的查询数 ≈ 关键词组数 × 搜索数（常住城市、每个 ✈ 地点，以及远程搜索）。3 组 × 2 次搜索 = 6 次。组越多越全，但付费通道花得越多、免费网站越容易限流。</p></div>
         <div><h4>保存后什么时候生效</h4><p>保存时用和 runner 相同的规则校验；runner 几秒内热加载，按钮旁显示"runner 已加载"。下一轮采集用新条件，不需要重启。</p></div>
       </div>
       <div class="callout info"><b>顺便看一眼「处理时间」标签：</b>默认工作日 07:00 / 17:00、周末 09:00，按你在向导里选的时区（出厂默认是 America/New_York），宿主机关机错过的轮次开机后会补跑。</div>

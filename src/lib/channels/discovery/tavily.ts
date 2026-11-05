@@ -1,3 +1,5 @@
+import { onsiteSearchTexts } from "@/lib/channels/query";
+import { loadQueryPlaces } from "@/lib/channels/query-places";
 import { z } from "zod";
 
 import { BudgetExceededError, ChannelError } from "@/lib/channels/errors";
@@ -47,12 +49,12 @@ export function tavilyDomainsFor(ats: DiscoverableAts): string[] {
 }
 
 /** `kw1 OR kw2 jobs City` for the first `keywords_per_query` keywords of each group; the ATS hosts go to `include_domains`. */
-export function buildTavilyQueries(search: Pick<SearchConfig, "keyword_groups" | "locations">, keywordsPerQuery: number): DiscoveryQuery[] {
+export function buildTavilyQueries(search: Pick<SearchConfig, "keyword_groups">, cities: readonly string[], keywordsPerQuery: number): DiscoveryQuery[] {
   const queries: DiscoveryQuery[] = [];
   for (const [group, keywords] of Object.entries(search.keyword_groups)) {
     const terms = keywords.map((k) => k.replaceAll('"', "").trim()).filter((k) => k !== "").slice(0, keywordsPerQuery);
     if (terms.length === 0) continue;
-    for (const city of search.locations) {
+    for (const city of cities) {
       for (const ats of DISCOVERABLE_ATS) {
         const parts = { ats, group, city, q: `${terms.join(" OR ")} jobs ${city}`, domains: tavilyDomainsFor(ats) };
         queries.push({ ...parts, id: discoveryQueryId(parts) });
@@ -80,7 +82,7 @@ export interface TavilyDeps extends DiscoveryDeps {
 }
 
 export const defaultTavilyDeps: TavilyDeps = {
-  inputs: () => ({ search: loadConfig("search"), companies: loadCompanies(), queryRotation: loadConfig("channels").collect.query_rotation }),
+  inputs: () => ({ search: loadConfig("search"), cities: onsiteSearchTexts(loadQueryPlaces()), companies: loadCompanies(), queryRotation: loadConfig("channels").collect.query_rotation }),
   store: () => createDbDiscoveryStore(getDb(), "tavily"),
 };
 
@@ -95,7 +97,7 @@ const tavilyProvider: DiscoveryProvider<TavilyChannelSettings> = {
   keyEnv: TAVILY_API_KEY_ENV,
   settingsOf: tavilySettingsOf,
   endpoint: (settings) => ({ service: "tavily", url: settings.api_base_url }),
-  buildQueries: (search, settings) => buildTavilyQueries(search, settings.keywords_per_query),
+  buildQueries: (search, cities, settings) => buildTavilyQueries(search, cities, settings.keywords_per_query),
   async search(query, apiKey, settings, ctx) {
     const expected = creditsPerSearch(settings.search_depth);
     assertCreditsAllowed(ctx.budget, settings, expected);

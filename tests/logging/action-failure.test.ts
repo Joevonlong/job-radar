@@ -7,7 +7,6 @@ import { setApplicationStatusAction } from "@/app/jobs/[id]/actions";
 import { ensureProfileFiles, reloadConfig, setOnProfileSaved } from "@/lib/config";
 import { meConfigToDraft } from "@/lib/profile/draft";
 import { saveProfile } from "@/lib/profile/service";
-import { syncSearchLocations } from "@/lib/profile/search-locations";
 import { resetAdvanced, saveAdvanced } from "@/lib/settings/advanced/service";
 import { loadAdvancedFile } from "@/lib/settings/advanced/view";
 import { setSourceEnabled } from "@/lib/sources/registry/service";
@@ -45,18 +44,6 @@ describe("caught action failures are diagnosable without private details", () =>
     expect(lines).toContain("QueryError");
     expect(lines).toContain(code);
     expect(lines).not.toMatch(/private|payload|postgres:\/\/|query and/);
-  });
-
-  it("logs a refused filesystem write at the service that returns the friendly result", async () => {
-    vi.spyOn(fs, "renameSync").mockImplementation(() => {
-      throw Object.assign(new Error("/private/config/search.yaml contains private form data"), { code: "EACCES" });
-    });
-    expect(await syncSearchLocations(["Austin"])).toEqual({ status: "error", error: "write_failed" });
-    const lines = vi.mocked(console.warn).mock.calls.map((call) => call.join(" ")).join("\n");
-    expect(lines).toContain("syncSearchLocations");
-    expect(lines).toContain("EACCES");
-    expect(lines).not.toContain("/private/config");
-    expect(lines).not.toContain("private form data");
   });
 
   it("names the source switch that failed inside the shared config helper", async () => {

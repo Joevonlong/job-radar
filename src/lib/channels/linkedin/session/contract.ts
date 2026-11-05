@@ -2,10 +2,10 @@ import { ChannelError } from "../../errors";
 import type { ChannelMarket } from "../../market";
 import type { SearchQuery } from "../../types";
 import { sessionSettingsSchema, type SessionSettings } from "@/lib/config/schemas/channels";
-import { remoteLocationFor } from "@/lib/market/remote-scope";
+import { remoteQueryLocation } from "@/lib/market/remote-scope";
 import { keywordStrings } from "../brightdata/contract";
 import { postedWithinSeconds } from "../date-window";
-import { searchKind } from "../../query";
+import { locatedText, searchKind } from "../../query";
 
 /**
  * Contract of the LinkedIn session channels: ids, settings, and the URLs the channels open. The channels only
@@ -36,12 +36,13 @@ export function jobUrl(baseUrl: string, jobId: string): string {
   return new URL(`/jobs/view/${jobId}/`, baseUrl).toString();
 }
 
-/** The location of a query: `City, Country`, or the configured location of the remote scope. */
+/** The location of a query: `City, Country`, or the place or configured location of a remote one. */
 export function locationOf(query: SearchQuery, settings: SessionSettings, market: ChannelMarket): string {
   if (searchKind(query) === "company") return settings.site.country_name || market.countryName;
-  if (query.remote) return remoteLocationFor(query.remoteScope ?? "worldwide", settings.site.remote_locations, market);
-  if (query.location === null) throw new Error("linkedin-session: a located query needs a location");
-  return `${query.location}, ${settings.site.country_name || market.countryName}`;
+  if (query.remote) return remoteQueryLocation(query, settings.site.remote_locations, market);
+  const located = locatedText(query, settings.site.country_name || market.countryName, market);
+  if (located === null) throw new Error("linkedin-session: a located query needs a location");
+  return located;
 }
 
 /** The keyword strings of a query (`"A" OR "B"`, usually one). */

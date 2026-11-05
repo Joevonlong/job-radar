@@ -15,8 +15,6 @@ import type { DealBreaker, PreferencesConfig } from "@/lib/config/schemas/prefer
 export const LANGUAGE_LEVEL_OPTIONS = ["A1", "A2", "B1", "B2", "C1", "C2", "native"] as const satisfies readonly MeLevel[];
 export const WORKPLACE_OPTIONS = ["onsite", "hybrid", "remote"] as const satisfies readonly PreferencesConfig["workplace"][number][];
 /** The kinds of remote scope; `region` comes with a list of regions / countries. */
-export const REMOTE_SCOPE_KINDS = ["none", "home_country", "worldwide", "region"] as const;
-export type RemoteScopeKind = (typeof REMOTE_SCOPE_KINDS)[number];
 export const SENIORITY_OPTIONS = ["all", "entry", "mid", "senior", "lead"] as const satisfies readonly PreferencesConfig["seniority"][];
 export const CONTRACT_OPTIONS = ["permanent", "fixed_term", "freelance", "temp_agency"] as const satisfies readonly PreferencesConfig["contracts"]["allow"][number][];
 export const CONTRACT_MODES = ["none", "allow", "exclude"] as const;

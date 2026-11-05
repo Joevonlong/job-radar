@@ -26,7 +26,7 @@ export function searchUrl(settings: ClientSettings, request: JsearchRequest): st
   const params = new URLSearchParams({
     query: request.query,
     num_pages: String(settings.pages_per_query),
-    country: settings.country ?? "",
+    country: request.country ?? settings.country ?? "",
     date_posted: request.datePosted,
   });
   if (settings.language !== "") params.set("language", settings.language);

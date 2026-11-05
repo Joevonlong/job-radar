@@ -220,7 +220,7 @@ pnpm sources:list [--type channel|ats_board] [--status failing ...] [--all] [--j
 每个正常结束的单元输出一条 `query rotation` 日志和 `steps[collect].result.rotation` 摘要；摘要保存在该轮
 `cycles.summary_json.steps` 中 `name` 为 `collect` 的条目里。它们包含起始通道（`sortChannel`）、查询数、
 结果为 served/failed 的查询数（`reached`）、从未运行数、最久的已知等待及对应查询、实际请求的最大窗口（`maxWindowHours`，含补窗）；
-日志还包含 `notReached`。`stretched` 统计至少有一次尝试扩大窗口的查询数；`capped` 统计补窗缺口被上限截住的查询数。
+日志还包含 `notReached`。`remotePlacesSkipped` 统计这个单元的网站发送不了地点的远程搜索数；它们在轮转之前就被去掉，不计入从未运行，“来源”页显示这个数。`stretched` 统计至少有一次尝试扩大窗口的查询数；`capped` 统计补窗缺口被上限截住的查询数。
 未知等待为 null。干跑按配置顺序、使用基础窗口，标记 `historyUnavailable: true`。读历史失败时警告一次并使用同样的回退。
 关闭轮换时，CLI 显示 `query order: config order (collect.query_rotation is false)`；读历史失败时显示 `run history could not be read`。
 没有可用起始通道本身不代表历史不可用：历史读取成功时，`historyUnavailable` 为 false，`neverRun` 为 0，最久等待为 null。
@@ -382,7 +382,7 @@ Berlin Startup Jobs（`berlinstartupjobs`）读 [berlinstartupjobs.com](https://
 - **条款。** 站点没有访客使用条款（雇主条款只是告知雇主：岗位公开，搜索引擎和其他第三方工具可以读取并在别处展示，这是对雇主的通知，不是对你的授权），
   `robots.txt` 允许这个接口。岗位版权归雇主所有：只用于你自己的求职，不要镜像或再发布采集到的数据，商业使用或对外展示岗位前请自行判断。
   `/sources` 卡片写明来源并带链接。401、第一页的 404、410 或 403 算被封，打开该通道的熔断，其他通道照常运行。
-- **限制。** 量小（大约 140 条，其中约三分之一是技术岗，扣掉过期的更少）。站点只有柏林：`search.yaml: locations` 里是别的城市时，地点过滤会丢掉全部岗位。
+- **限制。** 量小（大约 140 条，其中约三分之一是技术岗，扣掉过期的更少）。站点只有柏林：常住城市和地点里没有柏林时，地点过滤会丢掉全部岗位。
   公司名是站点的，多数不带 “GmbH”，品牌名也可能和标题里的不同，所以跨来源合并有时会漏掉重复。
 - **设置**：`sources.berlinstartupjobs` 下的 `base_url`、`user_agent`、`per_page`、`max_pages`、`skip_expired`、`max_age_days`、`max_results`、
   `throttle` 和 `title_prefilter`（设置页上也有）。用 `enabled: false` 或 `/sources/registry` 上的开关关掉它。
@@ -397,11 +397,11 @@ Greenhouse、Workday 等，很多是小型创业公司）。不要 key，不用�
 默认关闭。
 
 - **每轮读什么。** 一次请求取索引，再对每个要留下的新岗位取一次描述（最多 `max_details_per_run` 个，默认 30，请求之间隔
-  1 到 3 秒；已经入库的岗位不再取，超出的留到下一轮）。留下的岗位要同时满足：在你的地点之一（`search.yaml: locations`，按城市别名
-  比对，所以“München”也能匹配站点的 `munich`；或者你的远程范围不是 `none` 时，面向你所在国家的远程岗位），不超过
+  1 到 3 秒；已经入库的岗位不再取，超出的留到下一轮）。留下的岗位要同时满足：在你的常住城市或 ✈ 地点（按城市别名
+  比对，所以“München”也能匹配站点的 `munich`；没有常住城市时，本国任何地方），或者办公方式含远程时，面向本国或列出国家的远程岗位；不超过
   `max_age_days` 天（14；索引只有日期没有时间），标题通过 `title_prefilter`（命中搜索关键词或 `include_terms`，或属于关注的公司；
   `exclude_terms` 去掉学生岗和实习），并且在 `skip_known_boards: true` 时，不属于你已经列在 `ats_boards` 里的公司 board（不管开关）：
-  那些由 ATS 通道直接读一手数据。索引只覆盖柏林、慕尼黑、汉堡和德国远程；`locations` 里是别的城市时，通道照常运行，只是找不到岗位。
+  那些由 ATS 通道直接读一手数据。索引只覆盖柏林、慕尼黑、汉堡和德国远程；地点是别的地方时，通道照常运行，只是找不到岗位。
 - **一条岗位有什么。** 标题、公司、一个或多个地点、工作方式（站点的 "onsite" 不当作事实）、可选的薪资区间文字，以及完整描述
   （HTML，按文本读取；文本里的邮箱和电话会被去掉，入库的原文保留；陷阱扫描会读其中的隐藏文字，见
   [ai-traps.zh.md](ai-traps.zh.md)）。岗位链接指向雇主自己的岗位页，因为该站没有岗位页。同一岗位若也来自雇主的 ATS 或别的来源，会合并成一个；

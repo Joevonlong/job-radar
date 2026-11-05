@@ -24,7 +24,7 @@ describe("CHANNEL_CONFIG_TABLE", () => {
     expect(CHANNEL_CONFIG_TABLE["linkedin-monid"]).toEqual({ section: "linkedin", key: "monid" });
     expect(CHANNEL_CONFIG_TABLE["linkedin-guest"]).toEqual({ section: "linkedin", key: "guest", supportsCompanyQueries: true });
     expect(CHANNEL_CONFIG_TABLE["linkedin-session:recommended"]).toEqual({ section: "linkedin", key: "session", view: "recommended", usesQueries: false, statesPostedAt: true });
-    expect(CHANNEL_CONFIG_TABLE.arbeitsagentur).toEqual({ section: "sources", key: "arbeitsagentur", supportsCompanyQueries: true });
+    expect(CHANNEL_CONFIG_TABLE.arbeitsagentur).toEqual({ section: "sources", key: "arbeitsagentur", supportsCompanyQueries: true, supportsRemotePlaces: false });
     expect(CHANNEL_CONFIG_TABLE.arbeitnow).toEqual({ section: "sources", key: "arbeitnow", usesQueries: false });
     expect(CHANNEL_CONFIG_TABLE.berlinstartupjobs).toEqual({ section: "sources", key: "berlinstartupjobs", usesQueries: false });
     expect(CHANNEL_CONFIG_TABLE.handpicked).toEqual({ section: "sources", key: "handpicked", usesQueries: false });

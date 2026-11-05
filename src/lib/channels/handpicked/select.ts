@@ -1,5 +1,5 @@
 import { foldText } from "@/lib/filter/text";
-import { citySpellings, type PlaceGeo } from "@/lib/market/places";
+import { citySpellings, lookupPlace, placeAreas, wantedLocations, type PlaceGeo, type PlacePreferences } from "@/lib/market/places";
 
 import type { TitlePrefilter } from "../ats/prefilter";
 import { boardFromUrl, boardKey } from "../discovery/boards";
@@ -9,29 +9,37 @@ import type { HandpickedIndexEntry } from "./schema";
 
 /**
  * Which index entries the channel keeps. Pure functions of the entries and the user's configuration: the places come from
- * `search.yaml: locations` (with every spelling the tables know), never from the code.
+ * the home city and places of preferences.yaml (with every spelling the tables know), never from the code.
  */
 
 export interface Places {
   /** Folded names of the wanted cities, their aliases included. */
   cities: ReadonlySet<string>;
-  /** `search.yaml: remote_scope` is not `none`. */
+  /** Countries where any city counts: those I'd move to, and home without a home city. */
+  wholeCountries: ReadonlySet<string>;
+  /** The countries the tables give a city's slug. */
+  countriesOf: (slug: string) => readonly string[];
+  /** `workplace` has remote. */
   remote: boolean;
-  /** The market's home country (ISO 3166-1 alpha-2, upper case). */
-  country: string;
+  /** Countries a remote posting may be open to: home and the listed ones (upper case). Null: any (Worldwide is listed). */
+  countries: ReadonlySet<string> | null;
 }
 
-export function buildPlaces(input: { locations: readonly string[]; geo: Pick<PlaceGeo, "cityAliases" | "cities">; remoteScope: unknown; country: string }): Places {
+export function buildPlaces(input: { preferences: PlacePreferences & { workplace: readonly string[] }; geo: PlaceGeo; country: string }): Places {
   const cities = new Set<string>();
-  for (const location of input.locations) for (const name of citySpellings(location, input.geo)) cities.add(foldText(name));
-  return { cities, remote: input.remoteScope !== "none", country: input.country.toUpperCase() };
+  for (const location of wantedLocations(input.preferences)) for (const name of citySpellings(location, input.geo)) cities.add(foldText(name));
+  const areas = placeAreas(input.preferences, input.geo, input.country.toUpperCase());
+  const wholeCountries = new Set([...areas.moveCountries, ...(areas.anywhereInHome ? [input.country.toUpperCase()] : [])]);
+  const countriesOf = (slug: string): readonly string[] => lookupPlace(slug, input.geo)?.countries ?? [];
+  return { cities, wholeCountries, countriesOf, remote: input.preferences.workplace.includes("remote"), countries: areas.worldwide ? null : areas.remoteCountries };
 }
 
-/** A wanted place by `cities`, or a remote posting open to the home country (an empty country list means "not restricted"). */
+/** A wanted place by `cities`, or a remote posting open to home or a listed country (an empty country list means "not restricted"). */
 export function matchesPlace(entry: Pick<HandpickedIndexEntry, "cities" | "remoteType" | "remoteCountryCodes">, places: Places): boolean {
-  if (entry.cities.some((slug) => places.cities.has(foldText(slug)))) return true;
+  if (entry.cities.some((slug) => places.cities.has(foldText(slug)) || places.countriesOf(slug).some((country) => places.wholeCountries.has(country)))) return true;
   if (entry.remoteType !== "remote" || !places.remote) return false;
-  return entry.remoteCountryCodes.length === 0 || entry.remoteCountryCodes.some((code) => code.toUpperCase() === places.country);
+  const { countries } = places;
+  return countries === null || entry.remoteCountryCodes.length === 0 || entry.remoteCountryCodes.some((code) => countries.has(code.toUpperCase()));
 }
 
 export interface SelectOptions {

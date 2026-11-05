@@ -137,7 +137,7 @@ const sameReasons = (a: readonly string[], b: readonly string[]): boolean => a.l
 export async function runFilter(db: Db, options: FilterOptions): Promise<FilterRunResult> {
   const watchedCompanies = options.watchedCompanies ?? currentWatchedCompanies(options.logger);
   // Version the evaluator along with all configuration it reads, including inputs outside the preference snapshot.
-  const configHash = createHash("sha256").update(JSON.stringify([2, options.preferences, options.pipeline, options.me, watchedCompanies])).digest("hex");
+  const configHash = createHash("sha256").update(JSON.stringify([3, options.preferences, options.pipeline, options.me, watchedCompanies])).digest("hex");
   const compiled: CompiledFilter = compileFilter(options.preferences, options.pipeline, { me: options.me, watchedCompanies });
   const dealBreakers = startDealBreakerRun(compiled.dealBreakers, options.timeBox ?? vmTimeBox);
   // Phrase and visa rule health depends on this run's time budget, which an input fingerprint cannot predict.

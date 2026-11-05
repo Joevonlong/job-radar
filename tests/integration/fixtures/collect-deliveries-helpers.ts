@@ -6,7 +6,7 @@ import { stringify } from "yaml";
 import type { Channel, ChannelContext, RawPostingInput } from "@/lib/channels/types";
 import { resetConfigCache } from "@/lib/config";
 
-import { channelsWith } from "../../channels/helpers";
+import { channelsWith, oneCityPlaces } from "../../channels/helpers";
 import { makeTempConfig, type TempConfig } from "../../config/helpers";
 import { config, probeChannel, settings } from "../../cycle/helpers";
 
@@ -35,7 +35,7 @@ export function writeAuditConfig(temp: TempConfig, excludeChannels: string[] = [
 
 export function cycleConfig() {
   return {
-    ...config(),
+    ...config({ places: oneCityPlaces() }),
     channels: channelsWith((raw) => {
       raw.paid_total_monthly_budget_usd = 100;
       Object.assign(raw.http as Record<string, unknown>, { max_retries: 0 });

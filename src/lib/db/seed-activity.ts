@@ -2,6 +2,7 @@
 import { eq, inArray, or, sql } from "drizzle-orm";
 import { rootIdForCycle } from "@/lib/activity/ids";
 import { buildQueries, buildSweepQuery } from "@/lib/channels/query";
+import { loadQueryPlaces } from "@/lib/channels/query-places";
 import { loadConfig } from "@/lib/config";
 import type { Executor } from "./executor";
 import { activityEvents, activitySpans, controlRequests, runDeliveries } from "./schema";
@@ -42,7 +43,7 @@ export async function seedActivity(db: Executor, input: {
   const steps = ["collect", "pipeline", "filter", "signals", "ai", "notify", "maintenance"];
   await db.insert(activitySpans).values(steps.map((name, index) => ({ ...span(fixedId(10 + index), `step.${name}`, name === "collect" ? "partial" : "ok", rootId, rootId), progressDone: 3, progressTotal: 3 })));
   const search = loadConfig("search");
-  const queries = buildQueries(search, "manual");
+  const queries = buildQueries(search, loadQueryPlaces(), "manual");
   const sweep = buildSweepQuery(search, "manual");
   const querySpans = runs.filter((run) => run.status !== "skipped").map((run, index) => ({
     ...span(fixedId(100 + index), "collect.query", run.status === "failed" ? "failed" : "ok", fixedId(10), rootId),

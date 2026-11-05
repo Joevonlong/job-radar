@@ -83,8 +83,6 @@ if (!(await completeSetup("cli")).ok) fail("could not mark the setup complete");
 await applyExamplePlan(planExample(readExample(EXAMPLE_ID)));
 resetConfigCache();
 
-// the demo person's city (the example leaves the cities to the user)
-await mutateConfig("search", (current) => ({ ...current, locations: ["Berlin"] }));
 // the paid LinkedIn source needs an API key the demo does not have (src/lib/db/seed-demo.ts DEMO_DISABLED_CHANNELS)
 await mutateConfig("channels", (current) => ({ ...current, linkedin: { ...current.linkedin, brightdata: { ...current.linkedin.brightdata, enabled: false } } }));
 await mutateConfig("schedule", (current) => ({ ...current, timezone: DEMO_TIMEZONE }));

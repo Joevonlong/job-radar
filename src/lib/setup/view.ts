@@ -82,6 +82,8 @@ export interface SetupView {
   market: {
     /** null when preferences.yaml or search / schedule cannot be read. */
     draft: MarketInput | null;
+    /** preferences.yaml `workplace`: the count of searches per place depends on it. Empty when unreadable. */
+    workplace: readonly string[];
     saved: MarketDraft | null;
     /** Pack's city names per country (candidates; free text is fine too). */
     cities: Record<string, string[]>;
@@ -190,9 +192,9 @@ function marketPart(): SetupView["market"] {
   const schedule = readFresh("schedule");
   const cities = cityCandidates();
   const defaults = countryDefaults();
-  if (preferences === null || search === null || schedule === null) return { draft: null, saved: preferences === null ? null : preferencesConfigToDraft(preferences).market, cities, countryDefaults: defaults };
+  if (preferences === null || search === null || schedule === null) return { draft: null, workplace: [], saved: preferences === null ? null : preferencesConfigToDraft(preferences).market, cities, countryDefaults: defaults };
   const prefs = preferencesConfigToDraft(preferences);
-  return { draft: { market: prefs.market, home_city: prefs.home_city, places: prefs.places.map((entry) => ({ ...entry })), timezone: schedule.timezone }, saved: prefs.market, cities, countryDefaults: defaults };
+  return { draft: { market: prefs.market, home_city: prefs.home_city, places: prefs.places.map((entry) => ({ ...entry })), timezone: schedule.timezone }, workplace: prefs.workplace, saved: prefs.market, cities, countryDefaults: defaults };
 }
 
 function targetsPart(): SetupView["targets"] {

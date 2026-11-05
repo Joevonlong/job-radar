@@ -5,12 +5,13 @@ import { listJobCityRows, type Db } from "@/lib/db";
 
 import { buildCityGroups, type CityGroup } from "./city-groups";
 
-/** The target cities of preferences.yaml; none when the file cannot be read (the dropdown then has no "target" group). */
-function targetCities(): string[] {
+/** The target cities of preferences.yaml and which is home; none when the file cannot be read (the dropdown then has no "target" group). */
+function targetCities(): { targets: string[]; homeCity?: string } {
   try {
-    return wantedLocations(parseConfigText("preferences", readProfileText("preferences")));
+    const preferences = parseConfigText("preferences", readProfileText("preferences"));
+    return { targets: wantedLocations(preferences), homeCity: preferences.home_city };
   } catch {
-    return [];
+    return { targets: [] };
   }
 }
 
@@ -18,5 +19,5 @@ function targetCities(): string[] {
 export async function loadCityGroups(db: Db): Promise<CityGroup[]> {
   const rows = await listJobCityRows(db);
   const pipeline = loadPipeline();
-  return buildCityGroups(rows, { targets: targetCities(), filter: pipeline.filter, market: pipeline.market });
+  return buildCityGroups(rows, { ...targetCities(), filter: pipeline.filter, market: pipeline.market });
 }

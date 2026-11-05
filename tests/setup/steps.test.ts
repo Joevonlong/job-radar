@@ -71,22 +71,25 @@ describe("language", () => {
 });
 
 describe("market", () => {
-  it("writes the market, cities and remote scope to preferences and search, the time zone to schedule", async () => {
+  it("writes the market and the places to preferences, the time zone to schedule, and leaves search.yaml alone", async () => {
+    const before = snapshot("search");
     expect(await saveMarketStep(MARKET)).toEqual({ status: "saved", step: "market" });
     const prefs = reloadConfig("preferences");
     expect(prefs.market).toEqual({ pack: "generic", country: "NL", currency: "EUR", home_language: "nl" });
     expect(prefs.home_city).toBe("Amsterdam");
     expect(prefs.places).toEqual([{ place: "Utrecht", relocate: true }, { place: "eu", relocate: false }]);
-    const search = reloadConfig("search");
-    expect(search.locations).toEqual(["Amsterdam", "Utrecht"]);
-    expect(search.remote_scope).toEqual({ region: ["eu"] });
+    expect(snapshot("search")).toEqual(before);
     expect(reloadConfig("schedule").timezone).toBe("Europe/Amsterdam");
     expect(stepStatus("market")).toBe("done");
   });
 
+  it("takes no home city: anywhere in the home country then counts", async () => {
+    expect(await saveMarketStep({ ...MARKET, home_city: " " })).toEqual({ status: "saved", step: "market" });
+    expect(reloadConfig("preferences").home_city).toBe("");
+  });
+
   it.each([
     ["an unknown time zone", { ...MARKET, timezone: "Mars/Olympus" }, "timezone"],
-    ["no city", { ...MARKET, home_city: " " }, "home_city"],
     ["an unknown pack", { ...MARKET, market: { ...MARKET.market, pack: "atlantis" } }, "market.pack"],
     ["a generic pack without a country", { ...MARKET, market: { pack: "generic", country: "", currency: "EUR", home_language: "nl" } }, "market.country"],
   ])("reports %s next to the field and writes nothing", async (_name, input, path) => {

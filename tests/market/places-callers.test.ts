@@ -15,6 +15,46 @@ import { fixtureMarket, shippedPipeline } from "../pipeline/helpers";
 const market = fixtureMarket({ pack: "generic", country: "DE", currency: "EUR", home_language: "de" });
 const pipeline = { ...shippedPipeline(market), filter: { ...shippedPipeline(market).filter, city_aliases: {} } };
 
+describe("a place to move to counts abroad", () => {
+  const abroad = { ...pipeline, market: { ...pipeline.market, cities: { ...pipeline.market.cities, amsterdam: ["Amsterdam", "NL"] as [string, string] } } };
+
+  it("in the city groups, a city is listed and a whole country is not", () => {
+    const groups = buildCityGroups(
+      [{ jobId: 1, city: "Amsterdam", label: "Amsterdam, Netherlands", countryCode: "NL" }, { jobId: 3, city: "Utrecht", label: "Utrecht, Netherlands", countryCode: "NL" }],
+      { targets: ["Amsterdam", "NL"], filter: abroad.filter, market: { ...market, cities: abroad.market.cities } },
+    );
+    const target = groups.filter((group) => group.target);
+    expect(target.map((group) => group.key)).toEqual(["Amsterdam"]);
+    expect(target[0]?.jobCount).toBe(1);
+  });
+});
+
+describe("the handpicked channel without a home city, or with a whole country", () => {
+  const abroad = { ...pipeline, market: { ...pipeline.market, cities: { ...pipeline.market.cities, amsterdam: ["Amsterdam", "NL"] as [string, string] } } };
+  const onsite = (slug: string) => ({ cities: [slug], remoteType: "onsite" as const, remoteCountryCodes: [] });
+  const places = (home_city: string, list: { place: string; relocate: boolean }[]) => buildPlaces({ preferences: { home_city, places: list, workplace: ["onsite"] }, geo: placeGeo(abroad), country: "DE" });
+
+  it("keeps a city of the home country when there is no home city", () => {
+    expect(matchesPlace(onsite("München"), places("", []))).toBe(true);
+    expect(matchesPlace(onsite("Amsterdam"), places("", []))).toBe(false);
+    expect(matchesPlace(onsite("München"), places("Berlin", []))).toBe(false);
+  });
+
+  it("keeps a city of a country to move to, not of a remote-only one", () => {
+    expect(matchesPlace(onsite("Amsterdam"), places("Berlin", [{ place: "NL", relocate: true }]))).toBe(true);
+    expect(matchesPlace(onsite("Amsterdam"), places("Berlin", [{ place: "NL", relocate: false }]))).toBe(false);
+  });
+});
+
+describe("the city groups keep the home city in the home country", () => {
+  it("even when the tables do not know it", () => {
+    const target = (countryCode: string | null) => buildCityGroups([{ jobId: 1, city: "Poing", label: "Poing", countryCode }], { targets: ["Poing"], homeCity: "Poing", filter: pipeline.filter, market })[0]?.target;
+    expect(target("AT")).toBe(false);
+    expect(target(null)).toBe(true);
+    expect(target("DE")).toBe(true);
+  });
+});
+
 describe("every caller reads Munich and München as one city", () => {
   it.each([["Munich", "München, Germany"], ["München", "Munich, Germany"], ["Muenchen", "München, Germany"]])("the filter: wanted %s, job in %s", (wanted, label) => {
     const filter = filterWith(prefs((raw) => void (raw.home_city = wanted)), pipeline);
@@ -34,7 +74,7 @@ describe("every caller reads Munich and München as one city", () => {
   });
 
   it("the handpicked channel", () => {
-    const places = buildPlaces({ locations: ["Munich"], geo: placeGeo(pipeline), remoteScope: "none", country: "DE" });
+    const places = buildPlaces({ preferences: { home_city: "Munich", places: [], workplace: ["onsite"] }, geo: placeGeo(pipeline), country: "DE" });
     expect(matchesPlace({ cities: ["München"], remoteType: "onsite", remoteCountryCodes: [] }, places)).toBe(true);
     expect(matchesPlace({ cities: ["Hamburg"], remoteType: "onsite", remoteCountryCodes: [] }, places)).toBe(false);
   });

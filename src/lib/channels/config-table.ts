@@ -9,7 +9,7 @@ type ConfigView = "recommended";
 export type ChannelConfigRef = (
   | { readonly section: "linkedin"; readonly key: LinkedinKey; readonly view?: ConfigView }
   | { readonly section: "sources"; readonly key: SourceKey }
-) & { readonly usesQueries?: false; readonly supportsCompanyQueries?: true; readonly statesPostedAt?: true };
+) & { readonly usesQueries?: false; readonly supportsCompanyQueries?: true; readonly supportsRemotePlaces?: false; readonly statesPostedAt?: true };
 
 /**
  * The single table linking a channel id to its block in sources.yaml. A channel can only be
@@ -22,14 +22,14 @@ export const CHANNEL_CONFIG_TABLE = {
   "linkedin-session": { section: "linkedin", key: "session", supportsCompanyQueries: true, statesPostedAt: true },
   "linkedin-session:recommended": { section: "linkedin", key: "session", view: "recommended", usesQueries: false, statesPostedAt: true },
   "linkedin-guest": { section: "linkedin", key: "guest", supportsCompanyQueries: true },
-  arbeitsagentur: { section: "sources", key: "arbeitsagentur", supportsCompanyQueries: true },
+  arbeitsagentur: { section: "sources", key: "arbeitsagentur", supportsCompanyQueries: true, supportsRemotePlaces: false },
   indeed: { section: "sources", key: "indeed", supportsCompanyQueries: true },
-  stepstone: { section: "sources", key: "stepstone", supportsCompanyQueries: true },
-  xing: { section: "sources", key: "xing", supportsCompanyQueries: true },
+  stepstone: { section: "sources", key: "stepstone", supportsCompanyQueries: true, supportsRemotePlaces: false },
+  xing: { section: "sources", key: "xing", supportsCompanyQueries: true, supportsRemotePlaces: false },
   arbeitnow: { section: "sources", key: "arbeitnow", usesQueries: false },
   handpicked: { section: "sources", key: "handpicked", usesQueries: false },
   berlinstartupjobs: { section: "sources", key: "berlinstartupjobs", usesQueries: false },
-  jsearch: { section: "sources", key: "jsearch", supportsCompanyQueries: true },
+  jsearch: { section: "sources", key: "jsearch", supportsCompanyQueries: true, supportsRemotePlaces: false },
   greenhouse: { section: "sources", key: "greenhouse", usesQueries: false, statesPostedAt: true },
   lever: { section: "sources", key: "lever", usesQueries: false, statesPostedAt: true },
   ashby: { section: "sources", key: "ashby", usesQueries: false, statesPostedAt: true },
@@ -56,6 +56,13 @@ export function channelSupportsCompanyQueries(id: string): boolean {
   if (!isConfiguredChannelId(id)) return false;
   const ref: ChannelConfigRef = CHANNEL_CONFIG_TABLE[id];
   return ref.supportsCompanyQueries === true;
+}
+
+/** Whether the board can send a place on a remote query, for the web process, which has no collector instances. */
+export function channelSupportsRemotePlaces(id: string): boolean {
+  if (!isConfiguredChannelId(id)) return true;
+  const ref: ChannelConfigRef = CHANNEL_CONFIG_TABLE[id];
+  return ref.supportsRemotePlaces !== false;
 }
 
 /** Static `trustedPostedAt` for the web process: the channel's posted date is the source's own (an ATS's publish date), not an aggregator's. */

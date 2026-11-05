@@ -2,10 +2,11 @@ import { buildCompanyQueries, buildQueries, buildSweepQuery } from "@/lib/channe
 import type { WatchedCompanyBoard } from "@/lib/companies/watched-boards";
 import { z } from "zod";
 import type { SearchConfig } from "@/lib/config";
+import type { QueryPlaces } from "@/lib/channels/query";
 import type { ActivityTranslator } from "./messages";
 
 /** Only the current, trusted search config supplies free-text query labels. Never use stored query text. */
-export function resolveQueryLabels(search: SearchConfig, t: ActivityTranslator, companies: readonly WatchedCompanyBoard[] = [], historicalKeys: Record<string, string> = {}): Record<string, string> {
+export function resolveQueryLabels(search: SearchConfig, places: QueryPlaces | null, t: ActivityTranslator, companies: readonly WatchedCompanyBoard[] = [], historicalKeys: Record<string, string> = {}): Record<string, string> {
   const labels: Record<string, string> = {};
   for (const [id, key] of Object.entries(historicalKeys)) labels[id] = t("company", { name: key });
   // A board or opt-out added later must not erase labels of previous company queries.
@@ -13,8 +14,8 @@ export function resolveQueryLabels(search: SearchConfig, t: ActivityTranslator, 
   for (const query of buildCompanyQueries(companySearch, companies.map((entry) => ({ ...entry, hasBoard: false })), 0)) {
     labels[query.id] = t("company", { name: query.company!.name });
   }
-  for (const query of buildQueries(search, "manual")) {
-    labels[query.id] = `${query.keywords.join(" / ")} · ${query.location ?? t("remote")}`;
+  for (const query of buildQueries(search, places, "manual")) {
+    labels[query.id] = `${query.keywords.join(" / ")} · ${query.remote && query.location !== null ? t("remotePlace", { place: query.location }) : (query.location ?? t("remote"))}`;
   }
   labels[buildSweepQuery(search, "manual").id] = t("sweep");
   return labels;

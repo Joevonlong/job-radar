@@ -11,7 +11,6 @@ import { currentMe } from "@/lib/filter";
 import { loadMarket, loadPipeline } from "@/lib/market";
 import { previewDealBreakerDrafts, previewRequestSchema, type DraftPreviewRule } from "@/lib/profile/deal-breaker-preview";
 import { invalidProfileRequest, rollbackProfile, saveProfile, saveStories } from "@/lib/profile/service";
-import { syncSearchLocations, type SyncSearchLocationsResult } from "@/lib/profile/search-locations";
 import { enableMarketChannels, type RegistryActionState } from "@/lib/sources/registry/service";
 import type { ProfileActionState } from "@/lib/profile/types";
 import { adoptStoryDraft } from "@/lib/stories/adopt";
@@ -72,16 +71,6 @@ export async function enableMarketChannelsAction(): Promise<RegistryActionState>
     revalidatePath("/me");
     revalidatePath("/sources");
     revalidatePath("/sources/registry");
-  }
-  return result;
-}
-
-/** Copy the places of "What I want" into search.yaml `locations` (the cities that are searched). */
-export async function syncSearchLocationsAction(locations: unknown): Promise<SyncSearchLocationsResult> {
-  const result = await syncSearchLocations(locations);
-  if (result.status === "done") {
-    revalidatePath("/me");
-    revalidatePath("/settings");
   }
   return result;
 }

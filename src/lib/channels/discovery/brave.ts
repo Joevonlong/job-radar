@@ -1,3 +1,5 @@
+import { onsiteSearchTexts } from "@/lib/channels/query";
+import { loadQueryPlaces } from "@/lib/channels/query-places";
 import { z } from "zod";
 
 import { ChannelError } from "@/lib/channels/errors";
@@ -65,14 +67,15 @@ export function buildDiscoveryQuery(ats: DiscoverableAts, keywords: readonly str
 }
 
 /**
- * Every ATS x keyword group x city in search.yaml order (keyword group outermost, then city, then ATS).
+ * Every ATS x keyword group x place in order (keyword group outermost, then place, then ATS). Only the home city and the places
+ * I'd move to: discovery costs money per search, and an upgrade leaves it as it was.
  * When there are more than `max_queries_per_run`, a run takes the ones that had a turn longest ago first
  * (`shared.ts`); with rotation off the cap drops whole keyword groups from the end.
  */
-export function buildDiscoveryQueries(search: Pick<SearchConfig, "keyword_groups" | "locations">): DiscoveryQuery[] {
+export function buildDiscoveryQueries(search: Pick<SearchConfig, "keyword_groups">, cities: readonly string[]): DiscoveryQuery[] {
   const queries: DiscoveryQuery[] = [];
   for (const [group, keywords] of Object.entries(search.keyword_groups)) {
-    for (const city of search.locations) {
+    for (const city of cities) {
       for (const ats of DISCOVERABLE_ATS) {
         const q = buildDiscoveryQuery(ats, keywords, city);
         if (q !== null) queries.push({ ats, group, city, q, id: discoveryQueryId({ ats, group, city, q }) });
@@ -85,7 +88,7 @@ export function buildDiscoveryQueries(search: Pick<SearchConfig, "keyword_groups
 export type BraveDeps = DiscoveryDeps;
 
 export const defaultBraveDeps: BraveDeps = {
-  inputs: () => ({ search: loadConfig("search"), companies: loadCompanies(), queryRotation: loadConfig("channels").collect.query_rotation }),
+  inputs: () => ({ search: loadConfig("search"), cities: onsiteSearchTexts(loadQueryPlaces()), companies: loadCompanies(), queryRotation: loadConfig("channels").collect.query_rotation }),
   store: () => createDbDiscoveryStore(getDb(), "brave"),
 };
 
@@ -108,7 +111,7 @@ const braveProvider: DiscoveryProvider<BraveChannelSettings> = {
   keyEnv: BRAVE_API_KEY_ENV,
   settingsOf: braveSettingsOf,
   endpoint: (settings) => ({ service: "brave", url: settings.api_base_url }),
-  buildQueries: (search) => buildDiscoveryQueries(search),
+  buildQueries: (search, cities) => buildDiscoveryQueries(search, cities),
   async search(query, apiKey, settings, ctx) {
     const params = new URLSearchParams({
       q: query.q,

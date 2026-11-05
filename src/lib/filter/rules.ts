@@ -1,7 +1,6 @@
 import type { PipelineConfig, PreferencesConfig } from "@/lib/config";
 import type { GermanLevel, JobLocation, JobSalary } from "@/lib/domain/types";
-import { scopeCountries, scopeWidePatterns } from "@/lib/market/remote-scope";
-import { canonicalCity, citySpellings, placeGeo, wantedLocations, wantedRemoteScope } from "@/lib/market/places";
+import { canonicalCity, citySpellings, placeAreas, placeGeo } from "@/lib/market/places";
 import type { Market } from "@/lib/market/types";
 import { buildBlacklistedCompanyKeys, buildWatchedCompanyKeys, isCompanyExcluded, isCompanyWatched } from "@/lib/companies/marks";
 import { visaRulesFor } from "@/lib/visa/rules";
@@ -103,24 +102,38 @@ export function wholeWordSource(terms: readonly string[], foldAccents: boolean):
   return `(?<![\\p{L}\\p{N}_])${body}(?![\\p{L}\\p{N}_])`;
 }
 
+/** A city or an unknown name from the location settings, ready to compare locations with. */
+interface NamedTarget {
+  /** Folded names: its spellings and the towns of its metro area. */
+  names: ReadonlySet<string>;
+  patterns: readonly RegExp[];
+  /** Folded names of regions that contain it but are too coarse to say ("Bavaria"). */
+  regions: ReadonlySet<string>;
+  /** The countries it lies in; null: its text counts in any country. */
+  countries: ReadonlySet<string> | null;
+  /** The home city or a place I'd move to: on-site and hybrid jobs count here. */
+  relocate: boolean;
+}
+
 export interface CompiledFilter {
   preferences: PreferencesConfig;
-  /** Folded names of the allowed cities (preferences `locations`, their aliases and the towns of their metro areas). */
-  allowedCities: ReadonlySet<string>;
-  cityLabelPatterns: readonly RegExp[];
-  /** Folded names of regions that contain an allowed city but are too coarse to say ("Bavaria"). */
-  regions: ReadonlySet<string>;
+  /** The home city first, then the listed cities and unknown names. */
+  named: readonly NamedTarget[];
+  /** No home city: a location that states the home country counts. */
+  anywhereInHome: boolean;
+  /** Countries I'd move to: any location there counts. */
+  moveCountries: ReadonlySet<string>;
   /** Texts that name only a country ("Germany"). */
   countryLevel: readonly RegExp[];
   countryLevelOnsitePolicy: "keep_note" | "exclude";
   genericLocation: readonly RegExp[];
-  /** The market's home country: the only country a target city can be in. */
+  /** The market's home country. */
   homeCountry: string;
   /** The market's base currency: what the salary floor is in. */
   baseCurrency: string;
-  /** Countries inside the remote scope; null = all (worldwide). */
+  /** Where a remote job may be based: the home country and the listed countries and regions; null = all (Worldwide is listed). */
   scopeCountries: ReadonlySet<string> | null;
-  /** Location texts that name the scope as a whole ("EU", "Europe"). */
+  /** Location texts that name a wide area covering home or a listed place ("EU", "Europe"). */
   scopeWide: readonly RegExp[];
   worldwide: readonly RegExp[];
   outside: readonly RegExp[];
@@ -158,7 +171,7 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
   const transliterations = market.transliterations;
 
   const geo = placeGeo(pipeline);
-  const remoteScope = wantedRemoteScope(preferences, geo);
+  const areas = placeAreas(preferences, geo, market.country);
   const spellings = (name: string): string[] => citySpellings(name, geo);
 
   const metroOf = new Map<string, string[]>();
@@ -172,18 +185,25 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
     regionsOf.set(key, [...(regionsOf.get(key) ?? []), ...regions]);
   }
 
-  const allowed = new Set<string>();
-  const regions = new Set<string>();
-  for (const location of wantedLocations(preferences)) {
-    const canonical = canonicalCity(location, geo);
-    const addAllowed = (name: string): void => {
-      allowed.add(foldText(name));
-      allowed.add(foldTransliterated(name, transliterations));
+  const named = areas.named.map((place): NamedTarget => {
+    const canonical = canonicalCity(place.text, geo);
+    const names = new Set<string>();
+    const add = (name: string): void => {
+      names.add(foldText(name));
+      names.add(foldTransliterated(name, transliterations));
     };
-    for (const name of spellings(location)) addAllowed(name);
-    for (const town of metroOf.get(foldText(canonical)) ?? []) for (const name of spellings(town)) addAllowed(name);
-    for (const region of regionsOf.get(foldText(canonical)) ?? []) regions.add(foldText(region));
-  }
+    for (const name of spellings(place.text)) add(name);
+    for (const town of metroOf.get(foldText(canonical)) ?? []) for (const name of spellings(town)) add(name);
+    return {
+      names,
+      patterns: [...names].map((name) => wholeWordPattern(name)),
+      regions: new Set((regionsOf.get(foldText(canonical)) ?? []).map((region) => foldText(region))),
+      countries: place.countries === null ? null : new Set(place.countries),
+      relocate: place.relocate,
+    };
+  });
+  const remoteCountries = areas.worldwide ? null : areas.remoteCountries;
+  const wideRegions = [...new Set([...(market.homeRegion === null ? [] : [market.homeRegion]), ...areas.wideRegions])];
 
   const blacklistedCompanyKeys = buildBlacklistedCompanyKeys(preferences.exclude_companies, pipeline);
 
@@ -191,20 +211,20 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
 
   return {
     preferences,
-    allowedCities: allowed,
-    cityLabelPatterns: [...allowed].map((name) => wholeWordPattern(name)),
-    regions,
+    named,
+    anywhereInHome: areas.anywhereInHome,
+    moveCountries: areas.moveCountries,
     countryLevel: compilePatterns(cfg.country_level.patterns),
     countryLevelOnsitePolicy: cfg.country_level.onsite_policy,
     genericLocation: compilePatterns(cfg.generic_location_patterns),
     homeCountry: market.country,
     baseCurrency: market.currency,
-    scopeCountries: scopeCountries(remoteScope, market),
-    scopeWide: compilePatterns(scopeWidePatterns(remoteScope, market)),
+    scopeCountries: remoteCountries,
+    scopeWide: compilePatterns(areas.worldwide ? [] : wideRegions.flatMap((token) => market.regions[token]?.patterns ?? [])),
     worldwide: compilePatterns(cfg.remote.worldwide_patterns),
     outside: compilePatterns(cfg.remote.outside_patterns),
     titleOutside: compilePatterns(cfg.remote.title_outside_patterns),
-    outsideStateCode: outsideStateCodes(market, scopeCountries(remoteScope, market)),
+    outsideStateCode: outsideStateCodes(market, remoteCountries),
     descriptionInScope: compilePatterns(cfg.remote.description_in_scope_patterns),
     seniorities,
     blacklistedCompanyKeys,
@@ -224,22 +244,31 @@ function outsideStateCodes(market: Market, inScope: ReadonlySet<string> | null):
 
 // ---------------------------------------------------------------- location
 
-/** The home country or no country stated: the only countries a target city (or its metro area) can be in. */
+/** The home country or no country stated: where a text that names only the country, or no place, can stand for a wanted place. */
 const inHomeOrUnstated = (location: JobLocation, filter: CompiledFilter): boolean => location.countryCode === null || location.countryCode === filter.homeCountry;
 
 const cityOf = (location: JobLocation): string => location.city?.trim() ?? "";
 
+/** A named place holds a location when the location states one of its countries, or none. */
+const inCountriesOf = (target: NamedTarget, location: JobLocation): boolean => target.countries === null || location.countryCode === null || target.countries.has(location.countryCode);
+
 /**
- * The location is a target city or a town of its metro area. Both the normalized city and the label
- * are read ("Greater Munich Metropolitan Area", "Munich, Bavaria, Germany", "Poing bei München"); the
- * names have to stand alone as words.
+ * The location is this place or a town of its metro area. Both the normalized city and the label are read ("Greater Munich
+ * Metropolitan Area", "Munich, Bavaria, Germany", "Poing bei München"); the names have to stand alone as words.
  */
-function isAllowedCity(location: JobLocation, filter: CompiledFilter): boolean {
-  if (!inHomeOrUnstated(location, filter)) return false;
+function namesPlace(location: JobLocation, target: NamedTarget): boolean {
+  if (!inCountriesOf(target, location)) return false;
   const city = foldText(cityOf(location));
-  if (city !== "" && (filter.allowedCities.has(city) || filter.allowedCities.has(city.split(",", 1)[0]?.trim() ?? city))) return true;
+  if (city !== "" && (target.names.has(city) || target.names.has(city.split(",", 1)[0]?.trim() ?? city))) return true;
   const texts = [city, foldText(location.label)].filter((text) => text !== "");
-  return texts.some((text) => filter.cityLabelPatterns.some((p) => p.test(text)));
+  return texts.some((text) => target.patterns.some((p) => p.test(text)));
+}
+
+/** An on-site or hybrid job counts here: the home city (the stated home country without one), a place I'd move to, or a country I'd move to. */
+function isAllowedCity(location: JobLocation, filter: CompiledFilter): boolean {
+  const country = location.countryCode;
+  if (country !== null && (filter.moveCountries.has(country) || (filter.anywhereInHome && country === filter.homeCountry))) return true;
+  return filter.named.some((target) => target.relocate && namesPlace(location, target));
 }
 
 /** The location names only a country ("Germany", "Deutschland", "bundesweit"). */
@@ -251,18 +280,18 @@ function isCountryLevel(location: JobLocation, filter: CompiledFilter): boolean 
 
 /** The location names only a region that contains an allowed city ("Bavaria", "Bavaria, Germany"): the place itself is the region. */
 function isRegionLevel(location: JobLocation, filter: CompiledFilter): boolean {
-  if (!inHomeOrUnstated(location, filter)) return false;
   const place = foldText(cityOf(location) !== "" ? cityOf(location) : location.label);
-  return filter.regions.has(place.split(",", 1)[0]?.trim() ?? place);
+  const region = place.split(",", 1)[0]?.trim() ?? place;
+  return filter.named.some((target) => target.relocate && inCountriesOf(target, location) && target.regions.has(region));
 }
 
 const placeOf = (location: JobLocation): string => (location.city?.trim() ? location.city.trim() : location.label.trim());
 
 type ScopeClass = "in" | "out" | "unknown";
 
-/** Whether a location of a remote posting is inside the remote scope of the preferences. */
+/** Whether a remote posting is based where check 1 wants it: home, a listed country or city, or under a wide label. */
 function classifyRemoteLocation(location: JobLocation, filter: CompiledFilter): ScopeClass {
-  if (filter.scopeCountries === null) return "in";
+  if (filter.scopeCountries === null || filter.named.some((target) => namesPlace(location, target))) return "in";
   const country = location.countryCode;
   if (country !== null) return filter.scopeCountries.has(country) ? "in" : "out";
   const label = location.label;

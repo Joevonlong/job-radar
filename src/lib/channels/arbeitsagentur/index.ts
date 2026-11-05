@@ -165,6 +165,7 @@ export const arbeitsagenturChannel: Channel = {
   kind: "api",
   usesQueries: true,
   supportsCompanyQueries: true,
+  supportsRemotePlaces: false,
   // the ghost job check: the Referenznummer is stable and the detail's full text is stored
   stableExternalIds: true,
   fullDescription: true,

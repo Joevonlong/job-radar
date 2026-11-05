@@ -51,7 +51,7 @@ describe("loadConfig", () => {
   it("returns deeply frozen values", () => {
     const search = loadConfig("search");
     expect(() => {
-      search.locations.push("Hamburg");
+      search.window_hours.morning = 1;
     }).toThrow();
   });
 

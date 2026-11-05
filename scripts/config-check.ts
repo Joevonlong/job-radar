@@ -12,6 +12,7 @@
  *   - the deal-breakers of preferences.yaml must keep to the limits of pipeline.yaml (a language gate in a market without a
  *     local-language step is only a warning: it does nothing).
  *
+ *   - search.yaml's old `locations` and `remote_scope` name nothing preferences.yaml `places` lacks (only a warning: they are ignored);
  *   - the commented title_guard block of the shipped pipeline.yaml must equal the schema's defaults (a warning when the
  *     same-title limit is below the compatible limit or above the related-company limit);
  *   - the identity of the shipped defaults directory is printed (12 characters); a directory that cannot be identified (a
@@ -74,6 +75,7 @@ import { shippedConfigId, shortShippedConfigId } from "../src/lib/config/shipped
 import { dealBreakerLimitProblems, slowPatternProblems } from "../src/lib/filter/deal-breakers";
 import { vmTimeBox } from "../src/lib/filter/time-box";
 import { listPackIds, loadMarket, loadPipeline, packDirs, readPackDir } from "../src/lib/market";
+import { placeGeo, searchEntriesOutsidePlaces } from "../src/lib/market/places";
 import { compileGhostRules } from "../src/lib/ghost/rules";
 import { compileVisaRules } from "../src/lib/visa/rules";
 
@@ -327,6 +329,17 @@ report("preferences.yaml market", () => {
     if (sameMax > dedupe.cross_company_simhash_max_distance) console.log(`! dedupe.title_guard.same_title_max_distance (${sameMax}) is above dedupe.cross_company_simhash_max_distance (${dedupe.cross_company_simhash_max_distance}): the same company would be looser than related company names`);
   } catch {
     // reported by the lines above
+  }
+}
+
+// search.yaml's old location keys are ignored: warn about what they name that the location settings lack
+if (fs.existsSync(path.join(getProfileDir(), "preferences.yaml"))) {
+  try {
+    const preferences = parseConfigText("preferences", readConfigText("preferences"));
+    const names = searchEntriesOutsidePlaces(readEffectiveConfig("search"), preferences, placeGeo(loadPipeline()));
+    if (names.length > 0) console.log(`! search.yaml locations, remote_scope: ${names.join(", ")} not in preferences.yaml places; these keys are ignored, so they are not searched`);
+  } catch {
+    // an unreadable file is reported by its own check above
   }
 }
 

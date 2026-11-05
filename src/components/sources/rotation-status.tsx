@@ -21,11 +21,12 @@ export async function RotationStatusLine({ rotation, cascade = false, backfillId
   else {
     if (rotation.oldestWaitHours !== null && waiting) parts.push(t("wait", { hours: number(rotation.oldestWaitHours), group: waiting.keywordGroup, place }));
     if (rotation.neverRun > 0) parts.push(t("neverRun", { count: rotation.neverRun, number: number(rotation.neverRun) }));
+    if (rotation.remotePlacesSkipped > 0) parts.push(t("remotePlacesSkipped", { count: rotation.remotePlacesSkipped, number: number(rotation.remotePlacesSkipped) }));
     if (cascade) parts.push(t("orderedBy", { channel: rotation.sortChannel }));
   }
   return (
     <div className={cn("min-w-0 text-data [overflow-wrap:anywhere]", rotation.overCap > 0 ? "text-warning-text" : "text-ink-2")}
-      data-testid="rotation-status" data-queries={rotation.queries} data-never-run={rotation.neverRun} data-over-cap={rotation.overCap} data-sort-channel={rotation.sortChannel ?? ""}>
+      data-testid="rotation-status" data-queries={rotation.queries} data-never-run={rotation.neverRun} data-remote-places-skipped={rotation.remotePlacesSkipped} data-over-cap={rotation.overCap} data-sort-channel={rotation.sortChannel ?? ""}>
       <p>{parts.join(" · ")}</p>
       {rotation.overCap > 0 ? <p className="mt-1" data-testid="rotation-warning">{t("overCap", { count: rotation.overCap, number: number(rotation.overCap), hours: number(rotation.maxCatchUpHours) })}{backfillId ? <> <BackfillGapLink targetId={backfillId}>{backfill("gap")}</BackfillGapLink></> : null}</p> : null}
     </div>

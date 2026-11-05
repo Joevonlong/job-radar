@@ -209,7 +209,7 @@ Open <http://127.0.0.1:3000>. Every page leads to the setup wizard until you fin
 | Step | What you choose |
 |---|---|
 | Language | Interface language, language of the AI's texts, language ads are translated into |
-| Market | Market pack, country, currency, local language, cities, remote scope, time zone |
+| Market | Market pack, country, currency, local language, home city, places, time zone |
 | Profile | A short summary for the AI, skills with years, languages with levels, experience, visa, city |
 | Targets | Job titles, level, work modes, salary floor, contract types, what to leave out |
 | Sources | The job boards of your market and company career pages to add. Sources that scrape a site or use your LinkedIn login start unticked; ticking one shows the terms-of-service risk and asks you to confirm |

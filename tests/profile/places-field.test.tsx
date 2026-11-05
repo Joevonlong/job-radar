@@ -22,7 +22,7 @@ function Harness({ initial = [], known = true, onChange = () => {} }: { initial?
   const [value, setValue] = useState(initial);
   return (
     <NextIntlClientProvider locale="en" messages={en}>
-      <PlacesField id="places" value={value} geo={geo} options={options} known={known} onChange={(next) => { setValue(next); onChange(next); }} />
+      <PlacesField id="places" value={value} geo={geo} options={options} known={known} search={{ homeCity: "Berlin", workplace: ["onsite", "remote"], home: { country: "DE", countryName: "Germany" } }} onChange={(next) => { setValue(next); onChange(next); }} />
     </NextIntlClientProvider>
   );
 }
@@ -61,6 +61,13 @@ describe("PlacesField", () => {
     render(<Harness initial={[{ place: "NL", relocate: false }]} onChange={onChange} />);
     await add("Netherlands");
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("counts the searches a place adds per cycle, not its countries", () => {
+    render(<Harness initial={[{ place: "Amsterdam", relocate: true }, { place: "NL", relocate: false }]} />);
+    const counts = screen.getAllByTestId("place-searches").map((node) => node.textContent);
+    expect(counts[0]).toContain("2");
+    expect(counts[1]).toContain("1");
   });
 
   it("switches a place on a click; Worldwide stays remote only", async () => {

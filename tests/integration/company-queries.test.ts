@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, i
 import { ChannelError, PartialCollectError } from "@/lib/channels/errors";
 import { createFixtureChannel, FIXTURE_SETTINGS, type FixturePosting } from "@/lib/channels/fixture";
 import { createLogger, type LogRecord } from "@/lib/channels/logger";
-import { stubContext } from "../channels/helpers";
+import { stubContext, testPlaces } from "../channels/helpers";
 import { buildCompanyQueries, buildQueries } from "@/lib/channels/query";
 import { ChannelRegistry } from "@/lib/channels/registry";
 import type { Channel, SearchQuery } from "@/lib/channels/types";
@@ -42,7 +42,7 @@ afterEach(() => { vi.restoreAllMocks(); resetCycleSteps(); temp.cleanup(); });
 afterAll(async () => { await closeDb(); });
 
 function setup(options: { rotation?: boolean; interval?: number; cap?: number; maxCatchUp?: number } = {}) {
-  const cfg = config({ search: { ...pinnedSearch(), keyword_groups: { a: ["alpha"], b: ["beta"] }, locations: ["Berlin"], remote_scope: "none",
+  const cfg = config({ places: testPlaces({ places: [], workplace: ["onsite"] }), search: { ...pinnedSearch(), keyword_groups: { a: ["alpha"], b: ["beta"] },
     watched_company_queries: { enabled: true, max_per_cycle: options.cap ?? 1, min_interval_hours: options.interval ?? 24, max_results: 7 } } });
   cfg.channels.collect.query_rotation = options.rotation ?? true;
   cfg.channels.collect.max_catch_up_hours = options.maxCatchUp ?? 168;
@@ -81,7 +81,7 @@ describe("company-query collection", () => {
       const test = setup();
       test.add(kind, kind !== "unsupported", async () => [], kind === "unconfigured" ? { isConfigured: () => false } : {}, kind !== "disabled", kind !== "opted-out");
       const result = await test.run([kind]);
-      expect(result.rows.every((row) => buildQueries(test.cfg.search, "manual").some((q) => q.id === row.queryHash))).toBe(true);
+      expect(result.rows.every((row) => buildQueries(test.cfg.search, test.cfg.places, "manual").some((q) => q.id === row.queryHash))).toBe(true);
       expect(result.collect.queries).toBe(2);
     }
   });
@@ -103,7 +103,7 @@ describe("company-query collection", () => {
     }
     if (rotation) {
       const company = buildCompanyQueries(test.cfg.search, names.map((name, i) => ({ name, key: i ? "moonbeam" : "northstar-labs", hasBoard: false })), 24);
-      expect(new Set(all)).toEqual(new Set([...buildQueries(test.cfg.search, "manual"), ...company].map((q) => q.id)));
+      expect(new Set(all)).toEqual(new Set([...buildQueries(test.cfg.search, test.cfg.places, "manual"), ...company].map((q) => q.id)));
     } else expect(new Set(all).size).toBe(1);
   });
 
@@ -112,7 +112,7 @@ describe("company-query collection", () => {
     const perCycle = 2;
     const test = setup({ cap, interval: 1 });
     const fixture = createFixtureChannel({ postings: [posting("northstar", "Northstar Labs"), posting("moonbeam", "Moonbeam"), posting("keyword", "Agency")] });
-    const records = await fixture.collect(buildQueries(test.cfg.search, "manual")[0]!, stubContext());
+    const records = await fixture.collect(buildQueries(test.cfg.search, test.cfg.places, "manual")[0]!, stubContext());
     const recordFor = (query: SearchQuery) => records.find((record) => record.externalId === (query.company === null ? "keyword" : query.company.key === "moonbeam" ? "moonbeam" : "northstar"))!;
     let served: SearchQuery[] = [];
     let delivered = 0;
@@ -135,7 +135,7 @@ describe("company-query collection", () => {
     }
     const company = buildCompanyQueries(test.cfg.search, names.map((name, i) => ({ name, key: i ? "moonbeam" : "northstar-labs", hasBoard: false })), 24);
     expect(company).toHaveLength(2);
-    for (const query of [...buildQueries(test.cfg.search, "manual"), ...company]) expect(seen, query.company?.name ?? query.keywords.join(" / ")).toContain(query.id);
+    for (const query of [...buildQueries(test.cfg.search, test.cfg.places, "manual"), ...company]) expect(seen, query.company?.name ?? query.keywords.join(" / ")).toContain(query.id);
   });
 
   it("skips ineligible members without runs or circuit changes", async () => {
@@ -189,7 +189,7 @@ describe("company-query collection", () => {
     const auditConfig = loadConfig("deliveryAudit");
     await writeConfig("deliveryAudit", { ...auditConfig, scope: { ...auditConfig.scope, channel_kinds: ["manual"] } });
     const fixture = createFixtureChannel({ postings: [posting("same", "Northstar Labs GmbH"), posting("other-watched", "Moonbeam"), posting("wrong", "Agency")] });
-    const records = await fixture.collect(buildQueries(test.cfg.search, "manual")[0]!, stubContext());
+    const records = await fixture.collect(buildQueries(test.cfg.search, test.cfg.places, "manual")[0]!, stubContext());
     // A broken payload is deliberately kept, so the pipeline can diagnose it.
     records.push({ externalId: "broken", url: null, payload: { invalid: true } });
     test.add("company", true, async (q) => {

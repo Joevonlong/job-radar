@@ -610,7 +610,7 @@
       },
       "home_city": {
         "label": "Home city",
-        "hint": "On-site and hybrid jobs here count as local. It is sent to your AI provider with every job."
+        "hint": "Leave it empty to count anywhere in the home country. On-site and hybrid jobs here count as local. It is sent to your AI provider with every job."
       },
       "places": {
         "label": "Locations outside home city",
@@ -625,18 +625,9 @@
         "remove": "Remove {place}",
         "unknown": "\"{name}\" isn't in this market's tables, so it's matched as written. Check the spelling if that isn't what you meant.",
         "ruleMove": "A city you add starts as \"I'd move here\" (solid); a country or region starts as \"Remote only\" (dashed).",
-        "ruleWorldwide": "Worldwide is always remote only."
-      },
-      "searchCities": {
-        "differs": "The cities that are searched (search.yaml) are separate and do not follow this list: {cities}.",
-        "sync": "Search these places too",
-        "link": "Edit search cities",
-        "done": "Search cities updated: the next cycles search these places.",
-        "failed": "Could not update the search cities.",
-        "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
-        "busy": "Another process is saving settings. Try again shortly.",
-        "stale": "This file changed elsewhere. Reload and try again.",
-        "protected": "This change touches a locked key. Edit the config file by hand to change it."
+        "ruleWorldwide": "Worldwide is always remote only.",
+        "searches": "{count, plural, one {· # search per keyword group} other {· # searches per keyword group}}",
+        "ruleSearches": "Searches run every cycle. Remote searches of a place only run on boards that can search one."
       },
       "workplace": {
         "label": "Workplace"
@@ -660,7 +651,8 @@
       },
       "exclude_keywords": {
         "label": "Excluded keywords"
-      }
+      },
+      "searchLeftovers": "search.yaml still lists {names}, which your places lack. Those keys are ignored now, so they are not searched. Add them here if you still want them."
     },
     "options": {
       "level": {
@@ -797,7 +789,6 @@
     "skillScale": {
       "aria": "{name}: {years} years"
     },
-    "workplaceGroup": "Work mode",
     "units": {
       "perYear": "/yr",
       "years": "yrs"
@@ -2077,7 +2068,6 @@
       "cycle_weekend": "Weekend cycle",
       "schedule_behaviour": "Behaviour",
       "search_keywords": "Keyword groups",
-      "search_where": "Places and remote",
       "search_limits": "Look-back and limits",
       "channels_budget": "Budget and circuit breaker",
       "channels_http": "HTTP defaults",
@@ -2240,14 +2230,6 @@
       },
       "keyword_groups": {
         "label": "Keyword groups"
-      },
-      "locations": {
-        "label": "Cities",
-        "hint": "Every keyword group is searched once per city."
-      },
-      "remote_scope": {
-        "label": "Remote scope",
-        "hint": "Where a remote job may be open to. This decides where remote queries search; the filter uses the setting of the same name in My profile."
       },
       "window_morning": {
         "label": "Morning look-back (hours)",
@@ -4120,7 +4102,8 @@
       "unavailable": "no channel can take queries now",
       "remote": "Remote",
       "remoteRegion": "Remote · {scope}",
-      "overCap": "{count, plural, one {{number} query waited} other {{number} queries waited}} longer than the catch-up limit ({hours} h): new jobs from that gap may have been missed. Raise the budget or use fewer queries."
+      "overCap": "{count, plural, one {{number} query waited} other {{number} queries waited}} longer than the catch-up limit ({hours} h): new jobs from that gap may have been missed. Raise the budget or use fewer queries.",
+      "remotePlacesSkipped": "{count, plural, one {{number} remote place this board can't search} other {{number} remote places this board can't search}}"
     },
     "backfill": {
       "button": "Backfill…",
@@ -5511,29 +5494,6 @@
     }
   },
   "market": {
-    "scope": {
-      "homeCountryRemote": "Remote from {country} (incl. {region} / worldwide remote)",
-      "homeCountryRemoteNoRegion": "Remote from {country}",
-      "homeRegionShort": {
-        "eu": "EU / Europe / EMEA"
-      },
-      "thisCountry": "your home country",
-      "kindHint": {
-        "none": "Remote jobs are excluded, unless the posting is located in one of your cities.",
-        "home_country": "Kept: located in {country}, or open to {region} or worldwide; also kept when the description says it hires from {country} or {region}. Excluded: only another country is named (for example Remote - Spain), or the title says it hires only in the US or another region. Postings that do not say where they hire are kept and flagged.",
-        "home_countryNoRegion": "Kept: located in {country} or open worldwide; also kept when the description says it hires from {country}. Excluded: only another country is named (for example Remote - Spain), or the title says it hires only in another region. Postings that do not say where they hire are kept and flagged.",
-        "worldwide": "Every remote job is kept, wherever it hires.",
-        "region": "Kept: located in a selected region or country, or open worldwide; also kept when the description says it hires there. Excluded: only other countries are named, or the title says it hires only elsewhere. Postings that do not say where they hire are kept and flagged."
-      },
-      "regions": "Regions and countries",
-      "search": "Search regions or countries",
-      "none": "None picked yet",
-      "hint": "The job must hire in any one of them",
-      "groups": {
-        "regions": "Regions",
-        "countries": "Countries"
-      }
-    },
     "regions": {
       "eu": "European Union",
       "eea": "European Economic Area",
@@ -7914,7 +7874,8 @@
       "error": "Activity log could not be loaded. Check the configuration and database, then try again."
     },
     "viewJob": "View job",
-    "company": "Company: {name}"
+    "company": "Company: {name}",
+    "remotePlace": "Remote: {place}"
   },
   "currentScores": {
     "missing": "Current score projection is not migrated.",

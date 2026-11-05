@@ -1,15 +1,10 @@
-# Search criteria. Each keyword group is OR-joined into one query, which then runs once per city.
+# Search criteria. Each keyword group is OR-joined into one query, which then runs once per place in preferences.yaml (`home_city`, `places`).
 config_version: 3
 # Replace them with the job titles you are looking for (the setup wizard does this from your target roles).
 keyword_groups:
   targets:
     - Software Engineer
 
-locations:
-  - New York
-
-# Remote job scope: none | home_country (hired in the home country) | worldwide | {region: [eu, CH …]} (hired within these regions or countries)
-remote_scope: home_country
 
 # Lookback window per run (hours). Keys map to schedule.yaml: weekday_morning → morning, weekday_evening → evening, weekend → weekend
 window_hours:

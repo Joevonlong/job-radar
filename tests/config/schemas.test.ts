@@ -120,13 +120,12 @@ describe("schedule", () => {
 });
 
 describe("search", () => {
-  it("rejects empty groups, non-positive limits and a bad remote scope", () => {
+  it("rejects empty groups and non-positive limits", () => {
     const bad = fixture("search");
     bad.keyword_groups = { engineering: [] };
     bad.max_per_group_per_location = 0;
-    bad.remote_scope = "anywhere";
     expect(issuePaths("search", bad)).toEqual(
-      expect.arrayContaining(["keyword_groups.engineering", "max_per_group_per_location", "remote_scope"]),
+      expect.arrayContaining(["keyword_groups.engineering", "max_per_group_per_location"]),
     );
   });
 });

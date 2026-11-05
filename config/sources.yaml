@@ -77,7 +77,7 @@ linkedin:
     # Max total wait from trigger to finished download (snapshot build + download); a timeout counts as a retryable failure and the snapshot id is logged (the vendor keeps it 30 days, so it can be fetched later)
     timeout_ms: 600000
     country: "" # country code for all city queries (ISO, uppercase); empty = the market's country
-    # location used for remote queries (remote_scope in search.yaml); unset keys follow the market (home_country = market country name, region = region / country name)
+    # location used for a remote search of a scope (from your places in preferences.yaml); unset keys follow the market (home_country = market country name, region = region / country name)
     remote_locations:
       worldwide: Worldwide
 
@@ -97,7 +97,7 @@ linkedin:
     memory_mb: 1024 # memory per run; the start fee is charged per GB
     timeout_secs: 300 # timeout per run; the sync API caps at 300 seconds, beyond that Apify returns 408 (counted as a retryable failure)
     country_name: "" # location for city queries = "<city>, <country>"; empty = the market's country name
-    # location used for remote queries (remote_scope in search.yaml); unset keys follow the market (home_country = market country name, region = region / country name)
+    # location used for a remote search of a scope (from your places in preferences.yaml); unset keys follow the market (home_country = market country name, region = region / country name)
     remote_locations:
       worldwide: Worldwide
     # Value of {date_posted} for a template that uses a coarse filter: window ≤24 hours / ≤7 days / ≤30 days / longer (empty = no value). The default template below does not use it
@@ -165,7 +165,7 @@ linkedin:
       base_url: https://www.linkedin.com
       auth_file: .auth/linkedin.json # login session file, relative to the working directory (/app/.auth in the runner container, mounted read-only); not committed, mode 600
       country_name: "" # location for city queries = "<city>, <country>"; empty = the market's country name
-      # location used for remote queries (remote_scope in search.yaml); unset keys follow the market
+      # location used for a remote search of a scope (from your places in preferences.yaml); unset keys follow the market
       remote_locations:
         worldwide: Worldwide
     browser:
@@ -192,7 +192,7 @@ jobspy:
   timeout_ms: 180000 # one search (including fetching each LinkedIn description) may take tens of seconds
   country_indeed: "" # Indeed country site (jobspy spelling, e.g. germany); empty = the market's country
   linkedin_fetch_description: false # off by default: fetching each LinkedIn description costs one extra request each and is more prone to 429; when off, LinkedIn jobs from this channel have no body
-  # Location used for remote queries (per remote_scope in search.yaml); empty string = any location, unset keys follow the market
+  # Location used for a remote search of a scope (from your places in preferences.yaml); empty string = any location, unset keys follow the market
   remote_location:
     worldwide: ""
   # Proxy list (rotated); empty by default = direct connection. Proxy URLs may contain usernames and passwords: never commit real values
@@ -318,7 +318,7 @@ sources:
   # Handpicked Berlin: the public job index behind handpickedberlin.com/jobs (a static JSON file, no key, no login): the last ~30 days of postings
   # in Berlin, Munich, Hamburg and German remote, each with the employer's own link. The site publishes no terms (only an imprint and a privacy page);
   # robots.txt allows the paths used. Keep the request rate low, don't mirror or republish the data, and switch the channel off if the site asks.
-  # Off by default for that reason: set enabled: true to use it. Each run reads the index once, keeps postings in your places (search.yaml locations,
+  # Off by default for that reason: set enabled: true to use it. Each run reads the index once, keeps postings in your places (preferences.yaml,
   # with the spellings of filter.city_aliases) that pass title_prefilter, and fetches the description of the new ones (max_details_per_run).
   # discover_boards also offers the company boards behind matching postings (Greenhouse, Lever, Ashby, Personio) as candidates on /sources/registry.
   handpicked:

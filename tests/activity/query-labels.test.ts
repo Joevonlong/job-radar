@@ -4,13 +4,16 @@ import en from "../../messages/en.json";
 import { liveCompanyBoards, resolveQueryLabels, queryLabel, storedCompanyQueryKeys } from "@/lib/activity/query-labels";
 import { buildQueries, buildSweepQuery } from "@/lib/channels/query";
 import type { SearchConfig } from "@/lib/config";
+import { testPlaces } from "../channels/helpers";
 
-const search: SearchConfig = { keyword_groups: { engineering: ["Platform", "AI"] }, locations: ["Example City"], remote_scope: "worldwide", window_hours: { morning: 1, evening: 2, weekend: 3 }, max_per_group_per_location: 10, watched_company_queries: { enabled: true, max_per_cycle: 3, min_interval_hours: 24, max_results: 25 } };
+const places = testPlaces({ home_city: "Example City", places: [{ place: "Worldwide", relocate: false }] });
+
+const search: SearchConfig = { keyword_groups: { engineering: ["Platform", "AI"] },  window_hours: { morning: 1, evening: 2, weekend: 3 }, max_per_group_per_location: 10, watched_company_queries: { enabled: true, max_per_cycle: 3, min_interval_hours: 24, max_results: 25 } };
 const t = createTranslator({ locale: "en", messages: en, namespace: "activityLog" });
 describe("activity query labels", () => {
   it("uses the collector's ids, current keywords, locations and translated sweep/remote labels", () => {
-    const labels = resolveQueryLabels(search, t);
-    const queries = buildQueries(search, "manual");
+    const labels = resolveQueryLabels(search, places, t);
+    const queries = buildQueries(search, places, "manual");
     expect(labels[queries[0]!.id]).toBe("Platform / AI · Example City");
     expect(labels[queries[1]!.id]).toBe("Platform / AI · Remote");
     expect(labels[buildSweepQuery(search, "manual").id]).toBe(t("sweep"));
@@ -26,7 +29,7 @@ describe("activity query labels", () => {
 it("uses current company spelling, or the stored key after removal, even when opted out", () => {
   const companies = [{ name: "Acme GmbH", key: "acme", hasBoard: true }];
   const historical = { "d5d4c4ac6877c331": "old-company" };
-  const labels = resolveQueryLabels({ ...search, watched_company_queries: { ...search.watched_company_queries, enabled: false } }, t, companies, historical);
+  const labels = resolveQueryLabels({ ...search, watched_company_queries: { ...search.watched_company_queries, enabled: false } }, places, t, companies, historical);
   expect(Object.values(labels)).toContain("Company: Acme GmbH");
   expect(labels["d5d4c4ac6877c331"]).toBe("Company: old-company");
   expect(storedCompanyQueryKeys({ steps: [{ name: "collect", result: { companyQueryKeys: historical } }, { name: "filter", result: null }] })).toEqual(historical);
@@ -41,7 +44,7 @@ it("falls back to the stored company keys when the live watch list cannot be rea
   const companies = liveCompanyBoards(() => { throw failure; }, (error) => errors.push(error));
   expect(companies).toEqual([]);
   expect(errors).toEqual([failure]);
-  const labels = resolveQueryLabels(search, t, companies, historical);
+  const labels = resolveQueryLabels(search, places, t, companies, historical);
   expect(labels["d5d4c4ac6877c331"]).toBe("Company: acme");
   expect(Object.values(labels).filter((label) => label.startsWith("Company:"))).toEqual(["Company: acme"]);
   const live = [{ name: "Acme GmbH", key: "acme", hasBoard: false }];

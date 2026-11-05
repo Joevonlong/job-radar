@@ -9,7 +9,6 @@ import { applyExamplePlan, ensureProfileFiles, getConfigPath, loadConfig, overla
 import { valueAt } from "@/lib/config/merge";
 import { parseConfigYaml } from "@/lib/config/yaml-options";
 import { saveView } from "@/lib/interests/service";
-import { syncSearchLocations } from "@/lib/profile/search-locations";
 import { resetSetupStateCache } from "@/lib/setup/state";
 import { saveAiStep } from "@/lib/setup/steps/ai";
 import { saveLanguageStep } from "@/lib/setup/steps/language";
@@ -129,11 +128,10 @@ const ENTRIES: Entry[] = [
       again: () => saveAtsBoard({ original: { ats: BOARD.ats, token: BOARD.token }, board: BOARD }),
     }),
   },
-  { name: "profile page: search locations", config: "search", keyPath: ["max_per_group_per_location"], prepare: () => save(() => syncSearchLocations(["Austin"])) },
   {
     name: "config:example",
     config: "search",
-    keyPath: ["remote_scope"],
+    keyPath: ["window_hours", "morning"],
     prepare: () => {
       const dir = path.join(tmp.defaultsDir, "examples", "demo");
       fs.mkdirSync(dir, { recursive: true });

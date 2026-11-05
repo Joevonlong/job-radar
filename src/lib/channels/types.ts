@@ -1,6 +1,6 @@
+import type { RemoteScopeValue } from "@/lib/market/schema";
 import { z } from "zod";
 
-import type { SearchConfig } from "@/lib/config";
 
 import type { CycleKind } from "@/lib/db/repos/cycles";
 import type { DeliveryRecorder } from "./delivery";
@@ -32,8 +32,8 @@ export type ChannelKind = (typeof CHANNEL_KINDS)[number];
 
 // ---------------------------------------------------------------- queries
 
-/** `search.yaml: remote_scope` without `none` (no remote queries are built for `none`). */
-export type RemoteScope = Exclude<SearchConfig["remote_scope"], "none">;
+/** The scope of a remote search: home, Worldwide or listed tokens. */
+export type RemoteScope = Exclude<RemoteScopeValue, "none">;
 
 export interface SearchQuery {
   /** Stable hash of the keyword search, or of only the company key; see `queryId`. */
@@ -43,11 +43,13 @@ export interface SearchQuery {
   keywords: string[];
   /** Group in search.yaml, `company:<key>` for a company, or `*` for a board sweep. */
   keywordGroup: string;
-  /** City, or null for a remote, company or board-sweep query. */
+  /** The place searched: a city, a country or a region. Null for a remote search of a scope, a company or a board sweep. */
   location: string | null;
   remote: boolean;
-  /** Region a remote posting must be open to (`search.yaml: remote_scope`); null for located queries. */
+  /** The scope a remote search of a scope is open to; null when the query names a place. */
   remoteScope: RemoteScope | null;
+  /** ISO code of the country the place lies in, when it has one known country. Boards search there. Not part of the query id. */
+  country: string | null;
   /** Look-back window of this cycle. */
   windowHours: number;
   /** Upper bound for this query (already capped by the channel's own `max_results`). */
@@ -295,6 +297,8 @@ export interface Channel {
   /** false for channels that ignore keyword queries and iterate their own boards (ATS). */
   readonly usesQueries: boolean;
   readonly supportsCompanyQueries?: boolean;
+  /** false for a board that sends no place on a remote query: it keeps the remote searches of a scope and skips those that name a place. */
+  readonly supportsRemotePlaces?: boolean;
   /**
    * Fetch postings for one query. Must return every posting verbatim. Throw `ChannelError`
    * (or let `ctx.http` throw) for failures; other thrown values are classified as `unknown`.
