@@ -3,9 +3,10 @@ import { arbeitsagenturSettingsSchema, type ArbeitsagenturSettings } from "@/lib
 import { detailLayoutError } from "../details";
 import { ChannelError, settlePostings } from "../errors";
 import { loadKnownDetails, storedDetailOf } from "../known";
+import { marketForChannel } from "../market";
 import { searchKind } from "../query";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
-import { COMPANY_PARAMS, fetchDetail, fetchSearchPage, type CompanyParam } from "./client";
+import { COMPANY_PARAMS, fetchDetail, fetchSearchPage, germanLocation, type CompanyParam } from "./client";
 import { JOB_PAGE_URL, parseArbeitsagenturPayload, toDate } from "./parse";
 import { redactContacts } from "./redact";
 import { payloadSchema, type BaDetail, type BaPayload, type BaSearchItem } from "./schema";
@@ -55,7 +56,7 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
   const kind = searchKind(query);
   const remote = kind === "remote";
   const filterRemote = remote && settings.remote_requires_home_office;
-  const location = kind === "city" ? query.location : null;
+  const location = kind === "city" && query.location !== null ? germanLocation(query.location, settings.location_names ?? {}, marketForChannel().countries) : null;
   // when filtering, most of a page is dropped: read full pages instead of only what is still missing
   const size = filterRemote ? settings.page_size : Math.min(settings.page_size, query.maxResults);
   const maxPages = filterRemote ? settings.remote_max_pages : Number.POSITIVE_INFINITY;

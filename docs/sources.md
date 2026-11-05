@@ -554,6 +554,8 @@ If you switch scraping channels on: read the terms of every site, keep volumes l
 default schedule), do not republish collected data, and prefer official APIs, company career boards and your own job-alert
 emails. You are responsible for how you use them.
 
+**Arbeitsagentur and place names.** The API matches German names only: `Germany` and `Munich` find nothing where `Deutschland` and `München` do. So a country name is translated to German, and `sources.arbeitsagentur.location_names` holds cities with another name in German (`spelling: name`). Any other place is searched as written. The API also found nothing for countries abroad in a test with `Frankreich` and `Niederlande`, so a place abroad costs a request here and usually adds nothing.
+
 **StepStone and its robots.txt.** StepStone's `robots.txt` (checked 2026-11-03) disallows `/jobs/*?*` and allows only a search
 URL with a single `q=` parameter. The channel therefore sends exactly one form,
 `/jobs/<keyword>/in-<city>?q=<keyword>` (nationwide without the city for remote and company queries), and nothing else:

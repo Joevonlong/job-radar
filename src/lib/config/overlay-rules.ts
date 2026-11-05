@@ -31,6 +31,7 @@ export const OVERLAY_RECORD_RULES: Readonly<Partial<Record<ConfigName, readonly 
     { path: "translation.glossary", kind: "entries" },
   ],
   channels: [
+    { path: "sources.arbeitsagentur.location_names", kind: "entries" },
     { path: "linkedin.apify.input_template", kind: "opaque" },
     { path: "linkedin.apify.remote_input", kind: "opaque" },
     { path: "linkedin.monid.input_template", kind: "opaque" },

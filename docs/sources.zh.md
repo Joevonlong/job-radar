@@ -465,6 +465,8 @@ Berlin Design Network（`berlin_design_network`）发现公司 board，不采集
 如果你打开抓取类通道：阅读每个网站的条款，保持低请求量（少量关键词、少量城市、默认的调度），不要再发布采集到的数据，
 能用官方 API、公司招聘页和你自己的职位提醒邮件就优先用。使用方式由你自己负责。
 
+**Arbeitsagentur 与地名。** 该 API 只匹配德语地名：`Germany` 和 `Munich` 查不到结果，`Deutschland` 和 `München` 才能查到。因此国家名称会自动译成德语，德语写法不同的城市则记在 `sources.arbeitsagentur.location_names` 中（`写法: 名称`）。其他地点按原样搜索。在一次用 `Frankreich` 和 `Niederlande` 的测试中，该 API 对国外国家也没有返回结果，所以国外地点在这里会多花一次请求，通常没有收获。
+
 **StepStone 与它的 robots.txt。** StepStone 的 `robots.txt`（2026-11-03 核对）禁止 `/jobs/*?*`，只放行带单个 `q=` 参数的搜索 URL。
 因此通道只发一种形式：`/jobs/<关键词>/in-<城市>?q=<关键词>`（远程和公司查询不带城市，全国范围），不再带 `sort`、`ag`（回看窗口）、
 `radius`、`wfh`、`page` 任何参数。后果：每个关键词、每个城市一次请求，返回约 25 条，顺序由 StepStone 决定（相关度，不是最新优先），

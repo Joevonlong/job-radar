@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { arbeitsagenturChannel, interleave } from "@/lib/channels/arbeitsagentur";
-import { detailUrl, publishedDays, searchUrl } from "@/lib/channels/arbeitsagentur/client";
+import { detailUrl, germanLocation, publishedDays, searchUrl } from "@/lib/channels/arbeitsagentur/client";
 import { redactContacts } from "@/lib/channels/arbeitsagentur/redact";
 import { parseArbeitsagenturPayload } from "@/lib/channels/arbeitsagentur/parse";
 import { employerMatcher } from "@/lib/channels/company-match";
@@ -165,6 +165,21 @@ describe("request building", () => {
     expect(url.searchParams.get("umkreis")).toBe("12");
     expect(url.searchParams.get("veroeffentlichtseit")).toBe("2");
     expect(detailUrl(s, REF_MULTI)).toBe(`https://example.test/svc/pc/v4/jobdetails/${Buffer.from(REF_MULTI).toString("base64")}`);
+  });
+});
+
+describe("germanLocation", () => {
+  const countries = [{ code: "DE", name: "Germany", aliases: ["Deutschland"] }, { code: "FR", name: "France" }];
+
+  it("translates a country name, whichever spelling the place has", () => {
+    expect(germanLocation("Germany", {}, countries)).toBe("Deutschland");
+    expect(germanLocation("deutschland", {}, countries)).toBe("Deutschland");
+    expect(germanLocation("France", {}, countries)).toBe("Frankreich");
+  });
+
+  it("uses the configured name of a city, in any case, and keeps any other place as written", () => {
+    expect(germanLocation("TESTCITY", { Testcity: "Teststadt" }, countries)).toBe("Teststadt");
+    expect(germanLocation("Hamburg", { Testcity: "Teststadt" }, countries)).toBe("Hamburg");
   });
 });
 
@@ -884,6 +899,12 @@ describe("registration and configuration", () => {
     bad((b) => delete b.max_details_per_query);
     bad((b) => (b.unknown_key = 1));
   });
+});
+
+it("a search of the home country goes out under its German name", async () => {
+  const { ctx, calls } = makeContext(api({ pages: [SEARCH_REMOTE] }), { fetch_details: false });
+  await arbeitsagenturChannel.collect(query({ location: "Germany" }), ctx);
+  expect(calls[0]!.url.searchParams.get("wo")).toBe("Deutschland");
 });
 
 it("company searches are nationwide and keep onsite results even with home-office filtering enabled", async () => {

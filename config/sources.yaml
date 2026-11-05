@@ -213,6 +213,8 @@ sources:
     # Public client key (this exact value is in the official BA docs), not a secret, so it can stay in YAML
     api_key: jobboerse-jobsuche
     radius_km: 30 # radius around the city
+    # The API matches German place names only: spelling -> name it searches. Country names are translated without an entry here
+    location_names: { Munich: München, Cologne: Köln, Nuremberg: Nürnberg, Hanover: Hannover, Vienna: Wien }
     page_size: 50 # results per page
     fetch_details: true # whether to also fetch details for each job (the JD body is only in the details)
     max_details_per_query: 25 # max details fetched per query
