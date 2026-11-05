@@ -1,5 +1,5 @@
-import { parse } from "yaml";
-import { z } from "zod";
+import type { Diagnostic } from "./finding";
+import { parse, YAMLParseError } from "yaml";
 import { letterHtml } from "./blocks";
 import { CareerEngineError } from "./errors";
 import { fontFaceCss } from "./fonts";
@@ -12,28 +12,36 @@ import { headingsOf } from "./sections";
 import { style as baseStyle } from "./themes/base";
 import { THEMES } from "./themes";
 
-export function parseResume(text: string): Resume {
+export type ParseResult = { ok: true; resume: Resume } | { ok: false; issues: (Diagnostic & { path: string })[] };
+
+export function parseResume(text: string): ParseResult {
   let doc: unknown;
   try {
     doc = parse(text);
-  } catch (e) {
-    const line = (e as { linePos?: { line: number }[] }).linePos?.[0]?.line;
-    if (line !== undefined && /^\s*-\s+\[/.test(text.split("\n")[line - 1] ?? ""))
-      (e as Error).message += '\nhint: wrap the whole item in quotes, e.g. - "[x] done" or - "[[GA]] shipped"';
-    throw e;
+  } catch (error) {
+    const line = error instanceof YAMLParseError ? error.linePos?.[0]?.line : undefined;
+    const hint = line !== undefined && /^\s*-\s+\[/.test(text.split("\n")[line - 1] ?? "");
+    return { ok: false, issues: [{ path: "", code: "career.schema.yaml_invalid", params: { ...(line === undefined ? {} : { line }), ...(hint ? { hint: "quote_item" } : {}) } }] };
   }
   const result = Resume.safeParse(doc);
-  if (!result.success) throw new Error(`resume is not a valid resume:\n${z.prettifyError(result.error)}`);
+  if (!result.success) return {
+    ok: false,
+    issues: result.error.issues.map((issue) => ({
+      path: issue.path.join("."),
+      code: /^career\.[a-z]+\.[a-z0-9_]+$/.test(issue.message) ? issue.message : "career.schema.invalid",
+      ...(issue.code === "custom" && issue.params ? { params: issue.params } : "keys" in issue ? { params: { keys: issue.keys.join(", ") } } : "values" in issue ? { params: { values: issue.values.map(String).join(", ") } } : {}),
+    })),
+  };
   const problem = themeProblem(result.data.meta.theme);
-  if (problem) throw new CareerEngineError(problem.code, problem.params);
-  return result.data;
+  if (problem) return { ok: false, issues: [{ path: "meta.theme", ...problem }] };
+  return { ok: true, resume: result.data };
 }
 
 export function listThemes(): string[] {
   return Object.keys(THEMES);
 }
 
-export function themeProblem(name: string): { code: "career.theme.unknown"; params: { name: string; available: string } } | undefined {
+export function themeProblem(name: string): Diagnostic | undefined {
   const themes = listThemes();
   return themes.includes(name) ? undefined : { code: "career.theme.unknown", params: { name, available: themes.join(", ") } };
 }

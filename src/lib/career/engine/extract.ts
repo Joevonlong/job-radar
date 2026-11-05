@@ -1,7 +1,8 @@
 import { getDocumentProxy } from "unpdf";
 import { signDate } from "./blocks";
-import { i18n, today } from "./i18n";
-import type { Issue } from "./lint";
+import { i18n } from "./i18n";
+import type { Diagnostic, Issue } from "./finding";
+import type { CheckLimits } from "./limits";
 import { bareUrl } from "./md";
 import type { Resume } from "./schema";
 import { hasContent, headingOf, type Item, plainText, resolveSections } from "./sections";
@@ -77,13 +78,9 @@ export const canon = (s: string) =>
 
 export const withoutFolios = (text: string) => text.replace(/^[ \t]*\d+[ \t]*\/[ \t]*\d+[ \t]*$/gm, "");
 
-const MIN_PIECE = 16;
-
-const MAX_PIECES = 3;
-
-export function present(hay: string, needle: string): boolean {
+export function present(hay: string, needle: string, limits: CheckLimits): boolean {
   let rest = needle;
-  for (let piece = 1; piece <= MAX_PIECES; piece++) {
+  for (let piece = 1; piece <= limits.maxPieces; piece++) {
     if (hay.includes(rest)) return true;
 
     let lo = 0;
@@ -93,7 +90,7 @@ export function present(hay: string, needle: string): boolean {
       if (hay.includes(rest.slice(0, mid))) lo = mid;
       else hi = mid - 1;
     }
-    if (lo < MIN_PIECE) return false;
+    if (lo < limits.minPiece) return false;
     rest = rest.slice(lo);
   }
   return false;
@@ -128,7 +125,7 @@ function itemShown(it: Item, at: string, range: (s: string, e?: string) => strin
   }
 }
 
-export function shownContent(r: Resume, day = today()): Shown[] {
+export function shownContent(r: Resume, day: string): Shown[] {
   const l10n = i18n(r.meta.lang);
   const { range, date } = l10n;
   const b = r.basics;
@@ -199,14 +196,14 @@ export function shownContent(r: Resume, day = today()): Shown[] {
   return out;
 }
 
-export function missingContent(r: Resume, text: string, day?: string): Issue[] {
+export function missingContent(r: Resume, text: string, day: string, limits: CheckLimits): Issue[] {
   const hay = canon(withoutFolios(text));
   return shownContent(r, day).flatMap(({ where, text: raw, md }): Issue[] => {
     const visible = md ? plainText(raw) : raw;
     const needle = canon(visible);
-    if (!needle || present(hay, needle)) return [];
+    if (!needle || present(hay, needle, limits)) return [];
     const short = visible.replace(/\s+/g, " ").trim();
-    return [{ level: "error", where, message: `"${short.length > 60 ? `${short.slice(0, 57)}…` : short}" is not in the PDF text layer — the theme didn't print it, so no parser or reader sees it` }];
+    return [{ level: "error", where, code: "career.extract.content_missing", params: { text: short.length > 60 ? `${short.slice(0, 57)}…` : short } }];
   });
 }
 
@@ -235,11 +232,11 @@ export function identityProblems(r: Resume, text: string): Issue[] {
   const hay = squash(text.toLowerCase());
   const first = text.split("\n").find((l) => l.trim())?.trim() ?? "";
   if (!squash(first.toLowerCase()).includes(squash(r.basics.name.toLowerCase())))
-    out.push({ level: "error", where: "basics.name", message: `the text layer starts with "${first.slice(0, 50)}", not your name — parsers take the first line as the name; use a theme that prints the name first` });
+    out.push({ level: "error", where: "basics.name", code: "career.extract.name_first", params: { text: first.slice(0, 50) } });
   for (const key of ["email", "phone"] as const) {
     const v = r.basics[key];
     if (v && !hay.includes(squash(v.toLowerCase())))
-      out.push({ level: "error", where: `basics.${key}`, message: `${key} "${v}" is not in the PDF text layer — a parser can't read it; check the theme prints it as text` });
+      out.push({ level: "error", where: `basics.${key}`, code: "career.extract.contact_missing", params: { key, text: v } });
   }
   return out;
 }
@@ -251,13 +248,13 @@ function headingProblems(r: Resume, text: string, out: Issue[]): void {
     const where = s.kind === "custom" ? `sections[${s.index}].title` : s.name;
     const h = headingIn(text, title);
     if (h.state === "split")
-      out.push({ level: "error", where, message: `heading "${title}" reads as "${h.seen}" in the text layer — broken inside a word, so parsers don't recognise the section (letter-spacing in the theme, or the word wraps in a narrow heading column — try a shorter title)` });
+      out.push({ level: "error", where, code: "career.extract.heading_split", params: { title, seen: h.seen! } });
     else if (h.state === "missing")
-      out.push({ level: "warn", where, message: `heading "${title}" is not in the text layer — parsers split sections by their headings` });
+      out.push({ level: "warn", where, code: "career.extract.heading_missing", params: { title } });
   }
 }
 
-export function readingOrderProblem(r: Resume, text: string): string | null {
+export function readingOrderProblem(r: Resume, text: string): Diagnostic | null {
   const hay = squash(text.toLowerCase());
   for (const { name, seq } of chains(r)) {
     let at = 0;
@@ -266,7 +263,7 @@ export function readingOrderProblem(r: Resume, text: string): string | null {
       const s = squash(full).slice(0, 40);
       if (!s) continue;
       const i = hay.indexOf(s, at);
-      if (i < 0) return `${name}: ${hay.includes(s) ? "out of order" : "not extractable"}: "${full.slice(0, 40).trim()}…"`;
+      if (i < 0) return { code: hay.includes(s) ? "career.extract.order_wrong" : "career.extract.order_missing", params: { name, text: `${full.slice(0, 40).trim()}…` } };
       at = i + s.length;
     }
   }

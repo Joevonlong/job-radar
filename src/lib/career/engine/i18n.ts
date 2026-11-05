@@ -50,8 +50,6 @@ const words = {
 
 const MONTHS_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-export const today = () => new Date().toLocaleDateString("sv-SE");
-
 export const city = (s: string) =>
   s
     .split(",")[0]
@@ -81,3 +79,7 @@ export function i18n(lang: Lang) {
   const availability = (s: string) => (s.trim().toLowerCase().startsWith(w.available.toLowerCase()) ? s.trim() : `${w.available}: ${s.trim()}`);
   return { t, w, date, range, day, placeDate, availability };
 }
+
+export const STACK: Record<Lang, string> = { en: "Tech stack", de: "Tech-Stack" };
+
+export const UNIT = /(\d) (?=(?:ms|s|min|h|k|M|Mio\.?|Mrd\.?|km|kg|[KMGTP]B|%|€|\$|EUR|USD)(?![\p{L}\p{N}]))/gu;

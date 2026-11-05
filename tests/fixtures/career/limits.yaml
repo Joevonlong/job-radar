@@ -1,0 +1,17 @@
+maxMentions: 4
+goodCoverage: 70
+maxBullet: 200
+minBullet: 40
+maxBulletsPerEntry: 5
+maxGapMonths: 6
+proseMinWords: 12
+proseClearWords: 20
+proseRatio: 3
+proseClearRatio: 4
+maxRole: 200
+letterPages: 1
+letterWords:
+  min: 200
+  max: 450
+minPiece: 16
+maxPieces: 3

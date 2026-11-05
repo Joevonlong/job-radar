@@ -1,11 +1,8 @@
-import { i18n } from "./i18n";
-import type { Lang } from "./i18n";
+import { i18n, STACK } from "./i18n";
 import { letterParts } from "./letter";
 import type { Resume } from "./schema";
 import { headingOf, INLINE, labelOf, resolveSections } from "./sections";
 import type { BuiltinName, Item, Tag } from "./sections";
-
-const STACK: Record<Lang, string> = { en: "Tech stack", de: "Tech-Stack" };
 
 function visible(s: string): string {
   return s
