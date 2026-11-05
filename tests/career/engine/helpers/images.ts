@@ -19,13 +19,15 @@ function chunk(type: string, data: Uint8Array): Uint8Array {
   return bytes;
 }
 
-export function imagePng(): Uint8Array {
+export function imagePng(width = 1, height = 1, pixel: (x: number, y: number) => readonly number[] = () => [0, 0, 0, 255]): Uint8Array {
   const header = new Uint8Array(13);
   const view = new DataView(header.buffer);
-  view.setUint32(0, 1);
-  view.setUint32(4, 1);
+  view.setUint32(0, width);
+  view.setUint32(4, height);
   header.set([8, 6], 8);
-  const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", header), chunk("IDAT", deflateSync(new Uint8Array([0, 0, 0, 0, 255]))), chunk("IEND", new Uint8Array())];
+  const pixels = new Uint8Array(height * (1 + width * 4));
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) pixels.set(pixel(x, y), y * (1 + width * 4) + 1 + x * 4);
+  const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", header), chunk("IDAT", deflateSync(pixels)), chunk("IEND", new Uint8Array())];
   const png = new Uint8Array(parts.reduce((size, part) => size + part.length, 0));
   let offset = 0;
   for (const part of parts) {

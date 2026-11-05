@@ -80,6 +80,8 @@ const NOT_LOCKED = new Map<string, string>([
   ["src/lib/ai/providers/process.ts#makeScratchDir", "the provider process's scratch directory"],
   ["scripts/simhash-analyze.ts#exportSnapshot", "the snapshot file the operator names"],
   ["scripts/i18n-catalog.ts#main", "the generated message catalogs in the repository"],
+  ["scripts/career-engine-fonts.ts#main", "the generated src/lib/career/engine/fonts.generated.ts in the repository"],
+  ["scripts/career-print-baseline.ts#main", "PDFs, text and pages.json in the output directory the operator names (it refuses the baseline directory)"],
   ["scripts/market-regress.ts#main", "the regression report in the repository"],
   ["scripts/demo-finish.ts#makeGif", "the rendered pictures in the repository"],
   ["scripts/demo-finish.ts#<module>", "the rendered pictures in the repository"],

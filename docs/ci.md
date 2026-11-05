@@ -195,6 +195,10 @@ same placeholders as the English one) and verifies that the generated catalog fi
 text names the key or file. Fix: edit the messages, then `pnpm i18n:catalog` and commit the regenerated files. A few
 seconds.
 
+#### Resume fonts (generated table current)
+
+`pnpm career:fonts --check` (`tsx scripts/career-engine-fonts.ts --check`). Verifies that the embedded resume font table matches the pinned Fontsource files and CSS metadata. Missing files, metadata or stale output fail with the affected file name. Fix: run `pnpm career:fonts` and commit the regenerated table. A few seconds.
+
 #### Lint
 
 `pnpm lint` (`eslint .`). Whole repository, including tests and scripts. Failures print `file:line rule`. Fix locally with
@@ -644,6 +648,12 @@ server and the stand-in runner start as usual); the full suite belongs to CI. Co
 with the UI text (the specs run in English), a spec that writes shared config but is missing from `SERIAL_CHAIN`, a test
 that counts a whole list or changes shared rows without the `@exclusive` tag, a race that only shows up with two workers
 (the trace shows it).
+
+`e2e/career-print.spec.ts` compares the text layer of printed resumes with `tests/fixtures/career/print-baseline/` character
+by character. That comparison runs on Linux only, because the same document can break a line differently on macOS. This
+job always runs it. A run on macOS, including a full local CI run, reports it as skipped, and still checks page counts,
+engine checks, whole words and embedded fonts. To compare on a Mac, run `scripts/career-print-baseline-linux.sh <directory>`,
+which prints in the runner image.
 
 #### Setup wizard end-to-end tests
 

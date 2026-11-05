@@ -14,11 +14,15 @@ const layoutPath = path.join(root, "src/app/layout.tsx");
 const globalsPath = path.join(root, "src/app/globals.css");
 const layout = readFileSync(layoutPath, "utf8");
 const globals = readFileSync(globalsPath, "utf8");
-const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as { dependencies: Record<string, string> };
+const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as { dependencies: Record<string, string>; devDependencies: Record<string, string> };
 
 const FONT_PACKAGES = ["@fontsource-variable/archivo", "@fontsource/archivo-black", "@fontsource/ibm-plex-mono", "@fontsource-variable/noto-sans-sc"];
-/** The copyright notice each licence file must carry: the upstream one (google/fonts OFL.txt), with any reserved font name. */
+const PDF_FONT_PACKAGES = ["@fontsource/inter", "@fontsource/ibm-plex-sans", "@fontsource/newsreader"];
+/** The copyright statement from each font licence, with any reserved font name. */
 const COPYRIGHT: Record<string, string> = {
+  "@fontsource/inter": "Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)",
+  "@fontsource/ibm-plex-sans": "Copyright 2019 IBM Corp. All rights reserved.",
+  "@fontsource/newsreader": "Copyright 2020 The Newsreader Project Authors (http://github.com/productiontype/Newsreader)",
   "@fontsource-variable/archivo": "Copyright 2020 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo)",
   "@fontsource/archivo-black": "Copyright 2017 The Archivo Black Project Authors (https://github.com/Omnibus-Type/ArchivoBlack)",
   "@fontsource/ibm-plex-mono": 'Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"',
@@ -93,12 +97,16 @@ describe("self-hosted fonts", () => {
 
   it("the font packages are pinned to exact versions and their licences are in licenses/fonts", () => {
     const licences = readdirSync(path.join(root, "licenses/fonts"));
-    for (const name of FONT_PACKAGES) {
-      expect(pkg.dependencies[name], name).toMatch(/^\d+\.\d+\.\d+$/);
+    for (const name of [...FONT_PACKAGES, ...PDF_FONT_PACKAGES]) {
+      const version = PDF_FONT_PACKAGES.includes(name) ? pkg.devDependencies[name] : pkg.dependencies[name];
+      if (PDF_FONT_PACKAGES.includes(name)) {
+        expect(pkg.dependencies[name]).toBeUndefined();
+      }
+      expect(version, name).toMatch(/^\d+\.\d+\.\d+$/);
       const family = name.split("/")[1] ?? "";
       expect(licences, name).toContain(`${family}-OFL.txt`);
       const licence = readFileSync(path.join(root, "licenses/fonts", `${family}-OFL.txt`), "utf8");
-      expect(licence).toContain(`${name}@${pkg.dependencies[name]}`);
+      expect(licence).toContain(`${name}@${version}`);
       // the full notice: the copyright line, the licensing statement and the complete licence text (the same text the
       // package itself ships, compared with whitespace collapsed)
       expect(licence.split("\n").map((line) => line.trim()), name).toContain(COPYRIGHT[name]);
@@ -107,6 +115,14 @@ describe("self-hosted fonts", () => {
       expect(body, name).toMatch(/OTHER DEALINGS IN THE FONT SOFTWARE\.$/);
       expect(body, name).toBe(oflBody(readFileSync(path.join(root, "node_modules", name, "LICENSE"), "utf8")));
     }
+  });
+
+  it("the notice separates web fonts from PDF fonts", () => {
+    const notice = readFileSync(path.join(root, "NOTICE"), "utf8");
+    for (const family of ["Inter", "IBM Plex Sans", "Newsreader", "IBM Plex Mono"]) expect(notice).toContain(family);
+    const web = /The web serves[^.]+\./.exec(notice)?.[0];
+    expect(web).toBeDefined();
+    for (const family of ["Inter", "IBM Plex Sans", "Newsreader"]) expect(web).not.toContain(family);
   });
 
   it("the fallback faces keep the metrics next/font/google used for these families", () => {
