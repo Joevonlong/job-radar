@@ -9,7 +9,7 @@ import { ATS_KINDS, type AiConfig, type ChannelsConfig } from "@/lib/config";
 import { getDb, getDbNow, getLatestHeartbeat } from "@/lib/db";
 import type { Locale } from "@/i18n/locale";
 import { GENERIC_PACK_ID, listPackIds, loadMarket, loadPack } from "@/lib/market";
-import { remoteScopeKey } from "@/lib/market/remote-scope";
+import { wantedLocations } from "@/lib/market/places";
 import { loadAiWorkerStatus } from "@/lib/ops/ai-worker";
 import { loadTelegramStatus, type TelegramStatusView } from "@/lib/notify/telegram-status";
 import type { Db } from "@/lib/db/client";
@@ -192,7 +192,7 @@ function marketPart(): SetupView["market"] {
   const defaults = countryDefaults();
   if (preferences === null || search === null || schedule === null) return { draft: null, saved: preferences === null ? null : preferencesConfigToDraft(preferences).market, cities, countryDefaults: defaults };
   const prefs = preferencesConfigToDraft(preferences);
-  return { draft: { market: prefs.market, locations: [...prefs.locations], remote_scope: remoteScopeKey(preferences.remote_scope), timezone: schedule.timezone }, saved: prefs.market, cities, countryDefaults: defaults };
+  return { draft: { market: prefs.market, home_city: prefs.home_city, places: prefs.places.map((entry) => ({ ...entry })), timezone: schedule.timezone }, saved: prefs.market, cities, countryDefaults: defaults };
 }
 
 function targetsPart(): SetupView["targets"] {
@@ -337,7 +337,7 @@ export async function loadSetupView(options: { locale: Locale; acceptLanguage: L
       translationTarget: languageDefaults.translationTarget ?? options.locale,
     },
     market,
-    profile: { draft: me === null ? null : profileDraft(meConfigToDraft(me), steps.profile.status === null ? (market.draft?.locations ?? null) : null), localLanguage },
+    profile: { draft: me === null ? null : profileDraft(meConfigToDraft(me), steps.profile.status === null ? (market.draft === null ? null : wantedLocations(market.draft)) : null), localLanguage },
     targets: targetsPart(),
     sources: sourcesPart(channels),
     ai: {

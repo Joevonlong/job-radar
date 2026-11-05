@@ -14,8 +14,6 @@ import type { AiInput, LanguageInput, MarketInput, SourcesInput, TargetsInput, T
 const text = z.string().max(500);
 const names = z.array(z.string().max(200)).max(200);
 
-const regionScope = z.strictObject({ region: z.array(z.string().max(40)).min(1).max(50) });
-
 export const answersSchema = z.strictObject({
   language: z.strictObject({ ui_locale: z.enum(LOCALES), ai_output: z.string().max(35).optional(), translation_target: z.string().max(35).optional() }).optional(),
   market: z
@@ -24,9 +22,9 @@ export const answersSchema = z.strictObject({
       country: z.string().max(10).optional(),
       currency: z.string().max(10).optional(),
       home_language: z.string().max(10).optional(),
-      locations: names.optional(),
-      /** `none` | `home_country` | `worldwide` | `{ region: [eu, CH] }` (as in preferences.yaml). */
-      remote_scope: z.union([z.enum(["none", "home_country", "worldwide"]), regionScope]).optional(),
+      home_city: z.string().max(200).optional(),
+      /** As in preferences.yaml: `{ place, relocate }`. */
+      places: z.array(z.strictObject({ place: z.string().max(200), relocate: z.boolean() })).max(50).optional(),
       timezone: z.string().max(100).optional(),
     })
     .optional(),
@@ -91,11 +89,10 @@ export function languageInputOf(answers: NonNullable<SetupAnswers["language"]>):
 }
 
 export function marketInputOf(answers: NonNullable<SetupAnswers["market"]>, current: MarketInput): MarketInput {
-  const scope = answers.remote_scope;
   return {
     market: { pack: answers.pack, country: answers.country ?? "", currency: answers.currency ?? "", home_language: answers.home_language ?? "" },
-    locations: answers.locations ?? current.locations,
-    remote_scope: scope === undefined ? current.remote_scope : typeof scope === "string" ? scope : `region:${scope.region.join(",")}`,
+    home_city: answers.home_city ?? current.home_city,
+    places: answers.places ?? current.places,
     timezone: answers.timezone ?? current.timezone,
   };
 }

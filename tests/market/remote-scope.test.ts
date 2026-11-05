@@ -51,8 +51,8 @@ describe("the hard filter under each form", () => {
   it("home_country (DE) and {region: [eu]} behave like eu_hire_in_de and eu_any", async () => {
     const { evaluateJob } = await import("@/lib/filter");
     const remote = (label: string, country: string | null) => job({ workplace: "remote", locations: [loc(label, null, country)] });
-    const home = filterWith(prefs((raw) => void (raw.remote_scope = "home_country")));
-    const eu = filterWith(prefs((raw) => void (raw.remote_scope = { region: ["eu"] })));
+    const home = filterWith(prefs((raw) => void (raw.places = [])));
+    const eu = filterWith(prefs((raw) => void (raw.places = [{ place: "eu", relocate: false }])));
     expect(evaluateJob(remote("Remote, France", "FR"), home).result).toBe("filtered_out");
     expect(evaluateJob(remote("Remote, France", "FR"), eu).result).toBe("passed");
     expect(evaluateJob(remote("Remote - EU", null), home).result).toBe("passed");
@@ -62,7 +62,7 @@ describe("the hard filter under each form", () => {
   it("in the US market home_country takes US remote jobs and not German ones", async () => {
     const { evaluateJob } = await import("@/lib/filter");
     const usPipeline = shippedPipeline(us);
-    const home = filterWith(prefs((raw) => void (raw.remote_scope = "home_country")), usPipeline);
+    const home = filterWith(prefs((raw) => void (raw.places = [])), usPipeline);
     const remote = (label: string, country: string | null) => job({ workplace: "remote", locations: [loc(label, null, country)] });
     expect(evaluateJob(remote("Remote - USA", "US"), home).result).toBe("passed");
     expect(evaluateJob(remote("Remote, Germany", "DE"), home).result).toBe("filtered_out");

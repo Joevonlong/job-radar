@@ -1,6 +1,6 @@
 # 我要什么（模板）。首次运行时会被复制到 data/profile/preferences.yaml，之后只改 data/profile/ 里的那份。
 
-config_version: 2
+config_version: 3
 market:
   # 市场：pack = 市场包；country / currency / home_language 不写时取包的值
   pack: de
@@ -12,14 +12,12 @@ target_titles:
   - AI Engineer
   - Forward Deployed Engineer
 
-locations:
-  - Berlin
-  - München
+home_city: Berlin
+places:
+  - {place: München, relocate: true}
 
 # onsite | hybrid | remote
 workplace: [onsite, hybrid, remote]
-# none | home_country | worldwide | {region: [eu, CH …]}
-remote_scope: home_country
 # all | entry | mid | senior | lead
 seniority: all
 

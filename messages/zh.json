@@ -608,8 +608,24 @@
         "label": "目标职位",
         "hint": "每个职位输入后按 Enter 添加。"
       },
-      "locations": {
-        "label": "地点"
+      "home_city": {
+        "label": "常住城市",
+        "hint": "在这里的现场或混合办公职位算作本地职位。它会随每个职位一起发送给你的 AI 服务商。"
+      },
+      "places": {
+        "label": "常住城市以外的地点",
+        "hint": "可以是城市、国家、地区或“全球”。点击地点可在“我愿意搬去”和“仅远程”之间切换。",
+        "add": "添加",
+        "placeholder": "阿姆斯特丹、芬兰、欧盟…",
+        "worldwide": "全球",
+        "relocate": "我愿意搬去",
+        "remoteOnly": "仅远程",
+        "switch": "{place}：{state}。点击切换",
+        "fixed": "{place}：始终仅远程",
+        "remove": "移除 {place}",
+        "unknown": "当前市场的数据表里没有“{name}”，所以会按原文匹配。如果这不是你的本意，请检查拼写。",
+        "ruleMove": "新添加的城市默认“我愿意搬去”（实线）；国家或地区默认“仅远程”（虚线）。",
+        "ruleWorldwide": "“全球”始终仅远程。"
       },
       "searchCities": {
         "differs": "实际搜索的城市（search.yaml）是单独一份，不会跟着这里改：{cities}。",
@@ -624,9 +640,6 @@
       },
       "workplace": {
         "label": "工作方式"
-      },
-      "remote_scope": {
-        "label": "Remote 范围"
       },
       "seniority": {
         "label": "资历"
@@ -6581,12 +6594,9 @@
       "translationHint": "已经是这种语言的岗位不翻译（语言代码）。"
     },
     "market": {
-      "cities": "城市和都市圈",
-      "citiesHint": "从这个市场的城市里选，或者输入你自己的城市后按回车。",
       "suggestions": "这个市场的城市",
       "addCity": "添加 {city}",
       "noSuggestions": "这个国家没有城市列表，请自己输入。",
-      "remote": "远程岗位",
       "timezone": "时区",
       "timezoneHint": "轮次时间和“今天”都按这个时区算。",
       "browserZone": "你的浏览器在 {zone}。",
@@ -6751,8 +6761,8 @@
         "country": "本国，ISO 代码（留空 = 用包的）",
         "currency": "基准货币，ISO 代码（留空 = 用包的）",
         "homeLanguage": "本地语言，ISO 代码（留空 = 用包的）",
-        "locations": "城市，用逗号分隔",
-        "remoteScope": "远程岗位：none、home_country、worldwide 或 region:eu,CH",
+        "homeCity": "常住城市",
+        "places": "其他地点，用逗号分隔；只接受远程的地点前加 remote:（Amsterdam, remote:eu）",
         "timezone": "时区（IANA，例如 Europe/Berlin）",
         "summary": "给 AI 的简短介绍（一行；不要写姓名和联系方式）",
         "skills": "技能，写成 名称:年限，用逗号分隔（例如 Python:5, SQL）",

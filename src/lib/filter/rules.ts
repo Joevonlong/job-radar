@@ -1,6 +1,7 @@
 import type { PipelineConfig, PreferencesConfig } from "@/lib/config";
 import type { GermanLevel, JobLocation, JobSalary } from "@/lib/domain/types";
 import { scopeCountries, scopeWidePatterns } from "@/lib/market/remote-scope";
+import { canonicalCity, citySpellings, placeGeo, wantedLocations, wantedRemoteScope } from "@/lib/market/places";
 import type { Market } from "@/lib/market/types";
 import { buildBlacklistedCompanyKeys, buildWatchedCompanyKeys, isCompanyExcluded, isCompanyWatched } from "@/lib/companies/marks";
 import { visaRulesFor } from "@/lib/visa/rules";
@@ -156,31 +157,25 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
   const market: Market = pipeline.market;
   const transliterations = market.transliterations;
 
-  // spelling (folded) -> canonical name, for every city of city_aliases
-  const canonicalOf = new Map<string, string>();
-  const spellingsOf = new Map<string, string[]>();
-  for (const [canonical, aliases] of Object.entries(cfg.city_aliases)) {
-    const names = [canonical, ...aliases];
-    spellingsOf.set(canonical, names);
-    for (const name of names) canonicalOf.set(foldText(name), canonical);
-  }
-  const spellings = (name: string): string[] => spellingsOf.get(canonicalOf.get(foldText(name)) ?? "") ?? [name];
+  const geo = placeGeo(pipeline);
+  const remoteScope = wantedRemoteScope(preferences, geo);
+  const spellings = (name: string): string[] => citySpellings(name, geo);
 
   const metroOf = new Map<string, string[]>();
   for (const [city, towns] of Object.entries(cfg.metro_areas)) {
-    const key = foldText(canonicalOf.get(foldText(city)) ?? city);
+    const key = foldText(canonicalCity(city, geo));
     metroOf.set(key, [...(metroOf.get(key) ?? []), ...towns]);
   }
   const regionsOf = new Map<string, string[]>();
   for (const [city, regions] of Object.entries(cfg.metro_regions)) {
-    const key = foldText(canonicalOf.get(foldText(city)) ?? city);
+    const key = foldText(canonicalCity(city, geo));
     regionsOf.set(key, [...(regionsOf.get(key) ?? []), ...regions]);
   }
 
   const allowed = new Set<string>();
   const regions = new Set<string>();
-  for (const location of preferences.locations) {
-    const canonical = canonicalOf.get(foldText(location)) ?? location;
+  for (const location of wantedLocations(preferences)) {
+    const canonical = canonicalCity(location, geo);
     const addAllowed = (name: string): void => {
       allowed.add(foldText(name));
       allowed.add(foldTransliterated(name, transliterations));
@@ -204,12 +199,12 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
     genericLocation: compilePatterns(cfg.generic_location_patterns),
     homeCountry: market.country,
     baseCurrency: market.currency,
-    scopeCountries: scopeCountries(preferences.remote_scope, market),
-    scopeWide: compilePatterns(scopeWidePatterns(preferences.remote_scope, market)),
+    scopeCountries: scopeCountries(remoteScope, market),
+    scopeWide: compilePatterns(scopeWidePatterns(remoteScope, market)),
     worldwide: compilePatterns(cfg.remote.worldwide_patterns),
     outside: compilePatterns(cfg.remote.outside_patterns),
     titleOutside: compilePatterns(cfg.remote.title_outside_patterns),
-    outsideStateCode: outsideStateCodes(market, scopeCountries(preferences.remote_scope, market)),
+    outsideStateCode: outsideStateCodes(market, scopeCountries(remoteScope, market)),
     descriptionInScope: compilePatterns(cfg.remote.description_in_scope_patterns),
     seniorities,
     blacklistedCompanyKeys,
@@ -303,13 +298,8 @@ function checkLocation(job: FilterJob, filter: CompiledFilter, out: PartialVerdi
   const levelNote = (): string => encodeReason("location_country_level", placeOf((countryLevel ?? regionLevel) as JobLocation));
 
   if (job.workplace === "remote") {
-    const scope = filter.preferences.remote_scope;
-    if (scope === "none") {
-      out.excluded.push(encodeReason("remote_not_wanted"));
-      return;
-    }
     // the title says which region it hires in ("- US", "US East Coast"): that wins over locations and the description
-    const marker = scope === "worldwide" ? null : titleOutsideMarker(job.title, filter);
+    const marker = filter.scopeCountries === null ? null : titleOutsideMarker(job.title, filter);
     if (marker !== null) {
       out.excluded.push(encodeReason("remote_out_of_scope", marker));
       return;

@@ -29,6 +29,7 @@ describe("existing prompts are untouched", () => {
     const prompt = buildScorePrompt({
       me: fixedMe(),
       preferences: fixedPreferences(),
+      geo: { cityAliases: {}, cities: {}, countries: [], regions: {} },
       job: { title: "Forward Deployed Engineer", company: "Quillfeather Labs", locations: ["Berlin, Germany"], workplace: "hybrid", seniority: "senior", contract: "permanent", salary: "EUR 85,000 to 105,000 per year", description: forAi },
       jdMaxChars: 12000,
       jdHeadShare: 0.7,

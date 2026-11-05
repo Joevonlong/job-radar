@@ -283,7 +283,8 @@ describe("company-query collection", () => {
     const jobs = await getDb().select().from(schema.jobs);
     expect(jobs).toHaveLength(1);
     const { preferences, snapshot, me } = await currentPreferences(getDb());
-    preferences.locations = ["Berlin"];
+    preferences.home_city = "Berlin";
+    preferences.places = [];
     await runFilter(getDb(), { preferences, snapshotId: snapshot.id, me, pipeline: loadPipeline(), logger });
     const scores = await getDb().select().from(schema.scores);
     expect(scores).toMatchObject([{ filterResult: "passed", filterReasons: ["watched_company_location:Hamburg"] }]);

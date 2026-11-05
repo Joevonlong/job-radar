@@ -41,6 +41,7 @@ function view(over: Partial<MarketView> = {}): MarketView {
     homeLanguage: "de",
     languageName: "German",
     languageStep: true,
+    placeGeo: { cityAliases: {}, cities: {}, countries: [], regions: {} },
     scopeOptions: [],
     homeRegion: null,
     regionChoices: [],

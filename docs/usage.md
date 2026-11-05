@@ -187,9 +187,13 @@ direction. Pagination uses `ui.yaml: companies.page_size` (50 by default).
 
 ### Remote jobs and watched companies
 
-Two rules decide where a job may be, besides your cities (`/me` → What I want).
+Where a job may be is set on `/me` → What I want and in the Market step of the setup wizard. `preferences.yaml` holds it as `home_city` and `places: [{place, relocate}]`. A place is a city, a country, a region such as `eu`, or Worldwide. `home_city` goes to your AI provider with every job, like the rest of your preferences.
 
-**Remote scope** (the select on `/me`, `/settings` and in the setup wizard; a hint under it explains the chosen kind). For the Germany pack, `home_country` reads "Remote from Germany (incl. EU / Europe / EMEA / worldwide remote)":
+On the form, "Locations outside home city" shows each place as "✈ I'd move here" (solid) or "Remote only" (dashed), and a click switches it. A city you add starts as ✈, a country or region as remote only, and Worldwide is always remote only. A name the market's tables don't know gets a warning and is matched as written.
+
+For now, a ✈ place outside the home country doesn't bring in on-site jobs there: the filter still requires the home country.
+
+**Remote jobs.** Remote-only regions and countries, and Worldwide, set where remote jobs may be based; with none of them it is the home country. For the Germany pack that reads as remote from Germany, including EU, Europe, EMEA and worldwide remote:
 
 | Remote job | Result |
 |---|---|
@@ -203,12 +207,12 @@ Two rules decide where a job may be, besides your cities (`/me` → What I want)
 | a title such as "AI Engineer - US" or "(Americas)" | excluded; the description cannot rescue it. A title that also names EMEA or Europe is not excluded |
 | "Remote" without a place, or no location | kept, noted that it does not say where it hires |
 
-`none` drops remote jobs unless the posting names one of your cities, `worldwide` keeps all of them, and `region` keeps the places of the regions and countries you pick (plus worldwide). The scope in `/settings` decides where the remote searches look; the filter uses the one in My profile.
+Worldwide keeps all of them, and remote-only regions and countries keep their own places (plus worldwide). To stop seeing remote jobs, take Remote out of Workplace. A remote-only city does nothing yet. The remote scope in `/settings` still decides where the remote searches look; the filter uses your places.
 
 **Watched companies keep their on-site and hybrid jobs in any city of your country.** For a company on the watch list (`/interests`, **Watch** on `/companies`, or the database flag), a job that is not remote passes the location check when at least one of its places is in your home country, whatever the city; the job is noted "Watched company: Hamburg is not one of your cities but is in your home country, so the job is kept". Only the location check is relaxed:
 
 - A place the source does not tie to your country does not count: "San Francisco", "Bengaluru" or a small town the city table does not know, with no country given by the source. Such a job is still excluded as "Location not on your list". Most sources give the country (Arbeitsagentur always, LinkedIn writes "…, Germany").
-- Remote jobs follow the remote scope above. Work mode, contract, student roles, salary floor, seniority, excluded keywords and companies, deal-breakers and your own keep / exclude decisions are unchanged, and so are scoring and the push rules.
+- Remote jobs follow the rules above. Work mode, contract, student roles, salary floor, seniority, excluded keywords and companies, deal-breakers and your own keep / exclude decisions are unchanged, and so are scoring and the push rules.
 - The list is read on every filter run, so adding or removing a company changes its jobs on the next cycle. If `interests.yaml` cannot be read, the list counts as empty (a warning is logged) and only the database flag applies.
 - A company is only collected in every city when it has an ATS board (below) or a source returns its jobs: otherwise only the searches for your cities find them. `/interests` marks watched companies without a board.
 

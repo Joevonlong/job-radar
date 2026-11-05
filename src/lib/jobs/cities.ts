@@ -1,3 +1,4 @@
+import { wantedLocations } from "@/lib/market/places";
 import { parseConfigText, readProfileText } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import { listJobCityRows, type Db } from "@/lib/db";
@@ -7,7 +8,7 @@ import { buildCityGroups, type CityGroup } from "./city-groups";
 /** The target cities of preferences.yaml; none when the file cannot be read (the dropdown then has no "target" group). */
 function targetCities(): string[] {
   try {
-    return [...parseConfigText("preferences", readProfileText("preferences")).locations];
+    return wantedLocations(parseConfigText("preferences", readProfileText("preferences")));
   } catch {
     return [];
   }

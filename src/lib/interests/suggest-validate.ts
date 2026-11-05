@@ -3,6 +3,7 @@
  * be backed by evidence that code can verify against the jobs it was given (the quote is in the JD, the job
  * is of that company, the word is in the title or text), and has to be new. Pure: no database, no clock.
  */
+import { wantedLocations } from "@/lib/market/places";
 import type { InterestsConfig, PreferencesConfig, SuggestConfig } from "@/lib/config";
 import { SIGNAL_REGEX_FLAGS } from "@/lib/config/schemas/interests";
 import type { SuggestionSourceJob } from "@/lib/db/repos/interest-suggestions";
@@ -46,7 +47,7 @@ export interface ValidationContext {
   positive: readonly SuggestionSourceJob[];
   ignored: readonly SuggestionSourceJob[];
   interests: Pick<InterestsConfig, "signals" | "watched_companies" | "limits">;
-  preferences: Pick<PreferencesConfig, "locations" | "exclude_keywords" | "exclude_companies">;
+  preferences: Pick<PreferencesConfig, "home_city" | "places" | "exclude_keywords" | "exclude_companies">;
   config: Pick<SuggestConfig, "min_confidence" | "min_evidence" | "max_term_chars">;
   /** The key a company name is matched on (case, legal form and aliases ignored). */
   normalizeCompany: (name: string) => string;
@@ -273,7 +274,7 @@ export function validateSuggestions(output: SuggestOutput, context: ValidationCo
       }
       push({ kind: "filter", action: "exclude_keyword", value, ...shared, evidence: backing.map((job) => evidenceOf(job)) });
     } else if (entry.action === "add_location") {
-      if (context.preferences.locations.some((place) => normalizeTerm(place) === key)) {
+      if (wantedLocations(context.preferences).some((place) => normalizeTerm(place) === key)) {
         count("already_listed");
         continue;
       }

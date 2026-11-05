@@ -10,6 +10,7 @@
  *
  * A plain function of its dependencies, so the weekly schedule, the control request and tests all call it.
  */
+import { wantedLocations } from "@/lib/market/places";
 import { AiProviderError, sanitize } from "@/lib/ai/errors";
 import type { ScoreOutputLanguages } from "@/lib/ai/prompts/score";
 import { buildSuggestPrompt, cutDescription, suggestOutputSchemaFor, SUGGEST_PROMPT_VERSION, type SuggestCategory, type SuggestPromptJob } from "@/lib/ai/prompts/suggest";
@@ -134,7 +135,7 @@ export async function runSuggest(deps: SuggestDeps): Promise<SuggestSummary> {
     current: { watchedCompanies: interests.watched_companies },
     preferences: {
       targetTitles: preferences.target_titles,
-      locations: preferences.locations,
+      locations: wantedLocations(preferences),
       excludeKeywords: preferences.exclude_keywords,
       excludeCompanies: preferences.exclude_companies,
     },
