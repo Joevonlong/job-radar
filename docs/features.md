@@ -77,20 +77,20 @@ key · no accounts · no telemetry.
 
 <table>
   <tr>
-    <td width="50%"><img alt="Today" src="https://joevonlong.github.io/job-radar-site/readme/V-02.webp"><p align="center"><b>Today</b></p></td>
+    <td width="50%"><img alt="Today" src="https://jobradar.bid/readme/V-02.webp"><p align="center"><b>Today</b></p></td>
     <td width="50%"><img alt="Job breakdown & skill match" src="images/demo/breakdown.webp"><p align="center"><b>Job breakdown & skill match</b></p></td>
   </tr>
   <tr>
-    <td width="50%"><img alt="Clean input for your AI" src="https://joevonlong.github.io/job-radar-site/readme/V-06.webp"><p align="center"><b>Clean input for your AI</b></p></td>
-    <td width="50%"><img alt="Filters and saved views" src="https://joevonlong.github.io/job-radar-site/readme/V-10.webp"><p align="center"><b>Filters and saved views</b></p></td>
+    <td width="50%"><img alt="Clean input for your AI" src="https://jobradar.bid/readme/V-06.webp"><p align="center"><b>Clean input for your AI</b></p></td>
+    <td width="50%"><img alt="Filters and saved views" src="https://jobradar.bid/readme/V-10.webp"><p align="center"><b>Filters and saved views</b></p></td>
   </tr>
   <tr>
-    <td width="50%"><img alt="Track applications" src="https://joevonlong.github.io/job-radar-site/readme/V-13.webp"><p align="center"><b>Track applications</b></p></td>
-    <td width="50%"><img alt="Keyboard flow" src="https://joevonlong.github.io/job-radar-site/readme/V-11.webp"><p align="center"><b>Keyboard flow</b></p></td>
+    <td width="50%"><img alt="Track applications" src="https://jobradar.bid/readme/V-13.webp"><p align="center"><b>Track applications</b></p></td>
+    <td width="50%"><img alt="Keyboard flow" src="https://jobradar.bid/readme/V-11.webp"><p align="center"><b>Keyboard flow</b></p></td>
   </tr>
   <tr>
-    <td width="50%"><img alt="Many sources" src="https://joevonlong.github.io/job-radar-site/readme/V-16.webp"><p align="center"><b>Many sources</b></p></td>
-    <td width="50%"><img alt="Your AI, your subscription" src="https://joevonlong.github.io/job-radar-site/readme/V-17.webp"><p align="center"><b>Your AI, your subscription</b></p></td>
+    <td width="50%"><img alt="Many sources" src="https://jobradar.bid/readme/V-16.webp"><p align="center"><b>Many sources</b></p></td>
+    <td width="50%"><img alt="Your AI, your subscription" src="https://jobradar.bid/readme/V-17.webp"><p align="center"><b>Your AI, your subscription</b></p></td>
   </tr>
 </table>
 

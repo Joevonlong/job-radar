@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://joevonlong.github.io/job-radar-site/"><b>Website</b></a> ·
+  <a href="https://jobradar.bid/"><b>Website</b></a> ·
   <a href="docs/README.md"><b>Docs</b></a> ·
   <a href="#quick-start"><b>Quick start</b></a> ·
   <a href="docs/faq.md"><b>FAQ</b></a> ·
