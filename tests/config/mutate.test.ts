@@ -29,7 +29,7 @@ it("waits for the config write lock before reading or transforming the file", as
     fs.writeFileSync(file, String(doc));
   });
   await entered;
-  const update = vi.fn((current: ReturnType<typeof reloadConfig<"search">>) => ({ ...current, locations: ["Austin"] }));
+  const update = vi.fn((current: ReturnType<typeof reloadConfig<"search">>) => ({ ...current, keyword_groups: { a: ["Austin"] } }));
   const mutation = mutateConfig("search", update);
   try {
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -39,7 +39,7 @@ it("waits for the config write lock before reading or transforming the file", as
   }
   await writer;
   await mutation;
-  expect(reloadConfig("search")).toMatchObject({ locations: ["Austin"], max_per_group_per_location: max });
+  expect(reloadConfig("search")).toMatchObject({ keyword_groups: { a: ["Austin"] }, max_per_group_per_location: max });
 });
 
 it("a declined edit keeps the exact file text", async () => {

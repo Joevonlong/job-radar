@@ -1,4 +1,5 @@
 import type { SpanHandle } from "@/lib/activity/types";
+import type { QueryPlaces } from "@/lib/channels/query";
 import type { ChannelsConfig, ScheduleConfig, SearchConfig } from "@/lib/config";
 import type { CascadeSpec } from "@/lib/channels/cascade";
 import type { CircuitBreaker } from "@/lib/channels/circuit";
@@ -50,7 +51,8 @@ export interface CycleStepContext {
   signal: AbortSignal;
   logger: ChannelLogger;
   now: () => Date;
-  config: { channels: ChannelsConfig; search: SearchConfig; schedule: ScheduleConfig };
+  /** `places` null: preferences.yaml cannot be read, so there are no keyword queries this cycle. */
+  config: { channels: ChannelsConfig; search: SearchConfig; schedule: ScheduleConfig; places: QueryPlaces | null };
   channels: ChannelServices;
   /** Results of the steps that already ran. */
   results: Readonly<Partial<Record<CycleStepName, unknown>>>;

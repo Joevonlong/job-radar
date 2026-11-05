@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { createChannelContext } from "@/lib/channels/context";
+import { placeGeo } from "@/lib/market/places";
 import { createMemoryDiscoveryStore } from "@/lib/channels/discovery";
 import { ChannelError, PartialCollectError } from "@/lib/channels/errors";
 import {
@@ -57,16 +58,17 @@ const settings = (overrides: Partial<HandpickedSettings> = {}): HandpickedSettin
 });
 
 /** Places, keywords and boards the channel reads, built here (not taken from any shipped config). */
+const NO_TABLES = { cityAliases: {}, cities: {}, countries: [], regions: {} };
+
 function inputs(options: { remoteScope?: "none" | "home_country"; watched?: string[]; boards?: Array<{ ats: "greenhouse" | "personio"; token: string; enabled?: boolean }> } = {}): HandpickedInputs {
   const search = {
     ...shippedSearch(),
-    locations: ["Berlin", "München"],
-    remote_scope: options.remoteScope ?? "home_country",
     keyword_groups: { roles: ["AI Engineer", "Machine Learning Engineer", "Data Scientist", "MLOps Engineer"] },
   };
   const pipeline = loadPipeline();
   return {
     search,
+    preferences: { home_city: "Berlin", places: [{ place: "München", relocate: true }], workplace: options.remoteScope === "none" ? ["onsite"] : ["onsite", "remote"] },
     interests: { ...configRegistry.interests.schema.parse(shippedYaml("interests.yaml")), watched_companies: options.watched ?? [] },
     pipeline: { ...pipeline, filter: { ...pipeline.filter, city_aliases: { München: ["Munich", "Muenchen"] } } },
     companies: companiesSchema.parse({ companies: (options.boards ?? [{ ats: "greenhouse", token: "KnownCo", enabled: false }]).map((b) => ({ name: b.token, ats: b.ats, token: b.token, enabled: b.enabled ?? true })) }),
@@ -177,7 +179,7 @@ function prefilter(options: Parameters<typeof inputs>[0] = {}, s: HandpickedSett
 
 function placesOf(options: Parameters<typeof inputs>[0] = {}) {
   const i = inputs(options);
-  return buildPlaces({ locations: i.search.locations, cityAliases: i.pipeline.filter.city_aliases, remoteScope: i.search.remote_scope, country: i.country });
+  return buildPlaces({ preferences: i.preferences, geo: placeGeo(i.pipeline), country: i.country });
 }
 
 describe("fixtures", () => {
@@ -208,8 +210,8 @@ describe("places", () => {
   });
 
   it("has no city when none is configured, and compares without case or accents", () => {
-    expect(matchesPlace(entry("b000000002"), buildPlaces({ locations: ["BERLIN"], cityAliases: {}, remoteScope: "none", country: "DE" }))).toBe(true);
-    expect(matchesPlace(entry("b000000005"), buildPlaces({ locations: ["Berlin"], cityAliases: {}, remoteScope: "none", country: "DE" }))).toBe(false);
+    expect(matchesPlace(entry("b000000002"), buildPlaces({ preferences: { home_city: "BERLIN", places: [], workplace: ["onsite"] }, geo: NO_TABLES, country: "DE" }))).toBe(true);
+    expect(matchesPlace(entry("b000000005"), buildPlaces({ preferences: { home_city: "Berlin", places: [], workplace: ["onsite"] }, geo: NO_TABLES, country: "DE" }))).toBe(false);
   });
 });
 

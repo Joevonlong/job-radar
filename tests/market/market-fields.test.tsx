@@ -5,7 +5,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { useState, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { draftCountryName, languageStepOn, MarketFields } from "@/components/profile/market-fields";
+import { languageStepOn, MarketFields } from "@/components/profile/market-fields";
 import type { MarketView, PackOption } from "@/lib/market/view";
 import type { MarketDraft } from "@/lib/profile/draft";
 
@@ -41,6 +41,7 @@ function view(over: Partial<MarketView> = {}): MarketView {
     homeLanguage: "de",
     languageName: "German",
     languageStep: true,
+    placeGeo: { cityAliases: {}, cities: {}, countries: [], regions: {} },
     scopeOptions: [],
     homeRegion: null,
     regionChoices: [],
@@ -72,16 +73,6 @@ const wrap = (node: ReactNode, locale: "en" | "zh" = "en") => (
     {node}
   </NextIntlClientProvider>
 );
-
-describe("draftCountryName", () => {
-  it("follows the draft, not the saved market", () => {
-    const market = view({ country: "US", countryName: "United States" });
-    expect(draftCountryName(market, { pack: "xx", country: "", currency: "", home_language: "" })).toBe("Germany");
-    expect(draftCountryName(market, { pack: "xx", country: "US", currency: "", home_language: "" })).toBe("United States");
-    expect(draftCountryName(market, { pack: "generic", country: "", currency: "", home_language: "" })).toBe("");
-    expect(draftCountryName(market, { pack: "generic", country: "DE", currency: "", home_language: "" })).toBe("Germany");
-  });
-});
 
 describe("languageStepOn", () => {
   it("is on only for a pack with rules whose language the user keeps", () => {

@@ -1,3 +1,4 @@
+import { wantedLocations, wantedRemoteScope, type PlaceGeo } from "@/lib/market/places";
 import { createHash } from "node:crypto";
 
 import { z } from "zod";
@@ -299,6 +300,8 @@ export interface ScorePromptInput {
   language: ScoreLanguage | null;
   /** The market's base currency (the salary floor is in it). */
   currency: string;
+  /** The market's place tables, to read the remote-only places. */
+  geo: PlaceGeo;
   /** The languages the AI writes in (default: the reference rendering, Chinese with an English summary). */
   output?: ScoreOutputLanguages;
   /** `ai.yaml: scoring.criteria`. */
@@ -372,8 +375,8 @@ export function buildScorePrompt(input: ScorePromptInput): AiPrompt {
   ];
   const wants = [
     `Target titles: ${listOrNone(preferences.target_titles)}`,
-    `Locations: ${listOrNone(preferences.locations)}`,
-    `Workplace: ${listOrNone(preferences.workplace)}; remote scope: ${remoteScopeKey(preferences.remote_scope)}`,
+    `Locations: ${listOrNone(wantedLocations(preferences))}`,
+    `Workplace: ${listOrNone(preferences.workplace)}; remote scope: ${remoteScopeKey(wantedRemoteScope(preferences, input.geo))}`,
     `Seniority: ${preferences.seniority}`,
     `Salary floor (${input.currency} per year, gross): ${preferences.salary_floor_year}`,
     `Contracts allowed: ${listOrNone(preferences.contracts.allow)}; excluded: ${listOrNone(preferences.contracts.exclude)}`,

@@ -8,6 +8,8 @@
  * tracked in memory and printed, together with how the records parse. Needs JSEARCH_API_KEY in the
  * environment; the key is never printed. Ignores `enabled` and `pace_requests` in sources.yaml.
  */
+import { onsiteSearchTexts } from "../src/lib/channels/query";
+import { loadQueryPlaces } from "../src/lib/channels/query-places";
 import { parseArgs } from "node:util";
 
 import { BudgetTracker, monthKey } from "../src/lib/channels/budget";
@@ -40,7 +42,7 @@ async function main(): Promise<number> {
   const schedule = loadConfig("schedule");
   const groupId = values.group ?? Object.keys(search.keyword_groups)[0];
   const keywords = groupId ? search.keyword_groups[groupId] : undefined;
-  const location = values.remote ? null : (values.location ?? search.locations[0] ?? null);
+  const location = values.remote ? null : (values.location ?? onsiteSearchTexts(loadQueryPlaces())[0] ?? null);
   if (!Number.isFinite(windowHours) || windowHours <= 0 || !groupId || !keywords || (!values.remote && location === null)) {
     console.error("smoke:jsearch: bad --window-hours, unknown keyword group, or no location configured");
     return 2;
@@ -66,7 +68,7 @@ async function main(): Promise<number> {
     logger: createLogger({ minLevel: "info" }),
   });
 
-  const remoteScope = values.remote && search.remote_scope !== "none" ? search.remote_scope : null;
+  const remoteScope = values.remote ? ("home_country" as const) : null;
   const query = {
     id: queryId({ keywords, keywordGroup: groupId, location, remote: values.remote, remoteScope }),
     keywords: [...keywords],
@@ -74,6 +76,7 @@ async function main(): Promise<number> {
     location,
     remote: values.remote,
     remoteScope,
+    country: null,
     company: null,
     windowHours,
     maxResults: 10,

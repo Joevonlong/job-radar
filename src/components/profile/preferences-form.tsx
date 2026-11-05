@@ -1,11 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import Link from "next/link";
-import { useId, useState, useTransition } from "react";
+import { useId, useState, } from "react";
 
-import { syncSearchLocationsAction as rawSyncSearchLocationsAction } from "@/app/me/actions";
-import type { ConfigWriteErrorKey } from "@/lib/config/errors";
 
 import type { SalaryAxisScale } from "@/components/viz";
 import { Button } from "@/components/ui/button";
@@ -14,6 +11,7 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { changedPaths } from "@/lib/draft-diff";
 import type { SalaryMedian, StatedSalary } from "@/lib/profile/floor-preview";
+import { placesBeyondSearchEntries, searchEntriesOutsidePlaces, type OldSearchEntries } from "@/lib/market/places";
 import type { MarketView } from "@/lib/market/view";
 import {
   CONTRACT_MODES,
@@ -22,18 +20,15 @@ import {
   WORKPLACE_OPTIONS,
   type PreferencesDraft,
 } from "@/lib/profile/draft";
-import { sameLocations } from "@/lib/profile/same-locations";
 import type { ProfileActionState } from "@/lib/profile/types";
 
 import { DealBreakersCard } from "./deal-breakers-card";
 import { Field, TagInput, describedBy, fieldErrorMap } from "./fields";
 import { FloorPreview } from "./floor-preview";
 import { FormCard } from "./form-card";
-import { MarketFields, draftCountryName, draftHomeRegion } from "./market-fields";
-import { RemoteScopeField } from "./remote-scope-field";
-import { withActionFeedback } from "@/lib/actions/client";
+import { MarketFields } from "./market-fields";
+import { PlacesField } from "./places-field";
 
-const syncSearchLocationsAction = withActionFeedback(rawSyncSearchLocationsAction)(() => ({ status: "error", error: "write_failed" }));
 
 interface PreferencesFormProps {
   initial: PreferencesDraft;
@@ -47,24 +42,23 @@ interface PreferencesFormProps {
   salaryMedian: SalaryMedian;
   /** The market (scope choices, currency, language). */
   market: MarketView;
-  /** search.yaml `locations`: the cities that are searched; they do not follow `locations` of this form. */
-  searchLocations: readonly string[];
+  /** What search.yaml's old keys still name; ignored, and warned about. */
+  oldSearch: OldSearchEntries;
   /** The user's level of the market's local language in me.yaml ("B1", "native"), null = none listed: what a language gate compares. */
   userLanguageLevel: string | null;
   /** me.yaml `needs_visa_sponsorship` as saved; null = me.yaml cannot be read (a visa deal-breaker then does nothing). */
   needsVisaSponsorship: boolean | null;
 }
 
-export function PreferencesForm({ initial, hash, state, pending, onSave, salaries, axis, salaryMedian, market, searchLocations, userLanguageLevel, needsVisaSponsorship }: PreferencesFormProps) {
+export function PreferencesForm({ initial, hash, state, pending, onSave, salaries, axis, salaryMedian, market, oldSearch, userLanguageLevel, needsVisaSponsorship }: PreferencesFormProps) {
   const t = useTranslations("profile");
   const base = useId();
   const [draft, setDraft] = useState<PreferencesDraft>(initial);
   const errors = fieldErrorMap(state, "preferences", hash);
   const dirtyCount = changedPaths(draft, initial).length;
-  const [searchCities, setSearchCities] = useState<readonly string[]>(searchLocations);
-  const [syncing, startSync] = useTransition();
-  const [syncResult, setSyncResult] = useState<"done" | "error" | ConfigWriteErrorKey | null>(null);
-  const searchDiffers = draft.locations.length > 0 && !sameLocations(draft.locations, searchCities);
+  const sameMarket = draft.market.pack === market.packId && market.error === null;
+  const leftovers = sameMarket ? searchEntriesOutsidePlaces(oldSearch, draft, market.placeGeo, { country: market.country, countryName: market.countryName }) : [];
+  const added = sameMarket ? placesBeyondSearchEntries(oldSearch, draft, market.placeGeo, { country: market.country, countryName: market.countryName }) : [];
 
   function patch(next: Partial<PreferencesDraft>) {
     setDraft((current) => ({ ...current, ...next }));
@@ -72,9 +66,9 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
 
   const ids = {
     titles: `${base}-titles`,
-    locations: `${base}-locations`,
+    homeCity: `${base}-home-city`,
+    places: `${base}-places`,
     workplace: `${base}-workplace`,
-    remote: `${base}-remote`,
     seniority: `${base}-seniority`,
     salary: `${base}-salary`,
     contracts: `${base}-contracts`,
@@ -106,48 +100,39 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
         />
       </Field>
 
-      <Field id={ids.locations} label={t("fields.locations.label")} error={errors.get("locations")}>
-        <TagInput
-          id={ids.locations}
-          values={draft.locations}
-          onChange={(next) => patch({ locations: next })}
-          invalid={errors.has("locations")}
-          describedBy={describedBy(ids.locations, false, errors.get("locations"))}
+      <Field id={ids.homeCity} label={t("fields.home_city.label")} hint={t("fields.home_city.hint")} error={errors.get("home_city")}>
+        <Input
+          id={ids.homeCity}
+          className="max-w-72"
+          value={draft.home_city}
+          data-testid="home-city"
+          aria-invalid={errors.has("home_city") || undefined}
+          aria-describedby={describedBy(ids.homeCity, true, errors.get("home_city"))}
+          onChange={(event) => patch({ home_city: event.target.value })}
         />
       </Field>
-      {searchDiffers || syncResult !== null ? (
-        <div className="flex flex-col gap-2 text-body-sm" data-testid="search-cities-note">
-          {searchDiffers ? (
-            <>
-              <p className="text-ink-2">{t("fields.searchCities.differs", { cities: searchCities.join(", ") })}</p>
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={syncing}
-                  data-testid="search-cities-sync"
-                  onClick={() =>
-                    startSync(async () => {
-                      const result = await syncSearchLocationsAction(draft.locations);
-                      if (result.status === "done") setSearchCities(result.locations);
-                      setSyncResult(result.status === "done" ? "done" : ["dbUnavailable", "busy", "stale", "protected"].includes(result.error) ? result.error as ConfigWriteErrorKey : "error");
-                    })
-                  }
-                >
-                  {t("fields.searchCities.sync")}
-                </Button>
-                <Link href="/settings?tab=search" className="font-bold underline decoration-2 underline-offset-4 hover:bg-hi">
-                  {t("fields.searchCities.link")}
-                </Link>
-              </div>
-            </>
-          ) : null}
-          {syncResult !== null ? (
-            <p role="status" className={syncResult === "done" ? undefined : "text-bad font-bold"}>
-              {t(`fields.searchCities.${syncResult === "error" ? "failed" : syncResult}`)}
-            </p>
-          ) : null}
-        </div>
+      <Field id={ids.places} label={t("fields.places.label")} hint={t("fields.places.hint")} error={errors.get("places")}>
+        <PlacesField
+          id={ids.places}
+          value={draft.places}
+          onChange={(places) => patch({ places })}
+          geo={market.placeGeo}
+          options={market.scopeOptions}
+          known={draft.market.pack === market.packId && market.error === null}
+          search={{ homeCity: draft.home_city, workplace: draft.workplace, home: { country: market.country, countryName: market.countryName } }}
+          invalid={errors.has("places")}
+          describedBy={describedBy(ids.places, true, errors.get("places"))}
+        />
+      </Field>
+      {leftovers.length > 0 ? (
+        <p role="status" className="text-body-sm font-bold" data-testid="search-leftovers">
+          {t("fields.searchLeftovers", { names: leftovers.join(", ") })}
+        </p>
+      ) : null}
+      {added.length > 0 ? (
+        <p role="status" className="text-body-sm font-bold" data-testid="search-added">
+          {t("fields.searchAdded", { names: added.join(", ") })}
+        </p>
       ) : null}
 
       <Field id={ids.workplace} group label={t("fields.workplace.label")} error={errors.get("workplace")}>
@@ -171,19 +156,6 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id={ids.remote} label={t("fields.remote_scope.label")} error={errors.get("remote_scope")}>
-          <RemoteScopeField
-            id={ids.remote}
-            value={draft.remote_scope}
-            onChange={(next) => patch({ remote_scope: next })}
-            options={market.scopeOptions}
-            countryName={draftCountryName(market, draft.market)}
-            homeRegion={draftHomeRegion(market, draft.market)}
-            invalid={errors.has("remote_scope")}
-            describedBy={describedBy(ids.remote, false, errors.get("remote_scope"))}
-            namespace="profile"
-          />
-        </Field>
         <Field id={ids.seniority} label={t("fields.seniority.label")} error={errors.get("seniority")}>
           <Select
             id={ids.seniority}

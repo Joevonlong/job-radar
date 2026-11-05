@@ -5,7 +5,7 @@ import { catchUpWindow, familyHistory, orderQueries, rotationSummary, turnsOf } 
 import type { SearchQuery } from "@/lib/channels/types";
 import type { QueryRunHistoryRow } from "@/lib/db/repos/runs";
 
-const query = (id: string): SearchQuery => ({ id, keywordGroup: id, keywords: [id], location: "Test City", remote: false, remoteScope: null, company: null, windowHours: 24, maxResults: 10 });
+const query = (id: string): SearchQuery => ({ id, keywordGroup: id, keywords: [id], location: "Test City", remote: false, remoteScope: null, country: null, company: null, windowHours: 24, maxResults: 10 });
 const queries = ["a", "b", "c", "d", "e"].map(query);
 const ids = (items: readonly SearchQuery[]) => items.map((q) => q.id);
 const earlier = new Date("2026-01-01T00:00:00Z");
@@ -52,11 +52,11 @@ describe("history projections", () => {
 });
 
 describe("rotationSummary", () => {
-  const input = { queries, sortChannel: "paid", turns: new Map([["a", earlier], ["b", later]]), reached: 2, stretched: 0, capped: 0, maxWindowHours: 24, historyUnavailable: false, now: new Date("2026-01-02T01:07:00Z") };
+  const input = { queries, remotePlacesSkipped: 0, sortChannel: "paid", turns: new Map([["a", earlier], ["b", later]]), reached: 2, stretched: 0, capped: 0, maxWindowHours: 24, historyUnavailable: false, now: new Date("2026-01-02T01:07:00Z") };
 
   it("reports starting history, reached queries, rounded oldest wait and the requested window", () => {
     expect(rotationSummary(input)).toEqual({
-      sortChannel: "paid", queries: 5, reached: 2, neverRun: 3, oldestWaitHours: 25.1,
+      sortChannel: "paid", queries: 5, reached: 2, neverRun: 3, remotePlacesSkipped: 0, oldestWaitHours: 25.1,
       oldestWaiting: { id: "a", keywordGroup: "a", location: "Test City", remoteScope: null },
       stretched: 0, maxWindowHours: 24, capped: 0, historyUnavailable: false,
     });
@@ -132,7 +132,7 @@ describe("catchUpWindow", () => {
 
 it.each([false, true])("reports supplied distinct stretched and capped counts with unavailable history = %s", (historyUnavailable) => {
   expect(rotationSummary({
-    queries, sortChannel: "paid", turns: new Map(), reached: 3, stretched: 2, capped: 1,
+    queries, remotePlacesSkipped: 0, sortChannel: "paid", turns: new Map(), reached: 3, stretched: 2, capped: 1,
     maxWindowHours: 168, historyUnavailable, now: later,
   })).toMatchObject({ stretched: 2, capped: 1, maxWindowHours: 168 });
 });

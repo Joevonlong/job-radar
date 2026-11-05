@@ -31,10 +31,12 @@ import { markJobsPossiblyClosed } from "@/lib/db/repos/jobs";
 import { runMigrations } from "@/lib/db/migrate";
 import { cycleOutcome } from "@/lib/sources/view";
 
-import { channelsWith, shippedSearch } from "../channels/helpers";
+import { channelsWith, shippedSearch, testPlaces } from "../channels/helpers";
 import { response as jsearchResponse, SEARCH_PAGE } from "../channels/jsearch/helpers";
 import { fixtureHtml, htmlResponse } from "../channels/web/helpers";
 import { collectOf, config, pinnedSearch, probeChannel, quietLogger, settings } from "../cycle/helpers";
+
+const berlinOnly = () => testPlaces({ places: [], workplace: ["onsite", "hybrid"] });
 
 /**
  * A paginated query that fails after some pages (`PartialCollectError`): the postings already fetched are stored, the run is
@@ -411,10 +413,10 @@ describe("a real multi-request channel", () => {
       const stepstone = (raw.sources as Record<string, Record<string, unknown>>).stepstone!;
       stepstone.enabled = true;
     });
-    const search = { ...shippedSearch(), keyword_groups: { engineering: ["AI Engineer", "KI Engineer"] }, locations: ["Berlin"], remote_scope: "none" as const };
+    const search = { ...shippedSearch(), keyword_groups: { engineering: ["AI Engineer", "KI Engineer"] } };
     const result = await runCycle("manual", {
       registry,
-      config: { ...config(), channels: sources, search },
+      config: { ...config({ places: berlinOnly() }), channels: sources, search },
       logger: quietLogger,
       sleep: async () => {},
       channelIds: ["stepstone"],
@@ -603,10 +605,10 @@ describe("JSearch whose second keyword is refused before its request", () => {
         fetch_details: false,
       });
     });
-    const search = { ...shippedSearch(), keyword_groups: groups, locations: ["Berlin"], remote_scope: "none" as const };
+    const search = { ...shippedSearch(), keyword_groups: groups };
     return runCycle("manual", {
       registry,
-      config: { ...config(), channels: channelsConfig, search },
+      config: { ...config({ places: berlinOnly() }), channels: channelsConfig, search },
       logger: quietLogger,
       sleep: async () => {},
       channelIds: ["jsearch"],

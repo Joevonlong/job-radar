@@ -40,6 +40,7 @@ const market: MarketView = {
   homeLanguage: "en",
   languageName: "English",
   languageStep: false,
+  placeGeo: { cityAliases: {}, cities: {}, countries: [], regions: {} },
   scopeOptions: [],
   homeRegion: null,
   regionChoices: [],
@@ -48,7 +49,8 @@ const market: MarketView = {
 /** A country table in which ZZ has no entry at all, US has a currency but no city, DE has both. */
 function view(): SetupView["market"] {
   return {
-    draft: { market: { pack: "generic", country: "US", currency: "USD", home_language: "en" }, locations: ["New York"], remote_scope: "home_country", timezone: "America/New_York" },
+    workplace: ["onsite", "remote"],
+    draft: { market: { pack: "generic", country: "US", currency: "USD", home_language: "en" }, home_city: "New York", places: [], timezone: "America/New_York" },
     saved: { pack: "generic", country: "US", currency: "USD", home_language: "en" },
     cities: { DE: ["Berlin", "München"] },
     countryDefaults: { DE: { currency: "EUR", city: "Berlin" }, US: { currency: "USD", city: null } },
@@ -62,11 +64,7 @@ const wrap = (node: ReactNode) => (
 );
 
 const renderStep = (done = false) => render(wrap(<StepMarket view={view()} done={done} market={market} />));
-const chips = (): string[] =>
-  screen
-    .queryAllByRole("button", { name: /^Remove / })
-    .map((b) => b.getAttribute("aria-label")?.replace("Remove ", "") ?? "")
-    .filter((c) => c !== "");
+const homeCity = () => screen.getByTestId("setup-home-city");
 const country = () => screen.getByTestId("market-country");
 const currency = () => screen.getByTestId("market-currency");
 
@@ -74,19 +72,19 @@ describe("StepMarket country switch", () => {
   it("replaces the cities with the country's main city and brings its currency", async () => {
     const user = userEvent.setup();
     renderStep();
-    expect(chips()).toEqual(["New York"]);
+    expect(homeCity()).toHaveValue("New York");
     await user.selectOptions(country(), "DE");
-    expect(chips()).toEqual(["Berlin"]);
+    expect(homeCity()).toHaveValue("Berlin");
     expect(currency()).toHaveValue("EUR");
   });
 
   it("keeps the cities the user edited by hand through a later country switch", async () => {
     const user = userEvent.setup();
     renderStep();
-    await user.type(document.getElementById("setup-market-cities") as HTMLElement, "Boston{Enter}");
-    expect(chips()).toEqual(["New York", "Boston"]);
+    await user.clear(homeCity());
+    await user.type(homeCity(), "Boston");
     await user.selectOptions(country(), "DE");
-    expect(chips()).toEqual(["New York", "Boston"]);
+    expect(homeCity()).toHaveValue("Boston");
     expect(currency()).toHaveValue("EUR");
   });
 
@@ -96,7 +94,7 @@ describe("StepMarket country switch", () => {
     await user.selectOptions(currency(), "CHF");
     await user.selectOptions(country(), "DE");
     expect(currency()).toHaveValue("CHF");
-    expect(chips()).toEqual(["Berlin"]);
+    expect(homeCity()).toHaveValue("Berlin");
   });
 
   it("falls back to no currency and no city for a country the tables do not know", async () => {
@@ -104,7 +102,7 @@ describe("StepMarket country switch", () => {
     renderStep();
     await user.selectOptions(country(), "ZZ");
     expect(currency()).toHaveValue("");
-    expect(chips()).toEqual([]);
+    expect(homeCity()).toHaveValue("");
   });
 
   it("treats a saved step as the user's own choice: a country switch changes neither currency nor cities", async () => {
@@ -112,6 +110,6 @@ describe("StepMarket country switch", () => {
     renderStep(true);
     await user.selectOptions(country(), "DE");
     expect(currency()).toHaveValue("USD");
-    expect(chips()).toEqual(["New York"]);
+    expect(homeCity()).toHaveValue("New York");
   });
 });

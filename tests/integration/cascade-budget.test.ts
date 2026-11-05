@@ -11,7 +11,7 @@ import { runCycle } from "@/lib/cycle/run-cycle";
 import { closeDb, getDb, getMonthUsage, listRawPostingsForChannel, listRunsForCycle, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 
-import { channelsWith } from "../channels/helpers";
+import { channelsWith, oneCityPlaces } from "../channels/helpers";
 import { ENV, MONTH, NOW, fakeProvider, type FakeProvider } from "../channels/linkedin/brightdata/helpers";
 import { ENV as APIFY_ENV } from "../channels/linkedin/apify/helpers";
 import { collectOf, config, pinnedSearch, quietLogger } from "../cycle/helpers";
@@ -89,9 +89,8 @@ describe("Bright Data budget -> LinkedIn cascade", () => {
       costPerRecordUsd: 0.01, settings: { monthlyBudgetUsd: 10 },
     }));
     const guest = registerFixtureChannel(registry, { id: "linkedin-guest", family: "linkedin", kind: "guest", postings: [] });
-    const cfg = config({ search: {
-      ...pinnedSearch(), keyword_groups: { engineering: ["Platform Engineer"] },
-      locations: ["Test City"], remote_scope: "none", window_hours: { morning: 24, evening: 24, weekend: 24 },
+    const cfg = config({ places: oneCityPlaces(), search: {
+      ...pinnedSearch(), keyword_groups: { engineering: ["Platform Engineer"] }, window_hours: { morning: 24, evening: 24, weekend: 24 },
     } });
     const result = await runCycle("manual", {
       registry, cascades: [{ family: "linkedin", order: [BRIGHT, "linkedin-apify", guest.id] }], config: cfg,
@@ -112,10 +111,9 @@ describe("Bright Data budget -> LinkedIn cascade", () => {
     const guestId = "linkedin-guest";
     const apifyId = "linkedin-apify";
     const search = {
-      ...pinnedSearch(), keyword_groups: { a: ["alpha"], b: ["beta"], c: ["gamma"] },
-      locations: ["Test City"], remote_scope: "none" as const, max_per_group_per_location: 1,
+      ...pinnedSearch(), keyword_groups: { a: ["alpha"], b: ["beta"], c: ["gamma"] }, max_per_group_per_location: 1,
     };
-    const ids = buildQueries(search, "manual").map((query) => query.id);
+    const ids = buildQueries(search, oneCityPlaces(), "manual").map((query) => query.id);
     const fake = provider(() => 1);
     const registry = new ChannelRegistry();
     registry.register(createBrightDataChannel({ costPer1kUsd: () => 1.5, environment: ENV, now: () => NOW, sleep: async () => {} }));
@@ -130,7 +128,7 @@ describe("Bright Data budget -> LinkedIn cascade", () => {
       });
       const result = await runCycle("manual", {
         registry, cascades: [{ family: "linkedin", order: [BRIGHT, apifyId, guestId] }],
-        config: { ...config({ search }), channels }, logger: quietLogger, fetch: fake.fetch,
+        config: { ...config({ search, places: oneCityPlaces() }), channels }, logger: quietLogger, fetch: fake.fetch,
         sleep: async () => {}, now: () => now, ...(channelIds ? { channelIds } : {}),
       });
       // Equal timestamps within each cycle make ties explicit; later cycles are strictly newer.

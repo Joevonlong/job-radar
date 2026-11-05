@@ -10,8 +10,6 @@
 import { z } from "zod";
 
 import { isLanguageCode } from "@/lib/i18n/languages";
-import { migrateRemoteScope, parseRemoteScopeKey, remoteScopeKey } from "@/lib/market/remote-scope";
-import { remoteScopeSchema } from "@/lib/market/schema";
 import { issueKey, type FieldErrorKey } from "@/lib/profile/draft";
 
 import { fieldsOf, type FieldDef } from "./fields";
@@ -110,10 +108,6 @@ function fieldToDraft(def: FieldDef, value: unknown): DraftValue {
       return Array.isArray(value) ? value.filter((v): v is number => typeof v === "number").map(String) : [];
     case "keywordGroups":
       return isObj(value) ? Object.entries(value).map(([id, keywords]): KeywordGroupDraft => ({ id, keywords: asStrings(keywords) })) : [];
-    case "remoteScope": {
-      const scope = remoteScopeSchema.safeParse(migrateRemoteScope(value));
-      return scope.success ? remoteScopeKey(scope.data) : typeof value === "string" ? value : "";
-    }
     case "route": {
       const order = asStrings(getAt(value, "order"));
       const chosen = getAt(value, "models");
@@ -212,11 +206,6 @@ function fieldValue(def: FieldDef, value: DraftValue, errors: SettingsFieldError
         out[id] = row.keywords;
       }
       return out;
-    }
-    case "remoteScope": {
-      const key = typeof value === "string" ? value : "";
-      // an incomplete key ("region:" with nothing picked) goes to the schema as is and comes back as a field error
-      return parseRemoteScopeKey(key) ?? key;
     }
     case "route": {
       const rows = (Array.isArray(value) ? value : []).filter((row): row is RouteDraft => typeof row === "object" && "provider" in row);

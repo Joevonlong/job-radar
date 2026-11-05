@@ -19,7 +19,8 @@ import { upsertChannelRows } from "@/lib/db/repos/channels";
 import { RUN_CYCLE_QUEUE_LOCK } from "@/lib/db/repos/control-requests";
 import { databaseTestSupport } from "@/lib/db/test-support";
 
-import { makeTempConfig, type TempConfig } from "../config/helpers";
+import { oneCityPlaces } from "../channels/helpers";
+import { makeTempConfig, writeLocationSettings, type TempConfig } from "../config/helpers";
 import { pinnedSearch, quietLogger } from "../cycle/helpers";
 
 const url = inject("testDatabaseUrl");
@@ -134,15 +135,15 @@ describe("backfill execution", () => {
   it("persists the backfill summary and each query's maximum of backfill, catch-up and base", async () => {
     const search = {
       ...pinnedSearch(), keyword_groups: { a: ["alpha"], b: ["beta"], c: ["gamma"] },
-      locations: ["Test City"], remote_scope: "none" as const,
       window_hours: { morning: 24, evening: 24, weekend: 24 },
     };
     const file = path.join(temp.configDir, "search.yaml");
     const doc = parseDocument(fs.readFileSync(file, "utf8"));
     for (const [key, value] of Object.entries(search)) doc.set(key, doc.createNode(value));
     fs.writeFileSync(file, doc.toString());
+    writeLocationSettings(temp, oneCityPlaces().preferences as Parameters<typeof writeLocationSettings>[1]);
     const fixture = registerFixtureChannel(defaultRegistry, { postings: [] });
-    const queries = buildQueries(search, "manual");
+    const queries = buildQueries(search, oneCityPlaces(), "manual");
     await upsertChannelRows(getDb(), [{ id: fixture.id, family: fixture.family, kind: fixture.kind, enabled: true }]);
     // The handler owns its real clock: this anchor is safely within the 50th hour, avoiding a ceil boundary.
     const old = new Date(Date.now() - 49.5 * 3_600_000);

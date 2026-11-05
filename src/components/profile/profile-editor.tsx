@@ -1,5 +1,6 @@
 "use client";
 
+import type { OldSearchEntries } from "@/lib/market/places";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
@@ -49,8 +50,8 @@ interface ProfileEditorProps {
   salaryMedian: SalaryMedian;
   /** The market (scope choices, currency, language). */
   market: MarketView;
-  /** search.yaml `locations`: the cities that are searched. */
-  searchLocations: readonly string[];
+  /** What search.yaml's old keys still name; ignored, and warned about. */
+  oldSearch: OldSearchEntries;
   /** The user's level of the market's local language in me.yaml, null = none listed (the deal-breakers' language gate). */
   userLanguageLevel: string | null;
 }
@@ -92,7 +93,7 @@ function StaleBanner({ count }: { count: number }) {
  * The /me page body. The three Server Actions live here (not in the forms) so their state survives
  * the remount that follows every save or rollback: a form is keyed by the hash of its file.
  */
-export function ProfileEditor({ me, preferences, stories, storyLimits, storyImport, staleScores, dbAvailable, salaries, axis, salaryMedian, market, searchLocations, userLanguageLevel }: ProfileEditorProps) {
+export function ProfileEditor({ me, preferences, stories, storyLimits, storyImport, staleScores, dbAvailable, salaries, axis, salaryMedian, market, oldSearch, userLanguageLevel }: ProfileEditorProps) {
   const t = useTranslations("profile");
   const [meState, saveMe, mePending] = useActionState(saveMeAction, IDLE_ACTION_STATE);
   const [prefState, savePrefs, prefPending] = useActionState(savePreferencesAction, IDLE_ACTION_STATE);
@@ -150,7 +151,7 @@ export function ProfileEditor({ me, preferences, stories, storyLimits, storyImpo
               axis={axis}
               salaryMedian={salaryMedian}
               market={market}
-              searchLocations={searchLocations}
+              oldSearch={oldSearch}
               userLanguageLevel={userLanguageLevel}
               needsVisaSponsorship={me.draft?.needs_visa_sponsorship ?? null}
             />

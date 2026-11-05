@@ -1,5 +1,6 @@
 /** Read-only rotation estimates; collection owns scheduling and all persisted state. */
-import { CHANNEL_CONFIG_TABLE, channelUsesQueries, settingsFromConfig, type ConfiguredChannelId } from "@/lib/channels/registry";
+import { isRemotePlaceQuery } from "@/lib/channels/query";
+import { CHANNEL_CONFIG_TABLE, channelSupportsRemotePlaces, channelUsesQueries, settingsFromConfig, type ConfiguredChannelId } from "@/lib/channels/registry";
 import { catchUpWindow, familyHistory, rotationSummary, turnsOf } from "@/lib/channels/rotation";
 import type { SearchQuery } from "@/lib/channels/types";
 import type { ChannelsConfig } from "@/lib/config";
@@ -20,6 +21,8 @@ export interface RotationStatus {
   neverRun: number;
   oldestWaitHours: number | null;
   oldestWaiting: { id: string; keywordGroup: string; location: string | null; remoteScope: string | null } | null;
+  /** Remote searches naming a place that this unit's boards cannot send. */
+  remotePlacesSkipped: number;
   overCap: number;
   maxCatchUpHours: number;
 }
@@ -69,9 +72,11 @@ export function rotationStatus(input: {
   collect: ChannelsConfig["collect"];
   now: Date;
 }): RotationStatus {
-  const { unit, queries, history, sortChannel, collect, now } = input;
+  const { unit, history, sortChannel, collect, now } = input;
+  const queries = unit.channelIds.some(channelSupportsRemotePlaces) ? input.queries : input.queries.filter((query) => !isRemotePlaceQuery(query));
   const summary = rotationSummary({
     queries,
+    remotePlacesSkipped: input.queries.length - queries.length,
     sortChannel,
     turns: sortChannel === null ? new Map() : turnsOf(history, sortChannel),
     reached: 0,
@@ -99,6 +104,7 @@ export function rotationStatus(input: {
     neverRun: summary.neverRun,
     oldestWaitHours: summary.oldestWaitHours,
     oldestWaiting: summary.oldestWaiting,
+    remotePlacesSkipped: summary.remotePlacesSkipped,
     overCap,
     maxCatchUpHours: collect.max_catch_up_hours,
   };

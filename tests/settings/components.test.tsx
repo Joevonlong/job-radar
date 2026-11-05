@@ -68,7 +68,7 @@ describe("ConfigForm", () => {
     expect(screen.getByRole("textbox", { name: "Evening look-back (hours)" }).closest("[data-dirty]")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onSave.mock.calls[0]?.[0]).toMatchObject({ "window_hours.morning": "36", remote_scope: "home_country" });
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({ "window_hours.morning": "36" });
   });
 
   it("shows a field error next to its field only while the file is unchanged", () => {

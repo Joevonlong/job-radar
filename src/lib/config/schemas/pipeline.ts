@@ -405,7 +405,7 @@ export const pipelineSchema = z.strictObject({
     remote: z.strictObject({
       /** Added to the location texts of the region `eu` (generic pack). Kept for files from before the market packs. */
       eu_wide_patterns: extraRegexList,
-      /** Location text that says "anywhere in the world" (counts as in scope unless remote_scope is none). */
+      /** Location text that says "anywhere in the world" (counts as in scope). */
       worldwide_patterns: extraRegexList,
       /** Location text of regions outside the home region where no country code was found (USA, APAC ...): out of scope. */
       outside_patterns: extraRegexList,

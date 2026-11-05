@@ -32,6 +32,7 @@ import { pipeline004 } from "./pipeline/004-handpicked-priority";
 import { pipeline005 } from "./pipeline/005-berlinstartupjobs-priority";
 import { pipelineOverlayFormat } from "./pipeline/006-overlay-format";
 import { preferences002 } from "./preferences/002-market";
+import { preferences003 } from "./preferences/003-places";
 import { repliesOverlayFormat } from "./replies/002-overlay-format";
 import { researchOverlayFormat } from "./research/002-overlay-format";
 import { resumeOverlayFormat } from "./resume/002-overlay-format";
@@ -75,7 +76,7 @@ export const CONFIG_MIGRATIONS: Readonly<Partial<Record<ConfigName, readonly Con
   notify: [notify002, notifyOverlayFormat],
   pipeline: [pipeline002, pipeline003, pipeline004, pipeline005, pipelineOverlayFormat],
   pipelineBoard: [pipelineBoardOverlayFormat],
-  preferences: [preferences002],
+  preferences: [preferences002, preferences003],
   replies: [repliesOverlayFormat],
   research: [researchOverlayFormat],
   resume: [resumeOverlayFormat],

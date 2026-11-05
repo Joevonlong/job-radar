@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { parse, parseDocument } from "yaml";
+import { parse, parseDocument, stringify } from "yaml";
 
 import { configRegistry, LAYERED_CONFIG_NAMES, resetConfigCache, USER_CONFIG_NAMES } from "@/lib/config";
 
@@ -123,4 +123,11 @@ export async function waitFor(predicate: () => boolean, timeoutMs = 2000, stepMs
     await sleep(stepMs);
   }
   return predicate();
+}
+
+/** The location settings of a temp config's profile, for code that reads preferences.yaml itself. */
+export function writeLocationSettings(temp: Pick<TempConfig, "profileDir">, settings: { home_city: string; places: { place: string; relocate: boolean }[]; workplace: string[] }): void {
+  fs.mkdirSync(temp.profileDir, { recursive: true });
+  const preferences = { ...(shippedYaml("profile.example/preferences.yaml") as Record<string, unknown>), ...settings };
+  fs.writeFileSync(path.join(temp.profileDir, "preferences.yaml"), stringify(preferences));
 }

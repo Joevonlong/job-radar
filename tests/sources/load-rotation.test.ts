@@ -52,15 +52,13 @@ describe("sources rotation loading", () => {
     const searchFile = path.join(temp.configDir, "search.yaml");
     const search = parseDocument(fs.readFileSync(searchFile, "utf8"));
     search.set("keyword_groups", { custom: ["designer"] });
-    search.set("locations", ["Berlin"]);
-    search.set("remote_scope", "none");
     fs.writeFileSync(searchFile, search.toString());
     resetConfigCache();
     const edited = await loadSourcesView(NOW);
     const updated = vi.mocked(getQueryRotationHistory).mock.calls[1]![1].queryHashes;
-    expect(updated).toHaveLength(1);
+    expect(updated).toHaveLength(3);
     expect(updated).not.toEqual(original);
-    expect(edited.cascade.rotation?.queries).toBe(1);
+    expect(edited.cascade.rotation?.queries).toBe(3);
 
     const sourceFile = path.join(temp.configDir, "sources.yaml");
     const sources = parseDocument(fs.readFileSync(sourceFile, "utf8"));
@@ -75,7 +73,7 @@ describe("sources rotation loading", () => {
   it("keeps the page usable and omits rotation without reading history when search fails validation", async () => {
     const searchFile = path.join(temp.configDir, "search.yaml");
     const search = parseDocument(fs.readFileSync(searchFile, "utf8"));
-    search.set("locations", []);
+    search.set("keyword_groups", {});
     fs.writeFileSync(searchFile, search.toString());
     resetConfigCache();
 

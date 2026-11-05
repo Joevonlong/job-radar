@@ -9,7 +9,6 @@ import { withFileLock } from "@/lib/config/write";
 import { setConfigWriteLockProviderForTests } from "@/lib/config/write-lock";
 import { addWatchedCompany } from "@/lib/interests/service";
 import { approveSuggestion } from "@/lib/interests/suggestion-apply";
-import { syncSearchLocations } from "@/lib/profile/search-locations";
 import { configToDraft } from "@/lib/settings/draft";
 import { saveSettings } from "@/lib/settings/service";
 import { saveWorkflow } from "@/lib/settings/workflow/service";
@@ -110,13 +109,6 @@ describe("config mutations keep another writer's changes", () => {
     expect(reloadConfig("channels").sources.indeed.enabled).toBe(true);
   });
 
-  it("syncs locations using the search file after a queued write", async () => {
-    const file = getUserConfigPath("search");
-    const max = reloadConfig("search").max_per_group_per_location + 1;
-    expect(await behindWriter(file, () => syncSearchLocations(["Austin"]), () => setKey(file, ["max_per_group_per_location"], max))).toEqual({ status: "done", locations: ["Austin"] });
-    expect(reloadConfig("search")).toMatchObject({ locations: ["Austin"], max_per_group_per_location: max });
-  });
-
   it("keeps unrelated ui settings when the workflow save was queued", async () => {
     const file = getUserConfigPath("ui");
     const max = reloadConfig("ui").filters.company_options_max + 1;
@@ -161,7 +153,6 @@ describe("an unreachable database reaches the caller", () => {
 
   it.each([
     { name: "candidate", run: () => addBoardCandidate({ ats: "ashby", token: "candidate-board" }), expected: { status: "error", error: "dbUnavailable" } },
-    { name: "locations", run: () => syncSearchLocations(["Austin"]), expected: { status: "error", error: "dbUnavailable" } },
     { name: "interests", run: () => addWatchedCompany({ name: "Manual Labs" }), expected: { status: "error", formError: "dbUnavailable" } },
     { name: "suggestion", run: () => approveSuggestion(1), expected: { status: "error", error: "dbUnavailable" } },
   ])("returns dbUnavailable for $name edits", async ({ run, expected }) => {

@@ -19,7 +19,7 @@ import type { RotationStatus } from "@/lib/sources/rotation-status";
 import type { BackfillOptions } from "@/lib/sources/backfill";
 import type { SourceCard } from "@/lib/sources/view";
 
-const normal: RotationStatus = { sortChannel: "linkedin-guest", queries: 9, neverRun: 2, oldestWaitHours: 31,
+const normal: RotationStatus = { sortChannel: "linkedin-guest", queries: 9, remotePlacesSkipped: 0, neverRun: 2, oldestWaitHours: 31,
   oldestWaiting: { id: "old", keywordGroup: "targets", location: "Berlin", remoteScope: null }, overCap: 0, maxCatchUpHours: 168 };
 
 async function show(kind: "cascade" | "channel", rotation?: RotationStatus, locale: "en" | "zh" = "en", backfill?: BackfillOptions) {

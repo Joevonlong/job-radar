@@ -1,6 +1,8 @@
 import "server-only";
 
 import { getTranslations } from "next-intl/server";
+import { loadQueryPlaces } from "@/lib/channels/query-places";
+import type { QueryPlaces } from "@/lib/channels/query";
 import { loadConfig } from "@/lib/config";
 import { watchedCompanyBoards } from "@/lib/companies/watched-boards";
 import { logActionFailure } from "@/lib/logging/action-failure";
@@ -22,6 +24,15 @@ async function context(searchParams: Promise<ActivitySearchParams>) {
   const today = dayInZone(await getDbNow(db), timeZone);
   const liveness = { staleAfterSeconds: config.liveness.stale_after_seconds, startupGraceSeconds: config.liveness.startup_grace_seconds };
   return { url, config, timeZone, db, today, liveness };
+}
+
+/** The location settings for query labels; a query whose labels cannot be worked out shows its id. */
+function readQueryPlaces(): QueryPlaces | null {
+  try {
+    return loadQueryPlaces();
+  } catch {
+    return null;
+  }
 }
 
 /** Every config/DB failure is contained here. Pages only receive safe query projections and configured labels. */
@@ -62,7 +73,7 @@ export async function loadActivityDetail(rootId: string, searchParams: Promise<A
     const events = page === url.page ? initialEvents : await listActivityEvents(db, rootId, { page, pageSize: config.ui.events_page_size, ...(url.level !== "all" ? { level: url.level } : {}) });
     const cycle = detail.root.cycleId === null ? null : await getCycle(db, detail.root.cycleId);
     const companies = liveCompanyBoards(() => watchedCompanyBoards(currentWatchedCompanies(), [], loadPipeline()), (error) => logActionFailure("activityQueryLabels", error));
-    const queryLabels = resolveQueryLabels(loadConfig("search"), t, companies, storedCompanyQueryKeys(cycle?.summaryJson));
+    const queryLabels = resolveQueryLabels(loadConfig("search"), readQueryPlaces(), t, companies, storedCompanyQueryKeys(cycle?.summaryJson));
     const day = dayInZone(detail.root.startedAt, timeZone);
     const aiParams = new URLSearchParams({ range: "custom", from: day, to: day });
     const task = ({ "request.translate_job": "translate", "request.breakdown_job": "breakdown", "request.score_jobs": "score", "request.rescore_stale": "score", "request.salary_lookup": "salary_lookup", "request.company_research": "company_research", "request.story_extract": "story_extract", "request.run_suggest": "suggest", "request.test_ai": "probe" } as Record<string, string>)[detail.root.name];

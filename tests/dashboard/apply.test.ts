@@ -14,8 +14,8 @@ const source = (locationLabel: string | null, priority: number, url = `https://x
 });
 
 const places = targetPlaceNames(
-  { locations: ["Berlin", "München"] },
-  { city_aliases: { Berlin: [], München: ["Munich", "Muenchen"] }, metro_areas: { München: ["Garching"] } },
+  { home_city: "Berlin", places: [{ place: "München", relocate: true }] },
+  { filter: { city_aliases: { Berlin: [], München: ["Munich", "Muenchen"] }, metro_areas: { München: ["Garching"] } }, market: { cities: {}, countries: [], regions: {} } },
 );
 
 describe("pickApplyTarget", () => {
