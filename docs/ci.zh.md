@@ -545,6 +545,8 @@ transition 作业的第一步。有的 runner 根盘只有 72 GB（正常 145 GB
 | `docker` | `/jobspy` | 最多 2 个未关闭 PR；`jobspy/Dockerfile` 基础镜像的 digest（根目录的 `Dockerfile` 用构建参数拼镜像标签，Dependabot 改不了） |
 | `github-actions` | `/` | 最多 3 个未关闭 PR；workflow 里固定的 action 版本 |
 
+版本更新 PR 明确以 `main` 为目标，即使仓库的默认分支以后改变也是如此。安全更新始终以默认分支为目标，不受 `target-branch` 影响。
+
 Dependabot 的 PR 和其他 PR 跑同一条流水线。action 升级会改 `.github/`，因此选中全量覆盖、跑全部任务；如果它改了步骤名，`ci-docs` 会失败，直到本页更新。本页不写 action 版本号，所以单纯升级版本不需要改文档。
 
 workflow 里的每个 `uses:` 都固定到完整的 40 位 commit SHA，行尾注释写 release 标签（`uses: actions/checkout@<sha> # vX.Y.Z`），因为标签可以被移动到别的代码上。Dependabot 的 `github-actions` 生态系统认识这种写法，会同时更新 SHA 和注释。新增 action 时，先把标签解析成 commit（annotated tag 要解引用）再固定。
