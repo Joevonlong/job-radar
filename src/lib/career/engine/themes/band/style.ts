@@ -17,7 +17,7 @@ export const style = String.raw`/* Later pages: a little top margin on top of th
 /* Band: plain block with a background (no positioning), full bleed. */
 .theme-band .band { display: flex; justify-content: space-between; align-items: center; gap: 8mm; padding: 9mm 16mm 6.5mm; background: var(--band); color: #fff; }
 .theme-band .band .id { min-width: 0; }
-body[data-colors="accent"].theme-band .band a { color: inherit; } /*: the band is the accent already */
+body[data-colors="accent"].theme-band .band a { color: inherit; } /* The band is the accent already. */
 .theme-band h1 { font-size: 24pt; line-height: 1.05; font-weight: 700; letter-spacing: -0.02em; word-spacing: 0.12em; }
 .theme-band .title { margin-top: 1.6mm; font-size: 10.5pt; font-weight: 500; color: color-mix(in srgb, #fff 84%, var(--band)); }
 .theme-band .contact { margin-top: 2.6mm; font-size: 8.4pt; color: color-mix(in srgb, #fff 90%, var(--band)); }
@@ -79,7 +79,7 @@ body[data-colors="accent"].theme-band .band a { color: inherit; } /*: the band i
   .theme-band .head { flex-direction: column; gap: 2px; }
 }
 
-/* German CV fields  */
+/* German CV fields */
 .theme-band .contact .avail { color: #fff; font-weight: 500; }
 .theme-band .sign { margin-top: calc(6mm * var(--d)); }
 .theme-band .sign-name { font-size: 9.8pt; }

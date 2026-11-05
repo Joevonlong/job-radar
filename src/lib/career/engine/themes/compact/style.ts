@@ -59,7 +59,7 @@ export const style = String.raw`:root { --folio-right: 15mm; }
   .theme-compact header { flex-direction: column-reverse; align-items: flex-start; }
 }
 
-/* German CV fields  */
+/* German CV fields */
 .theme-compact .contact.avail { margin-top: 0.4mm; color: var(--ink); }
 .theme-compact .sign { margin-top: calc(4.5mm * var(--d)); }
 .theme-compact .sign-date { font: 400 7.9pt/1.3 var(--mono); }

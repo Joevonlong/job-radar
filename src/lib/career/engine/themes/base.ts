@@ -56,7 +56,7 @@ img { display: block; }
 /* No position:relative/absolute on anything that carries text: Chromium paints positioned boxes in a separate layer and
    scrambles the PDF text order. Text-free decoration (e.g. split's sidebar tint) may be positioned.
    Letter-spaced text (uppercase headings) sets ${"`"}font-kerning: none${"`"}: a kerning pair (LA, TY, AV) plus letter-spacing
-   leaves a gap pdf.js reads as a space, and "LANGUAGES" becomes "L ANGUAGES" in the text layer . */
+   leaves a gap pdf.js reads as a space, and "LANGUAGES" becomes "L ANGUAGES" in the text layer. */
 :root {
   --tag-accent: var(--accent);
   --tag-blue: #2563c9;

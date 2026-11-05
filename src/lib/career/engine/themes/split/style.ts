@@ -105,7 +105,7 @@ export const style = String.raw`:root { --folio-right: 13mm; }
   .theme-split .head { flex-direction: column; gap: 2px; }
 }
 
-/* German CV fields  */
+/* German CV fields */
 .theme-split .contact .addr { line-height: 1.42; }
 .theme-split .contact .avail { font-weight: 500; }
 .theme-split .sign { margin-top: calc(7mm * var(--d)); }
