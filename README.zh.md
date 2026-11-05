@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://joevonlong.github.io/job-radar-site/zh/"><b>官网</b></a> ·
+  <a href="https://jobradar.bid/zh/"><b>官网</b></a> ·
   <a href="docs/README.zh.md"><b>文档</b></a> ·
   <a href="#快速开始"><b>快速开始</b></a> ·
   <a href="docs/faq.zh.md"><b>常见问题</b></a> ·
