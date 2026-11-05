@@ -1,6 +1,6 @@
 export { CareerEngineError } from "./errors";
 export { parseResume, renderResume, listThemes, themeProblem, signaturePath } from "./render";
-export type { Doc, RenderOptions } from "./render";
+export type { Doc, RenderOptions, ParseResult } from "./render";
 export type { Resume } from "./schema";
 export type { FontRef } from "./theme";
 export type { Images } from "./images";
@@ -13,5 +13,7 @@ export { exportStem, contentDisposition } from "./naming";
 export { plainResume, plainLetter } from "./plain";
 export { parseJd } from "./jd";
 export type { Jd } from "./jd";
-export { makeDict } from "./keywords";
-export type { Dict } from "./keywords";
+export type { CheckLimits } from "./limits";
+export type { CheckLexicon, LanguageLexicon } from "./lexicon";
+export type { Diagnostic, Issue } from "./finding";
+export { shownContent } from "./extract";

@@ -1,3 +1,4 @@
+import { CareerEngineError } from "./errors";
 import { homeCity, i18n } from "./i18n";
 import type { Resume } from "./schema";
 
@@ -15,7 +16,7 @@ export interface LetterParts {
 
 export function letterParts(r: Resume, today: string): LetterParts {
   const l = r.letter;
-  if (!l) throw new Error("this resume has no `letter:` section — add one to write a cover letter");
+  if (!l) throw new CareerEngineError("career.letter.missing");
   const { w, placeDate } = i18n(r.meta.lang);
   return {
     recipient: l.recipient ?? [],

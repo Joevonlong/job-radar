@@ -1,10 +1,10 @@
+import { UNIT } from "./i18n";
 import { INLINE, labelOf } from "./sections";
 
 const ESC: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ESC[c]);
 
-const UNIT = /(\d) (?=(?:ms|s|min|h|k|M|Mio\.?|Mrd\.?|km|kg|[KMGTP]B|%|€|\$|EUR|USD)(?![\p{L}\p{N}]))/gu;
 export const nbsp = (s: string) => s.replace(UNIT, "$1\u00a0");
 
 export function safeHref(url: string): string | undefined {

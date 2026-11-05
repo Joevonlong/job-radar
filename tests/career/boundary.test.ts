@@ -44,7 +44,7 @@ const COMPUTED_IMPORTS = [
   { code: 'import("@/lib/" + x)', kind: "dynamic" },
   { code: "require(name)", kind: "require" },
 ];
-const PURITY_NEGATIVE_CASES = ['fetch("x")', "new XMLHttpRequest()", 'new WebSocket("x")', "__filename"];
+const PURITY_NEGATIVE_CASES = ['fetch("x")', "new XMLHttpRequest()", 'new WebSocket("x")', "__filename", "new Date()", "Date()", "Date.now()"];
 const config: unknown = await import(pathToFileURL(path.join(ROOT, "eslint.config.mjs")).href);
 const { CORE_IMPORTING_CAREER, ENGINE_FORBIDDEN_GLOBALS, careerFiles } = z.object({
   CORE_IMPORTING_CAREER: z.record(z.string(), z.array(z.string())),
@@ -163,6 +163,10 @@ function violations(file: string, text: string): string[] {
     if (within(file, ENGINE) && (ts.isMetaProperty(node) || isRuntimeGlobal)) {
       out.push(`${file}: runtime dependency ${node.getText(source)}`);
     }
+    const clockRead = (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Date" && !node.arguments?.length) ||
+      (ts.isCallExpression(node) && ((ts.isIdentifier(node.expression) && node.expression.text === "Date") ||
+        (ts.isPropertyAccessExpression(node.expression) && node.expression.expression.getText(source) === "Date" && node.expression.name.text === "now")));
+    if (within(file, ENGINE) && clockRead) out.push(`${file}: clock read ${node.getText(source)}`);
     ts.forEachChild(node, visit);
   }
   visit(source);
@@ -370,4 +374,10 @@ describe("ESLint boundary negative controls", () => {
   test.each(NON_SOURCE_FILES)("non-source consumers in %s are allowed", async (file) => {
     expect(await restricted(file, 'export * from "@/lib/career/engine";')).toBe(0);
   });
+});
+
+test("date parsing is allowed by both purity layers", async () => {
+  const code = 'new Date("2026-01-01")';
+  expect(violations(`${ENGINE}/probe.ts`, code)).toEqual([]);
+  expect(await restricted(`${ENGINE}/probe.ts`, code)).toBe(0);
 });

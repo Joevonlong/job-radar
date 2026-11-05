@@ -1,11 +1,12 @@
 // @vitest-environment node
+import { parseResume as parseResult } from "../../../src/lib/career/engine";
+import { resumeFromYaml as parseResume, DAY, resumeFixture, fixture } from "./helpers/fixtures";
 import { describe, expect, test } from "vitest";
-import { CareerEngineError, listThemes, parseResume, renderResume, themeProblem } from "../../../src/lib/career/engine";
+import { CareerEngineError, listThemes, renderResume, themeProblem } from "../../../src/lib/career/engine";
 import { fontFaceCss, fontFaceCssFromTable, type FontFace } from "../../../src/lib/career/engine/fonts";
 import { dataUrl, imageType } from "../../../src/lib/career/engine/images";
 import { style as baseStyle } from "../../../src/lib/career/engine/themes/base";
 import { THEMES } from "../../../src/lib/career/engine/themes";
-import { DAY, resumeFixture } from "./helpers/fixtures";
 import { imagePng } from "./helpers/images";
 
 const NAMES = ["minimal", "band", "classic", "compact", "split"];
@@ -74,8 +75,8 @@ test("theme names have a fixed registry order and unknown names report a code", 
   }
   const problem = { code: "career.theme.unknown", params: { name: "missing", available: NAMES.join(", ") } };
   expect(themeProblem("missing")).toEqual(problem);
+  expect(parseResult("meta: { theme: missing }\nbasics: { name: Test Person, title: Engineer }")).toEqual({ ok: false, issues: [{ path: "meta.theme", ...problem }] });
   for (const render of [
-    () => parseResume("meta: { theme: missing }\nbasics: { name: Test Person, title: Engineer }"),
     () => renderResume(resumeFixture("sample.en.yaml"), { today: DAY, theme: "missing" }),
     () => renderResume({ ...resumeFixture("sample.en.yaml"), meta: { ...resumeFixture("sample.en.yaml").meta, theme: "missing" } }, { today: DAY }),
   ]) {
@@ -99,4 +100,20 @@ test("font CSS emits matching table rows in reference order, including each subs
   const extended = { ...row, subset: "latin-ext", unicodeRange: "U+0100-02FF" };
   expect(fontFaceCssFromTable([{ family: "Inter", weight: 400 }], [row, extended])).toBe(`${expected}\n${expected.replace("U+0000-00FF", "U+0100-02FF")}`);
   expect(fontFaceCssFromTable([{ family: "Newsreader", weight: 500 }, { family: "Inter", weight: 400 }], [row, { ...row, family: "Newsreader", weight: 500 }])).toBe(`${expected.replace("Inter", "Newsreader").replace("weight: 400", "weight: 500")}\n${expected}`);
+});
+
+test("every resume fixture parses successfully through the result API", () => {
+  for (const file of ["sample.en.yaml", "sample.de.yaml", "sections.en.yaml", "letter.de.yaml"]) {
+    const result = parseResult(fixture(file));
+    expect(result.ok, file).toBe(true);
+    if (result.ok) expect(result.resume.basics.name).not.toBe("");
+  }
+});
+
+test("parse errors expose paths, codes and custom parameters without throwing", () => {
+  expect(parseResult('basics: { name: Test, title: Engineer }\nmeta: { pages: nope }')).toEqual({ ok: false, issues: [{ path: "meta.pages", code: "career.schema.invalid" }] });
+  expect(parseResult('basics: { name: Test, title: Engineer }\nmeta: { lang: fr }')).toEqual({ ok: false, issues: [{ path: "meta.lang", code: "career.schema.invalid", params: { values: "en, de" } }] });
+  expect(parseResult('basics: { name: Test, title: Engineer }\nexperience: [{ company: Example, role: Engineer, start: 2025-02, end: 2024-01 }]')).toEqual({ ok: false, issues: [{ path: "experience.0.end", code: "career.schema.end_before_start", params: { start: "2025-02", end: "2024-01" } }] });
+  const result = parseResult('basics: { name: Test, title: Engineer }\nsections:\n  - title: Extras\n    items:\n      - [x] done\n');
+  expect(result).toEqual({ ok: false, issues: [{ path: "", code: "career.schema.yaml_invalid", params: { line: 5, hint: "quote_item" } }] });
 });

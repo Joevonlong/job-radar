@@ -1,3 +1,4 @@
+import type { SchemaDiagnostic } from "./finding";
 import type { Resume } from "./schema";
 
 export const FILENAME_VARS = ["name", "company", "role", "lang", "date"] as const;
@@ -20,15 +21,15 @@ export function personName(name: string): string {
 
 const role = (s: string) => ascii(s.replace(/\(.*?\)/g, " "));
 
-export function templateProblem(t: string): string | undefined {
-  if (/[/\\]/.test(t)) return "filename can't contain / or \\ — it is a file name inside the exports folder, not a path";
-  if (/[\u0000-\u001f\u007f]/.test(t)) return "filename can't contain control characters or line breaks";
+export function templateProblem(t: string): SchemaDiagnostic | undefined {
+  if (/[/\\]/.test(t)) return { code: "career.schema.filename_path" };
+  if (/[\u0000-\u001f\u007f]/.test(t)) return { code: "career.schema.filename_control" };
   const unknown = [...t.matchAll(/\{([^}]*)\}/g)].map((m) => m[1]).filter((v) => !(FILENAME_VARS as readonly string[]).includes(v));
-  if (unknown.length) return `unknown variable {${unknown[0]}} in filename — use ${FILENAME_VARS.map((v) => `{${v}}`).join(", ")}`;
-  if (!t.replace(/\.pdf$/i, "").trim()) return "filename must not be empty";
+  if (unknown.length) return { code: "career.schema.filename_variable_unknown", params: { name: unknown[0], available: FILENAME_VARS.map((v) => `{${v}}`).join(", ") } };
+  if (!t.replace(/\.pdf$/i, "").trim()) return { code: "career.schema.filename_empty" };
 }
 
-export function exportStem(r: Resume, date = new Date().toLocaleDateString("sv-SE"), doc: "resume" | "letter" = "resume"): string {
+export function exportStem(r: Resume, date: string, doc: "resume" | "letter" = "resume"): string {
   const vars: Record<string, string> = {
     name: personName(r.basics.name),
     company: ascii(r.target?.company ?? ""),
