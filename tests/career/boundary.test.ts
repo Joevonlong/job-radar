@@ -133,7 +133,7 @@ type CoreImports = Record<string, string[]>;
 function coreCareerImports(sources: { file: string; text: string }[]): CoreImports {
   const actual: CoreImports = {};
   for (const { file, text } of sources) {
-    if (isCareer(file)) continue;
+    if (!within(file, "src") || isCareer(file)) continue;
     const targets = dependencies(sourceFile(file, text))
       .map((dependency) => target(file, dependency.source))
       .filter((to): to is string => to !== undefined && isCareer(to));
@@ -161,11 +161,11 @@ function violations(file: string, text: string): string[] {
         out.push(`${file}: impure ${dependency.kind} ${dependency.source}`);
       }
     }
-    if (!isCareer(file) && to && isCareer(to) && !CORE_IMPORTING_CAREER[file]?.includes(to)) {
+    if (within(file, "src") && !isCareer(file) && to && isCareer(to) && !CORE_IMPORTING_CAREER[file]?.includes(to)) {
       out.push(`${file}: core imports ${to}`);
     }
     const isPrintTarget = to !== undefined && within(to, "src/lib/career/print");
-    const isPrintConsumer = within(file, "src/career-pdf") || within(file, "src/lib/career/print");
+    const isPrintConsumer = within(file, "src/career-pdf") || within(file, "src/lib/career/print") || within(file, "e2e") || file === "scripts/career-print-baseline.ts";
     if (isPrintTarget && !isPrintConsumer) out.push(`${file}: imports printing outside the PDF entry point`);
   }
   function visit(node: ts.Node) {
@@ -230,7 +230,7 @@ async function restricted(file: string, code: string): Promise<number> {
 }
 
 test("all source dependencies respect the career and engine boundaries", () => {
-  const sources = sourceFiles(path.join(ROOT, "src")).map((full) => ({
+  const sources = ["src", "scripts", "tests", "e2e"].flatMap((dir) => sourceFiles(path.join(ROOT, dir))).map((full) => ({
     file: path.relative(ROOT, full).replaceAll(path.sep, "/"),
     text: fs.readFileSync(full, "utf8"),
   }));
@@ -316,7 +316,13 @@ describe("boundary scanner negative controls", () => {
     expect(violations(`${ENGINE}/probe.ts`, code), code).not.toEqual([]);
   });
 
-  test("printing is confined to the PDF entry point", () => {
+  test("printing is confined to PDF entry points, e2e and the baseline script", () => {
+    for (const file of ["tests/career/probe.ts", "scripts/probe.ts", "src/lib/core.ts"]) {
+      for (const code of allImportForms("@/lib/career/print/print-pdf")) expect(violations(file, code)).not.toEqual([]);
+    }
+    for (const file of ["e2e/career-print.spec.ts", "scripts/career-print-baseline.ts"]) {
+      for (const code of allImportForms("@/lib/career/print/print-pdf")) expect(violations(file, code)).toEqual([]);
+    }
     expect(violations("src/lib/career/preview.ts", 'import "./print/print-pdf";')).not.toEqual([]);
     expect(violations("src/career-pdf/main.ts", 'import "@/lib/career/print/print-pdf";')).toEqual([]);
     expect(violations("src/lib/career/print/print-pdf.ts", 'import "./x";')).toEqual([]);

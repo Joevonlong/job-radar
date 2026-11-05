@@ -134,6 +134,10 @@ workflow 级设置：`permissions: contents: read`（任何任务都不能写仓
 
 `pnpm i18n:check`（`tsx scripts/i18n-catalog.ts --check`）。校验每个 `messages/<id>.json`（核心语言 `en`、`zh` 必须有全部 key，其他语言不能有英文没有的 key，每条消息的占位符必须与英文一致），并确认生成文件与生成器现在会写出的内容一致。报错会点出 key 或文件。修复：改 messages 后运行 `pnpm i18n:catalog`，提交重新生成的文件。几秒钟。
 
+#### Resume fonts (generated table current)
+
+`pnpm career:fonts --check`（`tsx scripts/career-engine-fonts.ts --check`）。确认简历内嵌字体表与固定版本的 Fontsource 文件和 CSS 元数据一致。缺少文件、元数据或生成结果过期时，打印对应文件名并失败。修复：运行 `pnpm career:fonts`，提交重新生成的字体表。几秒钟。
+
 #### Lint
 
 `pnpm lint`（`eslint .`），覆盖整个仓库，包括测试和脚本。失败时打印 `文件:行 规则`。规则允许时本地用 `pnpm lint --fix`。约 1 分钟。
@@ -398,6 +402,8 @@ Ubuntu runner 通常已经提供 Chrome 所需的共享库。先检查可避免�
 #### End-to-end tests
 
 `pnpm test:e2e --workers=2 --fail-on-flaky-tests`，配合 `E2E_PART=${{ matrix.part }}`：运行该部分的主测试集 project（见上）。web server 命令先运行 `scripts/e2e-prepare.ts`，再 `pnpm start -p 3100 -H 127.0.0.1`。只有重试才通过的测试会让任务失败；重试仍会为报告记录 trace。上限 15 分钟。本地：先起一个一次性数据库（下文的 postgres 容器），`pnpm build`，然后 `E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e`；`E2E_PORT=<端口>` 让一次运行有自己的数据库和目录，多个检出可以并排运行，但**同一台机器同一时间只跑一套完整 e2e**：并行的完整运行会互相抢资源，产生并非真实失败的超时。开发时只跑受影响的 spec（`pnpm test:e2e e2e/pipeline.spec.ts`、几个文件，或 `e2e/dashboard.spec.ts:206` 只跑一个测试；只跑这些，web server 和替身 runner 照常启动），完整套件留给 CI。常见失败原因：定位器随界面文案变了（spec 以英文运行）；写共享配置的 spec 没加进 `SERIAL_CHAIN`；计数整个列表或改共享数据的测试没加 `@exclusive` 标签；只有 2 个 worker 才暴露的竞态（trace 里能看到）。
+
+`e2e/career-print.spec.ts` 把打印出的简历文字层和 `tests/fixtures/career/print-baseline/` 逐字比较。这项比较只在 Linux 上运行，因为同一份文档在 macOS 上可能折行不同。这个任务总是运行它。在 macOS 上运行（包括本地完整 CI）时，这项比较显示为跳过，页数、引擎检查、长词完整性和字体嵌入仍然检查。要在 Mac 上比较，运行 `scripts/career-print-baseline-linux.sh <目录>`，它在 runner 镜像里打印。
 
 #### Setup wizard end-to-end tests
 

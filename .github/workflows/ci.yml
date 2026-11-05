@@ -150,6 +150,9 @@ jobs:
       - name: I18n catalog (messages valid, generated files current)
         timeout-minutes: 3
         run: pnpm i18n:check
+      - name: Resume fonts (generated table current)
+        timeout-minutes: 3
+        run: pnpm career:fonts --check
       - name: Lint
         timeout-minutes: 8
         run: pnpm lint
