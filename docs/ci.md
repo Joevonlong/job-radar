@@ -905,6 +905,9 @@ combination (including a job that must run and was skipped or cancelled) prints 
 | `docker` | `/jobspy` | at most 2 open PRs; the digest of the base image in `jobspy/Dockerfile` (the root `Dockerfile` takes its image tags from build arguments, which Dependabot cannot update) |
 | `github-actions` | `/` | at most 3 open PRs; the action versions pinned in the workflows |
 
+Version-update PRs explicitly target `main`, even if the repository's default branch changes. Security updates always
+target the default branch and are not affected by `target-branch`.
+
 Dependabot PRs run the same pipeline as any other. An action bump changes `.github/`, so it selects full coverage and runs
 everything; if it renames a step, `ci-docs` fails until this page is updated. This page names no action versions, so a
 bump alone never needs a documentation change.
