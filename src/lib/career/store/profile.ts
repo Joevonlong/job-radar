@@ -82,6 +82,7 @@ async function persistProfile(
     const warnings: "history_failed"[] = [];
     try {
       await withConfigWriteLock(async () => {
+        if (!isCurrentProfile(text)) return;
         await writeVersion(text);
         await prune(config.history.keep_versions);
       }, careerHistoryDir());
@@ -90,6 +91,20 @@ async function persistProfile(
     }
     return { ok: true, profile, baseHash: sha256(text), warnings };
   });
+}
+
+/**
+ * The history lock is taken after the profile lock is released, so another process may delete or replace the profile in
+ * between. A version is recorded only while the committed text is still the current profile, so deleted data is never
+ * written back.
+ */
+function isCurrentProfile(text: string): boolean {
+  try {
+    return sha256(readUserFile(careerProfilePath())) === sha256(text);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
 }
 
 /** A restore trusts the ids of the stored version and commits it as a new current profile. */

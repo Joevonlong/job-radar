@@ -8,6 +8,8 @@ import { clearCareerHistory, deleteCareerData } from "@/lib/career/store/delete"
 import { listVersions, readVersion } from "@/lib/career/store/history";
 import { careerDir, careerProfilePath, careerContactPath, careerHistoryDir } from "@/lib/career/store/paths";
 import { loadCareerProfile, restoreCareerProfile, saveCareerProfile } from "@/lib/career/store/profile";
+import { setConfigWriteLockProviderForTests } from "@/lib/config/write-lock";
+import { inProcessConfigWriteLock } from "../config/in-process-lock";
 import { profile, tempCareer } from "./fixtures";
 
 let temp: ReturnType<typeof tempCareer>;
@@ -110,6 +112,25 @@ describe("career profile storage", () => {
     const draft = profile();
     draft.experience[0]!.bullets.push(profile().experience[0]!.bullets[0]!);
     await expect(saveCareerProfile(draft, { baseHash: null })).rejects.toThrow("limits");
+  });
+  it("records no history when another process deletes the profile between the two locks", async () => {
+    const saved = await save();
+    let acquired = 0;
+    setConfigWriteLockProviderForTests(async (options) => {
+      acquired += 1;
+      if (acquired === 2) fs.rmSync(careerDir(), { recursive: true, force: true });
+      return inProcessConfigWriteLock(options);
+    });
+    try {
+      const draft = structuredClone(saved.profile);
+      draft.experience[0]!.company = "Changed";
+      const result = await saveCareerProfile(draft, { baseHash: saved.baseHash });
+      expect(result).toMatchObject({ ok: true, warnings: [] });
+    } finally {
+      setConfigWriteLockProviderForTests(inProcessConfigWriteLock);
+    }
+    expect(acquired).toBe(2);
+    expect(fs.existsSync(careerDir())).toBe(false);
   });
 });
 

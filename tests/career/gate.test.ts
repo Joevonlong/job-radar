@@ -45,9 +45,11 @@ it.each([false, true].flatMap((writer) => [false, true].map((career) => ({ write
   },
 );
 
-it("ships the optional career profile disabled", () => {
-  const file = path.resolve(import.meta.dirname, "../../config/career.yaml");
-  expect(fs.readFileSync(file, "utf8")).toMatch(/^enabled: false$/m);
+it("is disabled when career.yaml does not turn it on", async () => {
+  const config = temp();
+  fs.writeFileSync(path.join(config.configDir, "career.yaml"), "config_version: 2\n");
+  expect(careerSchema.parse({}).enabled).toBe(false);
+  expect(await readCareerGate()).toEqual({ enabled: false });
 });
 
 it("warns about contact-like profile text without blocking schema parsing", () => {

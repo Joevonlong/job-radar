@@ -111,6 +111,18 @@ function customItem(kind: string): DataObject {
   };
 }
 
+/**
+ * Changing a custom item's kind keeps its text: text, bullet and tag items share one text, an entry's main text becomes
+ * the new item's text, and a simple item's text becomes an entry's heading. Entry-only fields are dropped.
+ */
+export function changeCustomItemKind(item: DataObject, kind: string): DataObject {
+  if (item.kind === kind) return item;
+  const kept = (item.kind === "entry" ? (item.text ?? item.heading) : item.text) as Text | null;
+  const next = customItem(kind);
+  if (kind === "entry") return { ...next, id: item.id, heading: kept ?? next.heading };
+  return { ...next, id: item.id, text: kept ?? next.text };
+}
+
 type Limits = CareerConfig["profile"];
 type FieldProps = {
   field: Field;
@@ -244,7 +256,7 @@ function NestedItem({
           label={t("fields.kind")}
           value={item.kind}
           options={["entry", "text", "bullet", "tag"]}
-          onChange={(value) => onChange({ ...customItem(value), id: item.id })}
+          onChange={(value) => onChange(changeCustomItemKind(item, value))}
         />
       )}
       <ObjectFields value={item} onChange={onChange} fields={fields} limits={limits} />

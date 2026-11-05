@@ -7,7 +7,12 @@ vi.mock("@/app/career/actions", () => ({ saveProfileAction: vi.fn() }));
 import { saveProfileAction } from "@/app/career/actions";
 import { ProfileForm } from "@/components/career/profile-form";
 import messages from "../../messages/en.json";
-import { ObjectFields, sectionFields, type DataObject } from "@/components/career/profile-fields";
+import {
+  ObjectFields,
+  changeCustomItemKind,
+  sectionFields,
+  type DataObject,
+} from "@/components/career/profile-fields";
 import { TextEditor } from "@/components/career/text-editor";
 import { careerSchema } from "@/lib/config/schemas/career";
 import { assignIds } from "@/lib/career/schema/ids";
@@ -104,4 +109,16 @@ it("keeps profile edits and shows a human-readable error if the action transport
   expect(error.textContent).not.toContain("request_failed");
   expect(screen.getByLabelText("Company")).toHaveValue("Edited company");
   expect(screen.queryByText("private failure detail")).toBeNull();
+});
+
+it("keeps a custom item's text and wordings when its kind changes", () => {
+  const body = assignIds(profile("First wording"), emptyProfile()).experience[0]!.bullets[0]!;
+  body.wordings.push({ ...body.wordings[0]!, id: "", text: "Second wording" });
+  const textItem: DataObject = { id: "itm_aaaaaaaaaa", kind: "text", text: body };
+  const bullet = changeCustomItemKind(textItem, "bullet");
+  expect(bullet).toEqual({ id: "itm_aaaaaaaaaa", kind: "bullet", text: body });
+  const entry = changeCustomItemKind(bullet, "entry");
+  expect(entry).toMatchObject({ id: "itm_aaaaaaaaaa", kind: "entry", heading: body, text: null, bullets: [] });
+  expect(changeCustomItemKind(entry, "tag")).toEqual({ id: "itm_aaaaaaaaaa", kind: "tag", text: body });
+  expect(changeCustomItemKind(entry, "entry")).toBe(entry);
 });
