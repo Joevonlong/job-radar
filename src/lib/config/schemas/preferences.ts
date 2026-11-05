@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { marketSettingsSchema } from "@/lib/market/schema";
 
-import { nonEmptyString, nonNegativeInt, regexString, remoteScope, slowPatternReason, stringList } from "./common";
+import { nonEmptyString, nonNegativeInt, regexString, slowPatternReason, stringList } from "./common";
 
 const contractKind = z.enum(["permanent", "fixed_term", "freelance", "temp_agency"]);
 const workplace = z.enum(["onsite", "hybrid", "remote"]);
@@ -90,14 +90,25 @@ export const dealBreakersSchema = z
     });
   });
 
+export const MAX_PLACES = 50;
+
+/** A place a job can be based, in any spelling. A name the market's tables do not know is warned about and matched as written. */
+const placeEntry = z.strictObject({
+  place: nonEmptyString.max(100),
+  /** true: I'd move here. false: remote only. */
+  relocate: z.boolean(),
+});
+
 /** data/profile/preferences.yaml — what I want. */
 export const preferencesSchema = z.strictObject({
   /** The market (pack, home country, base currency, local language); omitted values come from the pack. */
   market: marketSettingsSchema,
   target_titles: stringList.min(1),
-  locations: stringList.min(1),
+  /** Where a job counts as local. It is sent to your AI provider with every job. */
+  home_city: nonEmptyString.max(100),
+  /** Other places a job can be based. */
+  places: z.array(placeEntry).max(MAX_PLACES).default([]),
   workplace: uniqueEnumList(workplace).refine((w) => w.length > 0, "needs at least one workplace type"),
-  remote_scope: remoteScope,
   seniority: z.enum(["all", "entry", "mid", "senior", "lead"]),
   /** Annual gross salary floor in the market's base currency (was `salary_floor_eur_year`); postings with a stated maximum below it are filtered out. */
   salary_floor_year: nonNegativeInt,

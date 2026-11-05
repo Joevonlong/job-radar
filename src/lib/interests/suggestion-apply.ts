@@ -4,6 +4,7 @@
  * preferences.yaml). Server Actions in `app/interests/suggestion-actions.ts` are thin wrappers around these
  * functions; whatever arrives here is untrusted and checked with zod.
  */
+import { wantedLocations } from "@/lib/market/places";
 import { logActionFailure } from "@/lib/logging/action-failure";
 import { z } from "zod";
 
@@ -76,8 +77,8 @@ export function applySuggestion(payload: SuggestionPayload, current: ConfigPair,
         if (includesTerm(preferences.exclude_keywords, value)) return unchanged;
         preferences.exclude_keywords.push(value);
       } else if (payload.action === "add_location") {
-        if (includesTerm(preferences.locations, value)) return unchanged;
-        preferences.locations.push(value);
+        if (includesTerm(wantedLocations(preferences), value)) return unchanged;
+        preferences.places.push({ place: value, relocate: true });
       } else {
         const key = normalizeCompany(value);
         if (preferences.exclude_companies.some((name) => normalizeCompany(name) === key)) return unchanged;

@@ -14,6 +14,7 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { changedPaths } from "@/lib/draft-diff";
 import type { SalaryMedian, StatedSalary } from "@/lib/profile/floor-preview";
+import { wantedLocations } from "@/lib/market/places";
 import type { MarketView } from "@/lib/market/view";
 import {
   CONTRACT_MODES,
@@ -29,8 +30,8 @@ import { DealBreakersCard } from "./deal-breakers-card";
 import { Field, TagInput, describedBy, fieldErrorMap } from "./fields";
 import { FloorPreview } from "./floor-preview";
 import { FormCard } from "./form-card";
-import { MarketFields, draftCountryName, draftHomeRegion } from "./market-fields";
-import { RemoteScopeField } from "./remote-scope-field";
+import { MarketFields } from "./market-fields";
+import { PlacesField } from "./places-field";
 import { withActionFeedback } from "@/lib/actions/client";
 
 const syncSearchLocationsAction = withActionFeedback(rawSyncSearchLocationsAction)(() => ({ status: "error", error: "write_failed" }));
@@ -47,7 +48,7 @@ interface PreferencesFormProps {
   salaryMedian: SalaryMedian;
   /** The market (scope choices, currency, language). */
   market: MarketView;
-  /** search.yaml `locations`: the cities that are searched; they do not follow `locations` of this form. */
+  /** search.yaml `locations`: the cities that are searched; they do not follow the places of this form. */
   searchLocations: readonly string[];
   /** The user's level of the market's local language in me.yaml ("B1", "native"), null = none listed: what a language gate compares. */
   userLanguageLevel: string | null;
@@ -64,7 +65,8 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
   const [searchCities, setSearchCities] = useState<readonly string[]>(searchLocations);
   const [syncing, startSync] = useTransition();
   const [syncResult, setSyncResult] = useState<"done" | "error" | ConfigWriteErrorKey | null>(null);
-  const searchDiffers = draft.locations.length > 0 && !sameLocations(draft.locations, searchCities);
+  const wanted = wantedLocations(draft);
+  const searchDiffers = draft.home_city.trim() !== "" && !sameLocations(wanted, searchCities);
 
   function patch(next: Partial<PreferencesDraft>) {
     setDraft((current) => ({ ...current, ...next }));
@@ -72,9 +74,9 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
 
   const ids = {
     titles: `${base}-titles`,
-    locations: `${base}-locations`,
+    homeCity: `${base}-home-city`,
+    places: `${base}-places`,
     workplace: `${base}-workplace`,
-    remote: `${base}-remote`,
     seniority: `${base}-seniority`,
     salary: `${base}-salary`,
     contracts: `${base}-contracts`,
@@ -106,13 +108,27 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
         />
       </Field>
 
-      <Field id={ids.locations} label={t("fields.locations.label")} error={errors.get("locations")}>
-        <TagInput
-          id={ids.locations}
-          values={draft.locations}
-          onChange={(next) => patch({ locations: next })}
-          invalid={errors.has("locations")}
-          describedBy={describedBy(ids.locations, false, errors.get("locations"))}
+      <Field id={ids.homeCity} label={t("fields.home_city.label")} hint={t("fields.home_city.hint")} error={errors.get("home_city")}>
+        <Input
+          id={ids.homeCity}
+          className="max-w-72"
+          value={draft.home_city}
+          data-testid="home-city"
+          aria-invalid={errors.has("home_city") || undefined}
+          aria-describedby={describedBy(ids.homeCity, true, errors.get("home_city"))}
+          onChange={(event) => patch({ home_city: event.target.value })}
+        />
+      </Field>
+      <Field id={ids.places} label={t("fields.places.label")} hint={t("fields.places.hint")} error={errors.get("places")}>
+        <PlacesField
+          id={ids.places}
+          value={draft.places}
+          onChange={(places) => patch({ places })}
+          geo={market.placeGeo}
+          options={market.scopeOptions}
+          known={draft.market.pack === market.packId && market.error === null}
+          invalid={errors.has("places")}
+          describedBy={describedBy(ids.places, true, errors.get("places"))}
         />
       </Field>
       {searchDiffers || syncResult !== null ? (
@@ -128,7 +144,7 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
                   data-testid="search-cities-sync"
                   onClick={() =>
                     startSync(async () => {
-                      const result = await syncSearchLocationsAction(draft.locations);
+                      const result = await syncSearchLocationsAction(wanted);
                       if (result.status === "done") setSearchCities(result.locations);
                       setSyncResult(result.status === "done" ? "done" : ["dbUnavailable", "busy", "stale", "protected"].includes(result.error) ? result.error as ConfigWriteErrorKey : "error");
                     })
@@ -171,19 +187,6 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id={ids.remote} label={t("fields.remote_scope.label")} error={errors.get("remote_scope")}>
-          <RemoteScopeField
-            id={ids.remote}
-            value={draft.remote_scope}
-            onChange={(next) => patch({ remote_scope: next })}
-            options={market.scopeOptions}
-            countryName={draftCountryName(market, draft.market)}
-            homeRegion={draftHomeRegion(market, draft.market)}
-            invalid={errors.has("remote_scope")}
-            describedBy={describedBy(ids.remote, false, errors.get("remote_scope"))}
-            namespace="profile"
-          />
-        </Field>
         <Field id={ids.seniority} label={t("fields.seniority.label")} error={errors.get("seniority")}>
           <Select
             id={ids.seniority}

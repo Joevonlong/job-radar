@@ -55,9 +55,9 @@ export function fixedPreferences(): PreferencesConfig {
   return configRegistry.preferences.schema.parse({
     market: { pack: "de" },
     target_titles: ["AI Engineer", "Forward Deployed Engineer"],
-    locations: ["Berlin", "München"],
+    home_city: "Berlin",
+    places: [{ place: "München", relocate: true }],
     workplace: ["onsite", "hybrid", "remote"],
-    remote_scope: "home_country",
     seniority: "all",
     salary_floor_year: 70000,
     contracts: { allow: ["permanent", "fixed_term", "freelance"], exclude: ["temp_agency"] },

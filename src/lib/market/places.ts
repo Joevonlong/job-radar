@@ -3,7 +3,7 @@
  * so the filter, the ranking and the pages read a place alike. Which places exist is data (the packs' tables and
  * `filter.city_aliases`); nothing here names one. Pure.
  */
-import type { CountryEntry } from "./schema";
+import type { CountryEntry, RemoteScopeValue } from "./schema";
 
 /** The tables a place is looked up in. */
 export interface PlaceGeo {
@@ -132,4 +132,52 @@ export function lookupPlace(text: string, geo: PlaceGeo): Place | null {
   const city = cityEntry(written, geo);
   if (city === null) return null;
   return { kind: "city", name: city.name, countries: city.country === null ? [] : [city.country], spellings: [...city.spellings], searchName: city.name, token: null };
+}
+
+/** The id of a region the tables name. */
+function regionId(name: string, geo: PlaceGeo): string | null {
+  return Object.entries(geo.regions).find(([, region]) => region.name === name)?.[0] ?? null;
+}
+
+/** How a place is written in preferences.yaml: a region's id, a country's code, a city's name, else the text as written. */
+export function storedPlaceName(text: string, geo: PlaceGeo): string {
+  const place = lookupPlace(text, geo);
+  if (place === null) return text.trim();
+  if (place.kind === "region") return regionId(place.name, geo) ?? place.name;
+  if (place.kind === "country") return place.countries[0] ?? place.name;
+  return place.name;
+}
+
+/** Two texts with one key name one place. */
+export function samePlaceKey(text: string, geo: PlaceGeo): string {
+  return placeKey(storedPlaceName(text, geo));
+}
+
+/** The location part of preferences.yaml. */
+export interface PlacePreferences {
+  home_city: string;
+  places: readonly { place: string; relocate: boolean }[];
+}
+
+/** The wanted cities as the filter's location rules read them: the home city, then the places I'd move to. */
+export function wantedLocations(preferences: PlacePreferences): string[] {
+  return [preferences.home_city, ...preferences.places.filter((entry) => entry.relocate).map((entry) => entry.place)];
+}
+
+/** The scope token of a remote-only place: a region's id or a country's code. A city or an unknown name has none. */
+function scopeToken(text: string, geo: PlaceGeo): string | null {
+  const place = lookupPlace(text, geo);
+  if (place === null) return /^[A-Z]{2}$/.test(text) ? text : null;
+  if (place.token !== null) return place.token;
+  if (place.kind === "country") return place.countries[0] ?? null;
+  if (place.kind === "region") return regionId(place.name, geo);
+  return null;
+}
+
+/** The remote scope the remote-only places add up to: Worldwide, their tokens, else the home country. Never `none`. */
+export function wantedRemoteScope(preferences: PlacePreferences, geo: PlaceGeo): Exclude<RemoteScopeValue, "none"> {
+  const remoteOnly = preferences.places.filter((entry) => !entry.relocate).map((entry) => entry.place);
+  if (remoteOnly.some((text) => lookupPlace(text, geo)?.kind === "worldwide")) return "worldwide";
+  const tokens = [...new Set(remoteOnly.flatMap((text) => scopeToken(text, geo) ?? []))];
+  return tokens.length > 0 ? { region: tokens } : "home_country";
 }

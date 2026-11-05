@@ -44,7 +44,7 @@ const text = (name: ConfigName): string => fs.readFileSync(getConfigPath(name), 
 const snapshot = (...names: ConfigName[]): string[] => names.map(text);
 const stepStatus = (id: string): string | undefined => (readSetupState().state?.steps as Record<string, { status: string } | undefined> | undefined)?.[id]?.status;
 
-const MARKET: MarketInput = { market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, locations: ["Amsterdam", "Utrecht"], remote_scope: "region:eu", timezone: "Europe/Amsterdam" };
+const MARKET: MarketInput = { market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, home_city: "Amsterdam", places: [{ place: "Utrecht", relocate: true }, { place: "eu", relocate: false }], timezone: "Europe/Amsterdam" };
 
 describe("language", () => {
   it("saves the interface language and marks the step", async () => {
@@ -75,8 +75,8 @@ describe("market", () => {
     expect(await saveMarketStep(MARKET)).toEqual({ status: "saved", step: "market" });
     const prefs = reloadConfig("preferences");
     expect(prefs.market).toEqual({ pack: "generic", country: "NL", currency: "EUR", home_language: "nl" });
-    expect(prefs.locations).toEqual(["Amsterdam", "Utrecht"]);
-    expect(prefs.remote_scope).toEqual({ region: ["eu"] });
+    expect(prefs.home_city).toBe("Amsterdam");
+    expect(prefs.places).toEqual([{ place: "Utrecht", relocate: true }, { place: "eu", relocate: false }]);
     const search = reloadConfig("search");
     expect(search.locations).toEqual(["Amsterdam", "Utrecht"]);
     expect(search.remote_scope).toEqual({ region: ["eu"] });
@@ -86,7 +86,7 @@ describe("market", () => {
 
   it.each([
     ["an unknown time zone", { ...MARKET, timezone: "Mars/Olympus" }, "timezone"],
-    ["no city", { ...MARKET, locations: [] }, "locations"],
+    ["no city", { ...MARKET, home_city: " " }, "home_city"],
     ["an unknown pack", { ...MARKET, market: { ...MARKET.market, pack: "atlantis" } }, "market.pack"],
     ["a generic pack without a country", { ...MARKET, market: { pack: "generic", country: "", currency: "EUR", home_language: "nl" } }, "market.country"],
   ])("reports %s next to the field and writes nothing", async (_name, input, path) => {

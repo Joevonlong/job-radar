@@ -83,7 +83,8 @@ describe("DE market golden", () => {
 
   it("hard filter verdicts and reasons under every remote scope", () => {
     const keep = (i: number): boolean => !isChanged(inputs.locations[Math.floor(i / 4)] ?? "");
-    for (const scope of Object.keys(expected.filterLocation)) {
+    // `none` no longer exists: what it becomes is tested with the migration
+    for (const scope of Object.keys(expected.filterLocation).filter((key) => key !== "none")) {
       const got = (actual.filterLocation[scope] ?? []).filter((_, i) => keep(i));
       const want = (expected.filterLocation[scope] ?? []).filter((_, i) => keep(i));
       expect(differences(`filterLocation.${scope}`, got, want, (i) => String(i))).toEqual([]);
