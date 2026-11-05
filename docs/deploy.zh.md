@@ -38,18 +38,18 @@
 scripts/ops/deploy.sh --dry-run
 ```
 
-输出是 13 个步骤和每一步要执行的命令；如果有条件现在不满足（比如有未提交的改动），会用 `⚠ 实际运行会在这里停下` 标出来。确认没问题后：
+输出是 13 个步骤和每一步要执行的命令；如果有条件现在不满足（比如当前既不在 main 也不在 stable 分支、有未提交的改动），会用 `⚠ 实际运行会在这里停下` 标出来。确认没问题后：
 
 ```bash
 scripts/ops/deploy.sh
 ```
 
-在**主 checkout** 里运行（不要在 worktree 或 feature 分支里；从 3.0.0 起，不带 `--ref` 或 `--branch` 时跟随当前的 `stable` 或 `main` 分支；带 `--ref <tag>` 时检出该 tag 并停在 detached HEAD；ai-worker 从 `data/releases/ai-worker/` 下所部署提交的发布目录运行，见下面“ai-worker 从发布目录运行”）。脚本按顺序做，**任何一步失败就停下**，并告诉你是第几步、为什么、怎么办；已完成的步骤不会回滚，修好后重新运行即可（每一步都是幂等的）：
+在**主 checkout** 里运行（不要在 worktree 或 feature 分支里；默认跟随当前的 `main` 或 `stable` 分支；其他分支或 detached HEAD 会停止并给出提示，除非用 `--branch` 指定当前检出的分支、使用 `--ref` 或 `--skip-pull`；带 `--ref <tag>` 时检出该 tag 并停在 detached HEAD；ai-worker 从 `data/releases/ai-worker/` 下所部署提交的发布目录运行，见下面“ai-worker 从发布目录运行”）。脚本按顺序做，**任何一步失败就停下**，并告诉你是第几步、为什么、怎么办；已完成的步骤不会回滚，修好后重新运行即可（每一步都是幂等的）：
 
 | 步骤 | 做什么 | 失败时通常是 |
 |---|---|---|
 | 1 preflight | 终端没有设 `tostop`（否则后台输出会被暂停）；取部署锁（同一时间只有一次部署，见下面“同一时间只有一次部署”），并删除以前被中断的部署留在 `data/build/` 里的构建上下文；git / docker / node / pnpm 都在，Docker 在运行；已跟踪的文件没有未提交的改动（所有模式都查，`--skip-pull` 也一样，见“构建上下文和干净的工作树”）；外接卷没有重复挂载 | Docker Desktop 没起来；有未提交的改动；另一次部署持有锁；设了 `stty tostop`（运行 `stty -tostop`） |
-| 2 pull | 从 3.0.0 起，不带 `--ref` 或 `--branch`：在 `stable` 或 `main` 上 fetch，再快进到远端对应分支。带 `--ref <tag>`：fetch 该 tag（或分支），在检出目录移动之前拒绝 ai-worker 不能从发布目录运行的版本（见 [upgrade.zh.md](upgrade.zh.md#downgrade-pre-release-dir)），然后检出。然后固定要部署的提交：后面每一步都用它；从 install 到 ai-worker，HEAD 移动了或已跟踪的文件变了，那一步就停下 | 在别的分支或 detached HEAD（不带 `--ref` 或 `--branch` 时）；本地有没推送的提交（分叉）；`checkout moved during deploy`（部署期间有别的 git 命令动了检出目录）；`--ref` 指向发布目录之前的版本 |
+| 2 pull | 默认不带 `--ref` 或 `--skip-pull` 时：跟随当前的 `main` 或 `stable` 分支，`git fetch` 后快进到 `origin/<分支>`。`--branch` 可以指定当前检出的分支。带 `--ref <tag>`：fetch 该 tag（或分支），在检出目录移动之前拒绝 ai-worker 不能从发布目录运行的版本（见 [upgrade.zh.md](upgrade.zh.md#downgrade-pre-release-dir)），然后检出。然后固定要部署的提交：后面每一步都用它；从 install 到 ai-worker，HEAD 移动了或已跟踪的文件变了，那一步就停下 | 在其他分支或 detached HEAD（默认模式下；脚本会给出提示）；本地有没推送的提交（分叉）；`checkout moved during deploy`（部署期间有别的 git 命令动了检出目录）；`--ref` 指向发布目录之前的版本 |
 | 3 install | `pnpm install --frozen-lockfile` | 网络 |
 | 4 config | 创建 data 目录；新安装还会创建带数据库密码的 `.env`（`pnpm config:init --env-only`）。其余只读：`pnpm config:check` 内存校验、检查 compose config，以及用 `pnpm config:plan --deploy` 预览第 11 步将写什么。这一步不改任何用户配置文件 | YAML 无效，或配置版本比代码新 |
 | 5 backup | db 已经在运行就先做一份 `pre-deploy` 备份（第一次部署跳过） | 备份失败时不继续升级 |
@@ -60,11 +60,11 @@ scripts/ops/deploy.sh
 | 10 ai-worker | `scripts/ops/install-ai-worker.sh --release data/releases/ai-worker/<提交>`：把 ai-worker（macOS 上是 launchd agent，Linux 上是 systemd 用户单元 `job-radar-ai-worker.service`）切换到第 7 步的发布目录；新 worker 拿不出证据时回滚到上一个（见下面“ai-worker 从发布目录运行”）。它正在处理的 AI 请求（比如给一整轮打分的 `run_ai`）不会丢：回到队列，重启后接着跑（见下面“被重启打断的工作”） | 输出以 `not changed:`（什么都没动）、`rolled back:`（上一个 worker 又在运行）或 `ROLLBACK FAILED:`（按消息处理）开头；`claude` / `codex` 不在 PATH 里 |
 | 11 config-write | 唯一写用户配置文件的步骤。先等目标 worker 服务（实例锁、心跳和配置报告），再检查门禁：web 和 runner 各有容器，且运行的是本次部署刚构建的镜像；ai-worker 服务指向目标发布目录，其进程持有实例锁（`--no-ai-worker` 时：没有安装 worker 服务，也没人持有实例锁）；宿主机上没有其他 worker 进程。门禁通过后依次执行 `config:migrate --write`、`config:init`、`config:plan --deploy --check` 和 `config:migrate --prune-backups`；第一个失败就停止写入。`--settle 0` 做同样的检查，但不等新的 receipt。 | 门禁未通过或写入失败：不再写入，部署继续，最后退出 2（见“部署期间的配置写入”）。清理旧备份失败只警告 |
 | 12 prune | 先释放部署锁、删除第 6 步的构建上下文。然后清理 Docker：构建缓存按最近使用只留 `schedule.yaml: deploy.build_cache_keep_gb`（`docker builder prune -f --max-used-space 5gb`），删悬空镜像（`docker image prune -f`，不带 `-a`）。从不碰数据卷，不删正在使用的镜像 | 不会让部署失败：命令出错只打印 ⚠ 继续（比如 Docker 太旧不认 `--max-used-space`） |
-| 13 doctor | `pnpm run doctor`，包括检查第 11 步未完成写入的 `config.pending` | doctor 报错退出 2；仅告警退出 0 |
+| 13 doctor | `pnpm run doctor`，包括检查第 11 步未完成写入的 `config.pending`；实际部署后，如果部署的文件树与版本标签不同或标签不存在，会打印开发构建提示 | doctor 报错退出 2；仅告警退出 0 |
 
 选项：`--skip-pull`（不动 git，按当前代码部署，回滚用）、`--ref <标签|分支>`（部署 `vX.Y.Z` 这样的指定发布标签，见 [upgrade.zh.md](upgrade.zh.md)）、`--no-backup`、`--no-prune`（跳过第 12 步的 Docker 清理）、`--no-ai-worker`（跳过第 7、10 步和第 11 步的 worker 等待）、`--no-drain`（第 8 步不等正在运行的轮次）、`--drain-timeout 秒`（代替 `deploy.drain_timeout_seconds`）、`--branch`、`--remote`、`--wait-timeout 秒`、`--settle 秒`（从 prune 前第 11 步开始计时的 worker 等待上限；0 不等）；`--help` 看全部。
 
-从 3.0.0 起，在其他分支或 detached HEAD 上直接部署会被拒绝，脚本会建议 `--ref <tag>`。只有存在 `origin/stable` 时，才会建议 `git switch stable`。部署后的文件树与 `v<package.json version>` 标签不同时，会显示“development build”提示和比标签多的提交数。存在 `origin/stable` 时，还会显示如何切回发布渠道。`--skip-pull` 不变。要验证标签签名，用 `scripts/ops/deploy.sh --ref vX.Y.Z --verify`；在 `stable` 上直接部署不会验证签名。
+要检查标签签名，用 `scripts/ops/deploy.sh --ref vX.Y.Z --verify`；在 `stable` 或 `main` 上直接部署不验证签名。
 
 部署的设置在 `schedule.yaml` 的 `deploy` 和 `config_writes` 块，下次部署生效。部署脚本和备份脚本读 `schedule.yaml` 时和代码一样：先读用户配置 `data/config/schedule.yaml`，没有才读默认的 `config/schedule.yaml`：
 

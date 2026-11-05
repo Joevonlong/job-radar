@@ -29,11 +29,11 @@ Starting with 3.0.0, choose one of three channels:
 - **`main` (development):** `git switch main && scripts/ops/deploy.sh`; it may change between releases.
 
 `--ref` accepts a tag or a branch. The checkout ends up on that commit (for a tag, git calls this a detached HEAD, which is
-expected). From 3.0.0 on, without `--ref` or `--branch`, the script follows the current branch: `stable` pulls `stable`,
+expected). Without `--ref` or `--branch`, the script follows the current branch: `stable` pulls `stable`,
 `main` pulls `main`. Any other branch or a detached HEAD is refused, with a suggestion to use `--ref <tag>` or, only
 when `origin/stable` exists, `git switch stable`. `--skip-pull` still deploys the current checkout without pulling.
 
-From 3.0.0 on, after a deploy the script prints a "development build" note when the deployed tree differs from the
+After a deploy the script prints a "development build" note when the deployed tree differs from the
 `v<package.json version>` tag, including how many commits it is after that tag. For such a build, if `origin/stable` exists,
 it also shows how to switch back to the release channel.
 

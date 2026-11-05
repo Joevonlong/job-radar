@@ -81,6 +81,19 @@ describe("scripts/ops/*.sh --help", () => {
   it.each([...PASSTHROUGH])("%s has no options of its own", (name) => {
     expect(parsedOptions(fs.readFileSync(path.join(OPS, name), "utf8"))).toEqual([]);
   });
+
+  it("deploy help explains branch defaults, skip-pull and the development notice", () => {
+    const out = help(path.join(OPS, "deploy.sh"));
+    expect(out.status, out.stderr).toBe(0);
+    expect(out.stdout).toContain("current branch (main or stable)");
+    expect(out.stdout).toContain("never switches branches");
+    expect(out.stdout).toContain("--skip-pull");
+    expect(out.stdout).toContain("detached HEAD");
+    expect(out.stdout).toContain("development-build notice");
+    expect(out.stdout).toContain("dry-run skips");
+    expect(out.stdout).not.toContain("git checkout main");
+    expect(out.stdout).not.toContain("default main");
+  });
 });
 
 describe("the help check itself", () => {

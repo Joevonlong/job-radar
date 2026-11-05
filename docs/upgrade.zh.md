@@ -25,9 +25,9 @@ Job Radar 从一个 git 检出目录运行。发布版本是签名的 git 标签
   在 `stable` 上直接部署不会验证签名。
 - **`main`（开发）：** `git switch main && scripts/ops/deploy.sh`。两次发布之间可能变化。
 
-`--ref` 可以是标签或分支。检出会停在那个提交上（对标签来说，git 称之为 detached HEAD，这是正常的）。从 3.0.0 起，不加 `--ref` 或 `--branch` 时，脚本跟随当前分支：在 `stable` 上拉取 `stable`，在 `main` 上拉取 `main`。其他分支或 detached HEAD 会被拒绝。脚本会建议用 `--ref <tag>`；只有存在 `origin/stable` 时，才会建议 `git switch stable`。`--skip-pull` 仍按当前代码部署，不拉取。
+`--ref` 可以是标签或分支。检出会停在那个提交上（对标签来说，git 称之为 detached HEAD，这是正常的）。不加 `--ref` 或 `--branch` 时，脚本跟随当前分支：在 `stable` 上拉取 `stable`，在 `main` 上拉取 `main`。其他分支或 detached HEAD 会被拒绝。脚本会建议用 `--ref <tag>`；只有存在 `origin/stable` 时，才会建议 `git switch stable`。`--skip-pull` 仍按当前代码部署，不拉取。
 
-从 3.0.0 起，部署后的文件树与 `v<package.json version>` 标签不同时，脚本会显示“development build”提示，并说明比标签多了多少个提交。对这样的构建，存在 `origin/stable` 时，还会显示如何切回发布渠道。
+部署后的文件树与 `v<package.json version>` 标签不同时，脚本会显示“development build”提示，并说明比标签多了多少个提交。对这样的构建，存在 `origin/stable` 时，还会显示如何切回发布渠道。
 
 部署默认不验证签名。加 `--verify` 会先对标签运行 `git verify-tag`，无效就停止。它用的是随仓库发布的维护者公钥 [`signing-key.pub`](signing-key.pub)（`allowed_signers` 格式；指纹 `SHA256:HHRRfExpbUjcK0/pdc5E1qf94ogkREVkt9+1VP58JQc`，[SECURITY.md](../SECURITY.md) 里也有）；你自己用 `git config gpg.ssh.allowedSignersFile` 设置的公钥列表优先。有签名密钥时发布会签名，见 [RELEASING.md](../RELEASING.md)。手动检查：`git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=docs/signing-key.pub tag -v vX.Y.Z`。
 
