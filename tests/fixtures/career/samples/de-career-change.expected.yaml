@@ -4,20 +4,59 @@ experience:
       value: Mondfalter Handel GmbH
       quote: Mondfalter Handel GmbH
     role:
-      value: Projektleiterin
-      quote: Projektleiterin
+      value: Projektleiterin Digitalisierung
+      quote: Projektleiterin Digitalisierung
     start:
-      value: "2022"
-      quote: "2022"
+      value: 2022-01
+      quote: 01/2022
     end:
       value: present
-      quote: present
+      quote: seit 01/2022
     bullets:
-      - value: Koordinierte 7 interne Schulungen.
-        quote: Koordinierte 7 interne Schulungen.
-    stack:
-      - value: TypeScript
-        quote: TypeScript
+      - value: Koordinierte sieben interne Schulungen fuer neue Ablaeufe.
+        quote: Koordinierte sieben interne Schulungen fuer neue Ablaeufe.
+      - value: Erhob Anforderungen mit Verkauf und Lager und priorisierte Verbesserungen.
+        quote: Erhob Anforderungen mit Verkauf und Lager und priorisierte Verbesserungen.
+      - value: Begleitete die Einfuehrung eines digitalen Bestandsprozesses.
+        quote: Begleitete die Einfuehrung eines digitalen Bestandsprozesses.
+  - company:
+      value: Wolkental Medien GmbH
+      quote: Wolkental Medien GmbH
+    role:
+      value: Junior Entwicklerin
+      quote: Junior Entwicklerin
+    start:
+      value: 2020-07
+      quote: 07/2020
+    end:
+      value: 2021-12
+      quote: 12/2021
+    bullets:
+      - value: Entwickelte Formulare fuer eine interne Redaktionsanwendung.
+        quote: Entwickelte Formulare fuer eine interne Redaktionsanwendung.
+      - value: Schrieb automatisierte Tests fuer wiederkehrende Eingaben.
+        quote: Schrieb automatisierte Tests fuer wiederkehrende Eingaben.
+      - value: Arbeitete mit Gestaltung und Redaktion an barrierearmen Oberflaechen.
+        quote: Arbeitete mit Gestaltung und Redaktion an barrierearmen Oberflaechen.
+  - company:
+      value: Mondfalter Handel GmbH
+      quote: Mondfalter Handel GmbH
+    role:
+      value: Verkaufsberaterin
+      quote: Verkaufsberaterin
+    start:
+      value: 2016-02
+      quote: 02/2016
+    end:
+      value: 2020-06
+      quote: 06/2020
+    bullets:
+      - value: Beriet Kundschaft bei der Auswahl saisonaler Produkte.
+        quote: Beriet Kundschaft bei der Auswahl saisonaler Produkte.
+      - value: Organisierte Warenpraesentationen und zaehlte Lagerbestaende.
+        quote: Organisierte Warenpraesentationen und zaehlte Lagerbestaende.
+      - value: Arbeitete neue Teammitglieder in die Kassenablaeufe ein.
+        quote: Arbeitete neue Teammitglieder in die Kassenablaeufe ein.
 education:
   - school:
       value: Hochschule Sternmoos
@@ -26,16 +65,27 @@ education:
       value: BA Kommunikation
       quote: BA Kommunikation
     start:
-      value: "2014"
-      quote: "2014"
+      value: "2015"
+      quote: "2015"
     end:
-      value: "2017"
-      quote: "2017"
+      value: "2019"
+      quote: "2019"
+    summary:
+      value: "Schwerpunkt: Angewandte Methoden und Teamarbeit"
+      quote: "Schwerpunkt: Angewandte Methoden und Teamarbeit"
 skills:
-  - group: Technology
+  - group: Technik
     items:
       - value: TypeScript
         quote: TypeScript
+      - value: HTML
+        quote: HTML
+  - group: Projektarbeit
+    items:
+      - value: Anforderungsanalyse
+        quote: Anforderungsanalyse
+      - value: Schulung
+        quote: Schulung
 languages:
   - name:
       value: Deutsch
@@ -43,3 +93,16 @@ languages:
     level:
       value: C1
       quote: C1
+  - name:
+      value: Englisch
+      quote: Englisch
+    level:
+      value: B2
+      quote: B2
+certifications:
+  - name:
+      value: Zertifikat Digitale Zusammenarbeit
+      quote: Zertifikat Digitale Zusammenarbeit
+    date:
+      value: "2021"
+      quote: "2021"

@@ -8,16 +8,36 @@ experience:
       quote: Dateningenieurin
     start:
       value: 2021-03
-      quote: 2021-03
+      quote: 03/2021
     end:
-      value: 2023-08
-      quote: 2023-08
+      value: present
+      quote: seit 03/2021
     bullets:
-      - value: Senkung der Laufzeit um 40%.
-        quote: Senkung der Laufzeit um 40%.
-    stack:
-      - value: SQL
-        quote: SQL
+      - value: Verkuerzte die Laufzeit eines Datenlaufs um 40 Prozent.
+        quote: Verkuerzte die Laufzeit eines Datenlaufs um 40 Prozent.
+      - value: Pruefte Datenqualitaet vor der monatlichen Bereitstellung.
+        quote: Pruefte Datenqualitaet vor der monatlichen Bereitstellung.
+      - value: Stimmte Datenmodelle mit den Berichtsteams ab.
+        quote: Stimmte Datenmodelle mit den Berichtsteams ab.
+  - company:
+      value: Nebelgarten Analyse GmbH
+      quote: Nebelgarten Analyse GmbH
+    role:
+      value: Analystin
+      quote: Analystin
+    start:
+      value: 2018-01
+      quote: 01/2018
+    end:
+      value: 2021-02
+      quote: 02/2021
+    bullets:
+      - value: Erstellte regelmaessige Auswertungen fuer interne Teams.
+        quote: Erstellte regelmaessige Auswertungen fuer interne Teams.
+      - value: Dokumentierte Kennzahlen und ihre Berechnungsregeln.
+        quote: Dokumentierte Kennzahlen und ihre Berechnungsregeln.
+      - value: Erklaerte Abweichungen in gemeinsamen Besprechungen.
+        quote: Erklaerte Abweichungen in gemeinsamen Besprechungen.
 education:
   - school:
       value: Institut Farnwolke
@@ -26,16 +46,27 @@ education:
       value: BSc Mathematik
       quote: BSc Mathematik
     start:
-      value: "2014"
-      quote: "2014"
+      value: "2015"
+      quote: "2015"
     end:
-      value: "2017"
-      quote: "2017"
+      value: "2019"
+      quote: "2019"
+    summary:
+      value: "Schwerpunkt: Angewandte Methoden und Teamarbeit"
+      quote: "Schwerpunkt: Angewandte Methoden und Teamarbeit"
 skills:
-  - group: Technology
+  - group: Daten
     items:
       - value: SQL
         quote: SQL
+      - value: Python
+        quote: Python
+  - group: Methoden
+    items:
+      - value: Modellierung
+        quote: Modellierung
+      - value: Dokumentation
+        quote: Dokumentation
 languages:
   - name:
       value: Deutsch
@@ -43,3 +74,22 @@ languages:
     level:
       value: C2
       quote: C2
+  - name:
+      value: Englisch
+      quote: Englisch
+    level:
+      value: B2
+      quote: B2
+custom_sections:
+  - title:
+      value: Weiterbildung
+      quote: Weiterbildung
+    items:
+      - kind: entry
+        heading:
+          value: "Schuljahr 2020/21: Datenwerkstatt"
+          quote: "Schuljahr 2020/21: Datenwerkstatt"
+        date:
+          value: "2021"
+          quote: "2021"
+        bullets: []

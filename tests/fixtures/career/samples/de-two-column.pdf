@@ -9,62 +9,76 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
 endobj
 4 0 obj
-<< /Length 608 >>
+<< /Length 1128 >>
 stream
 BT
-/F1 10 Tf
-17 TL
+/F1 7 Tf
+13 TL
 36 730 Td
+(Liva Farnfenn) Tj
+T*
 (Lebenslauf) Tj
 T*
-(Nela Traumwald) Tj
+(Kontakt: livafarnfenn@example.invalid) Tj
 T*
-(de-two-column@example.invalid) Tj
-T*
-(+49 30 0000000) Tj
-T*
-(Anschrift: Fabelweg 00, 00000 Musterort) Tj
-T*
-(Geburtsdatum: 12/05/1990) Tj
-T*
-ET
-BT
-/F1 10 Tf
-17 TL
-260 730 Td
-(Berufserfahrung) Tj
-T*
-(Drachenmoos Labor GmbH) Tj
-T*
-(Dateningenieurin) Tj
-T*
-(2021-03 - 2023-08) Tj
-T*
-(- Senkung der Laufzeit um 40%.) Tj
-T*
-(Stack: SQL) Tj
+(+49 30 0000-2019) Tj
 T*
 () Tj
 T*
 (Ausbildung) Tj
 T*
-(Institut Farnwolke) Tj
+(\(2015-2019\) | BSc Mathematik | Institut Farnwolke) Tj
 T*
-(BSc Mathematik) Tj
-T*
-(2014 - 2017) Tj
+(Schwerpunkt: Angewandte Methoden und Teamarbeit) Tj
 T*
 () Tj
 T*
 (Kenntnisse) Tj
 T*
-(Technology: SQL) Tj
+(Daten: SQL, Python) Tj
+T*
+(Methoden: Modellierung, Dokumentation) Tj
 T*
 () Tj
 T*
 (Sprachen) Tj
 T*
 (Deutsch: C2) Tj
+T*
+(Englisch: B2) Tj
+T*
+() Tj
+T*
+(Weiterbildung) Tj
+T*
+(Schuljahr 2020/21: Datenwerkstatt | 2021) Tj
+T*
+ET
+BT
+/F1 8 Tf
+13 TL
+245 730 Td
+(Berufliche Stationen) Tj
+T*
+(seit 03/2021 | Dateningenieurin | Drachenmoos Labor GmbH) Tj
+T*
+(- Verkuerzte die Laufzeit eines Datenlaufs um 40 Prozent.) Tj
+T*
+(- Pruefte Datenqualitaet vor der monatlichen Bereitstellung.) Tj
+T*
+(- Stimmte Datenmodelle mit den Berichtsteams ab.) Tj
+T*
+() Tj
+T*
+(01/2018 - 02/2021 | Analystin | Nebelgarten Analyse GmbH) Tj
+T*
+(- Erstellte regelmaessige Auswertungen fuer interne Teams.) Tj
+T*
+(- Dokumentierte Kennzahlen und ihre Berechnungsregeln.) Tj
+T*
+(- Erklaerte Abweichungen in gemeinsamen Besprechungen.) Tj
+T*
+() Tj
 T*
 ET
 endstream
@@ -75,13 +89,13 @@ endobj
 xref
 0 6
 0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
-0000000241 00000 n 
-0000000900 00000 n 
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
+0000000241 00000 n
+0000001421 00000 n
 trailer
 << /Size 6 /Root 1 0 R >>
 startxref
-970
+1491
 %%EOF

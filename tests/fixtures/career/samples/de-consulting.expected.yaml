@@ -7,17 +7,54 @@ experience:
       value: Technischer Berater
       quote: Technischer Berater
     start:
-      value: "2019"
-      quote: "2019"
+      value: 2021-03
+      quote: 03/2021
     end:
       value: present
-      quote: present
+      quote: seit 03/2021
     bullets:
-      - value: Begleitete 12 fiktive Pilotprojekte.
-        quote: Begleitete 12 fiktive Pilotprojekte.
-    stack:
-      - value: Python
-        quote: Python
+      - value: Begleitete zwoelf Pilotprojekte von der Analyse bis zur Uebergabe.
+        quote: Begleitete zwoelf Pilotprojekte von der Analyse bis zur Uebergabe.
+      - value: Moderierte Anforderungsworkshops mit Fachbereichen.
+        quote: Moderierte Anforderungsworkshops mit Fachbereichen.
+      - value: Erstellte Entscheidungsvorlagen fuer technische Optionen.
+        quote: Erstellte Entscheidungsvorlagen fuer technische Optionen.
+  - company:
+      value: Farnwolke Dienste GmbH
+      quote: Farnwolke Dienste GmbH
+    role:
+      value: Datenanalyst
+      quote: Datenanalyst
+    start:
+      value: 2019-01
+      quote: 01/2019
+    end:
+      value: 2022-06
+      quote: 06/2022
+    bullets:
+      - value: Bereinigte monatliche Berichte fuer interne Teams.
+        quote: Bereinigte monatliche Berichte fuer interne Teams.
+      - value: Erklaerte Ergebnisse in regelmaessigen Abstimmungen.
+        quote: Erklaerte Ergebnisse in regelmaessigen Abstimmungen.
+      - value: Dokumentierte Datenquellen und bekannte Einschraenkungen.
+        quote: Dokumentierte Datenquellen und bekannte Einschraenkungen.
+  - company:
+      value: Morgenfarn Werkstatt GmbH
+      quote: Morgenfarn Werkstatt GmbH
+    role:
+      value: Werkstudent
+      quote: Werkstudent
+    start:
+      value: 2017-04
+      quote: 04/2017
+    end:
+      value: 2018-12
+      quote: 12/2018
+    bullets:
+      - value: Unterstuetzte die Pflege eines internen Wissenskatalogs.
+        quote: Unterstuetzte die Pflege eines internen Wissenskatalogs.
+      - value: Testete Formulare anhand vorbereiteter Beispieldaten.
+        quote: Testete Formulare anhand vorbereiteter Beispieldaten.
 education:
   - school:
       value: Akademie Wolkensteg
@@ -26,20 +63,44 @@ education:
       value: MSc Wirtschaftsinformatik
       quote: MSc Wirtschaftsinformatik
     start:
-      value: "2014"
-      quote: "2014"
+      value: "2015"
+      quote: "2015"
     end:
-      value: "2017"
-      quote: "2017"
+      value: "2019"
+      quote: "2019"
+    summary:
+      value: "Schwerpunkt: Angewandte Methoden und Teamarbeit"
+      quote: "Schwerpunkt: Angewandte Methoden und Teamarbeit"
 skills:
-  - group: Technology
+  - group: Analyse
     items:
       - value: Python
         quote: Python
+      - value: SQL
+        quote: SQL
+  - group: Beratung
+    items:
+      - value: Moderation
+        quote: Moderation
+      - value: Dokumentation
+        quote: Dokumentation
 languages:
+  - name:
+      value: Deutsch
+      quote: Deutsch
+    level:
+      value: Muttersprache
+      quote: Muttersprache
   - name:
       value: Englisch
       quote: Englisch
     level:
       value: C1
       quote: C1
+certifications:
+  - name:
+      value: Zertifikat Prozessmoderation
+      quote: Zertifikat Prozessmoderation
+    date:
+      value: "2022"
+      quote: "2022"

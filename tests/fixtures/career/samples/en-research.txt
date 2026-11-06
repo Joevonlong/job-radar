@@ -1,32 +1,33 @@
-Resume
-Oren Mistvale
-en-research@example.invalid
-+49 30 0000000
-Address: 00 Imaginary Lane, Fictionville
-Nationality: fictional
+Sorin Mossfenn
+Curriculum Vitae
+Kontakt: sorinmossfenn@example.invalid
++1 202 555 0100
 
-Experience
-Fablemoss Research Ltd
-Research Engineer
-2017 - 2021
-- Published 2 reproducible benchmarks.
-Stack: Python
+Professional experience
+February 2021 – Present | Research Engineer | Fablemoss Research Ltd
+- Designed reproducible benchmarks for scheduling experiments.
+- Explained uncertainty and limitations to partner teams.
+- Maintained a shared catalogue of experimental results.
+
+January 2017 – January 2021 | Research Assistant | Mistlefern Lab Ltd
+- Prepared datasets for controlled simulations.
+- Wrote scripts to check the consistency of experiment outputs.
+- Supported workshops on reproducible research methods.
 
 Education
-Silverfern Academy
-MSc Computing
-2014 - 2017
+(2015–2019) | MSc Computing | Silverfern Academy
+Focus: applied methods and collaborative practice
 
 Skills
-Technology: Python
+Programming: Python, Rust
+Research: Simulation, Statistics
 
 Languages
+English: C2
 German: B1
 
 Publications
-Queues in an Imaginary Forest
-2021
+Queues in an Imaginary Forest | 2021
 
 Awards
-Fictional Moss Award
-2022
+Moss Award for Open Methods | 2022

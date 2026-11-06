@@ -7,17 +7,37 @@ experience:
       value: Research Engineer
       quote: Research Engineer
     start:
-      value: "2017"
-      quote: "2017"
+      value: 2021-02
+      quote: February 2021
     end:
-      value: "2021"
-      quote: "2021"
+      value: present
+      quote: Present
     bullets:
-      - value: Published 2 reproducible benchmarks.
-        quote: Published 2 reproducible benchmarks.
-    stack:
-      - value: Python
-        quote: Python
+      - value: Designed reproducible benchmarks for scheduling experiments.
+        quote: Designed reproducible benchmarks for scheduling experiments.
+      - value: Explained uncertainty and limitations to partner teams.
+        quote: Explained uncertainty and limitations to partner teams.
+      - value: Maintained a shared catalogue of experimental results.
+        quote: Maintained a shared catalogue of experimental results.
+  - company:
+      value: Mistlefern Lab Ltd
+      quote: Mistlefern Lab Ltd
+    role:
+      value: Research Assistant
+      quote: Research Assistant
+    start:
+      value: 2017-01
+      quote: January 2017
+    end:
+      value: 2021-01
+      quote: January 2021
+    bullets:
+      - value: Prepared datasets for controlled simulations.
+        quote: Prepared datasets for controlled simulations.
+      - value: Wrote scripts to check the consistency of experiment outputs.
+        quote: Wrote scripts to check the consistency of experiment outputs.
+      - value: Supported workshops on reproducible research methods.
+        quote: Supported workshops on reproducible research methods.
 education:
   - school:
       value: Silverfern Academy
@@ -26,17 +46,34 @@ education:
       value: MSc Computing
       quote: MSc Computing
     start:
-      value: "2014"
-      quote: "2014"
+      value: "2015"
+      quote: "2015"
     end:
-      value: "2017"
-      quote: "2017"
+      value: "2019"
+      quote: "2019"
+    summary:
+      value: "Focus: applied methods and collaborative practice"
+      quote: "Focus: applied methods and collaborative practice"
 skills:
-  - group: Technology
+  - group: Programming
     items:
       - value: Python
         quote: Python
+      - value: Rust
+        quote: Rust
+  - group: Research
+    items:
+      - value: Simulation
+        quote: Simulation
+      - value: Statistics
+        quote: Statistics
 languages:
+  - name:
+      value: English
+      quote: English
+    level:
+      value: C2
+      quote: C2
   - name:
       value: German
       quote: German
@@ -62,8 +99,8 @@ custom_sections:
     items:
       - kind: entry
         heading:
-          value: Fictional Moss Award
-          quote: Fictional Moss Award
+          value: Moss Award for Open Methods
+          quote: Moss Award for Open Methods
         date:
           value: "2022"
           quote: "2022"

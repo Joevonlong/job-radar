@@ -4,20 +4,59 @@ experience:
       value: Nebelfalter Systeme GmbH
       quote: Nebelfalter Systeme GmbH
     role:
+      value: Senior Plattformentwicklerin
+      quote: Senior Plattformentwicklerin
+    start:
+      value: 2023-04
+      quote: 04/2023
+    end:
+      value: present
+      quote: seit 04/2023
+    bullets:
+      - value: Leitete die Planung einer Plattform fuer interne Datendienste.
+        quote: Leitete die Planung einer Plattform fuer interne Datendienste.
+      - value: Reduzierte die durchschnittliche Bereitstellungszeit um 35 Prozent.
+        quote: Reduzierte die durchschnittliche Bereitstellungszeit um 35 Prozent.
+      - value: Begleitete vier Kolleginnen und Kollegen bei Architekturentscheidungen.
+        quote: Begleitete vier Kolleginnen und Kollegen bei Architekturentscheidungen.
+  - company:
+      value: Nebelfalter Systeme GmbH
+      quote: Nebelfalter Systeme GmbH
+    role:
       value: Plattformentwicklerin
       quote: Plattformentwicklerin
     start:
       value: 2020-01
-      quote: 2020-01
+      quote: 01/2020
     end:
       value: 2023-03
-      quote: 2023-03
+      quote: 03/2023
     bullets:
-      - value: Aufbau eines Dienstes fuer 10 000 000 Anfragen.
-        quote: Aufbau eines Dienstes fuer 10 000 000 Anfragen.
-    stack:
-      - value: Go
-        quote: Go
+      - value: Entwickelte einen Dienst fuer 10.000.000 Anfragen pro Monat.
+        quote: Entwickelte einen Dienst fuer 10.000.000 Anfragen pro Monat.
+      - value: Automatisierte die Auslieferung von Anwendungen mit nachvollziehbaren Pruefungen.
+        quote: Automatisierte die Auslieferung von Anwendungen mit nachvollziehbaren Pruefungen.
+      - value: Dokumentierte Betriebsablaeufe und betreute den Bereitschaftsdienst.
+        quote: Dokumentierte Betriebsablaeufe und betreute den Bereitschaftsdienst.
+  - company:
+      value: Kieselsteg Digital GmbH
+      quote: Kieselsteg Digital GmbH
+    role:
+      value: Softwareentwicklerin
+      quote: Softwareentwicklerin
+    start:
+      value: 2018-02
+      quote: 02/2018
+    end:
+      value: 2019-12
+      quote: 12/2019
+    bullets:
+      - value: Erstellte Schnittstellen fuer die interne Auftragsverwaltung.
+        quote: Erstellte Schnittstellen fuer die interne Auftragsverwaltung.
+      - value: Fuehrte gemeinsame Codebesprechungen im kleinen Team ein.
+        quote: Fuehrte gemeinsame Codebesprechungen im kleinen Team ein.
+      - value: Untersuchte Fehlermeldungen und verbesserte die Protokollierung.
+        quote: Untersuchte Fehlermeldungen und verbesserte die Protokollierung.
 education:
   - school:
       value: Hochschule Kieselgarten
@@ -26,16 +65,27 @@ education:
       value: BSc Informatik
       quote: BSc Informatik
     start:
-      value: "2014"
-      quote: "2014"
+      value: "2015"
+      quote: "2015"
     end:
-      value: "2017"
-      quote: "2017"
+      value: "2019"
+      quote: "2019"
+    summary:
+      value: "Schwerpunkt: Angewandte Methoden und Teamarbeit"
+      quote: "Schwerpunkt: Angewandte Methoden und Teamarbeit"
 skills:
-  - group: Technology
+  - group: Programmierung
     items:
       - value: Go
         quote: Go
+      - value: Python
+        quote: Python
+  - group: Arbeitsweise
+    items:
+      - value: Code Review
+        quote: Code Review
+      - value: Moderation
+        quote: Moderation
 languages:
   - name:
       value: Deutsch
@@ -43,3 +93,9 @@ languages:
     level:
       value: Muttersprache
       quote: Muttersprache
+  - name:
+      value: Englisch
+      quote: Englisch
+    level:
+      value: C1
+      quote: C1

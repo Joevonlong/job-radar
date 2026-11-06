@@ -9,57 +9,63 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
 endobj
 4 0 obj
-<< /Length 766 >>
+<< /Length 1228 >>
 stream
 BT
 /F1 12 Tf
 14 TL
 72 720 Td
+(Jorin Nebelfenn) Tj
+T*
 (Lebenslauf) Tj
 T*
-(Arvo Kieselmond) Tj
+(Kontakt: jorinnebelfenn@example.invalid) Tj
 T*
-(de-publications@example.invalid) Tj
-T*
-(+49 30 0000000) Tj
-T*
-(Anschrift: Fabelweg 00, 00000 Musterort) Tj
-T*
-(Geburtsdatum: 12/05/1990) Tj
+(+49 30 0000-2019) Tj
 T*
 () Tj
 T*
-(Berufserfahrung) Tj
+(Berufliche Stationen) Tj
 T*
-(Funkelwald Forschung GmbH) Tj
+(seit 01/2021 | Forscher | Funkelwald Forschung GmbH) Tj
 T*
-(Forscher) Tj
+(- Entwickelte drei reproduzierbare Experimente zur Ablaufplanung.) Tj
 T*
-(2018 - 2022) Tj
+(- Verglich Messergebnisse unter wechselnden Lastbedingungen.) Tj
 T*
-(- Entwickelte 3 reproduzierbare Experimente.) Tj
+(- Stellte Ergebnisse in internen Forschungsrunden vor.) Tj
 T*
-(Stack: Rust) Tj
+() Tj
+T*
+(02/2017 - 12/2020 | Wissenschaftlicher Mitarbeiter | Sternmoos Institut) Tj
+T*
+(- Erstellte Modelle fuer simulierte Warteschlangen.) Tj
+T*
+(- Betreute studentische Projekte zur Datenauswertung.) Tj
+T*
+(- Dokumentierte Versuchsaufbau und Grenzen der Ergebnisse.) Tj
 T*
 () Tj
 T*
 (Ausbildung) Tj
 T*
-(Universitaet Morgenkiesel) Tj
+(\(2015-2019\) | Dr Informatik | Universitaet Morgenkiesel) Tj
 T*
-(Dr Informatik) Tj
-T*
-(2014 - 2017) Tj
+(Schwerpunkt: Angewandte Methoden und Teamarbeit) Tj
 T*
 () Tj
 T*
 (Kenntnisse) Tj
 T*
-(Technology: Rust) Tj
+(Programmierung: Rust, Python) Tj
+T*
+(Forschung: Simulation, Versuchsplanung) Tj
 T*
 () Tj
 T*
 (Sprachen) Tj
+T*
+(Deutsch: Muttersprache) Tj
 T*
 (Englisch: B2) Tj
 T*
@@ -67,17 +73,13 @@ T*
 T*
 (Publikationen) Tj
 T*
-(Fiktive Warteschlangen im Nebel) Tj
-T*
-(2021) Tj
+(Warteschlangen im Nebel | 2021) Tj
 T*
 () Tj
 T*
 (Auszeichnungen) Tj
 T*
-(Fiktiver Kieselpreis) Tj
-T*
-(2022) Tj
+(Kieselpreis fuer offene Methoden | 2022) Tj
 T*
 () Tj
 T*
@@ -90,13 +92,13 @@ endobj
 xref
 0 6
 0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
-0000000241 00000 n 
-0000001058 00000 n 
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
+0000000241 00000 n
+0000001521 00000 n
 trailer
 << /Size 6 /Root 1 0 R >>
 startxref
-1128
+1591
 %%EOF

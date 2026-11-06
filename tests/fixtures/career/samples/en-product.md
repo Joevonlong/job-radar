@@ -1,24 +1,31 @@
-# Resume
-Iris Cloudfern
-en-product@example.invalid
-+49 30 0000000
-Address: 00 Imaginary Lane, Fictionville
-Nationality: fictional
+Aven Mistfenn
+Curriculum Vitae
+Kontakt: avenmistfenn@example.invalid
++1 202 555 0100
 
-## Experience
-Moonpebble Software Ltd
-Product Engineer
-2020-02 - 2024-11
-- Built a queue handling 20% more events.
-Stack: TypeScript
+Professional experience
+May 2022 – Present | Senior Product Engineer | Moonpebble Software Ltd
+- Led delivery of an internal planning workspace for five teams.
+- Interviewed staff and turned recurring problems into small releases.
+- Reduced the median time to complete a request by 30 percent.
+
+February 2020 – April 2022 | Product Engineer | Moonpebble Software Ltd
+- Built a queue handling 20 percent more events.
+- Worked with designers to simplify a multi-step form.
+- Added monitoring and a runbook for the support team.
+
+January 2018 – January 2020 | Developer | Cloudmoss Studio Ltd
+- Built accessible interfaces for internal reporting tools.
+- Reviewed changes with colleagues and documented design decisions.
 
 Education
-Cloudfern Institute
-BSc Computing
-2014 - 2017
+(2015–2019) | BSc Computing | Cloudfern Institute
+Focus: applied methods and collaborative practice
 
 Skills
-Technology: TypeScript
+Engineering: TypeScript, SQL
+Product: User interviews, Prototyping
 
 Languages
 English: Native
+German: B1

@@ -1,32 +1,33 @@
-# Lebenslauf
-Arvo Kieselmond
-de-publications@example.invalid
-+49 30 0000000
-Anschrift: Fabelweg 00, 00000 Musterort
-Geburtsdatum: 12/05/1990
+Jorin Nebelfenn
+Lebenslauf
+Kontakt: jorinnebelfenn@example.invalid
++49 30 0000-2019
 
-## Berufserfahrung
-Funkelwald Forschung GmbH
-Forscher
-2018 - 2022
-- Entwickelte 3 reproduzierbare Experimente.
-Stack: Rust
+Berufliche Stationen
+seit 01/2021 | Forscher | Funkelwald Forschung GmbH
+- Entwickelte drei reproduzierbare Experimente zur Ablaufplanung.
+- Verglich Messergebnisse unter wechselnden Lastbedingungen.
+- Stellte Ergebnisse in internen Forschungsrunden vor.
+
+02/2017 – 12/2020 | Wissenschaftlicher Mitarbeiter | Sternmoos Institut
+- Erstellte Modelle fuer simulierte Warteschlangen.
+- Betreute studentische Projekte zur Datenauswertung.
+- Dokumentierte Versuchsaufbau und Grenzen der Ergebnisse.
 
 Ausbildung
-Universitaet Morgenkiesel
-Dr Informatik
-2014 - 2017
+(2015–2019) | Dr Informatik | Universitaet Morgenkiesel
+Schwerpunkt: Angewandte Methoden und Teamarbeit
 
 Kenntnisse
-Technology: Rust
+Programmierung: Rust, Python
+Forschung: Simulation, Versuchsplanung
 
 Sprachen
+Deutsch: Muttersprache
 Englisch: B2
 
 Publikationen
-Fiktive Warteschlangen im Nebel
-2021
+Warteschlangen im Nebel | 2021
 
 Auszeichnungen
-Fiktiver Kieselpreis
-2022
+Kieselpreis fuer offene Methoden | 2022

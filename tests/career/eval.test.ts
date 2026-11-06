@@ -44,7 +44,7 @@ it("dry-runs every fictional text, Markdown and PDF through the real prompt, rou
   expect(lines[0]).toMatchObject({ mode: "dry_scripted_expected_answers", samples: 10, modelQualityMeasured: false });
   expect(lines.filter((line) => line.sample)).toHaveLength(10);
   expect(lines.every((line) => !line.error)).toBe(true);
-  expect(lines.at(-1).total["experience.company"]).toMatchObject({ truePositive: 10, precision: 1, recall: 1 });
+  expect(lines.at(-1).total["experience.company"]).toMatchObject({ truePositive: 24, precision: 1, recall: 1 });
 });
 it("does not reward roles and dates assigned to the wrong company", () => {
   const first = output().experience[0]!;

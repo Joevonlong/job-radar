@@ -1,24 +1,35 @@
+Nela Sternfenn
 Lebenslauf
-Juna Federquell
-de-career-change@example.invalid
-+49 30 0000000
-Anschrift: Fabelweg 00, 00000 Musterort
-Geburtsdatum: 12/05/1990
+Kontakt: nelasternfenn@example.invalid
++49 30 0000-2019
 
-Berufserfahrung
-Mondfalter Handel GmbH
-Projektleiterin
-2022 - present
-- Koordinierte 7 interne Schulungen.
-Stack: TypeScript
+Berufliche Stationen
+seit 01/2022 | Projektleiterin Digitalisierung | Mondfalter Handel GmbH
+- Koordinierte sieben interne Schulungen fuer neue Ablaeufe.
+- Erhob Anforderungen mit Verkauf und Lager und priorisierte Verbesserungen.
+- Begleitete die Einfuehrung eines digitalen Bestandsprozesses.
+
+07/2020 – 12/2021 | Junior Entwicklerin | Wolkental Medien GmbH
+- Entwickelte Formulare fuer eine interne Redaktionsanwendung.
+- Schrieb automatisierte Tests fuer wiederkehrende Eingaben.
+- Arbeitete mit Gestaltung und Redaktion an barrierearmen Oberflaechen.
+
+02/2016 – 06/2020 | Verkaufsberaterin | Mondfalter Handel GmbH
+- Beriet Kundschaft bei der Auswahl saisonaler Produkte.
+- Organisierte Warenpraesentationen und zaehlte Lagerbestaende.
+- Arbeitete neue Teammitglieder in die Kassenablaeufe ein.
 
 Ausbildung
-Hochschule Sternmoos
-BA Kommunikation
-2014 - 2017
+(2015–2019) | BA Kommunikation | Hochschule Sternmoos
+Schwerpunkt: Angewandte Methoden und Teamarbeit
 
 Kenntnisse
-Technology: TypeScript
+Technik: TypeScript, HTML
+Projektarbeit: Anforderungsanalyse, Schulung
 
 Sprachen
 Deutsch: C1
+Englisch: B2
+
+Zertifikate
+Zertifikat Digitale Zusammenarbeit | 2021

@@ -1,24 +1,32 @@
+Mira Wolkenfenn
 Lebenslauf
-Mira Wolkenfels
-de-platform@example.invalid
-+49 30 0000000
-Anschrift: Fabelweg 00, 00000 Musterort
-Geburtsdatum: 12/05/1990
+Kontakt: mirawolkenfenn@example.invalid
++49 30 0000-2019
 
-Berufserfahrung
-Nebelfalter Systeme GmbH
-Plattformentwicklerin
-2020-01 - 2023-03
-- Aufbau eines Dienstes fuer 10 000 000 Anfragen.
-Stack: Go
+Berufliche Stationen
+seit 04/2023 | Senior Plattformentwicklerin | Nebelfalter Systeme GmbH
+- Leitete die Planung einer Plattform fuer interne Datendienste.
+- Reduzierte die durchschnittliche Bereitstellungszeit um 35 Prozent.
+- Begleitete vier Kolleginnen und Kollegen bei Architekturentscheidungen.
+
+01/2020 – 03/2023 | Plattformentwicklerin | Nebelfalter Systeme GmbH
+- Entwickelte einen Dienst fuer 10.000.000 Anfragen pro Monat.
+- Automatisierte die Auslieferung von Anwendungen mit nachvollziehbaren Pruefungen.
+- Dokumentierte Betriebsablaeufe und betreute den Bereitschaftsdienst.
+
+02/2018 – 12/2019 | Softwareentwicklerin | Kieselsteg Digital GmbH
+- Erstellte Schnittstellen fuer die interne Auftragsverwaltung.
+- Fuehrte gemeinsame Codebesprechungen im kleinen Team ein.
+- Untersuchte Fehlermeldungen und verbesserte die Protokollierung.
 
 Ausbildung
-Hochschule Kieselgarten
-BSc Informatik
-2014 - 2017
+(2015–2019) | BSc Informatik | Hochschule Kieselgarten
+Schwerpunkt: Angewandte Methoden und Teamarbeit
 
 Kenntnisse
-Technology: Go
+Programmierung: Go, Python
+Arbeitsweise: Code Review, Moderation
 
 Sprachen
 Deutsch: Muttersprache
+Englisch: C1

@@ -4,20 +4,57 @@ experience:
       value: Moonpebble Software Ltd
       quote: Moonpebble Software Ltd
     role:
+      value: Senior Product Engineer
+      quote: Senior Product Engineer
+    start:
+      value: 2022-05
+      quote: May 2022
+    end:
+      value: present
+      quote: Present
+    bullets:
+      - value: Led delivery of an internal planning workspace for five teams.
+        quote: Led delivery of an internal planning workspace for five teams.
+      - value: Interviewed staff and turned recurring problems into small releases.
+        quote: Interviewed staff and turned recurring problems into small releases.
+      - value: Reduced the median time to complete a request by 30 percent.
+        quote: Reduced the median time to complete a request by 30 percent.
+  - company:
+      value: Moonpebble Software Ltd
+      quote: Moonpebble Software Ltd
+    role:
       value: Product Engineer
       quote: Product Engineer
     start:
       value: 2020-02
-      quote: 2020-02
+      quote: February 2020
     end:
-      value: 2024-11
-      quote: 2024-11
+      value: 2022-04
+      quote: April 2022
     bullets:
-      - value: Built a queue handling 20% more events.
-        quote: Built a queue handling 20% more events.
-    stack:
-      - value: TypeScript
-        quote: TypeScript
+      - value: Built a queue handling 20 percent more events.
+        quote: Built a queue handling 20 percent more events.
+      - value: Worked with designers to simplify a multi-step form.
+        quote: Worked with designers to simplify a multi-step form.
+      - value: Added monitoring and a runbook for the support team.
+        quote: Added monitoring and a runbook for the support team.
+  - company:
+      value: Cloudmoss Studio Ltd
+      quote: Cloudmoss Studio Ltd
+    role:
+      value: Developer
+      quote: Developer
+    start:
+      value: 2018-01
+      quote: January 2018
+    end:
+      value: 2020-01
+      quote: January 2020
+    bullets:
+      - value: Built accessible interfaces for internal reporting tools.
+        quote: Built accessible interfaces for internal reporting tools.
+      - value: Reviewed changes with colleagues and documented design decisions.
+        quote: Reviewed changes with colleagues and documented design decisions.
 education:
   - school:
       value: Cloudfern Institute
@@ -26,16 +63,27 @@ education:
       value: BSc Computing
       quote: BSc Computing
     start:
-      value: "2014"
-      quote: "2014"
+      value: "2015"
+      quote: "2015"
     end:
-      value: "2017"
-      quote: "2017"
+      value: "2019"
+      quote: "2019"
+    summary:
+      value: "Focus: applied methods and collaborative practice"
+      quote: "Focus: applied methods and collaborative practice"
 skills:
-  - group: Technology
+  - group: Engineering
     items:
       - value: TypeScript
         quote: TypeScript
+      - value: SQL
+        quote: SQL
+  - group: Product
+    items:
+      - value: User interviews
+        quote: User interviews
+      - value: Prototyping
+        quote: Prototyping
 languages:
   - name:
       value: English
@@ -43,3 +91,9 @@ languages:
     level:
       value: Native
       quote: Native
+  - name:
+      value: German
+      quote: German
+    level:
+      value: B1
+      quote: B1

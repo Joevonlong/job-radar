@@ -7,17 +7,37 @@ experience:
       value: Community Engineer
       quote: Community Engineer
     start:
-      value: "2023"
-      quote: "2023"
+      value: 2023-01
+      quote: January 2023
     end:
       value: present
-      quote: present
+      quote: Present
     bullets:
-      - value: Organized 9 fictional workshops.
-        quote: Organized 9 fictional workshops.
-    stack:
-      - value: HTML
-        quote: HTML
+      - value: Organised nine workshops for new contributors.
+        quote: Organised nine workshops for new contributors.
+      - value: Built a small documentation site with clear navigation.
+        quote: Built a small documentation site with clear navigation.
+      - value: Collected feedback and prioritised updates with the community.
+        quote: Collected feedback and prioritised updates with the community.
+  - company:
+      value: Pebblefern Design Ltd
+      quote: Pebblefern Design Ltd
+    role:
+      value: Designer
+      quote: Designer
+    start:
+      value: 2019-01
+      quote: January 2019
+    end:
+      value: 2022-12
+      quote: December 2022
+    bullets:
+      - value: Created prototypes for internal learning tools.
+        quote: Created prototypes for internal learning tools.
+      - value: Ran usability sessions and shared observations with developers.
+        quote: Ran usability sessions and shared observations with developers.
+      - value: Maintained a library of reusable interface patterns.
+        quote: Maintained a library of reusable interface patterns.
 education:
   - school:
       value: Mistpebble College
@@ -26,16 +46,27 @@ education:
       value: BA Design
       quote: BA Design
     start:
-      value: "2014"
-      quote: "2014"
+      value: "2015"
+      quote: "2015"
     end:
-      value: "2017"
-      quote: "2017"
+      value: "2019"
+      quote: "2019"
+    summary:
+      value: "Focus: applied methods and collaborative practice"
+      quote: "Focus: applied methods and collaborative practice"
 skills:
-  - group: Technology
+  - group: Design
+    items:
+      - value: Prototyping
+        quote: Prototyping
+      - value: Usability testing
+        quote: Usability testing
+  - group: Web
     items:
       - value: HTML
         quote: HTML
+      - value: CSS
+        quote: CSS
 languages:
   - name:
       value: English
@@ -43,6 +74,12 @@ languages:
     level:
       value: C2
       quote: C2
+  - name:
+      value: German
+      quote: German
+    level:
+      value: B2
+      quote: B2
 custom_sections:
   - title:
       value: Volunteering
@@ -50,21 +87,16 @@ custom_sections:
     items:
       - kind: entry
         heading:
-          value: Imaginary Garden Mentoring
-          quote: Imaginary Garden Mentoring
+          value: Willow Garden Mentoring
+          quote: Willow Garden Mentoring
         date:
           value: "2024"
           quote: "2024"
         bullets: []
-  - title:
-      value: Patents
-      quote: Patents
-    items:
-      - kind: entry
-        heading:
-          value: Fictional cloud sorter
-          quote: Fictional cloud sorter
-        date:
-          value: "2025"
-          quote: "2025"
-        bullets: []
+certifications:
+  - name:
+      value: Community Facilitation Certificate
+      quote: Community Facilitation Certificate
+    date:
+      value: "2023"
+      quote: "2023"

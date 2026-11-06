@@ -1,24 +1,30 @@
+Liva Farnfenn
 Lebenslauf
-Nela Traumwald
-de-two-column@example.invalid
-+49 30 0000000
-Anschrift: Fabelweg 00, 00000 Musterort
-Geburtsdatum: 12/05/1990
+Kontakt: livafarnfenn@example.invalid
++49 30 0000-2019
 
-Berufserfahrung
-Drachenmoos Labor GmbH
-Dateningenieurin
-2021-03 - 2023-08
-- Senkung der Laufzeit um 40%.
-Stack: SQL
+Berufliche Stationen
+seit 03/2021 | Dateningenieurin | Drachenmoos Labor GmbH
+- Verkuerzte die Laufzeit eines Datenlaufs um 40 Prozent.
+- Pruefte Datenqualitaet vor der monatlichen Bereitstellung.
+- Stimmte Datenmodelle mit den Berichtsteams ab.
+
+01/2018 – 02/2021 | Analystin | Nebelgarten Analyse GmbH
+- Erstellte regelmaessige Auswertungen fuer interne Teams.
+- Dokumentierte Kennzahlen und ihre Berechnungsregeln.
+- Erklaerte Abweichungen in gemeinsamen Besprechungen.
 
 Ausbildung
-Institut Farnwolke
-BSc Mathematik
-2014 - 2017
+(2015–2019) | BSc Mathematik | Institut Farnwolke
+Schwerpunkt: Angewandte Methoden und Teamarbeit
 
 Kenntnisse
-Technology: SQL
+Daten: SQL, Python
+Methoden: Modellierung, Dokumentation
 
 Sprachen
 Deutsch: C2
+Englisch: B2
+
+Weiterbildung
+Schuljahr 2020/21: Datenwerkstatt | 2021
