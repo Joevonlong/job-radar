@@ -2,10 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { parse } from "yaml";
 
 import { createAiRouter, createDefaultProviders, createProvider } from "../src/lib/ai";
 import { loadConfig } from "../src/lib/config";
+import { parseConfigYaml } from "../src/lib/config/yaml-options";
 import { buildCareerExtractPrompt, careerExtractOutputSchema, type CareerExtractOutput } from "../src/lib/career/extract/prompt";
 import { draftFields, verifyCareerExtract } from "../src/lib/career/extract/verify";
 import { confirmedOutbound, NO_STORED_VALUES } from "../src/lib/outbound/outbound";
@@ -68,7 +68,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
   const samples = sources.map((file) => {
     if (!formatOfName(file)) throw new Error("sample_only");
     const expectedFile = file.endsWith(".pdf") ? `${file}.expected.yaml` : file.replace(/\.(?:txt|md)$/, ".expected.yaml");
-    const expected = careerExtractOutputSchema.parse(parse(fs.readFileSync(samplePath(expectedFile), "utf8")));
+    const expected = careerExtractOutputSchema.parse(parseConfigYaml(fs.readFileSync(samplePath(expectedFile), "utf8")));
     return { file, expected };
   });
   const settings = loadConfig("career");

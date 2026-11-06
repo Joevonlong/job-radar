@@ -1,11 +1,12 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
-import { parse, stringify } from "yaml";
+import { stringify } from "yaml";
 import { z } from "zod";
 
 import { commitConfigFile } from "@/lib/config/atomic";
 import { loadConfig } from "@/lib/config";
 import { readUserFile } from "@/lib/config/read-user-file";
+import { parseConfigYaml } from "@/lib/config/yaml-options";
 import { withFileLock } from "@/lib/config/write";
 import { currentConfigWriteLock, lockLostError, withConfigWriteLock } from "@/lib/config/write-lock";
 import { CareerStoreError } from "../contact/errors";
@@ -33,7 +34,7 @@ async function draftIds(): Promise<number[]> {
 
 export async function readCareerDraft(id: number): Promise<CareerDraft> {
   try {
-    const draft = careerDraftSchema.parse(parse(readUserFile(careerDraftPath(id)).toString("utf8")));
+    const draft = careerDraftSchema.parse(parseConfigYaml(readUserFile(careerDraftPath(id)).toString("utf8")));
     if (draft.request_id !== id) throw new CareerStoreError("draft_invalid");
     return draft;
   } catch (error) {

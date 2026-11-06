@@ -10,6 +10,7 @@ const REPO = path.resolve(import.meta.dirname, "../..");
 const ALLOWED: Record<string, string> = {
   "src/app/career/actions.ts": "serializes validated profile values for a local version diff",
   "src/lib/career/contact/store.ts": "strict local contact file without config overlays or history",
+  "src/lib/career/extract/draft-store.ts": "serializes validated career extraction drafts for local storage",
   "src/lib/career/store/profile.ts": "strict local career profile format, independent of layered config",
   "src/lib/career/store/history.ts": "strict local profile history versions, not config files",
   "src/lib/config/yaml-options.ts": "the one way config YAML is parsed",

@@ -7,9 +7,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Career extraction.** Preview and review a résumé or self-description as a career profile draft before adopting it. See `docs/career-profile.md`.
-
-- **Career profile (optional, off by default).** A local profile on `/career`, reached from a card on **My profile**: edit your experience and other sections by hand, keep several wordings of the same text, look at and restore earlier versions, and delete it all. Contact details are kept in a separate file. Manual editing sends nothing to AI and matching does not change. Turn it on in `career.yaml`. See `docs/career-profile.md`.
+- **Career profile (optional, off by default).** A local profile on `/career`, reached from a card on **My profile**: edit your experience and other sections by hand, keep several wordings of the same text, look at and restore earlier versions, and delete it all. Contact details are kept in a separate file. Upload or paste a résumé or self-description, check exactly what is sent to AI in a preview (contact details are replaced), and review the extracted entries before adopting them; matching does not change. Adds the `career_extract` control request kind (migration). Turn it on in `career.yaml`. See `docs/career-profile.md`.
 - **Gmail replies (optional, off by default).** Reads one Gmail label read-only with local rules and suggests status changes on `/pipeline`, each confirmed by you and undoable. No AI reads the mails and no mail content leaves the machine. See `docs/gmail-replies.md`. Adds the table `email_replies`.
 - **Merge duplicate companies.** `pnpm companies:merge` lists likely duplicate company rows and merges the pairs you confirm, with a dry run and an undo; a merged spelling no longer grows its row back in later cycles. See `docs/extraction.md`. Adds the table `company_merges` and `company.duplicate_tail_words` in `pipeline.yaml`.
 

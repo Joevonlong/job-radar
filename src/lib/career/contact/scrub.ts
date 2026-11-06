@@ -1,7 +1,6 @@
-import { parse } from "yaml";
-
 import { loadConfig } from "@/lib/config";
 import { readUserFile } from "@/lib/config/read-user-file";
+import { parseConfigYaml } from "@/lib/config/yaml-options";
 import { prepareScrub, scrubFinal, scrubOutbound, type ScrubKind, type ScrubRules, type StoredValues } from "@/lib/outbound/scrub";
 import { confirmedOutbound, toOutbound } from "@/lib/outbound/outbound";
 import { careerContactSchema, emptyContact, type CareerContact } from "../schema/contact";
@@ -15,7 +14,7 @@ function contactForScrub(): CareerContact {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyContact();
     throw new CareerStoreError("contact_unreadable");
   }
-  try { return careerContactSchema.parse(parse(source)); }
+  try { return careerContactSchema.parse(parseConfigYaml(source)); }
   catch { throw new CareerStoreError("contact_invalid"); }
 }
 

@@ -12,7 +12,7 @@ import { currentScoresBackfill } from "../src/lib/db/current-scores-config";
  * latest cycle". A backfill ends by itself too (see BACKFILL_GATE_LOCK). The real handler is covered by tests/integration/control.test.ts.
  */
 import fs from "node:fs";
-import { parse } from "yaml";
+import { parseConfigYaml } from "../src/lib/config/yaml-options";
 import { careerExtractOutputSchema } from "../src/lib/career/extract/prompt";
 import { createCareerExtractHandler } from "../src/lib/career/extract/handler";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -336,7 +336,7 @@ const careerAi: AiTransport = {
   plannedModel: () => "e2e-model",
   async call() {
     await sleep(STUB_TEST_MS);
-    const output = careerExtractOutputSchema.parse(parse(fs.readFileSync(new URL("../tests/fixtures/career/samples/en-research.expected.yaml", import.meta.url), "utf8")));
+    const output = careerExtractOutputSchema.parse(parseConfigYaml(fs.readFileSync(new URL("../tests/fixtures/career/samples/en-research.expected.yaml", import.meta.url), "utf8")));
     output.experience[0]!.bullets = [
       { value: "Published 3 reproducible benchmarks.", quote: "Published 3 reproducible benchmarks." },
       { value: "Cut costs by 60%.", quote: "Published 3 reproducible benchmarks." },
