@@ -3,11 +3,12 @@
  * `profile`: the title is "Company – Role", "what" the summary and bullets, metrics the figures found in them, skills the
  * stack, period the dates. Texts arrive through `scrub` and are cut to the writer.yaml story limits after that. The user's
  * own stories are never touched; a profile story the user may have edited is offered unchecked; one whose entry left the
- * profile is kept unless the user removes it. Pure.
+ * profile is kept unless the user removes it. Updating a profile story keeps the result, language and tags the user added;
+ * metrics and skills stop at the file's list bound. Pure.
  */
 import { isDeepStrictEqual } from "node:util";
 
-import type { Story } from "@/lib/config/schemas/stories";
+import { STORY_FILE_BOUNDS, type Story } from "@/lib/config/schemas/stories";
 import type { WriterStoriesLimits } from "@/lib/config/schemas/writer";
 
 import { primaryText, type CareerProfile } from "../schema/profile";
@@ -94,14 +95,15 @@ export function projectStories({ profile, current, limits, scrub, figures }: Pro
     const what = whatText(parts, limits.text_max_chars);
     const allMetrics = [...new Set(parts.flatMap((part) => figures(part)).map((figure) => figure.trim()))].filter((item) => item !== "");
     const allSkills = [...new Set(entry.stack.map((item) => scrub(item).trim()))].filter((item) => item !== "");
-    const metrics = allMetrics.filter(fits);
-    const skills = allSkills.filter(fits);
+    const metrics = allMetrics.filter(fits).slice(0, STORY_FILE_BOUNDS.listItems);
+    const skills = allSkills.filter(fits).slice(0, STORY_FILE_BOUNDS.listItems);
     const id = `${PROFILE_STORY_PREFIX}${entry.id.replace(/^exp_/, "")}`;
     projected.add(id);
     const when = period(entry.start, entry.end);
-    const proposed: Story = { id, title: title.text, what: what.text, metrics, skills, tags: [], source: "profile", ...(when === undefined ? {} : { period: when }) };
-    const truncated = title.truncated || what.truncated || metrics.length < allMetrics.length || skills.length < allSkills.length;
     const existing = byId.get(id) ?? null;
+    const kept = existing === null ? {} : { ...(existing.result === undefined ? {} : { result: existing.result }), ...(existing.language === undefined ? {} : { language: existing.language }) };
+    const proposed: Story = { id, title: title.text, what: what.text, metrics, skills, tags: existing?.tags ?? [], source: "profile", ...(when === undefined ? {} : { period: when }), ...kept };
+    const truncated = title.truncated || what.truncated || metrics.length < allMetrics.length || skills.length < allSkills.length;
     if (existing === null) changes.push({ id, kind: "new", current: null, proposed, defaultSelected: true, truncated });
     else if (isDeepStrictEqual(existing, proposed)) changes.push({ id, kind: "unchanged", current: existing, proposed, defaultSelected: false, truncated });
     else changes.push({ id, kind: "changed", current: existing, proposed, defaultSelected: false, truncated });

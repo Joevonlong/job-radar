@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
 
@@ -9,18 +10,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { INK_LINK } from "@/components/ui/ink-link";
+import { applyConfirmResultSchema, applyPreviewSchema } from "@/lib/career/apply/schema";
 import type { ApplyConfirmResult, ApplyPreview, ApplySelection } from "@/lib/career/apply/service";
 import type { MeFieldChange } from "@/lib/career/apply/project-me";
 import type { StoryChange } from "@/lib/career/apply/project-stories";
 
 const ROUTE = "/api/career/apply";
-const objectOf = <T,>() => z.custom<T>((value) => typeof value === "object" && value !== null);
 const responseSchema = z.union([
-  z.object({ ok: z.literal(true), preview: objectOf<ApplyPreview>() }),
-  z.object({ ok: z.literal(true), result: objectOf<ApplyConfirmResult>() }),
+  z.object({ ok: z.literal(true), preview: applyPreviewSchema }),
+  z.object({ ok: z.literal(true), result: applyConfirmResultSchema }),
   z.object({ ok: z.literal(false), error: z.string() }),
 ]);
-type ApplyResponse = z.infer<typeof responseSchema>;
+type ApplyResponse =
+  | { ok: true; preview: ApplyPreview }
+  | { ok: true; result: ApplyConfirmResult }
+  | { ok: false; error: string };
 
 const ERRORS = ["me_required", "profile_empty", "too_many", "disabled", "contact_invalid", "contact_unreadable", "profile_invalid", "config_error", "invalid", "unavailable"] as const;
 type ApplyError = (typeof ERRORS)[number];
@@ -30,7 +34,7 @@ async function post(body: unknown): Promise<ApplyResponse> {
   try {
     const response = await fetch(ROUTE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const parsed = responseSchema.safeParse(await response.json());
-    return parsed.success ? parsed.data : { ok: false, error: "unavailable" };
+    return parsed.success ? (parsed.data as ApplyResponse) : { ok: false, error: "unavailable" };
   } catch {
     return { ok: false, error: "unavailable" };
   }
@@ -46,6 +50,7 @@ function meValue(change: MeFieldChange, value: MeFieldChange["current"]): string
 /** The "apply to matching" step of the career page: preview, choose, confirm. */
 export function ApplyPanel({ changedSinceApply }: { changedSinceApply: boolean }) {
   const t = useTranslations("career.apply");
+  const router = useRouter();
   const [preview, setPreview] = useState<ApplyPreview | null>(null);
   const [result, setResult] = useState<Extract<ApplyConfirmResult, { status: "applied" }> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +83,7 @@ export function ApplyPanel({ changedSinceApply }: { changedSinceApply: boolean }
     if (response.result.status === "applied") {
       setResult(response.result);
       setPreview(null);
+      router.refresh();
     }
   }
 
@@ -143,9 +149,9 @@ export function ApplyPanel({ changedSinceApply }: { changedSinceApply: boolean }
                   </span>
                 </label>
               ))}
-              {preview.me.languagesNotApplied.length > 0 ? <p className="text-ink-3 text-body-sm">{t("languagesNotApplied", { names: preview.me.languagesNotApplied.join(", ") })}</p> : null}
             </div>
           ) : null}
+          {preview.me.languagesNotApplied.length > 0 ? <p className="text-ink-3 text-body-sm">{t("languagesNotApplied", { names: preview.me.languagesNotApplied.join(", ") })}</p> : null}
           {storyChanges.length > 0 ? (
             <div className="flex flex-col gap-2">
               <h3 className="text-body font-semibold">{t("storiesTitle")}</h3>

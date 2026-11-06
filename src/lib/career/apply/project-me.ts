@@ -10,7 +10,9 @@ import type { MeConfig } from "@/lib/config/schemas/me";
 import { primaryText, type CareerProfile } from "../schema/profile";
 import { yearsOfExperience } from "./years";
 
-export const ME_FIELDS = ["languages", "skills", "years_experience", "summary"] as const;
+import { ME_FIELDS } from "./schema";
+
+export { ME_FIELDS };
 export type MeField = (typeof ME_FIELDS)[number];
 export type MeSelection = Record<MeField, boolean>;
 
@@ -31,13 +33,13 @@ export interface MeProjection {
 
 const ME_SUMMARY_MAX_CHARS = 4000;
 
-function languages(profile: CareerProfile): { value: MeConfig["languages"]; notApplied: string[] } {
+function languages(profile: CareerProfile, scrub: (text: string) => string): { value: MeConfig["languages"]; notApplied: string[] } {
   const seen = new Set<string>();
   const value: MeConfig["languages"] = [];
   const notApplied: string[] = [];
   for (const language of profile.languages) {
     if (language.code === null || language.cefr === null) {
-      notApplied.push(language.name);
+      notApplied.push(scrub(language.name).trim());
       continue;
     }
     if (seen.has(language.code)) continue;
@@ -64,7 +66,7 @@ function skills(profile: CareerProfile, scrub: (text: string) => string): MeConf
 
 /** What the profile proposes for each me.yaml field, against the current values. `today` is an ISO date. */
 export function projectMe(profile: CareerProfile, current: MeConfig, today: string, scrub: (text: string) => string): MeProjection {
-  const projectedLanguages = languages(profile);
+  const projectedLanguages = languages(profile, scrub);
   const years = yearsOfExperience(profile.experience, today);
   const summaryText = scrub(primaryText(profile.summary)).trim();
   const summary = summaryText.length > ME_SUMMARY_MAX_CHARS ? summaryText.slice(0, ME_SUMMARY_MAX_CHARS) : summaryText;

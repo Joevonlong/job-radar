@@ -59,6 +59,11 @@ describe("me.yaml projection", () => {
     const projection = projectMe(profile, me, "2026-11-07", (value) => value.replace("TypeScript", "[name]"));
     expect(JSON.stringify(projection)).not.toContain("TypeScript");
   });
+
+  it("scrubs the names of languages it cannot apply", () => {
+    const projection = projectMe(profile, me, "2026-11-07", (value) => value.replace("Klingon", "[name]"));
+    expect(projection.languagesNotApplied).toEqual(["[name]"]);
+  });
 });
 
 describe("stories.yaml projection", () => {
@@ -82,6 +87,23 @@ describe("stories.yaml projection", () => {
     const next = applyStoriesSelection(current, projection, { write: ["career-aaaaaaaaaa"], remove: ["career-zzzzzzzzzz"] });
     expect(next.map((story) => story.id)).toEqual(["my-story", "career-aaaaaaaaaa"]);
     expect(next[1]!.what).toContain("Ran the platform team.");
+  });
+
+  it("keeps the result, language and tags the user added when it updates a profile story", () => {
+    const edited: Story = { id: "career-aaaaaaaaaa", title: "Acme – Engineer", what: "Edited by me", result: "Shipped on time", language: "en", metrics: [], skills: [], tags: ["platform"], source: "profile" };
+    const projection = projectStories({ profile: career({ experience: [experience("exp_aaaaaaaaaa")] }), current: [edited], limits, scrub: same, figures: shown });
+    const next = applyStoriesSelection([edited], projection, { write: ["career-aaaaaaaaaa"], remove: [] });
+    expect(next[0]).toMatchObject({ what: expect.stringContaining("Ran the platform team."), result: "Shipped on time", language: "en", tags: ["platform"] });
+  });
+
+  it("stops metrics and skills at the story list bound and marks the story truncated", () => {
+    const bullets = Array.from({ length: 30 }, (_, index) => text(`Grew revenue by ${index + 10}% and cut cost by ${index + 50}%.`));
+    const stack = Array.from({ length: 60 }, (_, index) => `Tool${index}`);
+    const projection = projectStories({ profile: career({ experience: [experience("exp_aaaaaaaaaa", { bullets, stack })] }), current: [], limits: { ...limits, text_max_chars: 20_000 }, scrub: same, figures: shown });
+    const story = projection.changes[0]!;
+    expect(story.proposed!.metrics.length).toBeLessThanOrEqual(50);
+    expect(story.proposed!.skills).toHaveLength(50);
+    expect(story.truncated).toBe(true);
   });
 
   it("lists an experience without summary or bullets as not applied", () => {

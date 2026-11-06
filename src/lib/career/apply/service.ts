@@ -26,22 +26,12 @@ import { CareerStoreError } from "../contact/errors";
 import { hasCareerContent } from "../schema/profile";
 import { loadApplyState, saveApplyState } from "../store/apply-state";
 import { loadCareerProfile } from "../store/profile";
-import { applyMeSelection, defaultMeSelection, ME_FIELDS, projectMe, type MeProjection, type MeSelection } from "./project-me";
+import { applyMeSelection, defaultMeSelection, projectMe, type MeProjection, type MeSelection } from "./project-me";
 import { applyStoriesSelection, defaultStoriesSelection, projectStories, type StoriesProjection, type StoriesSelection } from "./project-stories";
+import type { applyBasesSchema, applySelectionSchema } from "./schema";
 
-const idList = z.array(z.string().max(200)).max(5000);
-export const applySelectionSchema = z.strictObject({
-  me: z.strictObject(Object.fromEntries(ME_FIELDS.map((field) => [field, z.boolean()])) as Record<(typeof ME_FIELDS)[number], z.ZodBoolean>),
-  stories: z.strictObject({ write: idList, remove: idList }),
-});
+export { applyBasesSchema, applySelectionSchema } from "./schema";
 export type ApplySelection = z.infer<typeof applySelectionSchema>;
-
-export const applyBasesSchema = z.strictObject({
-  profile: z.string().max(200),
-  me: z.string().max(200),
-  stories: z.string().max(200),
-  staleCount: z.number().int().min(0),
-});
 export type ApplyBases = z.infer<typeof applyBasesSchema>;
 
 export type ApplyErrorCode = "me_required" | "profile_empty" | "too_many";
