@@ -607,6 +607,17 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 `config_version: 2` 使用标准分层覆盖格式；初始完整文件格式为版本 1，可用
 `pnpm config:migrate --write --convert-overlays` 转成覆盖层。
 
+`document.max_documents` 限制简历副本数量（1–1000）；`document.image_max_bytes` 限制每张本地 JPEG/PNG
+照片或签名大小（最多 20 MB）；`document.max_request_bytes` 配置预览和保存的请求体上限（最多 50 MB）。
+`document.defaults` 提供缺失偏好文件时的 `lang`（en/de）、`theme`（minimal/band/classic/compact/split）、
+`accent`、`pages`（1–10）、`paper`（a4/letter）、`density`（compact/normal/relaxed）。
+`preview.debounce_ms` 配置预览延迟（50–10000 毫秒）。这些后端设置尚未提供编辑器或预览路由。
+
+文档保存在 profile 目录的 `career/documents/`，保留来源引用并独立编辑。
+`history.keep_versions` 分别约束每份文档在 `career/history/documents/` 下的历史及档案历史。
+联系方式仅在渲染时合并，不进入文档或其历史文件；偏好和本地图片没有历史。
+删除全部职业数据会一并删除文档、偏好、图片和历史。
+
 提取配置包括：顶层 `timeout_seconds`、`expiry_grace_seconds`、`queue_timeout_seconds`；
 `import` 下的 `formats`、`max_file_bytes`、`upload_timeout_seconds`、`max_chars`、`min_chars`、`pdf_timeout_seconds`、
 `pdf_max_memory_mb`、`max_concurrent_uploads`、`draft_ttl_days`、`max_pending_drafts`、`output_truncated_share`、

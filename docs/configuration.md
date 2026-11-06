@@ -825,6 +825,17 @@ limit saves. `history.keep_versions` limits profile history; contact details hav
 every key and rejects unknown keys. `config_version: 2` uses the standard layered overlay format; the initial whole-file
 format is version 1 and can be converted with `pnpm config:migrate --write --convert-overlays`.
 
+`document.max_documents` limits saved résumé copies (1–1000). `document.image_max_bytes` limits each local JPEG or PNG
+photo or signature (up to 20 MB), and `document.max_request_bytes` configures the preview/save body limit (up to 50 MB).
+`document.defaults` supplies `lang` (en/de), `theme` (minimal/band/classic/compact/split), `accent`, `pages` (1–10),
+`paper` (a4/letter) and `density` (compact/normal/relaxed) for missing preferences. `preview.debounce_ms` configures the
+preview delay (50–10000 ms). These backend settings do not add an editor or preview route.
+
+Documents live in `career/documents/` under the profile directory and retain source references while being edited
+independently. `history.keep_versions` applies separately to each document under `career/history/documents/` as well
+as the profile. Contact is merged only for rendering; it is absent from document and history files. Preferences and
+local images have no history. Deleting all career data removes documents, preferences, images and history together.
+
 Extraction settings are `timeout_seconds`, `expiry_grace_seconds`, `queue_timeout_seconds`,
 `import.formats`, `max_file_bytes`, `upload_timeout_seconds`, `max_chars`, `min_chars`, `pdf_timeout_seconds`,
 `pdf_max_memory_mb`, `max_concurrent_uploads`, `draft_ttl_days`, `max_pending_drafts`, `output_truncated_share`,
