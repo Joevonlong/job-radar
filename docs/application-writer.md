@@ -50,11 +50,9 @@ The **Get stories from what you already wrote** card below the library has the A
   a text layer: a scan has none and gets "no text to extract from", so paste the text instead. The file is read in memory
   and never stored, not even in a temporary folder.
 
-A text longer than `import.max_chars` is cut and the card says so. These buttons need the writer switched on, and nothing is
-sent until you press them; the card names the providers of the `story_extract` task (`ai.yaml`). The AI is told to leave out
-your name, contact details and ID numbers, but it can miss one: a draft that seems to hold an email address or phone number
-is marked, as a story is. What remains of the text, and where, is in
-[Story extraction](privacy.md#story-extraction).
+These actions require the writer to be enabled and open an editable preview before sending. Detected contact details and links are replaced, and items to check are highlighted. If the source exceeds the preview limit or PDF pages were not read, the preview shows a general shortening warning; it does not identify unread pages. The prepared preview is cut to `import.max_chars`. Check all the text: detection can miss details or replace the wrong text. You can enter a name and address to remove them, or restore a wrongly guessed name. Only the text you confirm goes to the `story_extract` providers named on the card (`ai.yaml`). A final check may ask you to review again; confirmed text longer than `import.max_chars` is refused rather than cut.
+
+Story extraction works independently of the career profile switch. It does not use stored contact values for replacement or read the career profile folder while that profile is off. Requests queued by an older version without a confirmed preview fail and ask you to open the preview again; existing story drafts remain available. Drafts that appear to contain an email address or phone number are marked. See [Story extraction](privacy.md#story-extraction) for what may remain of the text.
 
 The results wait in **drafts to review**. `stories.yaml` does not change until you adopt one. For each draft:
 

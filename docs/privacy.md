@@ -70,10 +70,9 @@ The confirmed text stays in a control request while queued or running and is cle
 
 ### Story extraction
 
-The buttons in the stories card on `/me` send your profile summary and skills, a text you paste or the text of your résumé to
-the providers of the `story_extract` task in `ai.yaml`, only when you press them and only while `writer.yaml: enabled` is true.
-No web search. An uploaded file is read in memory and never written to disk, not even to a temporary folder; its name is not
-kept. Its text goes into one `story_extract` control request, where it stays until the request ends: every way it ends (done,
+With `writer.yaml: enabled`, the stories card on `/me` prepares an editable preview of your profile summary and skills, pasted text or résumé. Only the preview text you confirm is sent to the `story_extract` providers in `ai.yaml`; there is no web search. Detected contact details and links are replaced, but detection can miss details, so review all the text. Story extraction does not use stored contact values for replacement, regardless of the career profile switch. You can enter a name and address in the preview for removal. When the career profile is off, it does not read that profile folder.
+
+An uploaded file is read in memory and never written to disk, not even to a temporary folder; its name is not kept. The confirmed text goes into one `story_extract` control request, where it stays until the request ends: every way it ends (done,
 failed, expired, cut off by a restart) clears the text in the same statement and leaves only the SHA-256 and the length. A
 request is not retried after a restart.
 
