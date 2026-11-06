@@ -336,7 +336,7 @@ const careerAi: AiTransport = {
   plannedModel: () => "e2e-model",
   async call() {
     await sleep(STUB_TEST_MS);
-    const output = careerExtractOutputSchema.parse(parseConfigYaml(fs.readFileSync(new URL("../tests/fixtures/career/samples/en-research.expected.yaml", import.meta.url), "utf8")));
+    const output = careerExtractOutputSchema.parse(parseConfigYaml(fs.readFileSync(new URL("../tests/fixtures/career/extraction-preview.expected.yaml", import.meta.url), "utf8")));
     output.experience[0]!.bullets = [
       { value: "Published 3 reproducible benchmarks.", quote: "Published 3 reproducible benchmarks." },
       { value: "Cut costs by 60%.", quote: "Published 3 reproducible benchmarks." },

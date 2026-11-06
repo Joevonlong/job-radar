@@ -88,7 +88,7 @@ test("preview, extract, review, adopt, wording, restore and delete at mobile wid
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/career");
     const extraction = page.getByTestId("career-extraction");
-    const source = fs.readFileSync(new URL("../tests/fixtures/career/samples/en-research.txt", import.meta.url), "utf8");
+    const source = fs.readFileSync(new URL("../tests/fixtures/career/extraction-preview.txt", import.meta.url), "utf8");
     await extraction.getByTestId("career-extract-source").fill(source);
     await extraction.getByRole("button", { name: "生成预览", exact: true }).click();
     const preview = extraction.getByTestId("send-preview");
