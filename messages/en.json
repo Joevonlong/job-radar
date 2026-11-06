@@ -8017,6 +8017,9 @@
     "migrated": "Database migrations complete."
   },
   "career": {
+    "documents": {
+      "defaultTitle": "General résumé"
+    },
     "title": "Career profile",
     "description": "Build your local career profile by reviewing an extraction or editing entries and alternative wordings.",
     "disabled": "Career profile is not enabled.",

@@ -8017,6 +8017,9 @@
     "migrated": "数据库迁移已完成。"
   },
   "career": {
+    "documents": {
+      "defaultTitle": "通用简历"
+    },
     "title": "职业档案",
     "description": "通过提取审核或手动编辑，维护本机职业档案与多种写法。",
     "disabled": "职业档案尚未开启。",

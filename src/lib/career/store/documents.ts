@@ -9,7 +9,7 @@ import { readUserFile } from "@/lib/config/read-user-file";
 import { withFileLock } from "@/lib/config/write";
 import { lockLostError, withConfigWriteLock } from "@/lib/config/write-lock";
 import { CareerStoreError } from "../contact/errors";
-import { applyDocumentEdit, prepareDocumentCreation } from "../document/edit";
+import { applyDocumentEdit, applyDocumentRestore, prepareDocumentCreation } from "../document/edit";
 import { documentIdSchema, parseStoredDocument, type CareerDocument } from "../schema/document";
 import { listVersions, prune, versionIdSchema, writeVersion, type CareerVersion } from "./history";
 import { careerDocumentHistoryDir, careerDocumentPath, careerDocumentsDir } from "./paths";
@@ -79,12 +79,22 @@ export async function createDocument(raw: unknown): Promise<Extract<DocumentSave
 }
 
 export async function saveDocument(id: string, incoming: unknown, { baseHash }: { baseHash: string }): Promise<DocumentSaveResult> {
+  return persistDocument(id, baseHash, (current) => applyDocumentEdit(current, incoming, new Date().toISOString()));
+}
+
+export async function restoreDocumentVersion(id: string, version: string, { baseHash }: { baseHash: string }): Promise<DocumentSaveResult> {
+  return persistDocument(id, baseHash, async (current) => applyDocumentRestore(current, await readDocumentVersion(id, version), new Date().toISOString()));
+}
+
+async function persistDocument(
+  id: string, baseHash: string, edit: (current: CareerDocument) => CareerDocument | Promise<CareerDocument>,
+): Promise<DocumentSaveResult> {
   const file = careerDocumentPath(id);
   return withFileLock(file, async () => {
     const current = await loadDocument(id);
     if (baseHash !== current.baseHash) return { ok: false, code: "stale" };
     const config = reloadConfig("career");
-    const edited = applyDocumentEdit(current.document, incoming, new Date().toISOString());
+    const edited = await edit(current.document);
     const unchanged = stringify({ ...edited, updated_at: current.document.updated_at }) === stringify(current.document);
     const document = unchanged ? current.document : edited;
     const text = stringify(document);

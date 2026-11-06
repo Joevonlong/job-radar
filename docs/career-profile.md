@@ -2,7 +2,7 @@
 
 [中文](career-profile.zh.md)
 
-The optional career profile is a local library of career facts and alternative wordings. You can edit it manually or extract a reviewable draft from your own text. It does not generate or export résumés. It is independent of the
+The optional career profile is a local library of career facts and alternative wordings. You can edit it manually or extract a reviewable draft from your own text. The profile editor does not export résumés. It is independent of the
 application writer and does not change matching, scores or the experience library on **My profile**.
 
 ## Turn it on
@@ -52,10 +52,34 @@ All career data is under `data/profile/career/` (or the configured profile direc
 | `profile.yaml` | Facts, text and alternative wordings; no contact fields |
 | `contact.yaml` | Name, address, location, email, phone, work authorization, availability and contact links |
 | `history/profile/<utc>-<sha8>.yaml` | Saved profile versions, newest first in the interface |
+| `documents/<id>.yaml` | Independent résumé documents, layout and optional letter; no contact fields |
+| `history/documents/<id>/<utc>-<sha8>.yaml` | Saved document versions |
+| `preferences.yaml` | Layout defaults for newly created documents, emphasis and tone |
+| `photo.png` / `photo.jpg`, `signature.png` / `signature.jpg` | Shared document images |
 
 Files written by the app have mode `0600`. The directory is created on the first save. Contact details have a separate
 save button and stale-file check. They are overwritten without history: old contact values are never copied into career
 history. The optional contact photo field is reserved; this editor does not use images.
+
+## Document actions and preview API
+
+Document server actions in `src/app/career/documents/actions.ts` create a general résumé from a nonempty saved profile,
+list and edit documents, restore versions and manage preferences and images. Changed text becomes user wording;
+saves and restores require the current file hash. A restore appends a version through the same save path, including
+when an entry has been removed since the selected version. New documents use the current preferences; existing
+documents keep their own layout. An unreadable source profile returns a warning without blocking document loading
+or saving. Deleting a document requires literal confirmation and removes its history.
+
+`POST /api/career/documents/preview` accepts JSON `{ document, doc: "resume" | "letter" }`, including unsaved documents
+with empty ids. It projects included content and loads contact details and shared images only for the in-memory HTML
+render. It writes no files. Automatic dates use the configured display time zone. Responses contain either HTML or
+machine error codes; render issues contain paths and codes only.
+
+`POST /api/career/images?kind=photo|signature` accepts a raw `application/octet-stream` body. PNG and JPEG are detected
+from magic bytes; unsupported types return 415 and oversized bodies return 413. `DELETE` at the same URL removes that
+shared image. Documents can hide the photo with `hide_contact`. Request and image byte limits come from
+`career.yaml: document`; request timeouts use `import.upload_timeout_seconds`. Both APIs send `Cache-Control: no-store`.
+All document actions and these APIs check the career gate before reading input or career files; disabled APIs return 409.
 
 The contact file is not sent to AI. A city or other personal detail in source text can still be sent if it remains in the confirmed preview. The manual editor sends no career content to AI, Telegram or MCP and writes no database profile snapshots. Profile text can itself contain
 contact details; its warning is advisory. Saved files, including contact details, can remain in backups.

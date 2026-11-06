@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { applyDocumentEdit } from "@/lib/career/document/edit";
+import { applyDocumentEdit, applyDocumentRestore } from "@/lib/career/document/edit";
 import { newId } from "@/lib/career/schema/ids";
 import { parseStoredDocument } from "@/lib/career/schema/document";
 import { document, NOW } from "./document-fixtures";
@@ -36,4 +36,23 @@ it("assigns new entry, skill and text ids and removes client provenance from new
   expect(edited.projects.at(-1)).toMatchObject({ id: expect.stringMatching(/^ent_/), source: null, tagline: { id: expect.stringMatching(/^dtx_/), source: null, origin: "user" } });
   expect(edited.skills[0]!.items.at(-1)).toMatchObject({ id: expect.stringMatching(/^itm_/), source: null });
   expect(edited.custom_sections[1]!.items.at(-1)).toMatchObject({ source: null, text: { origin: "user", source: null } });
+});
+
+it("restores removed entries and section references from trusted history while preserving current identity", () => {
+  const version = document();
+  version.layout.sections = [{ custom: version.custom_sections[0]!.id }, "experience"];
+  const current = structuredClone(version);
+  current.experience = [];
+  current.custom_sections = [];
+  current.layout.sections = ["experience"];
+  current.summary!.text = "Newer wording";
+  current.updated_at = "2026-02-01T00:00:00Z";
+  expect(() => applyDocumentEdit(current, version, NOW)).toThrow("unknown_id");
+  const restored = applyDocumentRestore(current, version, "2026-03-01T00:00:00Z");
+  expect(restored.experience).toEqual(version.experience);
+  expect(restored.custom_sections).toEqual(version.custom_sections);
+  expect(restored.layout.sections).toEqual(version.layout.sections);
+  expect(restored.summary).toEqual({ ...version.summary, origin: "user" });
+  expect(restored.created_at).toBe(current.created_at);
+  expect(restored.updated_at).toBe("2026-03-01T00:00:00Z");
 });

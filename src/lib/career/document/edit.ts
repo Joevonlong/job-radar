@@ -5,6 +5,15 @@ import { visitProfile } from "../schema/profile";
 
 /** Identity and provenance belong to the server, even when edits arrive as raw YAML. */
 export function applyDocumentEdit(stored: CareerDocument, incoming: unknown, now: string): CareerDocument {
+  return editDocument(stored, incoming, now, [stored]);
+}
+
+/** Only a validated version read from this document's history may reintroduce removed ids. */
+export function applyDocumentRestore(stored: CareerDocument, version: CareerDocument, now: string): CareerDocument {
+  return editDocument(stored, version, now, [version, stored]);
+}
+
+function editDocument(stored: CareerDocument, incoming: unknown, now: string, known: CareerDocument[]): CareerDocument {
   if (typeof incoming !== "object" || incoming === null || Array.isArray(incoming)) throw new CareerStoreError("document_invalid");
   const parsed = documentSchema.safeParse({
     ...incoming, id: stored.id, kind: stored.kind, job: stored.job, profile_hash: stored.profile_hash,
@@ -12,9 +21,9 @@ export function applyDocumentEdit(stored: CareerDocument, incoming: unknown, now
   });
   if (!parsed.success) throw new CareerStoreError("document_invalid");
   const previous = new Map<string, Record<string, unknown>>();
-  visitProfile(stored, (object) => {
+  known.forEach((document) => visitProfile(document, (object) => {
     if (typeof object.id === "string") previous.set(object.id, object);
-  });
+  }));
   const used = new Set(previous.keys());
   const skillItems = new Set<object>(parsed.data.skills.flatMap((group) => group.items));
   visitProfile(parsed.data, (object) => {

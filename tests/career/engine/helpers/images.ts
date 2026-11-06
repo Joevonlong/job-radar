@@ -36,3 +36,18 @@ export function imagePng(width = 1, height = 1, pixel: (x: number, y: number) =>
   }
   return png;
 }
+
+/** A one-pixel grayscale baseline JPEG with a single zero-coefficient block. */
+export function imageJpeg(): Uint8Array {
+  const oneCode = [1, ...Array<number>(15).fill(0), 0];
+  return new Uint8Array([
+    0xff, 0xd8,
+    0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0,
+    0xff, 0xdb, 0, 67, 0, ...Array<number>(64).fill(1),
+    0xff, 0xc0, 0, 11, 8, 0, 1, 0, 1, 1, 1, 0x11, 0,
+    0xff, 0xc4, 0, 20, 0, ...oneCode,
+    0xff, 0xc4, 0, 20, 0x10, ...oneCode,
+    0xff, 0xda, 0, 8, 1, 1, 0, 0, 63, 0, 0x3f,
+    0xff, 0xd9,
+  ]);
+}

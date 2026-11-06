@@ -2,7 +2,7 @@
 
 [English](career-profile.md)
 
-职业档案是可选的本机职业事实与多写法资料库。可手动编辑，也可从自己的文字提取待审核草稿；不生成或导出简历。
+职业档案是可选的本机职业事实与多写法资料库。可手动编辑，也可从自己的文字提取待审核草稿；档案编辑器不导出简历。
 它与申请写作开关独立，不改变匹配、分数或“我的画像”中的经历素材。
 
 ## 开启
@@ -52,9 +52,31 @@
 | `profile.yaml` | 事实、文本和多写法，不允许联系字段 |
 | `contact.yaml` | 姓名、地址、所在地、邮箱、电话、工作许可、到岗时间和联系链接 |
 | `history/profile/<utc>-<sha8>.yaml` | 档案历史版本，界面按从新到旧展示 |
+| `documents/<id>.yaml` | 独立简历文档、版式和可选求职信，不含联系字段 |
+| `history/documents/<id>/<utc>-<sha8>.yaml` | 文档历史版本 |
+| `preferences.yaml` | 新文档的默认版式、强调方向与语气 |
+| `photo.png` / `photo.jpg`、`signature.png` / `signature.jpg` | 所有文档共用的图片 |
 
 应用写入的文件权限是 `0600`，第一次保存才创建目录。联系方式单独保存并检查旧版本哈希，覆盖时不留历史，
 旧联系值不会写进职业档案历史。联系方式的可选照片字段暂为保留字段，此编辑器不使用图片。
+
+## 文档操作与预览 API
+
+`src/app/career/documents/actions.ts` 中的服务端操作可从非空的已保存档案生成通用简历，列出与编辑文档、
+恢复历史，并管理偏好与图片。修改后的文本标记为用户写法；保存和恢复都要求当前文件哈希。
+恢复通过相同保存流程追加版本，即使所选版本中的条目后来已删除也能恢复。
+偏好只应用于新文档，已有文档保留自己的版式。源档案无法读取时返回警告，不阻止加载或保存文档。
+删除文档要求明确确认，同时删除其历史。
+
+`POST /api/career/documents/preview` 接收 JSON `{ document, doc: "resume" | "letter" }`，允许尚未保存、标识为空的文档。
+它只投影纳入的内容，在内存渲染 HTML 时加载联系方式与共享图片，不写文件。自动日期采用应用的显示时区。
+响应返回 HTML 或机器错误码；渲染问题只包含路径与代码。
+
+`POST /api/career/images?kind=photo|signature` 接收 `application/octet-stream` 原始请求体，按魔数识别 PNG 和 JPEG；
+其他类型返回 415，超限返回 413。相同 URL 的 `DELETE` 删除共享图片。文档可通过 `hide_contact` 隐藏照片。
+请求与图片大小限制来自 `career.yaml: document`，读取超时复用 `import.upload_timeout_seconds`。
+两个 API 的所有响应均带 `Cache-Control: no-store`。所有文档操作与这些 API 都在读取输入或档案文件前检查开关；
+关闭时 API 返回 409。
 
 联系方式文件不发给 AI。来源文字中的城市或其他个人信息若仍留在确认后的预览中，仍可能被发送。
 手动编辑器不向 AI、Telegram 或 MCP 发送职业档案内容，也不写数据库画像快照。
