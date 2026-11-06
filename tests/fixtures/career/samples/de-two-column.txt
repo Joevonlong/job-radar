@@ -3,16 +3,31 @@ Lebenslauf
 Kontakt: livafarnfenn@example.invalid
 +49 30 0000-2019
 
+Profil
+Erfahrene Fachkraft mit Freude an Zusammenarbeit und sorgfältiger Analyse. Ich verbinde praktische Umsetzung mit verständlicher Kommunikation und begleite Aufgaben von der ersten Klärung bis zur Übergabe. Besonders wichtig sind mir nachvollziehbare Entscheidungen, gute Dokumentation und Lösungen, die im Alltag zuverlässig funktionieren. Ich arbeite strukturiert, teile Wissen offen und berücksichtige unterschiedliche Perspektiven. Auch bei wechselnden Anforderungen achte ich auf klare Verantwortlichkeiten und regelmäßige Rückmeldungen.
+
 Berufliche Stationen
 seit 03/2021 | Dateningenieurin | Drachenmoos Labor GmbH
-- Verkuerzte die Laufzeit eines Datenlaufs um 40 Prozent.
-- Pruefte Datenqualitaet vor der monatlichen Bereitstellung.
+- Verkürzte die Laufzeit eines Datenlaufs um 40 Prozent.
+- Prüfte Datenqualität vor der monatlichen Bereitstellung.
 - Stimmte Datenmodelle mit den Berichtsteams ab.
+- Erfasste Rückmeldungen aus regelmäßigen Gesprächen und übersetzte sie in überprüfbare nächste Schritte für das Team.
+- Stimmte Prioritäten mit angrenzenden Bereichen ab und hielt Entscheidungen mit Gründen und offenen Fragen schriftlich fest.
+- Prüfte Ergebnisse anhand vereinbarter Beispiele und besprach Abweichungen frühzeitig mit den beteiligten Kolleginnen und Kollegen.
 
 01/2018 – 02/2021 | Analystin | Nebelgarten Analyse GmbH
-- Erstellte regelmaessige Auswertungen fuer interne Teams.
+- Erstellte regelmäßige Auswertungen für interne Teams.
 - Dokumentierte Kennzahlen und ihre Berechnungsregeln.
-- Erklaerte Abweichungen in gemeinsamen Besprechungen.
+- Erklärte Abweichungen in gemeinsamen Besprechungen.
+- Bereitete Übergaben für neue Mitarbeitende vor und ergänzte die Unterlagen um häufige Fragen und nachvollziehbare Beispiele.
+- Verglich unterschiedliche Lösungswege hinsichtlich Aufwand und Nutzen und stellte die Ergebnisse in kurzen Besprechungen vor.
+- Verfolgte Rückmeldungen nach der Einführung und plante gemeinsam mit dem Team gezielte Verbesserungen für den nächsten Arbeitszyklus.
+
+03/2015 – 12/2017 | Datenassistentin | Kieselfarn Archiv GmbH
+- Bereinigte Tabellen für die Übernahme in ein gemeinsames Berichtsarchiv.
+- Prüfte Stichproben mit dem Fachteam und dokumentierte auffällige Abweichungen.
+- Erstellte eine Übersicht der Datenquellen und ihrer jeweiligen Aktualisierungstermine.
+- Unterstützte die Übergabe monatlicher Berichte an die zuständigen Kolleginnen und Kollegen.
 
 Ausbildung
 (2015–2019) | BSc Mathematik | Institut Farnwolke

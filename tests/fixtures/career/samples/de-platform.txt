@@ -3,21 +3,33 @@ Lebenslauf
 Kontakt: mirawolkenfenn@example.invalid
 +49 30 0000-2019
 
+Profil
+Erfahrene Fachkraft mit Freude an Zusammenarbeit und sorgfältiger Analyse. Ich verbinde praktische Umsetzung mit verständlicher Kommunikation und begleite Aufgaben von der ersten Klärung bis zur Übergabe. Besonders wichtig sind mir nachvollziehbare Entscheidungen, gute Dokumentation und Lösungen, die im Alltag zuverlässig funktionieren. Ich arbeite strukturiert, teile Wissen offen und berücksichtige unterschiedliche Perspektiven. Auch bei wechselnden Anforderungen achte ich auf klare Verantwortlichkeiten und regelmäßige Rückmeldungen.
+
 Berufliche Stationen
 seit 04/2023 | Senior Plattformentwicklerin | Nebelfalter Systeme GmbH
-- Leitete die Planung einer Plattform fuer interne Datendienste.
+- Leitete die Planung einer Plattform für interne Datendienste.
 - Reduzierte die durchschnittliche Bereitstellungszeit um 35 Prozent.
 - Begleitete vier Kolleginnen und Kollegen bei Architekturentscheidungen.
+- Erfasste Rückmeldungen aus regelmäßigen Gesprächen und übersetzte sie in überprüfbare nächste Schritte für das Team.
+- Stimmte Prioritäten mit angrenzenden Bereichen ab und hielt Entscheidungen mit Gründen und offenen Fragen schriftlich fest.
+- Prüfte Ergebnisse anhand vereinbarter Beispiele und besprach Abweichungen frühzeitig mit den beteiligten Kolleginnen und Kollegen.
 
 01/2020 – 03/2023 | Plattformentwicklerin | Nebelfalter Systeme GmbH
-- Entwickelte einen Dienst fuer 10.000.000 Anfragen pro Monat.
-- Automatisierte die Auslieferung von Anwendungen mit nachvollziehbaren Pruefungen.
-- Dokumentierte Betriebsablaeufe und betreute den Bereitschaftsdienst.
+- Entwickelte einen Dienst für 10.000.000 Anfragen pro Monat.
+- Automatisierte die Auslieferung von Anwendungen mit nachvollziehbaren Prüfungen.
+- Dokumentierte Betriebsabläufe und betreute den Bereitschaftsdienst.
+- Bereitete Übergaben für neue Mitarbeitende vor und ergänzte die Unterlagen um häufige Fragen und nachvollziehbare Beispiele.
+- Verglich unterschiedliche Lösungswege hinsichtlich Aufwand und Nutzen und stellte die Ergebnisse in kurzen Besprechungen vor.
+- Verfolgte Rückmeldungen nach der Einführung und plante gemeinsam mit dem Team gezielte Verbesserungen für den nächsten Arbeitszyklus.
 
 02/2018 – 12/2019 | Softwareentwicklerin | Kieselsteg Digital GmbH
-- Erstellte Schnittstellen fuer die interne Auftragsverwaltung.
-- Fuehrte gemeinsame Codebesprechungen im kleinen Team ein.
+- Erstellte Schnittstellen für die interne Auftragsverwaltung.
+- Führte gemeinsame Codebesprechungen im kleinen Team ein.
 - Untersuchte Fehlermeldungen und verbesserte die Protokollierung.
+- Koordinierte Abstimmungen mit benachbarten Teams und dokumentierte Zuständigkeiten, Fristen und den Stand der offenen Aufgaben.
+- Erstellte verständliche Anleitungen für wiederkehrende Tätigkeiten und überprüfte sie gemeinsam mit den späteren Nutzerinnen und Nutzern.
+- Wertete Erfahrungen aus abgeschlossenen Aufgaben aus und schlug konkrete Änderungen für künftige Abläufe vor.
 
 Ausbildung
 (2015–2019) | BSc Informatik | Hochschule Kieselgarten

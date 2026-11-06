@@ -13,12 +13,18 @@ experience:
       value: present
       quote: seit 04/2023
     bullets:
-      - value: Leitete die Planung einer Plattform fuer interne Datendienste.
-        quote: Leitete die Planung einer Plattform fuer interne Datendienste.
+      - value: Leitete die Planung einer Plattform für interne Datendienste.
+        quote: Leitete die Planung einer Plattform für interne Datendienste.
       - value: Reduzierte die durchschnittliche Bereitstellungszeit um 35 Prozent.
         quote: Reduzierte die durchschnittliche Bereitstellungszeit um 35 Prozent.
       - value: Begleitete vier Kolleginnen und Kollegen bei Architekturentscheidungen.
         quote: Begleitete vier Kolleginnen und Kollegen bei Architekturentscheidungen.
+      - value: Erfasste Rückmeldungen aus regelmäßigen Gesprächen und übersetzte sie in überprüfbare nächste Schritte für das Team.
+        quote: Erfasste Rückmeldungen aus regelmäßigen Gesprächen und übersetzte sie in überprüfbare nächste Schritte für das Team.
+      - value: Stimmte Prioritäten mit angrenzenden Bereichen ab und hielt Entscheidungen mit Gründen und offenen Fragen schriftlich fest.
+        quote: Stimmte Prioritäten mit angrenzenden Bereichen ab und hielt Entscheidungen mit Gründen und offenen Fragen schriftlich fest.
+      - value: Prüfte Ergebnisse anhand vereinbarter Beispiele und besprach Abweichungen frühzeitig mit den beteiligten Kolleginnen und Kollegen.
+        quote: Prüfte Ergebnisse anhand vereinbarter Beispiele und besprach Abweichungen frühzeitig mit den beteiligten Kolleginnen und Kollegen.
   - company:
       value: Nebelfalter Systeme GmbH
       quote: Nebelfalter Systeme GmbH
@@ -32,12 +38,18 @@ experience:
       value: 2023-03
       quote: 03/2023
     bullets:
-      - value: Entwickelte einen Dienst fuer 10.000.000 Anfragen pro Monat.
-        quote: Entwickelte einen Dienst fuer 10.000.000 Anfragen pro Monat.
-      - value: Automatisierte die Auslieferung von Anwendungen mit nachvollziehbaren Pruefungen.
-        quote: Automatisierte die Auslieferung von Anwendungen mit nachvollziehbaren Pruefungen.
-      - value: Dokumentierte Betriebsablaeufe und betreute den Bereitschaftsdienst.
-        quote: Dokumentierte Betriebsablaeufe und betreute den Bereitschaftsdienst.
+      - value: Entwickelte einen Dienst für 10.000.000 Anfragen pro Monat.
+        quote: Entwickelte einen Dienst für 10.000.000 Anfragen pro Monat.
+      - value: Automatisierte die Auslieferung von Anwendungen mit nachvollziehbaren Prüfungen.
+        quote: Automatisierte die Auslieferung von Anwendungen mit nachvollziehbaren Prüfungen.
+      - value: Dokumentierte Betriebsabläufe und betreute den Bereitschaftsdienst.
+        quote: Dokumentierte Betriebsabläufe und betreute den Bereitschaftsdienst.
+      - value: Bereitete Übergaben für neue Mitarbeitende vor und ergänzte die Unterlagen um häufige Fragen und nachvollziehbare Beispiele.
+        quote: Bereitete Übergaben für neue Mitarbeitende vor und ergänzte die Unterlagen um häufige Fragen und nachvollziehbare Beispiele.
+      - value: Verglich unterschiedliche Lösungswege hinsichtlich Aufwand und Nutzen und stellte die Ergebnisse in kurzen Besprechungen vor.
+        quote: Verglich unterschiedliche Lösungswege hinsichtlich Aufwand und Nutzen und stellte die Ergebnisse in kurzen Besprechungen vor.
+      - value: Verfolgte Rückmeldungen nach der Einführung und plante gemeinsam mit dem Team gezielte Verbesserungen für den nächsten Arbeitszyklus.
+        quote: Verfolgte Rückmeldungen nach der Einführung und plante gemeinsam mit dem Team gezielte Verbesserungen für den nächsten Arbeitszyklus.
   - company:
       value: Kieselsteg Digital GmbH
       quote: Kieselsteg Digital GmbH
@@ -51,12 +63,18 @@ experience:
       value: 2019-12
       quote: 12/2019
     bullets:
-      - value: Erstellte Schnittstellen fuer die interne Auftragsverwaltung.
-        quote: Erstellte Schnittstellen fuer die interne Auftragsverwaltung.
-      - value: Fuehrte gemeinsame Codebesprechungen im kleinen Team ein.
-        quote: Fuehrte gemeinsame Codebesprechungen im kleinen Team ein.
+      - value: Erstellte Schnittstellen für die interne Auftragsverwaltung.
+        quote: Erstellte Schnittstellen für die interne Auftragsverwaltung.
+      - value: Führte gemeinsame Codebesprechungen im kleinen Team ein.
+        quote: Führte gemeinsame Codebesprechungen im kleinen Team ein.
       - value: Untersuchte Fehlermeldungen und verbesserte die Protokollierung.
         quote: Untersuchte Fehlermeldungen und verbesserte die Protokollierung.
+      - value: Koordinierte Abstimmungen mit benachbarten Teams und dokumentierte Zuständigkeiten, Fristen und den Stand der offenen Aufgaben.
+        quote: Koordinierte Abstimmungen mit benachbarten Teams und dokumentierte Zuständigkeiten, Fristen und den Stand der offenen Aufgaben.
+      - value: Erstellte verständliche Anleitungen für wiederkehrende Tätigkeiten und überprüfte sie gemeinsam mit den späteren Nutzerinnen und Nutzern.
+        quote: Erstellte verständliche Anleitungen für wiederkehrende Tätigkeiten und überprüfte sie gemeinsam mit den späteren Nutzerinnen und Nutzern.
+      - value: Wertete Erfahrungen aus abgeschlossenen Aufgaben aus und schlug konkrete Änderungen für künftige Abläufe vor.
+        quote: Wertete Erfahrungen aus abgeschlossenen Aufgaben aus und schlug konkrete Änderungen für künftige Abläufe vor.
 education:
   - school:
       value: Hochschule Kieselgarten
@@ -99,3 +117,6 @@ languages:
     level:
       value: C1
       quote: C1
+summary:
+  value: Erfahrene Fachkraft mit Freude an Zusammenarbeit und sorgfältiger Analyse. Ich verbinde praktische Umsetzung mit verständlicher Kommunikation und begleite Aufgaben von der ersten Klärung bis zur Übergabe. Besonders wichtig sind mir nachvollziehbare Entscheidungen, gute Dokumentation und Lösungen, die im Alltag zuverlässig funktionieren. Ich arbeite strukturiert, teile Wissen offen und berücksichtige unterschiedliche Perspektiven. Auch bei wechselnden Anforderungen achte ich auf klare Verantwortlichkeiten und regelmäßige Rückmeldungen.
+  quote: Erfahrene Fachkraft mit Freude an Zusammenarbeit und sorgfältiger Analyse. Ich verbinde praktische Umsetzung mit verständlicher Kommunikation und begleite Aufgaben von der ersten Klärung bis zur Übergabe. Besonders wichtig sind mir nachvollziehbare Entscheidungen, gute Dokumentation und Lösungen, die im Alltag zuverlässig funktionieren. Ich arbeite strukturiert, teile Wissen offen und berücksichtige unterschiedliche Perspektiven. Auch bei wechselnden Anforderungen achte ich auf klare Verantwortlichkeiten und regelmäßige Rückmeldungen.

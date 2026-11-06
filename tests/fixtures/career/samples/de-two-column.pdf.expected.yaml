@@ -13,12 +13,18 @@ experience:
       value: present
       quote: seit 03/2021
     bullets:
-      - value: Verkuerzte die Laufzeit eines Datenlaufs um 40 Prozent.
-        quote: Verkuerzte die Laufzeit eines Datenlaufs um 40 Prozent.
-      - value: Pruefte Datenqualitaet vor der monatlichen Bereitstellung.
-        quote: Pruefte Datenqualitaet vor der monatlichen Bereitstellung.
+      - value: Verkürzte die Laufzeit eines Datenlaufs um 40 Prozent.
+        quote: Verkürzte die Laufzeit eines Datenlaufs um 40 Prozent.
+      - value: Prüfte Datenqualität vor der monatlichen Bereitstellung.
+        quote: Prüfte Datenqualität vor der monatlichen Bereitstellung.
       - value: Stimmte Datenmodelle mit den Berichtsteams ab.
         quote: Stimmte Datenmodelle mit den Berichtsteams ab.
+      - value: Erfasste Rückmeldungen aus regelmäßigen Gesprächen und übersetzte sie in überprüfbare nächste Schritte für das Team.
+        quote: Erfasste Rückmeldungen aus regelmäßigen Gesprächen und übersetzte sie in überprüfbare nächste Schritte für das Team.
+      - value: Stimmte Prioritäten mit angrenzenden Bereichen ab und hielt Entscheidungen mit Gründen und offenen Fragen schriftlich fest.
+        quote: Stimmte Prioritäten mit angrenzenden Bereichen ab und hielt Entscheidungen mit Gründen und offenen Fragen schriftlich fest.
+      - value: Prüfte Ergebnisse anhand vereinbarter Beispiele und besprach Abweichungen frühzeitig mit den beteiligten Kolleginnen und Kollegen.
+        quote: Prüfte Ergebnisse anhand vereinbarter Beispiele und besprach Abweichungen frühzeitig mit den beteiligten Kolleginnen und Kollegen.
   - company:
       value: Nebelgarten Analyse GmbH
       quote: Nebelgarten Analyse GmbH
@@ -32,12 +38,39 @@ experience:
       value: 2021-02
       quote: 02/2021
     bullets:
-      - value: Erstellte regelmaessige Auswertungen fuer interne Teams.
-        quote: Erstellte regelmaessige Auswertungen fuer interne Teams.
+      - value: Erstellte regelmäßige Auswertungen für interne Teams.
+        quote: Erstellte regelmäßige Auswertungen für interne Teams.
       - value: Dokumentierte Kennzahlen und ihre Berechnungsregeln.
         quote: Dokumentierte Kennzahlen und ihre Berechnungsregeln.
-      - value: Erklaerte Abweichungen in gemeinsamen Besprechungen.
-        quote: Erklaerte Abweichungen in gemeinsamen Besprechungen.
+      - value: Erklärte Abweichungen in gemeinsamen Besprechungen.
+        quote: Erklärte Abweichungen in gemeinsamen Besprechungen.
+      - value: Bereitete Übergaben für neue Mitarbeitende vor und ergänzte die Unterlagen um häufige Fragen und nachvollziehbare Beispiele.
+        quote: Bereitete Übergaben für neue Mitarbeitende vor und ergänzte die Unterlagen um häufige Fragen und nachvollziehbare Beispiele.
+      - value: Verglich unterschiedliche Lösungswege hinsichtlich Aufwand und Nutzen und stellte die Ergebnisse in kurzen Besprechungen vor.
+        quote: Verglich unterschiedliche Lösungswege hinsichtlich Aufwand und Nutzen und stellte die Ergebnisse in kurzen Besprechungen vor.
+      - value: Verfolgte Rückmeldungen nach der Einführung und plante gemeinsam mit dem Team gezielte Verbesserungen für den nächsten Arbeitszyklus.
+        quote: Verfolgte Rückmeldungen nach der Einführung und plante gemeinsam mit dem Team gezielte Verbesserungen für den nächsten Arbeitszyklus.
+  - company:
+      value: Kieselfarn Archiv GmbH
+      quote: Kieselfarn Archiv GmbH
+    role:
+      value: Datenassistentin
+      quote: Datenassistentin
+    start:
+      value: 2015-03
+      quote: 03/2015
+    end:
+      value: 2017-12
+      quote: 12/2017
+    bullets:
+      - value: Bereinigte Tabellen für die Übernahme in ein gemeinsames Berichtsarchiv.
+        quote: Bereinigte Tabellen für die Übernahme in ein gemeinsames Berichtsarchiv.
+      - value: Prüfte Stichproben mit dem Fachteam und dokumentierte auffällige Abweichungen.
+        quote: Prüfte Stichproben mit dem Fachteam und dokumentierte auffällige Abweichungen.
+      - value: Erstellte eine Übersicht der Datenquellen und ihrer jeweiligen Aktualisierungstermine.
+        quote: Erstellte eine Übersicht der Datenquellen und ihrer jeweiligen Aktualisierungstermine.
+      - value: Unterstützte die Übergabe monatlicher Berichte an die zuständigen Kolleginnen und Kollegen.
+        quote: Unterstützte die Übergabe monatlicher Berichte an die zuständigen Kolleginnen und Kollegen.
 education:
   - school:
       value: Institut Farnwolke
@@ -93,3 +126,6 @@ custom_sections:
           value: "2021"
           quote: "2021"
         bullets: []
+summary:
+  value: Erfahrene Fachkraft mit Freude an Zusammenarbeit und sorgfältiger Analyse. Ich verbinde praktische Umsetzung mit verständlicher Kommunikation und begleite Aufgaben von der ersten Klärung bis zur Übergabe. Besonders wichtig sind mir nachvollziehbare Entscheidungen, gute Dokumentation und Lösungen, die im Alltag zuverlässig funktionieren. Ich arbeite strukturiert, teile Wissen offen und berücksichtige unterschiedliche Perspektiven. Auch bei wechselnden Anforderungen achte ich auf klare Verantwortlichkeiten und regelmäßige Rückmeldungen.
+  quote: Erfahrene Fachkraft mit Freude an Zusammenarbeit und sorgfältiger Analyse. Ich verbinde praktische Umsetzung mit verständlicher Kommunikation und begleite Aufgaben von der ersten Klärung bis zur Übergabe. Besonders wichtig sind mir nachvollziehbare Entscheidungen, gute Dokumentation und Lösungen, die im Alltag zuverlässig funktionieren. Ich arbeite strukturiert, teile Wissen offen und berücksichtige unterschiedliche Perspektiven. Auch bei wechselnden Anforderungen achte ich auf klare Verantwortlichkeiten und regelmäßige Rückmeldungen.

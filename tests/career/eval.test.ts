@@ -7,6 +7,7 @@ import { expect, it } from "vitest";
 
 import { SAMPLE_ROOT, samplePath, scoreExtraction } from "../../scripts/career-extract-eval";
 import { output, field } from "./extract-fixtures";
+import { extractText } from "../../src/lib/career/engine/extract";
 
 it("scores each field, counting duplicates, missing facts and unsupported facts", () => {
   const expected = output();
@@ -44,7 +45,8 @@ it("dry-runs every fictional text, Markdown and PDF through the real prompt, rou
   expect(lines[0]).toMatchObject({ mode: "dry_scripted_expected_answers", samples: 10, modelQualityMeasured: false });
   expect(lines.filter((line) => line.sample)).toHaveLength(10);
   expect(lines.every((line) => !line.error)).toBe(true);
-  expect(lines.at(-1).total["experience.company"]).toMatchObject({ truePositive: 24, precision: 1, recall: 1 });
+  expect(lines.filter((line) => line.sample).every((line) => Object.keys(line.flags).length === 0)).toBe(true);
+  expect(lines.at(-1).total["experience.company"]).toMatchObject({ truePositive: 30, precision: 1, recall: 1 });
 });
 it("does not reward roles and dates assigned to the wrong company", () => {
   const first = output().experience[0]!;
@@ -73,4 +75,12 @@ it.each(["promotion", "rehire", "overlap"])("matches %s experiences at one compa
   expect(Object.values(scores).every((score) => score.precision === 1 && score.recall === 1)).toBe(false);
   const reordered = output({ experience: [second, first] });
   expect(Object.values(scoreExtraction(expected, reordered)).every((score) => score.precision === 1 && score.recall === 1)).toBe(true);
+});
+
+
+it.each(["de-publications.pdf", "de-two-column.pdf"])("preserves German characters in %s text", async (file) => {
+  const text = await extractText(new Uint8Array(fs.readFileSync(path.join(SAMPLE_ROOT, file))));
+  expect(text).toContain("für");
+  expect(text).toContain("Übergabe");
+  expect(text).toContain("regelmäß");
 });

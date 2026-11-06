@@ -19,6 +19,12 @@ experience:
         quote: Explained uncertainty and limitations to partner teams.
       - value: Maintained a shared catalogue of experimental results.
         quote: Maintained a shared catalogue of experimental results.
+      - value: Gathered feedback in regular conversations and translated recurring issues into practical, testable next steps for the team.
+        quote: Gathered feedback in regular conversations and translated recurring issues into practical, testable next steps for the team.
+      - value: Aligned priorities with neighbouring teams and recorded decisions, trade-offs and open questions in a shared working document.
+        quote: Aligned priorities with neighbouring teams and recorded decisions, trade-offs and open questions in a shared working document.
+      - value: Checked outcomes against agreed examples and discussed unexpected results early with the people responsible for follow-up.
+        quote: Checked outcomes against agreed examples and discussed unexpected results early with the people responsible for follow-up.
   - company:
       value: Mistlefern Lab Ltd
       quote: Mistlefern Lab Ltd
@@ -38,6 +44,33 @@ experience:
         quote: Wrote scripts to check the consistency of experiment outputs.
       - value: Supported workshops on reproducible research methods.
         quote: Supported workshops on reproducible research methods.
+      - value: Prepared handover material for new colleagues, including worked examples and answers to questions raised during onboarding.
+        quote: Prepared handover material for new colleagues, including worked examples and answers to questions raised during onboarding.
+      - value: Compared possible approaches for cost and usefulness, then presented the trade-offs in concise team discussions.
+        quote: Compared possible approaches for cost and usefulness, then presented the trade-offs in concise team discussions.
+      - value: Reviewed feedback after each release and planned focused improvements with the people who used the service every day.
+        quote: Reviewed feedback after each release and planned focused improvements with the people who used the service every day.
+  - company:
+      value: Cloudfern Methods Ltd
+      quote: Cloudfern Methods Ltd
+    role:
+      value: Research Intern
+      quote: Research Intern
+    start:
+      value: 2014-01
+      quote: January 2014
+    end:
+      value: 2016-12
+      quote: December 2016
+    bullets:
+      - value: Prepared input datasets for a series of small simulation studies.
+        quote: Prepared input datasets for a series of small simulation studies.
+      - value: Checked source records against the study protocol and documented missing values.
+        quote: Checked source records against the study protocol and documented missing values.
+      - value: Produced tables for internal reviews and explained how the results were calculated.
+        quote: Produced tables for internal reviews and explained how the results were calculated.
+      - value: Maintained experiment notes so colleagues could repeat the same analysis later.
+        quote: Maintained experiment notes so colleagues could repeat the same analysis later.
 education:
   - school:
       value: Silverfern Academy
@@ -105,3 +138,6 @@ custom_sections:
           value: "2022"
           quote: "2022"
         bullets: []
+summary:
+  value: A collaborative practitioner who combines careful analysis with practical delivery. I work from the first conversation through handover, making decisions visible and explaining trade-offs to colleagues with different backgrounds. My focus is on useful, maintainable work, clear documentation and steady improvements informed by the people who use it. I enjoy sharing knowledge, making ownership explicit and adapting plans as requirements change. Regular feedback helps me keep the work useful and understandable for everyone involved.
+  quote: A collaborative practitioner who combines careful analysis with practical delivery. I work from the first conversation through handover, making decisions visible and explaining trade-offs to colleagues with different backgrounds. My focus is on useful, maintainable work, clear documentation and steady improvements informed by the people who use it. I enjoy sharing knowledge, making ownership explicit and adapting plans as requirements change. Regular feedback helps me keep the work useful and understandable for everyone involved.

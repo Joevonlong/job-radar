@@ -3,16 +3,31 @@ Curriculum Vitae
 Kontakt: sorinmossfenn@example.invalid
 +1 202 555 0100
 
+Profile
+A collaborative practitioner who combines careful analysis with practical delivery. I work from the first conversation through handover, making decisions visible and explaining trade-offs to colleagues with different backgrounds. My focus is on useful, maintainable work, clear documentation and steady improvements informed by the people who use it. I enjoy sharing knowledge, making ownership explicit and adapting plans as requirements change. Regular feedback helps me keep the work useful and understandable for everyone involved.
+
 Professional experience
 February 2021 – Present | Research Engineer | Fablemoss Research Ltd
 - Designed reproducible benchmarks for scheduling experiments.
 - Explained uncertainty and limitations to partner teams.
 - Maintained a shared catalogue of experimental results.
+- Gathered feedback in regular conversations and translated recurring issues into practical, testable next steps for the team.
+- Aligned priorities with neighbouring teams and recorded decisions, trade-offs and open questions in a shared working document.
+- Checked outcomes against agreed examples and discussed unexpected results early with the people responsible for follow-up.
 
 January 2017 – January 2021 | Research Assistant | Mistlefern Lab Ltd
 - Prepared datasets for controlled simulations.
 - Wrote scripts to check the consistency of experiment outputs.
 - Supported workshops on reproducible research methods.
+- Prepared handover material for new colleagues, including worked examples and answers to questions raised during onboarding.
+- Compared possible approaches for cost and usefulness, then presented the trade-offs in concise team discussions.
+- Reviewed feedback after each release and planned focused improvements with the people who used the service every day.
+
+January 2014 – December 2016 | Research Intern | Cloudfern Methods Ltd
+- Prepared input datasets for a series of small simulation studies.
+- Checked source records against the study protocol and documented missing values.
+- Produced tables for internal reviews and explained how the results were calculated.
+- Maintained experiment notes so colleagues could repeat the same analysis later.
 
 Education
 (2015–2019) | MSc Computing | Silverfern Academy
