@@ -3456,6 +3456,13 @@
       },
       "reasoning_effort_career_extract": {
         "label": "Reasoning effort: Career extraction"
+      },
+      "task_career_tailor": {
+        "label": "Resume tailoring",
+        "hint": "Sends confirmed resume blocks, profile wordings, preferences, requirements and the cleaned JD; excludes contact details and links, and never searches the web."
+      },
+      "reasoning_effort_career_tailor": {
+        "label": "Reasoning effort: Resume tailoring"
       }
     },
     "control": {
@@ -3518,7 +3525,8 @@
           "models_sync": "Model list refresh",
           "story_extract": "Story extraction",
           "writer_fit": "Application fit note",
-          "career_extract": "Career extraction"
+          "career_extract": "Career extraction",
+          "career_tailor": "Resume tailoring"
         },
         "status": {
           "pending": "Queued",
@@ -3557,7 +3565,12 @@
           "profile_invalid": "The career profile is invalid. Check it and try again.",
           "deleted": "The career data was deleted and this request was cancelled.",
           "draft_write_failed": "The extracted draft could not be saved. Try again.",
-          "handler_failed": "Career extraction failed. Try again."
+          "handler_failed": "Career extraction failed. Try again.",
+          "outbound_changed": "Confirmed content changed; review it again.",
+          "doc_gone": "The document was deleted.",
+          "job_gone": "The job no longer exists.",
+          "no_jd": "The job has no description.",
+          "proposal_write_failed": "Suggestions could not be saved."
         },
         "scoreResult": "Scoring finished: {scored} scored, {failed} failed",
         "timeBudget": "Stopped at the time budget: {remaining} still to score.",
@@ -4064,7 +4077,8 @@
         "company_research": "Company background",
         "write": "Application writer",
         "story_extract": "Story extraction",
-        "career_extract": "Career extraction"
+        "career_extract": "Career extraction",
+        "career_tailor": "Resume tailoring"
       },
       "details": "Details →"
     },
@@ -7638,7 +7652,8 @@
       "request__models_sync": "Refresh model list",
       "request__story_extract": "Extract stories",
       "request__writer_fit": "Write application fit note",
-      "request__career_extract": "Extract career profile"
+      "request__career_extract": "Extract career profile",
+      "request__career_tailor": "Resume tailoring"
     },
     "event": {
       "item__ok": "Item completed",
@@ -7842,7 +7857,12 @@
       "profile_invalid": "The career profile is invalid. Check it and try again.",
       "deleted": "The career data was deleted and this request was cancelled.",
       "draft_write_failed": "The extracted draft could not be saved. Try again.",
-      "handler_failed": "Career extraction failed. Try again."
+      "handler_failed": "Career extraction failed. Try again.",
+      "outbound_changed": "Confirmed content changed; review it again.",
+      "doc_gone": "The document was deleted.",
+      "job_gone": "The job no longer exists.",
+      "no_jd": "The job has no description.",
+      "proposal_write_failed": "Suggestions could not be saved."
     },
     "callbackResult": {
       "changed": "Changed",
@@ -7993,7 +8013,8 @@
       "models_sync": "Refresh model list",
       "story_extract": "Extract stories",
       "writer_fit": "Application fit note",
-      "career_extract": "Career extraction"
+      "career_extract": "Career extraction",
+      "career_tailor": "Resume tailoring"
     },
     "level": {
       "all": "All levels",

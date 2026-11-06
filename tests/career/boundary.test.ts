@@ -183,12 +183,12 @@ function violations(file: string, text: string): string[] {
     const engineConsumer = [ENGINE, "src/lib/career/render", "src/lib/career/print", "src/app/career", "src/app/api/career"]
       .some((directory) => within(file, directory));
     if (within(file, "src") && to && within(to, ENGINE) && !engineConsumer) out.push(`${file}: imports engine outside rendering boundary`);
-    const isStorage = ["schema", "store", "contact", "ai", "extract", "document"].some((part) => within(file, `src/lib/career/${part}`));
+    const isStorage = ["schema", "store", "contact", "ai", "extract", "tailor", "document"].some((part) => within(file, `src/lib/career/${part}`));
     const importsRendering = to && (within(to, ENGINE) || within(to, "src/lib/career/print") || to.includes("/fonts/"));
     if (isStorage && (importsRendering || /@fontsource/.test(dependency.source))) {
       out.push(`${file}: storage imports rendering dependency`);
     }
-    const isAi = ["ai", "extract"].some((part) => within(file, `src/lib/career/${part}`));
+    const isAi = ["ai", "extract", "tailor"].some((part) => within(file, `src/lib/career/${part}`));
     if (isAi && to === "src/lib/career/contact/store.ts") out.push(`${file}: reads contact storage directly`);
     if ((within(file, "src/lib/outbound") || within(file, "src/components/outbound")) && to && isCareer(to)) out.push(`${file}: outbound imports career`);
     if (["src/lib/outbound/scrub.ts", "src/lib/outbound/outbound.ts"].includes(file) && /^(?:node:)?fs(?:\/|$)/.test(dependency.source)) out.push(`${file}: pure outbound reads files`);
@@ -273,8 +273,8 @@ test("all source dependencies respect the career and engine boundaries", () => {
   expect(coreCareerImports(sources)).toEqual(CORE_IMPORTING_CAREER);
 });
 
-test("the core career import whitelist contains only the card and extraction registration", () => {
-  expect(CORE_IMPORTING_CAREER).toEqual({ "src/app/me/page.tsx": ["src/components/career/career-card.tsx"], "src/lib/control/ai-handlers.ts": ["src/lib/career/extract/handler.ts"] });
+test("the core career import whitelist contains only the card and career handler registration", () => {
+  expect(CORE_IMPORTING_CAREER).toEqual({ "src/app/me/page.tsx": ["src/components/career/career-card.tsx"], "src/lib/control/ai-handlers.ts": ["src/lib/career/extract/handler.ts", "src/lib/career/tailor/handler.ts"] });
 });
 
 test("core career import comparison rejects unlisted imports and unused whitelist entries", () => {
@@ -451,7 +451,7 @@ test("preview candidates and stored-value bypasses stay at their permitted bound
 });
 
 test("storage dependencies reject rendering imports by every syntax and relative path", async () => {
-  for (const directory of ["schema", "store", "contact", "ai", "extract", "document"]) {
+  for (const directory of ["schema", "store", "contact", "ai", "extract", "tailor", "document"]) {
     const file = `src/lib/career/${directory}/probe.ts`;
     for (const specifier of [
       "@/lib/career/engine",

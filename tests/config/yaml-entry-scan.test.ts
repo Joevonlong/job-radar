@@ -12,6 +12,8 @@ const ALLOWED: Record<string, string> = {
   "src/lib/career/contact/store.ts": "strict local contact file without config overlays or history",
   "src/lib/career/extract/draft-store.ts": "serializes validated career extraction drafts for local storage",
   "src/lib/career/store/documents.ts": "strict local résumé documents and their history",
+  "src/lib/career/tailor/proposals.ts": "strict local AI proposal file next to a document, not a config file",
+  "scripts/career-tailor-calibrate.ts": "reads fictional calibration samples, not config files",
   "src/lib/career/store/preferences.ts": "strict local document preferences without overlays",
   "src/lib/career/render/to-resume.ts": "transient engine validation input, never config or disk",
   "src/lib/career/store/profile.ts": "strict local career profile format, independent of layered config",

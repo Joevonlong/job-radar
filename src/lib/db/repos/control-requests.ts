@@ -8,7 +8,7 @@ export type ControlRequest = typeof controlRequests.$inferSelect;
 export type ControlRequestKind = ControlRequest["kind"];
 export type ControlRequestStatus = ControlRequest["status"];
 
-export const CONTROL_REQUEST_KINDS = ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup", "writer_job", "writer_fit", "models_sync", "company_research", "story_extract", "career_extract"] as const satisfies readonly ControlRequestKind[];
+export const CONTROL_REQUEST_KINDS = ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup", "writer_job", "writer_fit", "models_sync", "company_research", "story_extract", "career_extract", "career_tailor"] as const satisfies readonly ControlRequestKind[];
 /** The requests the settings page offers and lists; the AI ones belong to the ai-worker and show on /sources. */
 export const SETTINGS_REQUEST_KINDS = ["run_cycle", "rescore_stale", "score_jobs"] as const satisfies readonly ControlRequestKind[];
 /**
@@ -18,14 +18,14 @@ export const SETTINGS_REQUEST_KINDS = ["run_cycle", "rescore_stale", "score_jobs
  * processes (`src/lib/control/kinds.ts`) and the `/sources` queue count derive from it.
  * `tests/ai-worker/units.test.ts` fails while a kind of the database enum is in neither list.
  */
-export const AI_CONTROL_REQUEST_KINDS = ["run_ai", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup", "writer_job", "writer_fit", "story_extract", "career_extract", "company_research"] as const satisfies readonly ControlRequestKind[];
+export const AI_CONTROL_REQUEST_KINDS = ["run_ai", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup", "writer_job", "writer_fit", "story_extract", "career_extract", "career_tailor", "company_research"] as const satisfies readonly ControlRequestKind[];
 /**
  * Kinds that call no AI but hold a provider key's neighbourhood: only the host ai-worker claims them, whatever `ai.yaml: execution`
  * says (the container runner never does). `models_sync` reads a provider's model list for the "refresh models" button.
  */
 export const HOST_ONLY_CONTROL_REQUEST_KINDS = ["models_sync"] as const satisfies readonly ControlRequestKind[];
 /** User requests served independently of batch AI work. Automatic requests stay in the batch lane. */
-export const INTERACTIVE_CONTROL_REQUEST_KINDS = ["translate_job", "breakdown_job", "salary_lookup", "test_ai", "writer_job", "writer_fit", "story_extract", "career_extract", "models_sync", "company_research"] as const satisfies readonly (typeof AI_CONTROL_REQUEST_KINDS | typeof HOST_ONLY_CONTROL_REQUEST_KINDS)[number][];
+export const INTERACTIVE_CONTROL_REQUEST_KINDS = ["translate_job", "breakdown_job", "salary_lookup", "test_ai", "writer_job", "writer_fit", "story_extract", "career_extract", "career_tailor", "models_sync", "company_research"] as const satisfies readonly (typeof AI_CONTROL_REQUEST_KINDS | typeof HOST_ONLY_CONTROL_REQUEST_KINDS)[number][];
 /** The kinds that call no AI: the container runner's own work (the channel test and the Telegram test message). */
 export const NON_AI_CONTROL_REQUEST_KINDS = ["run_cycle", "test_channel", "test_telegram"] as const satisfies readonly ControlRequestKind[];
 /** The test buttons of /sources and /settings; their result is shown next to the button, not in the request list. */
@@ -37,7 +37,7 @@ export const TEST_CONTROL_REQUEST_KINDS = ["test_channel", "test_ai", "test_tele
  * `salary_lookup`, `company_research`: a paid web search the user clicked; a restart must not run it (and bill it) again unasked, the card offers "try again".
  * `story_extract`: it carries the text of a résumé or profile, which must not outlive a restart; the card offers to send it again.
  */
-export const NOT_REQUEUED_CONTROL_REQUEST_KINDS = [...TEST_CONTROL_REQUEST_KINDS, "run_cycle", "salary_lookup", "company_research", "story_extract", "career_extract"] as const satisfies readonly ControlRequestKind[];
+export const NOT_REQUEUED_CONTROL_REQUEST_KINDS = [...TEST_CONTROL_REQUEST_KINDS, "run_cycle", "salary_lookup", "company_research", "story_extract", "career_extract", "career_tailor"] as const satisfies readonly ControlRequestKind[];
 /**
  * Kinds whose payload carries the user's own text (the material of an application answer). Every path that ends such a
  * request (done, failed, failed by a restart, expired) removes these keys from the payload in the same statement, so the
@@ -48,6 +48,7 @@ export const SCRUBBED_PAYLOAD_KEYS = {
   writer_job: ["materials"],
   story_extract: ["text"],
   career_extract: ["text"],
+  career_tailor: [],
   writer_fit: ["materials"],
 } as const satisfies Partial<Record<ControlRequestKind, readonly string[]>>;
 export type ScrubbedPayloadKind = keyof typeof SCRUBBED_PAYLOAD_KEYS;
@@ -323,7 +324,7 @@ export async function finishControlRequest(
     .returning();
   if (row) return row;
   const completed = await getControlRequest(db, id);
-  if (input.status === "done" && completed?.kind === "career_extract" && completed.status === "done") return completed;
+  if (input.status === "done" && completed && ["career_extract", "career_tailor"].includes(completed.kind) && completed.status === "done") return completed;
   return null;
 }
 
@@ -588,5 +589,14 @@ export async function getLatestFinishedControlRequest(db: Db, kind: ControlReque
 /** The newest request of `kind` (any status), or null: when the weekly suggestion was last asked for. */
 export async function findLatestControlRequest(db: Db, kind: ControlRequestKind): Promise<ControlRequest | null> {
   const [row] = await db.select().from(controlRequests).where(eq(controlRequests.kind, kind)).orderBy(desc(controlRequests.id)).limit(1);
+  return row ?? null;
+}
+
+export async function findLatestCareerTailorRequest(db: Executor, docId: string): Promise<ControlRequest | null> {
+  const known = await db.execute(sql`select 1 from pg_enum where enumtypid = 'control_request_kind'::regtype and enumlabel = 'career_tailor'`);
+  if (known.length === 0) return null;
+  const [row] = await db.select().from(controlRequests)
+    .where(and(eq(controlRequests.kind, "career_tailor"), sql`${controlRequests.payload}->>'doc_id' = ${docId}`))
+    .orderBy(desc(controlRequests.id)).limit(1);
   return row ?? null;
 }

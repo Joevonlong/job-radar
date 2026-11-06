@@ -52,6 +52,23 @@ const customEntry = z.strictObject({
 });
 const customText = z.strictObject({ ...base, kind: z.enum(["text", "bullet", "tag"]), text: docTextSchema });
 
+export const claimTargetSchema = z.union([
+  z.strictObject({ text: id("dtx").min(1) }),
+  z.strictObject({ entry: id("ent").min(1), field: value.min(1), value }),
+  z.strictObject({ letter: z.enum(["recipient", "place", "date", "subject", "salutation", "closing"]) }),
+]);
+export const claimSchema = z.strictObject({
+  id: z.string().regex(/^clm_[a-z2-7]{10}$/),
+  target: claimTargetSchema,
+  kind: z.enum(["figure", "skill", "duty", "fact"]),
+  text: value.min(1),
+  in_jd: z.boolean().default(false),
+  translation: z.boolean().default(false),
+  status: z.enum(["pending", "confirmed", "rejected", "noted"]),
+  by: z.enum(["ai", "user"]),
+});
+export type Claim = z.infer<typeof claimSchema>;
+
 export const documentSchema = z.strictObject({
   schema_version: z.literal(1),
   id: id("doc"),
@@ -95,7 +112,7 @@ export const documentSchema = z.strictObject({
     recipient: strings, place: optional, date: z.iso.date().nullable(), subject: optional, salutation: optional,
     body: bullets, closing: optional,
   }).nullable(),
-  claims: z.array(z.never()),
+  claims: z.array(claimSchema).max(CAREER_FILE_BOUNDS.entries),
 }).superRefine((document, ctx) => {
   const seen = new Set<string>();
   let count = 0;
@@ -103,7 +120,7 @@ export const documentSchema = z.strictObject({
     if (typeof object.id !== "string") return;
     if (object.id && seen.has(object.id)) ctx.addIssue({ code: "custom", message: "duplicate id" });
     if (object.id) seen.add(object.id);
-    if (!("origin" in object) && !("schema_version" in object)) count++;
+    if (!("origin" in object) && !("schema_version" in object) && !("target" in object)) count++;
   });
   if (count > CAREER_FILE_BOUNDS.entries) ctx.addIssue({ code: "custom", message: "too many entries" });
 });

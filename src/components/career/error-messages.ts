@@ -5,6 +5,14 @@ type ErrorCode = CareerErrorCode | "stale" | "disabled" | "confirmation_required
 type ErrorMessageKey = `errors.${keyof typeof messages.career.errors}`;
 
 const errorMessages = {
+  unresolved_claims: "errors.generic",
+  target_gone: "errors.generic",
+  proposal_invalid: "errors.generic",
+  proposal_write_failed: "errors.generic",
+  outbound_changed: "errors.generic",
+  doc_gone: "errors.generic",
+  job_gone: "errors.generic",
+  no_jd: "errors.generic",
   document_invalid: "errors.generic",
   document_missing: "errors.generic",
   document_limit: "errors.limits",

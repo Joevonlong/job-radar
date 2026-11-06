@@ -13,7 +13,7 @@ import { WRITER_DEFAULT_EXPIRY_GRACE_SECONDS, WRITER_DEFAULT_QUEUE_TIMEOUT_SECON
 import { CAREER_DEFAULT_EXPIRY_GRACE_SECONDS, CAREER_DEFAULT_QUEUE_TIMEOUT_SECONDS, CAREER_DEFAULT_TIMEOUT_SECONDS } from "@/lib/config/schemas/career";
 
 type ExpirySettings = Pick<WriterConfig, "timeout_seconds" | "expiry_grace_seconds" | "queue_timeout_seconds">;
-export const CAREER_SCRUBBED_KINDS = ["career_extract"] as const;
+export const CAREER_SCRUBBED_KINDS = ["career_extract", "career_tailor"] as const;
 const WRITER_SCRUBBED_KINDS = SCRUBBED_PAYLOAD_KINDS.filter((kind) => !(CAREER_SCRUBBED_KINDS as readonly string[]).includes(kind));
 
 export function careerExpirySettings(): ExpirySettings {

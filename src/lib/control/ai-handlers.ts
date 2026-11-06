@@ -10,6 +10,7 @@ import { createRunAiHandler } from "./run-ai";
 import { testAiHandler } from "./test-ai";
 import { translateJobHandler } from "./translate-job";
 import { storyExtractHandler } from "./story-extract";
+import { careerTailorHandler } from "@/lib/career/tailor/handler";
 import { careerExtractHandler } from "@/lib/career/extract/handler";
 import { writerFitHandler } from "./writer-fit-job";
 import { writerJobHandler } from "./writer-job";
@@ -32,6 +33,7 @@ export function registerAiControlHandlers(): void {
   registerControlHandler("writer_job", writerJobHandler);
   registerControlHandler("story_extract", storyExtractHandler);
   registerControlHandler("career_extract", careerExtractHandler);
+  registerControlHandler("career_tailor", careerTailorHandler);
   registerControlHandler("writer_fit", writerFitHandler);
   registerControlHandler("models_sync", modelsSyncHandler);
   registerControlHandler("company_research", companyResearchHandler);

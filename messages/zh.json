@@ -3456,6 +3456,13 @@
       },
       "reasoning_effort_career_extract": {
         "label": "推理强度：职业档案提取"
+      },
+      "task_career_tailor": {
+        "label": "简历定制",
+        "hint": "发送已确认的简历分块、档案写法、偏好、单独要求和清洗后的 JD；排除联系方式与链接，不搜索网络。"
+      },
+      "reasoning_effort_career_tailor": {
+        "label": "推理强度：简历定制"
       }
     },
     "control": {
@@ -3518,7 +3525,8 @@
           "models_sync": "刷新模型列表",
           "story_extract": "提取素材",
           "writer_fit": "申请契合要点",
-          "career_extract": "职业档案提取"
+          "career_extract": "职业档案提取",
+          "career_tailor": "简历定制"
         },
         "status": {
           "pending": "排队中",
@@ -3557,7 +3565,12 @@
           "profile_invalid": "职业档案格式不正确。请检查后再试。",
           "deleted": "职业档案已删除，此请求已取消。",
           "draft_write_failed": "无法保存提取草稿，请重试。",
-          "handler_failed": "职业档案提取失败，请重试。"
+          "handler_failed": "职业档案提取失败，请重试。",
+          "outbound_changed": "已确认内容有变化，请重新检查。",
+          "doc_gone": "文档已删除。",
+          "job_gone": "岗位已不存在。",
+          "no_jd": "岗位没有职位描述。",
+          "proposal_write_failed": "无法保存提议。"
         },
         "scoreResult": "打分完成：{scored} 条成功，{failed} 条失败",
         "timeBudget": "到了时间预算，还剩 {remaining} 条没打分。",
@@ -4064,7 +4077,8 @@
         "company_research": "公司背景",
         "write": "申请写作",
         "story_extract": "提取素材",
-        "career_extract": "职业档案提取"
+        "career_extract": "职业档案提取",
+        "career_tailor": "简历定制"
       },
       "details": "详细统计 →"
     },
@@ -7638,7 +7652,8 @@
       "request__models_sync": "刷新模型列表",
       "request__story_extract": "提取素材",
       "request__writer_fit": "生成申请契合要点",
-      "request__career_extract": "提取职业档案"
+      "request__career_extract": "提取职业档案",
+      "request__career_tailor": "简历定制"
     },
     "event": {
       "item__ok": "单项处理成功",
@@ -7842,7 +7857,12 @@
       "profile_invalid": "职业档案格式不正确。请检查后再试。",
       "deleted": "职业档案已删除，此请求已取消。",
       "draft_write_failed": "无法保存提取草稿，请重试。",
-      "handler_failed": "职业档案提取失败，请重试。"
+      "handler_failed": "职业档案提取失败，请重试。",
+      "outbound_changed": "已确认内容有变化，请重新检查。",
+      "doc_gone": "文档已删除。",
+      "job_gone": "岗位已不存在。",
+      "no_jd": "岗位没有职位描述。",
+      "proposal_write_failed": "无法保存提议。"
     },
     "callbackResult": {
       "changed": "已更改",
@@ -7993,7 +8013,8 @@
       "models_sync": "刷新模型列表",
       "story_extract": "提取素材",
       "writer_fit": "申请契合要点",
-      "career_extract": "职业档案提取"
+      "career_extract": "职业档案提取",
+      "career_tailor": "简历定制"
     },
     "level": {
       "all": "全部级别",

@@ -14,6 +14,7 @@ export const CONTROL_ERROR_CODES = [
   "rescore_ai_unavailable", "rescore_failed", "rescore_profile_incomplete", "rescore_stopped", "not_found", "no_description", "same_language", "failed",
   "no_web_provider", "quota", "not_ready", "ai_failed", "invalidPayload", "unknownChannel", "nothingStale", "nothingToScore", "databaseUnavailable", "tooSoon",
   "quota_guard", "ai_test_failed", "unknown_channel", "channel_excluded", "channel_disabled", "channel_test_failed",
+  "outbound_changed", "doc_gone", "job_gone", "no_jd", "proposal_write_failed",
   "scrub_mismatch", "contact_unreadable", "contact_invalid", "profile_invalid", "deleted", "draft_write_failed", "handler_failed",
   "backfillOverLimit", "cycleBusy", "configUnavailable", "no_material", "no_text", "too_long", "busy", "output_truncated", "expired",
 ] as const;
