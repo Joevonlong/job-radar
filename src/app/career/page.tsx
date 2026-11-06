@@ -60,6 +60,7 @@ export default async function Page() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader title={t("title")} description={t("description")} />
+      <Link href="/career/documents" className="underline">{t("documents.title")}</Link>
       <CareerEditor
         initial={initial}
         contact={contact}

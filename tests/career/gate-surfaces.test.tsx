@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 vi.mock("next-intl/server", () => ({ getLocale: async () => "en", getTranslations: async () => (key: string) => key }));
 import { CareerCard } from "@/components/career/career-card";
+import { CareerEditor } from "@/components/career/career-editor";
 import CareerPage from "@/app/career/page";
 import {
   deleteCareerAction,
@@ -80,7 +81,7 @@ it("broken private data renders a machine-code error without file text", async (
   const card = await CareerCard();
   const page = await CareerPage();
   expect(renderToStaticMarkup(card)).not.toContain("private-sentinel");
-  expect(page.props.children[1].props.errors).toEqual(["profile_invalid"]);
+  expect(page.props.children.find((child: { type: unknown }) => child.type === CareerEditor)?.props.errors).toEqual(["profile_invalid"]);
   const result = await saveProfileAction({ profile: profile(), baseHash: null });
   expect(result).toEqual({ ok: false, code: "profile_invalid" });
 });

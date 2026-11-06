@@ -15,11 +15,12 @@ export const CAREER_FILE_BOUNDS = {
 const value = z.string().max(CAREER_FILE_BOUNDS.textChars);
 const optionalValue = value.nullable().default(null);
 const id = (prefix: IdPrefix) => z.string().regex(new RegExp(`^(?:${prefix}_[a-z2-7]{10})?$`));
-const date = z
+export const careerDateSchema = z
   .string()
   .regex(/^(?:\d{4}(?:-(?:0[1-9]|1[0-2]))?|present)$/)
   .nullable()
   .default(null);
+const date = careerDateSchema;
 const url = z
   .url({ protocol: /^https?$/ })
   .max(CAREER_FILE_BOUNDS.textChars)

@@ -135,6 +135,13 @@ describe("career profile storage", () => {
 });
 
 describe("contact and deletion", () => {
+  it("distinguishes unreadable contact files from invalid contact content", async () => {
+    fs.mkdirSync(careerContactPath(), { recursive: true });
+    await expect(loadContact()).rejects.toMatchObject({ code: "contact_unreadable" });
+    fs.rmdirSync(careerContactPath());
+    fs.writeFileSync(careerContactPath(), "name: [private-parser-sentinel");
+    await expect(loadContact()).rejects.toMatchObject({ code: "contact_invalid" });
+  });
   it("overwrites contact without history and keeps old contact values out of history", async () => {
     await save();
     const first = await saveContact({ ...emptyContact(), email: "old-contact@example.invalid" }, { baseHash: null });

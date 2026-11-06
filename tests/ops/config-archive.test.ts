@@ -37,6 +37,38 @@ beforeEach(() => {
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
 describe("writeConfigArchive", () => {
+  it("restores every career document asset and document history byte for byte", async () => {
+    const id = "doc_aaaaaaaaaa";
+    const files = new Map([
+      [`career/documents/${id}.yaml`, Buffer.from("title: Example document\n")],
+      [`career/history/documents/${id}/2026-01-02.yaml`, Buffer.from("title: Previous document\n")],
+      ["career/preferences.yaml", Buffer.from("schema_version: 1\n")],
+      ["career/photo.png", Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
+      ["career/signature.jpg", Buffer.from([0xff, 0xd8, 0xff, 0xe0])],
+    ]);
+    for (const [name, bytes] of files) {
+      const file = path.join(dirs.profile, name);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, bytes, { mode: 0o600 });
+    }
+    const members = [...files.keys()].map((name) => `data/profile/${name}`);
+    expect(await listArchiveMembers(dirs)).toEqual(expect.arrayContaining(members));
+    const destination = path.join(dir, "career.config.tgz");
+    await writeConfigArchive({ dirs, destination });
+    const listed = spawnSync("tar", ["-tzf", destination], { encoding: "utf8" });
+    expect(listed.status, listed.stderr).toBe(0);
+    expect(listed.stdout.split("\n")).toEqual(expect.arrayContaining(members));
+    const target = path.join(dir, "restored");
+    fs.mkdirSync(target);
+    const restored = spawnSync("tar", ["-xzf", destination, "-C", target], { encoding: "utf8" });
+    expect(restored.status, restored.stderr).toBe(0);
+    for (const [name, bytes] of files) {
+      const file = path.join(target, "data/profile", name);
+      expect(fs.readFileSync(file), name).toEqual(bytes);
+      expect(fs.statSync(file).mode & 0o777, name).toBe(0o600);
+    }
+  });
+
   it("archives data/config and data/profile under those names, without .backup, the session secret, partial files and symlinks", async () => {
     expect(await listArchiveMembers(dirs)).toEqual([
       "data/config/editor/nested.yaml",

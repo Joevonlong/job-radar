@@ -1,4 +1,10 @@
 export type CareerErrorCode =
+  | "document_invalid"
+  | "document_missing"
+  | "document_limit"
+  | "preferences_invalid"
+  | "image_invalid"
+  | "image_too_large"
   | "profile_invalid"
   | "contact_invalid"
   | "unknown_id"

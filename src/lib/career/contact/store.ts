@@ -10,11 +10,16 @@ import { careerContactPath } from "../store/paths";
 import { CareerStoreError } from "./errors";
 
 export async function loadContact(): Promise<{ contact: CareerContact; baseHash: string | null }> {
+  let text: string;
   try {
-    const text = readUserFile(careerContactPath()).toString("utf8");
-    return { contact: careerContactSchema.parse(parse(text)), baseHash: sha256(text) };
+    text = readUserFile(careerContactPath()).toString("utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return { contact: emptyContact(), baseHash: null };
+    throw new CareerStoreError("contact_unreadable");
+  }
+  try {
+    return { contact: careerContactSchema.parse(parse(text)), baseHash: sha256(text) };
+  } catch {
     throw new CareerStoreError("contact_invalid");
   }
 }

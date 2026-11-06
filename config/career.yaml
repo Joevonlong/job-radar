@@ -63,3 +63,29 @@ evidence:
     scale: { 万: 10000, 萬: 10000, 亿: 100000000, 億: 100000000, 千: 1000, thousand: 1000, tausend: 1000, m: 1000000, mn: 1000000, mio: 1000000, million: 1000000, millionen: 1000000, b: 1000000000, bn: 1000000000, mrd: 1000000000, billion: 1000000000, milliarden: 1000000000 }
     # Suffixes expressing a multiple rather than a magnitude.
     multiple: [倍, x]
+# Résumé document limits and initial layout.
+document:
+  # Maximum number of saved documents.
+  max_documents: 100
+  # Maximum photo or signature size in bytes.
+  image_max_bytes: 2000000
+  # Maximum preview request body in bytes. Document saves carry at most 1 MB, like profile saves.
+  max_request_bytes: 4000000
+  # Initial layout for new documents and missing preferences.
+  defaults:
+    # Document language.
+    lang: en
+    # Rendering theme.
+    theme: classic
+    # Accent color.
+    accent: "#2f54eb"
+    # Target page count.
+    pages: 1
+    # Paper format.
+    paper: a4
+    # Content density.
+    density: normal
+# Preview timing.
+preview:
+  # Delay before updating a preview in milliseconds.
+  debounce_ms: 400

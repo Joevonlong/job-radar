@@ -6,6 +6,20 @@ import { figureUnitsSchema } from "./writer";
 export const CAREER_DEFAULT_TIMEOUT_SECONDS = 300;
 export const CAREER_DEFAULT_EXPIRY_GRACE_SECONDS = 60;
 export const CAREER_DEFAULT_QUEUE_TIMEOUT_SECONDS = 900;
+export const CAREER_LANGS = ["en", "de"] as const;
+export const CAREER_THEMES = ["minimal", "band", "classic", "compact", "split"] as const;
+export const CAREER_PAPERS = ["a4", "letter"] as const;
+export const CAREER_DENSITIES = ["compact", "normal", "relaxed"] as const;
+export const careerAccentSchema = z.string().min(1).max(64).regex(/^[#a-zA-Z0-9(),.%\s/+-]+$/);
+
+export const careerLayoutDefaultsSchema = z.strictObject({
+  lang: z.enum(CAREER_LANGS).default("en"),
+  theme: z.enum(CAREER_THEMES).default("classic"),
+  accent: careerAccentSchema.default("#2f54eb"),
+  pages: z.number().int().min(1).max(10).default(1),
+  paper: z.enum(CAREER_PAPERS).default("a4"),
+  density: z.enum(CAREER_DENSITIES).default("normal"),
+});
 
 const positive = (fallback: number, max: number) => z.number().int().min(1).max(max).default(fallback);
 
@@ -45,6 +59,14 @@ export const careerSchema = z.strictObject({
     })
     .prefault({}),
   history: z.strictObject({ keep_versions: positive(50, 1000) }).prefault({}),
+  document: z.strictObject({
+    max_documents: positive(100, 1000),
+    image_max_bytes: positive(2000000, 20000000),
+    max_request_bytes: positive(4000000, 50000000)
+      .describe("Maximum preview request body in bytes. Document saves carry at most 1 MB, like profile saves."),
+    defaults: careerLayoutDefaultsSchema.prefault({}),
+  }).prefault({}),
+  preview: z.strictObject({ debounce_ms: z.number().int().min(50).max(10000).default(400) }).prefault({}),
   evidence: z
     .strictObject({
       min_quote_chars: positive(4, 1000),
