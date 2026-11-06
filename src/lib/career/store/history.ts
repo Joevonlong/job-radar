@@ -16,11 +16,11 @@ export interface CareerVersion {
   createdAt: string;
   hash: string;
 }
-const directory = () => path.join(careerHistoryDir(), "profile");
+const profileDirectory = () => path.join(careerHistoryDir(), "profile");
 
-export async function listVersions(): Promise<CareerVersion[]> {
+export async function listVersions(directory = profileDirectory()): Promise<CareerVersion[]> {
   try {
-    const files = await fsp.readdir(directory());
+    const files = await fsp.readdir(directory);
     return files
       .filter((file) => versionIdSchema.safeParse(file).success)
       .sort()
@@ -39,26 +39,26 @@ export async function listVersions(): Promise<CareerVersion[]> {
 export async function readVersion(rawId: string): Promise<CareerProfile> {
   if (!versionIdSchema.safeParse(rawId).success) throw new CareerStoreError("version_missing");
   try {
-    return parseStoredProfile(parse(readUserFile(path.join(directory(), rawId)).toString("utf8")));
+    return parseStoredProfile(parse(readUserFile(path.join(profileDirectory(), rawId)).toString("utf8")));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new CareerStoreError("version_missing");
     throw new CareerStoreError("history_invalid");
   }
 }
 
-/** Called under the profile's outer file lock and a separate config write lock. */
-export async function writeVersion(text: string): Promise<void> {
-  const versions = await listVersions();
+/** Called under the owning profile or document file lock and a separate history config write lock. */
+export async function writeVersion(text: string, directory = profileDirectory()): Promise<void> {
+  const versions = await listVersions(directory);
   const last = versions[0]?.createdAt;
   const stamp = new Date(Math.max(Date.now(), last ? Date.parse(last) + 1 : 0)).toISOString().replaceAll(":", "-");
-  await commitConfigFile(path.join(directory(), `${stamp}-${sha256(text).slice(0, 8)}.yaml`), text, { mode: "create" });
+  await commitConfigFile(path.join(directory, `${stamp}-${sha256(text).slice(0, 8)}.yaml`), text, { mode: "create" });
 }
 
 /** Retention is part of the history commit and holds its config write lock. */
-export async function prune(keep: number): Promise<void> {
-  const versions = await listVersions();
+export async function prune(keep: number, directory = profileDirectory()): Promise<void> {
+  const versions = await listVersions(directory);
   for (const version of versions.slice(keep)) {
-    const file = path.join(directory(), version.id);
+    const file = path.join(directory, version.id);
     const lock = currentConfigWriteLock();
     if (!lock || !(await lock.fence())) throw lockLostError(file);
     await fsp.rm(file, { force: true });

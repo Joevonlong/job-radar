@@ -2,7 +2,7 @@
 
 [中文](career-profile.zh.md)
 
-The optional career profile is a local library of career facts and alternative wordings. You can edit it manually or extract a reviewable draft from your own text. It does not generate or export résumés. It is independent of the
+The optional career profile is a local library of career facts and alternative wordings. You can edit it manually or extract a reviewable draft from your own text. The profile editor does not export résumés. It is independent of the
 application writer and does not change matching, scores or the experience library on **My profile**.
 
 ## Turn it on
@@ -52,10 +52,14 @@ All career data is under `data/profile/career/` (or the configured profile direc
 | `profile.yaml` | Facts, text and alternative wordings; no contact fields |
 | `contact.yaml` | Name, address, location, email, phone, work authorization, availability and contact links |
 | `history/profile/<utc>-<sha8>.yaml` | Saved profile versions, newest first in the interface |
+| `documents/<id>.yaml` | Independent résumé documents, layout and optional letter; no contact fields |
+| `history/documents/<id>/<utc>-<sha8>.yaml` | Saved document versions |
+| `preferences.yaml` | Layout defaults for newly created documents, emphasis and tone |
+| `photo.png` / `photo.jpg`, `signature.png` / `signature.jpg` | Shared document images |
 
 Files written by the app have mode `0600`. The directory is created on the first save. Contact details have a separate
 save button and stale-file check. They are overwritten without history: old contact values are never copied into career
-history. The optional contact photo field is reserved; this editor does not use images.
+history. The contact photo field is not used; résumé documents use the shared photo uploaded in the document editor.
 
 The contact file is not sent to AI. A city or other personal detail in source text can still be sent if it remains in the confirmed preview. The manual editor sends no career content to AI, Telegram or MCP and writes no database profile snapshots. Profile text can itself contain
 contact details; its warning is advisory. Saved files, including contact details, can remain in backups.
@@ -84,3 +88,22 @@ archives and retained profile directories yourself. See [Backup and restore](bac
 
 A save request can carry at most 1 MB. A very large profile can reach that before the entry and wording limits; the
 save then fails with an error and your edits stay in the form. Shorten the content and save again.
+
+## Résumé documents
+
+From `/career`, open **Résumé documents** and create a document from your saved, nonempty profile.
+Each document is an independent copy: later profile edits do not change it, and a banner tells you
+when the profile has changed.
+
+Open a document to edit and reorder entries, include or exclude entries and bullets, or add handwritten
+entries. Edited text and sources deleted from the profile are marked. Add a cover letter in the Letter tab.
+Use the live preview to check your changes. The preview is rendered on your machine; nothing is sent to AI.
+Contact details are read only for the preview and are never copied into document files. You can hide
+individual contact fields for each document.
+
+Upload a shared photo or signature as PNG or JPEG; the size limit is `career.yaml: document.image_max_bytes`.
+Images are shared across documents. In the layout menu, choose the theme, accent, page budget, paper,
+density, colours, language, filename, section order and signature. **Save as my defaults** applies the
+layout to future documents. Use history to view and restore earlier versions; save pending edits first.
+Delete a document from the list after confirmation; this also removes its history. Page count and PDF
+export are not available yet.
