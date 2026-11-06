@@ -189,6 +189,20 @@ it("renders unsaved documents without excluded content or filesystem writes", as
   expect(tree()).toEqual(before);
 });
 
+it.each(["resume", "letter"] as const)("previews %s without validating the other document's content", async (kind) => {
+  const unsaved = document();
+  unsaved.letter = {
+    recipient: [], place: null, date: null, subject: null, salutation: null, closing: null,
+    body: [{ id: "", source: null, origin: "user", text: kind === "resume" ? "" : "Independent letter paragraph" }],
+  };
+  if (kind === "letter") unsaved.experience[0]!.start = null;
+  const before = tree();
+  const response = await preview(jsonRequest({ document: unsaved, doc: kind }));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ ok: true, html: expect.stringContaining("<!doctype html>") });
+  expect(tree()).toEqual(before);
+});
+
 it("keeps contact sentinels transient across create, save, history, preferences and preview", async () => {
   const sentinel = "private-contact-sentinel";
   const contact = { ...emptyContact(), name: `${sentinel}-name`, address: `${sentinel}-address`, location: `${sentinel}-location`,

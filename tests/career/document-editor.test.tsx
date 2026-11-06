@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
+import { useState } from "react";
 import { expect, it, vi } from "vitest";
 import messages from "../../messages/en.json";
 import { document, HASH } from "./document-fixtures";
@@ -18,6 +19,37 @@ vi.mock("@/app/career/documents/actions", () => ({
 vi.mock("@/components/career/document-preview", () => ({ DocumentPreview: () => null }));
 import { saveDocumentAction } from "@/app/career/documents/actions";
 import { DocumentEditor } from "@/components/career/document-editor";
+import { DocumentLayout } from "@/components/career/document-layout";
+import { documentLayoutSchema } from "@/lib/career/schema/document";
+
+it("offers every schema page budget after switching from five pages to three and back", () => {
+  const initial = document();
+  initial.layout.pages = 5;
+  function Form() {
+    const [doc, setDoc] = useState(initial);
+    return (
+      <DocumentLayout
+        document={doc}
+        onChange={(layout) => setDoc({ ...doc, layout })}
+        initialPreferences={{
+          preferences: preferencesSchema.parse({ schema_version: 1, layout: {}, emphasis: null, tone: null }),
+          baseHash: null,
+        }}
+      />
+    );
+  }
+  render(<NextIntlClientProvider locale="en" messages={messages}><Form /></NextIntlClientProvider>);
+  const select = screen.getByRole("combobox", { name: messages.career.documents.layoutFields.pages });
+  const pages = documentLayoutSchema.shape.pages;
+  const expected = Array.from({ length: pages.maxValue! - pages.minValue! + 1 }, (_, index) =>
+    String(pages.minValue! + index));
+  expect(within(select).getAllByRole("option").map((option) => option.getAttribute("value"))).toEqual(expected);
+  expect(select).toHaveValue("5");
+  fireEvent.change(select, { target: { value: "3" } });
+  expect(select).toHaveValue("3");
+  fireEvent.change(select, { target: { value: "5" } });
+  expect(select).toHaveValue("5");
+});
 
 it("keeps edits and unsaved protection after a stale save", async () => {
   vi.mocked(saveDocumentAction).mockResolvedValue({ ok: false, code: "stale" });

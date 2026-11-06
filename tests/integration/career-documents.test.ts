@@ -169,8 +169,18 @@ it("removes documents, preferences, images and document history with all career 
   await savePreferences((await loadPreferences()).preferences, { baseHash: null });
   await saveImage("photo", png);
   await saveImage("signature", jpg);
-  expect(fs.existsSync(careerDocumentHistoryDir(created.document.id))).toBe(true);
+  const versions = await listDocumentVersions(created.document.id);
+  expect(versions).toHaveLength(1);
+  const files = [
+    careerDocumentPath(created.document.id),
+    path.join(careerDocumentHistoryDir(created.document.id), versions[0]!.id),
+    careerPreferencesPath(), careerImagePath("photo", "png"), careerImagePath("signature", "jpg"),
+  ];
+  for (const file of files) expect(fs.statSync(file).isFile()).toBe(true);
   await deleteCareerData();
+  for (const file of files) expect(fs.existsSync(file), path.relative(temp.profileDir, file)).toBe(false);
+  expect(fs.existsSync(careerDocumentsDir())).toBe(false);
+  expect(fs.existsSync(careerDocumentHistoryDir(created.document.id))).toBe(false);
   expect(fs.existsSync(careerDir())).toBe(false);
   expect(await listDocuments()).toEqual([]);
   expect(await loadImages()).toEqual({});

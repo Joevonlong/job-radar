@@ -8,6 +8,49 @@ import { document } from "./document-fixtures";
 const contact = () => ({ ...emptyContact(), name: "Projection sentinel", email: "projection@example.invalid", address: "One road\nSecond line", work_auth: "Authorized", availability: "Available", location: "Example location", phone: "0000", links: [{ label: "Site", url: "https://example.invalid" }], photo: "ignored.png" });
 const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
+it("previews a resume independently of an unfinished letter", () => {
+  const doc = document();
+  doc.letter = {
+    recipient: [], place: null, date: null, subject: null, salutation: null, closing: null,
+    body: [{ id: "", source: null, origin: "user", text: "" }],
+  };
+  expect(toResume(doc, contact(), {}, "resume").resume.letter).toBeUndefined();
+  expect(renderDocumentHtml(doc, { contact: contact(), images: {}, doc: "resume", today: "2026-01-02" }).ok)
+    .toBe(true);
+  expect(renderDocumentHtml(doc, { contact: contact(), images: {}, doc: "letter", today: "2026-01-02" }).ok)
+    .toBe(false);
+});
+
+it("previews a letter independently of incomplete resume sections", () => {
+  const doc = document();
+  doc.experience[0]!.start = null;
+  doc.education[0]!.start = null;
+  doc.custom_sections[0]!.title.text = "";
+  doc.letter = {
+    recipient: [], place: null, date: null, subject: null, salutation: null, closing: null,
+    body: [{ id: "", source: null, origin: "user", text: "Letter paragraph" }],
+  };
+  const projected = toResume(doc, contact(), {}, "letter").resume;
+  expect(projected.basics).toMatchObject({ name: contact().name, email: contact().email });
+  expect(projected.meta).toMatchObject({ lang: doc.layout.lang, theme: doc.layout.theme });
+  expect(projected.letter?.body).toEqual(["Letter paragraph"]);
+  for (const key of ["experience", "projects", "education", "certifications", "languages", "skills", "approach"] as const)
+    expect(projected[key]).toEqual([]);
+  expect(projected.sections).toBeUndefined();
+  expect(renderDocumentHtml(doc, { contact: contact(), images: {}, doc: "letter", today: "2026-01-02" }))
+    .toMatchObject({ ok: true, html: expect.stringContaining("Letter paragraph") });
+  expect(renderDocumentHtml(doc, { contact: contact(), images: {}, doc: "resume", today: "2026-01-02" }).ok)
+    .toBe(false);
+});
+
+it.each(["resume", "letter"] as const)("preserves a three-line address in the %s projection", (kind) => {
+  const doc = document();
+  const details = { ...contact(), address: "One road\r\nSecond line\r\nThird line" };
+  expect(toResume(doc, details, {}, kind).resume.basics.address)
+    .toEqual(["One road", "Second line, Third line"]);
+  expect(details.address).toBe("One road\r\nSecond line\r\nThird line");
+});
+
 it("projects generated fixture data to the engine without storing contact", () => {
   const doc = document();
   doc.custom_sections = [];
@@ -152,7 +195,8 @@ it("excludes unchecked bullets from every projected section and keeps legacy bul
   expect(result.resume.experience[0]!.bullets).toEqual(["Kept bullet"]);
   expect(result.resume.projects[0]!.bullets).toEqual(["Kept bullet"]);
   expect(result.resume.education[0]!.bullets).toEqual(["Kept bullet"]);
-  expect(result.resume.letter?.body).toEqual(["Kept paragraph"]);
+  expect(result.resume.letter).toBeUndefined();
+  expect(toResume(doc, contact(), {}, "letter").resume.letter?.body).toEqual(["Kept paragraph"]);
   expect(JSON.stringify(result.resume)).not.toContain("Excluded");
 });
 

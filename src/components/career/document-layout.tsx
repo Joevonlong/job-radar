@@ -9,12 +9,17 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Switch } from "@/components/ui/switch";
 import { CAREER_DENSITIES, CAREER_LANGS, CAREER_PAPERS, CAREER_THEMES } from "@/lib/config/schemas/career";
-import { DOCUMENT_BUILTINS, type CareerDocument } from "@/lib/career/schema/document";
+import { DOCUMENT_BUILTINS, documentLayoutSchema, type CareerDocument } from "@/lib/career/schema/document";
 import type { CareerPreferences } from "@/lib/career/schema/preferences";
 import { moveDocumentItem } from "./document-fields";
 import { DocumentInput, DocumentStatus } from "./document-shared";
 
 type Layout = CareerDocument["layout"];
+const pageBudget = documentLayoutSchema.shape.pages;
+const pageOptions = Array.from(
+  { length: pageBudget.maxValue! - pageBudget.minValue! + 1 },
+  (_, index) => pageBudget.minValue! + index,
+);
 export function documentSectionOrder(document: CareerDocument): NonNullable<Layout["sections"]> {
   const custom = document.custom_sections.filter((section) => section.included && section.id);
   const current = document.layout.sections ?? [...DOCUMENT_BUILTINS];
@@ -109,12 +114,11 @@ export function DocumentLayout({
       <label className="flex flex-col gap-1 text-label">
         {t("layoutFields.pages")}
         <NativeSelect value={layout.pages} onChange={(event) => patch({ pages: Number(event.target.value) })}>
-          {[1, 2, 3].map((pages) => (
+          {pageOptions.map((pages) => (
             <option key={pages} value={pages}>
               {pages}
             </option>
           ))}
-          {layout.pages > 3 && <option value={layout.pages}>{layout.pages}</option>}
         </NativeSelect>
       </label>
       <DocumentInput

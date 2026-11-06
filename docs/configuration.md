@@ -826,10 +826,13 @@ every key and rejects unknown keys. `config_version: 2` uses the standard layere
 format is version 1 and can be converted with `pnpm config:migrate --write --convert-overlays`.
 
 `document.max_documents` limits saved résumé copies (1–1000). `document.image_max_bytes` limits each local JPEG or PNG
-photo or signature (up to 20 MB), and `document.max_request_bytes` configures the preview/save body limit (up to 50 MB).
+photo or signature (up to 20 MB), and `document.max_request_bytes` configures only the preview request body limit
+(up to 50 MB). A document save request can carry at most 1 MB, like a profile save. A very large document can reach
+that before the entry and wording limits; the save then fails with an error and your edits stay in the form.
 `document.defaults` supplies `lang` (en/de), `theme` (minimal/band/classic/compact/split), `accent`, `pages` (1–10),
 `paper` (a4/letter) and `density` (compact/normal/relaxed) for missing preferences. `preview.debounce_ms` configures the
-preview delay (50–10000 ms). These backend settings do not add an editor or preview route.
+preview delay (50–10000 ms). Open the editor at `/career/documents`; see
+[Résumé documents](career-profile.md#résumé-documents) for editing and live preview.
 
 Documents live in `career/documents/` under the profile directory and retain source references while being edited
 independently. `history.keep_versions` applies separately to each document under `career/history/documents/` as well

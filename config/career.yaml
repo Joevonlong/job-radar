@@ -69,7 +69,7 @@ document:
   max_documents: 100
   # Maximum photo or signature size in bytes.
   image_max_bytes: 2000000
-  # Maximum preview or save request body in bytes.
+  # Maximum preview request body in bytes. Document saves carry at most 1 MB, like profile saves.
   max_request_bytes: 4000000
   # Initial layout for new documents and missing preferences.
   defaults:

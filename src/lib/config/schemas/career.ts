@@ -82,7 +82,8 @@ export const careerSchema = z.strictObject({
   document: z.strictObject({
     max_documents: positive(100, 1000),
     image_max_bytes: positive(2000000, 20000000),
-    max_request_bytes: positive(4000000, 50000000),
+    max_request_bytes: positive(4000000, 50000000)
+      .describe("Maximum preview request body in bytes. Document saves carry at most 1 MB, like profile saves."),
     defaults: careerLayoutDefaultsSchema.prefault({}),
   }).prefault({}),
   preview: z.strictObject({ debounce_ms: z.number().int().min(50).max(10000).default(400) }).prefault({}),

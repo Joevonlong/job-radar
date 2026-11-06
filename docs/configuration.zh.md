@@ -608,10 +608,13 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 `pnpm config:migrate --write --convert-overlays` 转成覆盖层。
 
 `document.max_documents` 限制简历副本数量（1–1000）；`document.image_max_bytes` 限制每张本地 JPEG/PNG
-照片或签名大小（最多 20 MB）；`document.max_request_bytes` 配置预览和保存的请求体上限（最多 50 MB）。
+照片或签名大小（最多 20 MB）；`document.max_request_bytes` 仅配置预览请求体上限（最多 50 MB）。
+和职业档案一样，文档一次保存最多发送 1 MB。文档很大时可能在达到条目和写法上限之前就超出；
+这时保存失败并提示错误，表单里的修改仍在。
 `document.defaults` 提供缺失偏好文件时的 `lang`（en/de）、`theme`（minimal/band/classic/compact/split）、
 `accent`、`pages`（1–10）、`paper`（a4/letter）、`density`（compact/normal/relaxed）。
-`preview.debounce_ms` 配置预览延迟（50–10000 毫秒）。这些后端设置尚未提供编辑器或预览路由。
+`preview.debounce_ms` 配置预览延迟（50–10000 毫秒）。编辑器位于 `/career/documents`；
+编辑和实时预览见[简历文档](career-profile.zh.md#简历文档)。
 
 文档保存在 profile 目录的 `career/documents/`，保留来源引用并独立编辑。
 `history.keep_versions` 分别约束每份文档在 `career/history/documents/` 下的历史及档案历史。
