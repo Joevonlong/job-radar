@@ -1,13 +1,13 @@
 # File format version.
 config_version: 2
 enabled: false
-# Maximum running time for an extraction request (reserved for extraction).
+# Maximum running time for an extraction request.
 timeout_seconds: 300
 # Margin before an abandoned running request expires.
 expiry_grace_seconds: 60
 # Maximum wait for a queued request.
 queue_timeout_seconds: 900
-# Upload and extraction limits, reserved for extraction.
+# Upload and extraction limits.
 import:
   # Accepted file extensions.
   formats: [pdf, md, txt]
@@ -51,7 +51,7 @@ profile:
 history:
   # Maximum versions kept, oldest removed first.
   keep_versions: 50
-# Evidence verification limits, reserved for extraction.
+# Evidence verification limits for extraction.
 evidence:
   # Minimum supporting quote length.
   min_quote_chars: 4

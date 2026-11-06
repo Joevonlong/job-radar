@@ -205,8 +205,8 @@ tar -xzf data/backups/<name>.config.tgz -C .
 
 ## Career profile copies
 
-The configuration archive includes the whole `data/profile/career/` directory: profile, contact details and profile
-history. Scheduled archives follow `schedule.yaml: backup.config_archive`, `keep_daily` and `keep_weekly`.
+The configuration archive includes the whole `data/profile/career/` directory: profile, contact details, profile
+history and extraction drafts in `data/profile/career/drafts/`. Scheduled archives follow `schedule.yaml: backup.config_archive`, `keep_daily` and `keep_weekly`.
 Pre-migration system archives follow `config_archive`; pre-deploy and pre-restore archives are always made. System
 archives use `keep_system` per kind (default five); manual archives are kept until you delete them. Scheduled defaults
 retain fourteen daily and eight weekly backups; your own configured policy takes precedence.
