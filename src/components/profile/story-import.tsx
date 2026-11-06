@@ -114,6 +114,7 @@ export function StoryImport({ view, baseHash, dirty }: StoryImportProps) {
     else if (origin === "self_description") body = JSON.stringify({ text });
     else {
       if (!file) return false;
+      // the server checks this too; refused here, the file does not leave the browser
       if (file.size > view.maxFileBytes) { fail({ error: "too_large", resumeAt: null }); return false; }
       body = new FormData();
       body.set("file", file);

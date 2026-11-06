@@ -14,6 +14,12 @@ import { reply, refuse } from "../reply";
 export const dynamic = "force-dynamic";
 const profileInput = z.strictObject({ origin: z.literal("profile") });
 
+/**
+ * `POST /api/me/story-extract/prepare`: the editable preview of a story extraction from your profile (`{ origin: "profile" }`),
+ * a pasted text (`{ text }`) or a résumé (multipart `file`). A route rather than a server action, whose body limit is smaller
+ * than a résumé. Host, Origin and login are checked by `src/proxy.ts`, like every other route. The file stays in memory and
+ * only its scrubbed text is returned; nothing is stored, and neither its name nor its text is logged.
+ */
 export async function POST(request: Request) {
   let release: (() => void) | null = null;
   try {
@@ -32,6 +38,7 @@ export async function POST(request: Request) {
       const input = profile.success ? { text: profileSourceText(reloadConfig("me")) } : raw;
       source = new Request(request.url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input), signal: request.signal });
     } else {
+      // only a file is read by this process side by side with others (its bytes and a PDF thread); pasted text and the profile are not
       release = enterUpload(limits.max_concurrent_uploads);
       if (release === null) return refuse("too_many");
     }

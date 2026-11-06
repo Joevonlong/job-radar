@@ -83,6 +83,7 @@ export function createStoryExtractHandler(options: StoryExtractHandlerOptions = 
     try {
       await insertStoryDrafts(context.db, { origin, sourceHash, drafts });
     } catch (error) {
+      // a query error quotes its parameters, which hold the drafts: only its name goes on
       context.logger.error("story drafts could not be stored", { error: error instanceof Error ? error.name : "unknown" });
       return { status: "failed", result: { ...base, error: "handler_error" } };
     }

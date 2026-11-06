@@ -11,6 +11,11 @@ import { reply, refuse } from "./reply";
 export const dynamic = "force-dynamic";
 const inputSchema = z.strictObject({ origin: z.enum(STORY_EXTRACT_ORIGINS), text: z.string() });
 
+/**
+ * `POST /api/me/story-extract`: start a story extraction from a text confirmed in the preview (`{ origin, text }`). A route
+ * rather than a server action, like the prepare route next to it. Host, Origin and login are checked by `src/proxy.ts`, like
+ * every other route. The text goes only into the request's payload; it is not logged.
+ */
 export async function POST(request: Request) {
   try {
     const writer = reloadConfig("writer");
