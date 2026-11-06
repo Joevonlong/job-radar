@@ -7,7 +7,7 @@ import { saveProfileAction } from "@/app/career/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CareerConfig } from "@/lib/config/schemas/career";
-import { profileEntryCount, type CareerProfile } from "@/lib/career/schema/profile";
+import { profileContent, profileEntryCount, type CareerProfile } from "@/lib/career/schema/profile";
 
 import { CareerStatus } from "./career-status";
 import { ObjectFields, blankEntry, sectionFields, sectionKeys, type DataObject } from "./profile-fields";
@@ -46,7 +46,7 @@ export function ProfileForm({
         if (disabled || pending) return;
         startTransition(async () => {
           try {
-            const result = await saveProfileAction({ profile: draft, baseHash });
+            const result = await saveProfileAction({ profile: profileContent(draft), baseHash });
             if (!result.ok) {
               setStatus(result.code);
               return;

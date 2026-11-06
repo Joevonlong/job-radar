@@ -24,7 +24,7 @@ The page shows queued and running status, then a draft or an error. If a request
 
 Review each suggested field against its source quote and any warning flags. Edit fields, choose which bullets to keep, and select **Add**, **Merge** when a match is suggested, or **Skip** for each entry. Matches are suggestions, so check them. Merging keeps existing facts and adds different text as another wording and new bullets. Save any unsaved profile edits first, then adopt your selections; discard removes the draft without adopting it. Extracted project links must be added manually.
 
-**Add** always creates a separate entry, even when a match exists. Adopting the same draft again adds nothing twice; the profile field `adopted_entries` remembers what was adopted. If a PDF is longer than the reading limit, the preview marks it as cut off.
+**Add** always creates a separate entry, even when a match exists. Adopting the same draft again adds nothing twice; `adopted_entries` is internal metadata preserved across edits and restores, never edited by users or shown in comparisons. If a PDF is longer than the reading limit, the preview marks it as cut off.
 
 Unreviewed drafts expire after `import.draft_ttl_days` (default 14 days). At `import.max_pending_drafts` (default 5), adopt or discard a draft before starting another. Drafts are stored under `data/profile/career/drafts/` and included in backups.
 

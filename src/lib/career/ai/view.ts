@@ -1,4 +1,4 @@
-import type { CareerProfile } from "../schema/profile";
+import { profileContent, type CareerProfile } from "../schema/profile";
 
 /** AI views keep every wording and content field, excluding local identifiers, source metadata and URLs. */
 export function careerAiView(profile: CareerProfile): string {
@@ -8,5 +8,5 @@ export function careerAiView(profile: CareerProfile): string {
     if (typeof value === "object") return Object.entries(value).filter(([key]) => !["url", "id", "primary", "created_at", "from_document", "from_story"].includes(key)).map(([key, value]) => `${key}:\n${render(value)}`).join("\n");
     return String(value);
   };
-  return render(profile);
+  return render(profileContent(profile));
 }

@@ -169,6 +169,12 @@ export function emptyProfile(): CareerProfile {
   return careerProfileSchema.parse({});
 }
 
+export function profileContent(profile: CareerProfile): Omit<CareerProfile, "adopted_entries"> {
+  const content: Omit<CareerProfile, "adopted_entries"> & { adopted_entries?: string[] } = { ...profile };
+  delete content.adopted_entries;
+  return content;
+}
+
 export function primaryText(text: Text | null): string {
   return text?.wordings.find((wording) => wording.id === text.primary)?.text ?? text?.wordings[0]?.text ?? "";
 }

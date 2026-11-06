@@ -61,6 +61,17 @@ it("serializes concurrent saves and rejects the stale base", async () => {
   expect(await listVersions()).toHaveLength(1);
 });
 
+it("keeps stored adoption keys when the editor action saves under real locks", async () => {
+  const saved = await saveCareerProfile({ ...profile(), adopted_entries: ["1:d0", "2:headline"] }, { baseHash: null });
+  if (!saved.ok) throw new Error(saved.code);
+  const { adopted_entries, ...edit } = saved.profile;
+  edit.experience[0]!.company = "Edited company";
+  expect(await saveProfileAction({ profile: edit, baseHash: null })).toEqual({ ok: false, code: "stale" });
+  expect(await saveProfileAction({ profile: edit, baseHash: saved.baseHash }))
+    .toMatchObject({ ok: true, profile: { adopted_entries } });
+  expect((await loadCareerProfile()).profile).toEqual({ ...edit, adopted_entries });
+});
+
 it("leaves matching snapshots, score staleness and the existing profile files unchanged", async () => {
   await ensureProfileFiles();
   const db = getDb();

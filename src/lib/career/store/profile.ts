@@ -13,6 +13,7 @@ import {
   checkProfileLimits,
   emptyProfile,
   parseStoredProfile,
+  profileContent,
   type CareerProfile,
 } from "../schema/profile";
 import { assignIds } from "../schema/ids";
@@ -59,11 +60,12 @@ async function persistProfile(
     if (baseHash !== current.baseHash) return { ok: false, code: "stale" };
     const parsed = careerProfileSchema.safeParse(rawProfile);
     if (!parsed.success) throw new CareerStoreError("profile_invalid");
+    parsed.data.adopted_entries = [...new Set([...current.profile.adopted_entries, ...parsed.data.adopted_entries])];
     const config = reloadConfig("career");
     checkProfileLimits(parsed.data, config.profile);
     const profile = restore ? parseStoredProfile(parsed.data) : assignIds(parsed.data, current.profile);
-    const text = stringify(profile);
-    const unchanged = current.baseHash !== null && stringify(current.profile) === text;
+    const text = serializeProfile(profile);
+    const unchanged = current.baseHash !== null && serializeProfile(current.profile) === text;
     try {
       await withConfigWriteLock(async () => {
         if (unchanged) {
@@ -93,6 +95,10 @@ async function persistProfile(
   });
 }
 
+function serializeProfile(profile: CareerProfile): string {
+  return stringify(profile.adopted_entries.length ? profile : profileContent(profile));
+}
+
 /**
  * The history lock is taken after the profile lock is released, so another process may delete or replace the profile in
  * between. A version is recorded only while the committed text is still the current profile, so deleted data is never
@@ -107,7 +113,7 @@ function isCurrentProfile(text: string): boolean {
   }
 }
 
-/** A restore trusts the ids of the stored version and commits it as a new current profile. */
+/** A restore trusts the stored ids and keeps adoption keys from both profiles when committing the restored content. */
 export async function restoreCareerProfile(
   profile: CareerProfile,
   options: { baseHash: string | null },

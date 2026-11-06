@@ -7,7 +7,7 @@ import { readCareerGate } from "@/lib/config/career-gate";
 import { CareerStoreError } from "@/lib/career/contact/errors";
 import { saveContact } from "@/lib/career/contact/store";
 import { careerContactSchema } from "@/lib/career/schema/contact";
-import { careerProfileSchema } from "@/lib/career/schema/profile";
+import { careerProfileSchema, profileContent } from "@/lib/career/schema/profile";
 import { clearCareerHistory, deleteCareerData } from "@/lib/career/store/delete";
 import { listVersions, readVersion, versionIdSchema } from "@/lib/career/store/history";
 import { loadCareerProfile, restoreCareerProfile, saveCareerProfile } from "@/lib/career/store/profile";
@@ -39,7 +39,7 @@ export async function saveProfileAction(input: unknown) {
   const parsed = profileInput.safeParse(input);
   if (!parsed.success) return { ok: false as const, code: "profile_invalid" };
   try {
-    return await saveCareerProfile(parsed.data.profile, { baseHash: parsed.data.baseHash });
+    return await saveCareerProfile(profileContent(parsed.data.profile), { baseHash: parsed.data.baseHash });
   } catch (error) {
     return failure("saveCareerProfile", error);
   }
@@ -75,7 +75,7 @@ export async function diffVersionAction(input: unknown) {
     const current = await loadCareerProfile();
     return {
       ok: true as const,
-      changes: diffLines(stringify(version), stringify(current.profile)).map(({ added, removed, value }) => ({
+      changes: diffLines(stringify(profileContent(version)), stringify(profileContent(current.profile))).map(({ added, removed, value }) => ({
         added: !!added,
         removed: !!removed,
         value,

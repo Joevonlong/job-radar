@@ -11,7 +11,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, i
 
 import { POST as prepare } from "@/app/api/career/extract/prepare/route";
 import { POST as extract } from "@/app/api/career/extract/route";
-import { adoptCareerDraftAction, deleteCareerAction, discardCareerDraftAction, getCareerExtractStatus, listCareerDrafts, readCareerDraftAction } from "@/app/career/actions";
+import { adoptCareerDraftAction, deleteCareerAction, discardCareerDraftAction, getCareerExtractStatus, listCareerDrafts, readCareerDraftAction, restoreVersionAction } from "@/app/career/actions";
 import { AiProviderError, createAiRouter } from "@/lib/ai";
 import { createActivityRecorder } from "@/lib/activity/recorder";
 import { CONTROL_ERROR_CODES } from "@/lib/activity/error-codes";
@@ -21,6 +21,7 @@ import { CAREER_DEFAULT_QUEUE_TIMEOUT_SECONDS } from "@/lib/config/schemas/caree
 import { readCareerGate } from "@/lib/config/career-gate";
 import { saveContact } from "@/lib/career/contact/store";
 import { emptyContact } from "@/lib/career/schema/contact";
+import { emptyProfile } from "@/lib/career/schema/profile";
 import { createCareerExtractHandler } from "@/lib/career/extract/handler";
 import { requestCareerExtract, readCareerExtractStatus } from "@/lib/career/extract/request";
 import * as draftStore from "@/lib/career/extract/draft-store";
@@ -28,7 +29,8 @@ import * as atomic from "@/lib/config/atomic";
 import * as scrub from "@/lib/career/contact/scrub";
 import * as verify from "@/lib/career/extract/verify";
 import { careerContactPath, careerDir, careerProfilePath } from "@/lib/career/store/paths";
-import { loadCareerProfile } from "@/lib/career/store/profile";
+import { listVersions } from "@/lib/career/store/history";
+import { loadCareerProfile, saveCareerProfile } from "@/lib/career/store/profile";
 import { processNextControlRequest, registerControlHandler, resetControlHandlers } from "@/lib/control";
 import { CAREER_SCRUBBED_KINDS, expireScrubbedRequests } from "@/lib/control/expire";
 import { closeDb, getDb, schema } from "@/lib/db";
@@ -466,6 +468,29 @@ it("reports a committed adoption if draft removal fails and makes the retry idem
   const current = await loadCareerProfile();
   expect(await adoptCareerDraftAction({ requestId: id, baseHash: current.baseHash, decisions })).toMatchObject({ ok: true, draftDiscarded: true, baseHash: current.baseHash });
   expect((await loadCareerProfile()).profile).toEqual(current.profile);
+});
+
+it("does not adopt a retained draft again after restoring pre-adoption history", async () => {
+  const original = await saveCareerProfile(emptyProfile(), { baseHash: null });
+  if (!original.ok) throw new Error(original.code);
+  const version = (await listVersions())[0]!;
+  handlerWith();
+  const id = await queue();
+  await poll();
+  const savedDraft = await draftStore.readCareerDraft(id);
+  const decisions = [{ key: savedDraft.sections.experience[0]!.key, action: "new" }];
+  const removal = vi.spyOn(draftStore, "discardCareerDraft").mockRejectedValueOnce(new Error("removal unavailable"));
+  expect(await adoptCareerDraftAction({ requestId: id, baseHash: original.baseHash, decisions }))
+    .toMatchObject({ ok: true, draftDiscarded: false });
+  removal.mockRestore();
+  const adopted = await loadCareerProfile();
+  expect(adopted.profile.experience).toHaveLength(1);
+  expect(await restoreVersionAction({ version: version.id, baseHash: adopted.baseHash }))
+    .toMatchObject({ ok: true, profile: { experience: [], adopted_entries: adopted.profile.adopted_entries } });
+  const restored = await loadCareerProfile();
+  expect(await adoptCareerDraftAction({ requestId: id, baseHash: restored.baseHash, decisions }))
+    .toMatchObject({ ok: true, draftDiscarded: true, baseHash: restored.baseHash });
+  expect((await loadCareerProfile()).profile).toEqual(restored.profile);
 });
 
 it("keeps private parser text out of route and action diagnostics", async () => {
