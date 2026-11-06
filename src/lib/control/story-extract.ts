@@ -4,6 +4,8 @@ import type { AiRouter } from "@/lib/ai/router";
 import type { AiCallRecord, AiResult } from "@/lib/ai/types";
 import { ConfigError, loadConfig, type WriterConfig } from "@/lib/config";
 import { STORY_FILE_BOUNDS } from "@/lib/config/schemas/stories";
+import { confirmedOutbound, NO_STORED_VALUES, OutboundMismatch, type OutboundText } from "@/lib/outbound/outbound";
+import { neutralizeStorySource } from "@/lib/stories/source";
 import { insertStoryDrafts } from "@/lib/db/repos/story-drafts";
 import { countFlags } from "@/lib/stories/extract";
 import { verifyExtractedDraft } from "@/lib/stories/verify-extract";
@@ -32,6 +34,15 @@ export function createStoryExtractHandler(options: StoryExtractHandlerOptions = 
     if (!payload.success) return { status: "failed", result: { error: "invalid_payload" } };
     const { origin, sourceHash, text } = payload.data;
     const base = { origin };
+    if (!payload.data.confirmed) return { status: "failed", result: { ...base, error: "preview_required" } };
+    let outbound: OutboundText;
+    try {
+      outbound = confirmedOutbound(text, NO_STORED_VALUES);
+      if (neutralizeStorySource(text) !== text) throw new OutboundMismatch();
+    } catch (error) {
+      if (error instanceof OutboundMismatch) return { status: "failed", result: { ...base, error: "scrub_mismatch" } };
+      throw error;
+    }
     let settings: WriterConfig;
     try {
       settings = loadSettings();
@@ -41,7 +52,7 @@ export function createStoryExtractHandler(options: StoryExtractHandlerOptions = 
     }
     if (!settings.enabled) return { status: "failed", result: { ...base, error: "disabled" } };
 
-    const prompt = buildStoryExtractPrompt({ text, maxDrafts: settings.import.max_drafts, quoteMaxChars: settings.evidence.quote_max_chars });
+    const prompt = buildStoryExtractPrompt({ text: outbound, maxDrafts: settings.import.max_drafts, quoteMaxChars: settings.evidence.quote_max_chars });
     const startedAt = request.startedAt?.getTime() ?? Date.now();
     const timeout = AbortSignal.timeout(Math.max(1, startedAt + settings.timeout_seconds * 1000 - Date.now()));
     let lastCall: AiCallRecord | null = null;
@@ -72,7 +83,6 @@ export function createStoryExtractHandler(options: StoryExtractHandlerOptions = 
     try {
       await insertStoryDrafts(context.db, { origin, sourceHash, drafts });
     } catch (error) {
-      // a query error quotes its parameters, which hold the drafts: only its name goes on
       context.logger.error("story drafts could not be stored", { error: error instanceof Error ? error.name : "unknown" });
       return { status: "failed", result: { ...base, error: "handler_error" } };
     }

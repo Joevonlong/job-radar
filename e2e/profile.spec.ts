@@ -288,6 +288,9 @@ test("story extraction from a pasted text: drafts wait for review, flags show, a
   await page.getByTestId("story-import-paste").click();
   await page.getByTestId("story-import-text").fill("Led the migration of the billing service to Postgres\nwith no downtime for customers.");
   await page.getByTestId("story-import-send-text").click();
+  await expect(page.getByTestId("send-preview")).toBeVisible();
+  await expect(page.getByTestId("story-draft")).toHaveCount(0);
+  await page.getByTestId("outbound-send").click();
 
   const drafts = page.getByTestId("story-draft");
   await expect(drafts).toHaveCount(2, { timeout: 30_000 });
@@ -331,6 +334,9 @@ test("story extraction from an uploaded résumé: a PDF is read, a scan and a wr
   const pdf = minimalPdf(["Shipped the search rewrite for the Atlas product team.", "Reduced query latency for all customers."]);
   await page.getByTestId("story-import-file").setInputFiles({ name: "resume.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf) });
   await page.getByTestId("story-import-send-file").click();
+  await expect(page.getByTestId("send-preview")).toBeVisible();
+  await expect(page.getByTestId("story-draft")).toHaveCount(0);
+  await page.getByTestId("outbound-send").click();
   const drafts = page.getByTestId("story-draft");
   await expect(drafts).toHaveCount(2, { timeout: 30_000 });
   await expect(drafts.filter({ hasText: "Shipped the search rewrite" })).toHaveCount(1);
