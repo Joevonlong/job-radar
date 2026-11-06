@@ -13,7 +13,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/app/me/actions", () => ({ adoptStoryDraftAction: vi.fn(), discardStoryDraftAction: vi.fn(), storyExtractStatusAction: vi.fn(async () => null) }));
 vi.mock("@/lib/toast", () => ({ toastTone: vi.fn() }));
 
-const view: StoryImportView = { enabled: true, maxFileBytes: 2_000_000, maxChars: 30_000, formats: ["pdf", "md", "txt"], ttlDays: 14, providers: [], drafts: [], open: null, error: null };
+const view: StoryImportView = { enabled: true, maxFileBytes: 2_000_000, maxChars: 30_000, formats: ["pdf", "md", "txt"], ttlDays: 14, providers: [], drafts: [], open: null, error: null, careerEnabled: false };
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -114,4 +114,18 @@ it("clears the selected upload when its preview is cancelled", async () => {
   expect(screen.getByTestId("story-import-send-file")).toBeDisabled();
   fireEvent.click(screen.getByTestId("story-import-send-file"));
   expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it.each([["en", en], ["zh", zh]] as const)("links to the career page instead of the extract entries when the career profile is on (%s)", (locale, messages) => {
+  render(<NextIntlClientProvider locale={locale} messages={messages} timeZone="UTC"><StoryImport view={{ ...view, careerEnabled: true }} baseHash="h" dirty={false} /></NextIntlClientProvider>);
+  expect(screen.getByTestId("story-import-career")).toHaveTextContent(messages.profile.storyImport.useCareer);
+  expect(screen.getByRole("link", { name: messages.profile.storyImport.useCareerLink })).toHaveAttribute("href", "/career");
+  expect(screen.queryByTestId("story-import-profile")).toBeNull();
+  expect(screen.queryByTestId("story-import-paste")).toBeNull();
+  expect(screen.queryByTestId("story-import-upload")).toBeNull();
+});
+
+it("still follows an extraction that was already running when the career profile is on", () => {
+  render(<NextIntlClientProvider locale="en" messages={en} timeZone="UTC"><StoryImport view={{ ...view, careerEnabled: true, open: { requestId: 9, stage: "running", queue: null } }} baseHash="h" dirty={false} /></NextIntlClientProvider>);
+  expect(screen.getByTestId("story-import-waiting")).toBeInTheDocument();
 });

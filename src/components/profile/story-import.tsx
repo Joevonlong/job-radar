@@ -172,6 +172,14 @@ export function StoryImport({ view, baseHash, dirty }: StoryImportProps) {
       <CardContent className="flex flex-col gap-4 px-4 md:px-5">
         {view.enabled ? (
           <>
+            {view.careerEnabled ? (
+              <p className="text-body-sm" data-testid="story-import-career">
+                {t("useCareer")}{" "}
+                <Link href="/career" className={INK_LINK}>
+                  {t("useCareerLink")}
+                </Link>
+              </p>
+            ) : <>
             <div className="bg-soft rounded-card flex flex-col gap-1 px-3 py-2.5" data-testid="story-import-disclosure">
               <p className="text-body-sm" data-testid="story-import-providers">
                 <span className="font-semibold">{t("sendsTo")}</span> {providers}
@@ -232,6 +240,7 @@ export function StoryImport({ view, baseHash, dirty }: StoryImportProps) {
                 </Button>
               </div>
             ) : null}
+            </>}
             </>}
             {busy ? (
               <div className="flex flex-col gap-1" role="status" data-testid="story-import-waiting">

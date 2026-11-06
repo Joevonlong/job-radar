@@ -42,7 +42,9 @@ configuration archive with the rest of `data/profile/` ([backup-restore.md](back
 
 ### Getting stories from what you already wrote
 
-The **Get stories from what you already wrote** card below the library has the AI draft stories, from one of three sources:
+The **Get stories from what you already wrote** card below the library has the AI draft stories, from one of three sources
+(while the [career profile](career-profile.md) is on, the card links to the career page instead, where extraction and
+**Apply to matching** fill the library):
 
 - **From my profile**: the summary and skills of `me.yaml`, nothing else.
 - **Paste a self-description**: any text you paste.

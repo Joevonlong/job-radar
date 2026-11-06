@@ -6,7 +6,12 @@ import { copyPrivateIfMissing } from "./private-file";
 import { getConfigPath, getProfileDir, getProfileExampleDir } from "./paths";
 import { configRegistry, PROFILE_NAMES, type ProfileName } from "./registry";
 
-export type ProfileSavedHook = (kind: ProfileName, yamlText: string) => Promise<void>;
+/** What a profile save did beyond writing the file: the number of scores it newly marked stale, when the hook knows it. */
+export interface ProfileSavedResult {
+  staleMarked?: number;
+}
+
+export type ProfileSavedHook = (kind: ProfileName, yamlText: string) => Promise<ProfileSavedResult | void>;
 
 let onProfileSaved: ProfileSavedHook = async () => {};
 
@@ -15,8 +20,8 @@ export function setOnProfileSaved(hook: ProfileSavedHook | null): void {
   onProfileSaved = hook ?? (async () => {});
 }
 
-export async function notifyProfileSaved(kind: ProfileName, yamlText: string): Promise<void> {
-  await onProfileSaved(kind, yamlText);
+export async function notifyProfileSaved(kind: ProfileName, yamlText: string): Promise<ProfileSavedResult> {
+  return (await onProfileSaved(kind, yamlText)) ?? {};
 }
 
 export interface EnsureProfileResult {

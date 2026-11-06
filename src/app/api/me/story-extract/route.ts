@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { ConfigError, reloadConfig } from "@/lib/config";
+import { readCareerGate } from "@/lib/config/career-gate";
 import { requestStoryExtract } from "@/lib/control/story-extract-request";
 import { getDb } from "@/lib/db";
 import { logActionFailure } from "@/lib/logging/action-failure";
@@ -14,10 +15,12 @@ const inputSchema = z.strictObject({ origin: z.enum(STORY_EXTRACT_ORIGINS), text
 /**
  * `POST /api/me/story-extract`: start a story extraction from a text confirmed in the preview (`{ origin, text }`). A route
  * rather than a server action, like the prepare route next to it. Host, Origin and login are checked by `src/proxy.ts`, like
- * every other route. The text goes only into the request's payload; it is not logged.
+ * every other route. The text goes only into the request's payload; it is not logged. With the career profile on, extraction
+ * moves to the career page: every request is refused with `use_career` before its body is read.
  */
 export async function POST(request: Request) {
   try {
+    if ((await readCareerGate()).enabled) return refuse("use_career");
     const writer = reloadConfig("writer");
     if (!writer.enabled) return refuse("disabled");
     if (!request.headers.get("content-type")?.includes("application/json")) return refuse("invalid");

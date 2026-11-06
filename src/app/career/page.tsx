@@ -2,12 +2,14 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 
+import { ApplyPanel } from "@/components/career/apply-panel";
 import { CareerEditor } from "@/components/career/career-editor";
 import { PageHeader } from "@/components/shell/page-header";
 import { readCareerGate } from "@/lib/config/career-gate";
 import { reloadConfig } from "@/lib/config/load";
 import { CareerStoreError } from "@/lib/career/contact/errors";
 import { loadContact } from "@/lib/career/contact/store";
+import { changedSinceApply } from "@/lib/career/apply/service";
 import { listVersions } from "@/lib/career/store/history";
 import { loadCareerProfile } from "@/lib/career/store/profile";
 import { getDisplayTimeZone } from "@/lib/dashboard/context";
@@ -70,6 +72,7 @@ export default async function Page() {
         extraction={{ limits: limits.import, providers, drafts, open: status }}
         timeZone={getDisplayTimeZone()}
       />
+      {initial ? <ApplyPanel changedSinceApply={changedSinceApply(initial.baseHash)} /> : null}
     </div>
   );
 }

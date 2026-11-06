@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { parseConfigText, setOnProfileSaved, type ProfileName } from "@/lib/config";
 import {
+  countScoresStaleOnChange,
   findProfileSnapshotByHash,
   getDb,
   getLatestProfileSnapshot,
@@ -44,6 +45,22 @@ export async function recordProfileSnapshot(db: Db, kind: ScoredProfileName, yam
     const staleMarked = kind === "preferences" ? await switchScoresToSnapshot(tx, snapshot.id) : await markScoresStaleExcept(tx, snapshot.id);
     return { snapshot, staleMarked };
   });
+}
+
+/**
+ * How many scores saving `yamlText` as me.yaml would newly mark stale, decided branch by branch like
+ * `recordProfileSnapshot`: the newest snapshot's text or a text that means the same marks nothing; an older snapshot's text
+ * marks the scores of every other snapshot; anything else, also with no snapshot yet, marks every score of a snapshot.
+ * Reads only. Scores that finish between this count and the save are marked as well, so the save reports its own number.
+ */
+export async function previewStaleOnProfileChange(db: Db, yamlText: string): Promise<number> {
+  const hash = hashProfileYaml(yamlText);
+  const previous = await getLatestProfileSnapshot(db, "me");
+  if (previous?.hash === hash) return 0;
+  const found = await findProfileSnapshotByHash(db, "me", hash);
+  if (found) return found.id === previous?.id ? 0 : countScoresStaleOnChange(db, found.id);
+  if (previous && sameProfileValues("me", previous.contentYaml, yamlText)) return 0;
+  return countScoresStaleOnChange(db, null);
 }
 
 /**
@@ -106,6 +123,7 @@ export function registerProfileSnapshotHook(): void {
       await saveProfileSnapshot(getDb(), kind, yamlText);
       return;
     }
-    await recordProfileSnapshot(getDb(), kind, yamlText);
+    const recorded = await recordProfileSnapshot(getDb(), kind, yamlText);
+    return { staleMarked: recorded.staleMarked };
   });
 }
