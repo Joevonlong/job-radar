@@ -626,3 +626,24 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 `pdf_max_memory_mb`、`max_concurrent_uploads`、`draft_ttl_days`、`max_pending_drafts`、`output_truncated_share`、
 `stored_value_min_chars`、`title_words`、`sensitive_labels`；`evidence` 下的 `min_quote_chars`、`quote_max_chars`、
 `figure_units`。顶层三个时间控制运行、过期宽限和排队等待；导入设置控制文件类型和大小、上传及 PDF 处理时间和内存、文字长度、并发上传、草稿过期和数量、疑似输出截断，以及预览移除和高亮规则。证据设置控制引用长度和数字核验，数字单位共用申请写作的 scale 和 multiple 默认值。`ai.yaml` 的 `career_extract` 任务选择提取使用的服务商和模型。
+
+### 可选 PDF 服务和接口
+
+`preview.page_count_debounce_ms` 提供页数刷新防抖时间，默认 3000 毫秒。
+`pdf.url` 默认 `http://career-pdf:8090`，是受保护键，只能手改，设置表单和高级编辑器都不能修改；
+整个 `pdf` 块不出现在设置表单。`pdf.timeout_seconds` 默认 60（最多 300），限制 web 请求时间；
+`pdf.max_html_bytes` 默认 8000000（最多 50000000），发送前按 UTF-8 字节数检查 HTML。
+
+运行 `COMPOSE_PROFILES=career-pdf docker compose up -d --build career-pdf` 启动可选服务。
+服务不读取配置文件、没有数据卷；环境变量为 `CAREER_PDF_PORT`（默认 8090）、
+`CAREER_PDF_TIMEOUT_SECONDS`（默认 60）和 `CAREER_PDF_MAX_HTML_BYTES`（默认 8000000）。
+Compose 固定端口为 8090，另外两个变量从主机环境传入。修改 web 限制时，用这两个环境变量同步服务限制。
+JSON 请求体上限是 HTML 上限的六倍加 1024 字节，以容纳转义；解码后的 HTML 再单独检查字节上限。
+服务一次打印一份，忙时返回 429，超时返回 504。健康检查反映浏览器连接状态，断线后下一次渲染会重启浏览器。
+
+`POST /api/career/documents/pages` 接收与预览相同的 `{ document, doc }` JSON；成功返回页数，
+PDF 不可用时返回 `{ ok: true, pages: null, code }`，不影响编辑。
+`POST /api/career/documents/<id>/pdf?doc=resume`（或 `doc=letter`）只导出已保存版本，应先保存再导出。
+两者都返回 `Cache-Control: no-store`，不写入 HTML 或 PDF 文件。求职信需要非空且纳入的正文。
+简历文件名使用引擎的 `layout.filename` 模板，求职信使用独立的语言对应名称。
+服务未启动时，编辑和 HTML 预览仍可用，错误码有包含启动命令的本地化文案。

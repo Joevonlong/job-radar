@@ -8143,7 +8143,12 @@
         "image_invalid": "图片无效。",
         "write_failed": "无法保存更改，请重试。",
         "disabled": "简历文档功能尚未启用。",
-        "generic": "操作失败，请重试。"
+        "generic": "操作失败，请重试。",
+        "pdf_unavailable": "PDF 服务不可用。请运行 COMPOSE_PROFILES=career-pdf docker compose up -d --build career-pdf 启动。",
+        "pdf_busy": "正在导出，请稍后。",
+        "pdf_failed": "PDF 导出失败，请重试。",
+        "pdf_too_large": "文档超出 PDF 服务的 HTML 大小限制。",
+        "letter_missing": "请先填写求职信正文再导出。"
       },
       "source": {
         "source_deleted": "来源已删除",

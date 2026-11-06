@@ -22,6 +22,7 @@ export const ALLOW_PROTECTED_EDIT_ENV = "JOB_RADAR_ALLOW_WEB_EDIT_PROTECTED";
  * override in it.
  */
 export const PROTECTED_KEYS: Readonly<Partial<Record<ConfigName, readonly string[]>>> = {
+  career: ["pdf.url"],
   ai: [
     // the subscription CLIs: the program spawned for every AI call
     "providers.*.command",

@@ -640,6 +640,18 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
   compose ps
 fi
 
+if compose config --services 2>/dev/null | grep -qx career-pdf; then
+  echo "  \$ docker compose -p $PROJECT up -d --no-deps --wait --wait-timeout $WAIT_TIMEOUT career-pdf"
+  if [[ "$DRY_RUN" == 0 ]]; then
+    assert_target
+    proc_check_stop; pdf_code=0
+    proc_run docker compose -p "$PROJECT" up -d --no-deps --wait --wait-timeout "$WAIT_TIMEOUT" career-pdf || pdf_code=$?; proc_check_stop
+    if (( pdf_code != 0 )); then
+      echo "deploy: warning: career-pdf did not become healthy; the deploy continues. Check docker compose logs career-pdf." >&2
+    fi
+  fi
+fi
+
 step "migrate: database migrations"
 assert_target
 run "Migration failed: the database is not left half-changed (each migration runs in a transaction); read the error and, if needed, restore the pre-deploy backup (docs/backup-restore.md)" pnpm migrate:run

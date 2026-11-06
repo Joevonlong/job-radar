@@ -43,3 +43,15 @@ docker compose up -d --build
 ## 删除一个实例
 
 在它的检出里：`docker compose down`（容器和网络），然后，只有在确定时，`docker volume rm <它的 JOBRADAR_PG_VOLUME>`。`docker compose down -v` 删除的是**这份**检出 `.env` 里指定的卷：只在你要删除其数据库的那份检出里运行。见 [upgrade.zh.md](upgrade.zh.md#卸载)。
+
+## 可选简历 PDF 服务
+
+在实例环境设置 `COMPOSE_PROFILES=career-pdf`，构建和部署才会包含 PDF 服务。
+部署在 jobspy 之后用 `--no-deps --wait` 启动它，失败只警告并继续。
+Doctor 仅在 career 功能开启且 Compose 列出该服务时检查；未激活 profile 时部署不碰它。
+默认 profile 仍是 db、web、runner 和 jobspy。
+
+PDF 容器复用 runner 镜像，不带凭据、不挂载数据、不发布端口；只读运行，`/tmp` 和主目录用临时文件系统，
+内存上限由 `CAREER_PDF_MEM_LIMIT` 设置（默认 1g）。仅 web 同时连接它的专用内部网络和默认网络。
+每个 Compose 项目有独立 PDF 网络和服务，第二实例不需要额外分配主机端口。
+限制和 HTTP 接口见[配置](configuration.zh.md#可选-pdf-服务和接口)。

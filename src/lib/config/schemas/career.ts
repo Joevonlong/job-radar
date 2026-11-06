@@ -86,7 +86,15 @@ export const careerSchema = z.strictObject({
       .describe("Maximum preview request body in bytes. Document saves carry at most 1 MB, like profile saves."),
     defaults: careerLayoutDefaultsSchema.prefault({}),
   }).prefault({}),
-  preview: z.strictObject({ debounce_ms: z.number().int().min(50).max(10000).default(400) }).prefault({}),
+  preview: z.strictObject({
+    debounce_ms: z.number().int().min(50).max(10000).default(400),
+    page_count_debounce_ms: positive(3000, 60000),
+  }).prefault({}),
+  pdf: z.strictObject({
+    url: z.url({ protocol: /^https?$/ }).default("http://career-pdf:8090"),
+    timeout_seconds: positive(60, 300),
+    max_html_bytes: positive(8000000, 50000000),
+  }).prefault({}),
   evidence: z
     .strictObject({
       min_quote_chars: positive(4, 1000),

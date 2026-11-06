@@ -8143,7 +8143,12 @@
         "image_invalid": "The image is invalid.",
         "write_failed": "The changes could not be saved. Please try again.",
         "disabled": "Career documents are not enabled.",
-        "generic": "The operation failed. Please try again."
+        "generic": "The operation failed. Please try again.",
+        "pdf_unavailable": "PDF service unavailable. Start it with COMPOSE_PROFILES=career-pdf docker compose up -d --build career-pdf.",
+        "pdf_busy": "Export in progress, please wait.",
+        "pdf_failed": "PDF export failed. Please try again.",
+        "pdf_too_large": "This document exceeds the PDF service HTML size limit.",
+        "letter_missing": "Add a letter body before exporting."
       },
       "source": {
         "source_deleted": "Source deleted",

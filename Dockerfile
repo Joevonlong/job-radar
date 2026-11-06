@@ -104,6 +104,7 @@ ARG PLAYWRIGHT_VERSION
 RUN npm install --prefix /app --no-save --no-package-lock --no-audit --no-fund playwright-core@${PLAYWRIGHT_VERSION} \
     && npm cache clean --force
 COPY --from=build --chown=pwuser:pwuser /app/dist/runner.mjs ./dist/runner.mjs
+COPY --from=build --chown=pwuser:pwuser /app/dist/career-pdf.mjs ./dist/career-pdf.mjs
 # Mount points the compose file binds over (data/backups: the daily pg_dump, see RUNNER_BACKUP_DIR; data/exports: JD exports for resume-kit).
 RUN mkdir -p /app/data/backups /app/data/profile /app/data/exports /app/data/config && chown -R pwuser:pwuser /app/data
 # The container healthcheck (compose.yaml): reads the newest heartbeat and exits 1 when it is too old.

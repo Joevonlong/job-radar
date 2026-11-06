@@ -89,3 +89,9 @@ document:
 preview:
   # Delay before updating a preview in milliseconds.
   debounce_ms: 400
+  page_count_debounce_ms: 3000
+
+pdf:
+  url: http://career-pdf:8090
+  timeout_seconds: 60
+  max_html_bytes: 8000000

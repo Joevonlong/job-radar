@@ -225,7 +225,7 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
   ui: ["applications", "filters", "companies", "config_editor", "web_access", "job_checks"],
   insights: [],
   resume: [],
-  career: ["import", "evidence", "document", "preview"],
+  career: ["import", "evidence", "document", "preview", "pdf"],
   // The library limits, the story import, question limits, variants, tones and the evidence check are lists / tables: the advanced editor
   writer: ["stories", "import", "questions", "variants", "tones", "emphasis_max_chars", "jd_max_chars", "evidence"],
   language: [],

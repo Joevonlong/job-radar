@@ -834,6 +834,26 @@ that before the entry and wording limits; the save then fails with an error and 
 preview delay (50–10000 ms). Open the editor at `/career/documents`; see
 [Résumé documents](career-profile.md#résumé-documents) for editing and live preview.
 
+`preview.page_count_debounce_ms` supplies the page-count refresh delay (default 3000 ms).
+`pdf.url` defaults to `http://career-pdf:8090` and is protected: change it by hand, never through settings or the
+advanced editor. The `pdf` block is hidden from the settings form. `pdf.timeout_seconds` (default 60, maximum 300)
+bounds the web request, and `pdf.max_html_bytes` (default 8000000, maximum 50000000) bounds UTF-8 HTML before sending.
+
+The optional PDF service starts with `COMPOSE_PROFILES=career-pdf docker compose up -d --build career-pdf`.
+It reads no config files or data volumes. Its environment settings are `CAREER_PDF_PORT` (default 8090),
+`CAREER_PDF_TIMEOUT_SECONDS` (default 60) and `CAREER_PDF_MAX_HTML_BYTES` (default 8000000). Compose fixes the port to
+8090 and passes the latter two settings from the host environment. When changing the web limits, match the service
+limits with those environment overrides. The JSON body is limited to six times the HTML limit plus 1024 bytes to
+allow JSON escapes; decoded HTML has the separate byte limit. Only one render runs at a time; busy requests return 429,
+and timeouts return 504. Health reflects the browser connection; a disconnected browser is relaunched on the next render.
+
+`POST /api/career/documents/pages` accepts the same `{ document, doc }` JSON as preview and returns a page count,
+or `{ ok: true, pages: null, code }` when PDF rendering is unavailable. `POST /api/career/documents/<id>/pdf?doc=resume`
+(or `doc=letter`) exports the saved document. Save edits first. These endpoints return `Cache-Control: no-store` and
+write no HTML or PDF files. A letter needs a nonempty included body. The filename uses the engine's résumé template
+(`layout.filename`); letters use the separate language-specific letter name. With no PDF service, editing and HTML
+preview continue to work; the response codes have localized messages including the startup command.
+
 Documents live in `career/documents/` under the profile directory and retain source references while being edited
 independently. `history.keep_versions` applies separately to each document under `career/history/documents/` as well
 as the profile. Contact is merged only for rendering; it is absent from document and history files. Preferences and
