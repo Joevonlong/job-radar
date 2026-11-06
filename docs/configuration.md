@@ -818,17 +818,16 @@ Supported channel blocks in `sources.yaml` have `company_queries: true` by defau
 ## Career profile (`career.yaml`)
 
 Off by default and independent of `writer.enabled`. Enable it under **Settings → Workflow**, then use the card on
-My profile. See [Career profile](career-profile.md) for manual editing, wordings, history and deletion. Turning it off
-keeps the files. No AI operation is provided by this editor.
+My profile. See [Career profile](career-profile.md) for editing, extraction, history and deletion. Turning it off keeps the files.
 
 `profile.max_entries`, `profile.max_bullets_per_entry`, `profile.max_wordings_per_text` and `profile.text_max_chars`
 limit saves. `history.keep_versions` limits profile history; contact details have none. The schema supplies defaults for
 every key and rejects unknown keys. `config_version: 2` uses the standard layered overlay format; the initial whole-file
 format is version 1 and can be converted with `pnpm config:migrate --write --convert-overlays`.
 
-The reserved extraction settings are `timeout_seconds`, `expiry_grace_seconds`, `queue_timeout_seconds`,
+Extraction settings are `timeout_seconds`, `expiry_grace_seconds`, `queue_timeout_seconds`,
 `import.formats`, `max_file_bytes`, `upload_timeout_seconds`, `max_chars`, `min_chars`, `pdf_timeout_seconds`,
 `pdf_max_memory_mb`, `max_concurrent_uploads`, `draft_ttl_days`, `max_pending_drafts`, `output_truncated_share`,
 `stored_value_min_chars`, `title_words`, `sensitive_labels` (all under `import` after `formats`), and
 `evidence.min_quote_chars`, `quote_max_chars`, `figure_units` (all under `evidence`). Figure units share the writer's
-scale and multiple defaults. These settings reserve the format for extraction; this version does not execute it.
+scale and multiple defaults. The three top-level time settings limit running time, the expiry grace period and queue wait. Import settings control file types and size, upload and PDF processing time and memory, text length, concurrent uploads, draft expiry and count, suspected output truncation, and preview removal and highlighting rules. Evidence settings control quote length and figure verification. The `career_extract` task in `ai.yaml` selects the provider and model for extraction.

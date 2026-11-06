@@ -7,7 +7,7 @@ import { saveProfileAction } from "@/app/career/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CareerConfig } from "@/lib/config/schemas/career";
-import { profileEntryCount, type CareerProfile } from "@/lib/career/schema/profile";
+import { profileContent, profileEntryCount, type CareerProfile } from "@/lib/career/schema/profile";
 
 import { CareerStatus } from "./career-status";
 import { ObjectFields, blankEntry, sectionFields, sectionKeys, type DataObject } from "./profile-fields";
@@ -19,12 +19,14 @@ export function ProfileForm({
   limits,
   onSaved,
   onDirty,
+  disabled = false,
 }: {
   profile: CareerProfile;
   baseHash: string | null;
   limits: CareerConfig["profile"];
   onSaved: (profile: CareerProfile, hash: string) => void;
   onDirty: (dirty: boolean) => void;
+  disabled?: boolean;
 }) {
   const t = useTranslations("career");
   const [draft, setDraftState] = useState(profile);
@@ -41,9 +43,10 @@ export function ProfileForm({
       className="flex min-w-0 flex-col gap-6"
       onSubmit={(event) => {
         event.preventDefault();
+        if (disabled || pending) return;
         startTransition(async () => {
           try {
-            const result = await saveProfileAction({ profile: draft, baseHash });
+            const result = await saveProfileAction({ profile: profileContent(draft), baseHash });
             if (!result.ok) {
               setStatus(result.code);
               return;
@@ -58,7 +61,7 @@ export function ProfileForm({
         });
       }}
     >
-      <fieldset disabled={pending} className="flex min-w-0 flex-col gap-6">
+      <fieldset disabled={pending || disabled} className="flex min-w-0 flex-col gap-6">
         <Card>
           <CardHeader>
             <CardTitle>{t("title")}</CardTitle>
@@ -125,7 +128,7 @@ export function ProfileForm({
         </p>
       )}
       <CareerStatus code={status} />
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" disabled={pending || disabled}>
         {pending ? t("saving") : t("save")}
       </Button>
     </form>

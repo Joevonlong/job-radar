@@ -195,7 +195,7 @@ tar -xzf data/backups/<名字>.config.tgz -C .
 
 ## 职业档案副本
 
-配置归档包含整个 `data/profile/career/`：档案、联系方式和档案历史。
+配置归档包含整个 `data/profile/career/`：档案、联系方式、档案历史和 `data/profile/career/drafts/` 中的提取草稿。
 定时归档受 `schedule.yaml: backup.config_archive`、`keep_daily`、`keep_weekly` 控制。
 迁移前系统归档受 `config_archive` 控制；部署前和恢复前始终归档。
 系统归档按类型使用 `keep_system`（默认五份）；手动归档由你自行删除。

@@ -899,7 +899,14 @@
         "aborted": "The AI worker was stopped and the text was cleared. Try again.",
         "invalid_payload": "The request could not be read. Try again.",
         "handler_error": "The drafts could not be stored. Try again.",
-        "no_handler": "The AI worker does not know this request yet: it needs a restart after the update."
+        "no_handler": "The AI worker does not know this request yet: it needs a restart after the update.",
+        "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+        "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
+        "contact_invalid": "Contact details are invalid. Check the local file and try again.",
+        "profile_invalid": "The career profile is invalid. Check it and try again.",
+        "deleted": "The career data was deleted and this request was cancelled.",
+        "draft_write_failed": "The extracted draft could not be saved. Try again.",
+        "handler_failed": "Career extraction failed. Try again."
       }
     }
   },
@@ -1426,7 +1433,14 @@
           "unknown": "Failed",
           "score_profile_incomplete": "Scoring did not start: the profile is incomplete, it has no summary and no skills. Fill in at least one on the profile page, then score again",
           "score_ai_unavailable": "Scoring did not start: no AI provider is available (cooling down, over its cap or logged out), see the AI card on /sources",
-          "quota_guard": "Scoring did not start: Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}"
+          "quota_guard": "Scoring did not start: Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
+          "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+          "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
+          "contact_invalid": "Contact details are invalid. Check the local file and try again.",
+          "profile_invalid": "The career profile is invalid. Check it and try again.",
+          "deleted": "The career data was deleted and this request was cancelled.",
+          "draft_write_failed": "The extracted draft could not be saved. Try again.",
+          "handler_failed": "Career extraction failed. Try again."
         }
       },
       "actionBar": {
@@ -3435,6 +3449,13 @@
       },
       "reasoning_effort_story_extract": {
         "label": "Reasoning effort: Story extraction"
+      },
+      "task_career_extract": {
+        "label": "Career extraction",
+        "hint": "Extracts a career profile from the confirmed text without searching the web."
+      },
+      "reasoning_effort_career_extract": {
+        "label": "Reasoning effort: Career extraction"
       }
     },
     "control": {
@@ -3496,7 +3517,8 @@
           "writer_job": "Application answer",
           "models_sync": "Model list refresh",
           "story_extract": "Story extraction",
-          "writer_fit": "Application fit note"
+          "writer_fit": "Application fit note",
+          "career_extract": "Career extraction"
         },
         "status": {
           "pending": "Queued",
@@ -3528,7 +3550,14 @@
           "rescore_ai_unavailable": "Re-scoring did not start: no AI provider is available (cooling down, over its cap or logged out), see the AI card on /sources",
           "score_profile_incomplete": "Scoring did not start: the profile is incomplete, it has no summary and no skills. Fill in at least one on the profile page",
           "score_ai_unavailable": "Scoring did not start: no AI provider is available (cooling down, over its cap or logged out), see the AI card on /sources",
-          "quota_guard": "Not run: Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}"
+          "quota_guard": "Not run: Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
+          "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+          "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
+          "contact_invalid": "Contact details are invalid. Check the local file and try again.",
+          "profile_invalid": "The career profile is invalid. Check it and try again.",
+          "deleted": "The career data was deleted and this request was cancelled.",
+          "draft_write_failed": "The extracted draft could not be saved. Try again.",
+          "handler_failed": "Career extraction failed. Try again."
         },
         "scoreResult": "Scoring finished: {scored} scored, {failed} failed",
         "timeBudget": "Stopped at the time budget: {remaining} still to score.",
@@ -4034,7 +4063,8 @@
         "salary_lookup": "Salary lookup",
         "company_research": "Company background",
         "write": "Application writer",
-        "story_extract": "Story extraction"
+        "story_extract": "Story extraction",
+        "career_extract": "Career extraction"
       },
       "details": "Details →"
     },
@@ -4480,7 +4510,14 @@
       "invalid_payload": "Malformed request",
       "unknown": "Failed",
       "quota_guard": "Job Radar's own AI usage cap holds this provider back. {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
-      "backfill_over_limit": "The configured backfill limit changed before execution (maximum {max} h). Queue a smaller backfill."
+      "backfill_over_limit": "The configured backfill limit changed before execution (maximum {max} h). Queue a smaller backfill.",
+      "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+      "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
+      "contact_invalid": "Contact details are invalid. Check the local file and try again.",
+      "profile_invalid": "The career profile is invalid. Check it and try again.",
+      "deleted": "The career data was deleted and this request was cancelled.",
+      "draft_write_failed": "The extracted draft could not be saved. Try again.",
+      "handler_failed": "Career extraction failed. Try again."
     },
     "done": {
       "testChannel": "{fetched} fetched, {parsed} parsed ({seconds} s, nothing stored)",
@@ -4921,7 +4958,14 @@
       "failed": "The breakdown failed. Please try again.",
       "invalid_payload": "The request was not valid.",
       "handler_error": "Something went wrong handling the request. Try again.",
-      "no_handler": "No process handles breakdown requests (is the ai-worker running?)."
+      "no_handler": "No process handles breakdown requests (is the ai-worker running?).",
+      "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+      "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
+      "contact_invalid": "Contact details are invalid. Check the local file and try again.",
+      "profile_invalid": "The career profile is invalid. Check it and try again.",
+      "deleted": "The career data was deleted and this request was cancelled.",
+      "draft_write_failed": "The extracted draft could not be saved. Try again.",
+      "handler_failed": "Career extraction failed. Try again."
     }
   },
   "sourcesRegistry": {
@@ -7136,7 +7180,14 @@
       "failed": "The lookup failed. Please try again.",
       "invalid_payload": "The request was not valid.",
       "handler_error": "Something went wrong handling the request. Try again.",
-      "no_handler": "No process handles salary lookups (is the ai-worker running?)."
+      "no_handler": "No process handles salary lookups (is the ai-worker running?).",
+      "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+      "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
+      "contact_invalid": "Contact details are invalid. Check the local file and try again.",
+      "profile_invalid": "The career profile is invalid. Check it and try again.",
+      "deleted": "The career data was deleted and this request was cancelled.",
+      "draft_write_failed": "The extracted draft could not be saved. Try again.",
+      "handler_failed": "Career extraction failed. Try again."
     },
     "cli": {
       "usage": "pnpm salary:benchmark [--json]\n\nRebuilds the salary benchmark from the postings in the database and prints its groups.",
@@ -7271,7 +7322,14 @@
       "failed": "The lookup failed. Please try again.",
       "invalid_payload": "The request was not valid.",
       "handler_error": "Something went wrong handling the request. Try again.",
-      "no_handler": "No process handles company lookups (is the ai-worker running?)."
+      "no_handler": "No process handles company lookups (is the ai-worker running?).",
+      "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+      "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
+      "contact_invalid": "Contact details are invalid. Check the local file and try again.",
+      "profile_invalid": "The career profile is invalid. Check it and try again.",
+      "deleted": "The career data was deleted and this request was cancelled.",
+      "draft_write_failed": "The extracted draft could not be saved. Try again.",
+      "handler_failed": "Career extraction failed. Try again."
     }
   },
   "mcp": {
@@ -7579,7 +7637,8 @@
       "request__writer_job": "Write application answer",
       "request__models_sync": "Refresh model list",
       "request__story_extract": "Extract stories",
-      "request__writer_fit": "Write application fit note"
+      "request__writer_fit": "Write application fit note",
+      "request__career_extract": "Extract career profile"
     },
     "event": {
       "item__ok": "Item completed",
@@ -7678,7 +7737,14 @@
       "budget": "AI budget exceeded",
       "ai_unavailable": "AI unavailable",
       "translation_incomplete": "Translation incomplete",
-      "error": "Operation error"
+      "error": "Operation error",
+      "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+      "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
+      "contact_invalid": "Contact details are invalid. Check the local file and try again.",
+      "profile_invalid": "The career profile is invalid. Check it and try again.",
+      "deleted": "The career data was deleted and this request was cancelled.",
+      "draft_write_failed": "The extracted draft could not be saved. Try again.",
+      "handler_failed": "Career extraction failed. Try again."
     },
     "error": {
       "backfill_over_limit": "Backfill range over the configured limit",
@@ -7769,7 +7835,14 @@
       "budget": "AI budget exceeded",
       "ai_unavailable": "AI unavailable",
       "translation_incomplete": "Translation incomplete",
-      "error": "Operation error"
+      "error": "Operation error",
+      "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+      "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
+      "contact_invalid": "Contact details are invalid. Check the local file and try again.",
+      "profile_invalid": "The career profile is invalid. Check it and try again.",
+      "deleted": "The career data was deleted and this request was cancelled.",
+      "draft_write_failed": "The extracted draft could not be saved. Try again.",
+      "handler_failed": "Career extraction failed. Try again."
     },
     "callbackResult": {
       "changed": "Changed",
@@ -7919,7 +7992,8 @@
       "writer_job": "Write application answer",
       "models_sync": "Refresh model list",
       "story_extract": "Extract stories",
-      "writer_fit": "Application fit note"
+      "writer_fit": "Application fit note",
+      "career_extract": "Career extraction"
     },
     "level": {
       "all": "All levels",
@@ -7944,7 +8018,7 @@
   },
   "career": {
     "title": "Career profile",
-    "description": "Keep a local career profile with alternative wordings and version history. Manual editing only; no AI is used here.",
+    "description": "Build your local career profile by reviewing an extraction or editing entries and alternative wordings.",
     "disabled": "Career profile is not enabled.",
     "settings": "Open workflow settings",
     "entries": "{count, plural, one {# entry} other {# entries}}",
@@ -8085,7 +8159,99 @@
       "confirmationRequired": "Confirm the deletion before continuing.",
       "requestFailed": "The request could not be completed. Try again.",
       "historyFailed": "Your profile changes are stored, but the history version could not be created.",
-      "generic": "Something went wrong. Try again."
+      "generic": "Something went wrong. Try again.",
+      "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+      "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
+      "contact_invalid": "Contact details are invalid. Check the local file and try again.",
+      "profile_invalid": "The career profile is invalid. Check it and try again.",
+      "deleted": "The career data was deleted and this request was cancelled.",
+      "draft_write_failed": "The extracted draft could not be saved. Try again.",
+      "handler_failed": "Career extraction failed. Try again.",
+      "draft_invalid": "The extraction draft is invalid.",
+      "draft_missing": "The extraction draft is no longer available."
+    },
+    "extract": {
+      "title": "Extract a career profile",
+      "disclosure": "The confirmed text may be sent to: {providers}.",
+      "noProvider": "No extraction provider is enabled. Configure an AI provider before sending.",
+      "residue": "The source file stays in memory during preview. Confirmed text is queued locally until processing ends. Drafts and backups may retain extracted content; an AI provider may retain what it receives.",
+      "origin": "Source type",
+      "resume": "Resume",
+      "self_description": "Self-description",
+      "file": "Upload a file",
+      "fileHint": "Accepted formats: {formats}. Maximum file size: {max} bytes.",
+      "paste": "Or paste source text",
+      "preview": "Prepare preview",
+      "running": "Extracting the confirmed text…",
+      "waiting": "Preparing or waiting for extraction…",
+      "done": "Extraction finished. Review each entry below.",
+      "pending": "{count, plural, one {# draft awaits review} other {# drafts await review}}",
+      "ttl": "{days, plural, one {Drafts expire after # day.} other {Drafts expire after # days.}}",
+      "age": "Created {date} ({age}).",
+      "quote": "Source quote: “{quote}”",
+      "match": "Suggested match: {entry}.",
+      "decision": "Entry decision",
+      "skip": "Skip",
+      "new": "Add as new",
+      "merge": "Merge into suggested match",
+      "mergeHint": "Existing factual fields stay unchanged. Different text becomes another wording and new bullets are added.",
+      "includeBullet": "Include bullet {number}",
+      "include": "Include this field",
+      "adopt": "Adopt selected entries",
+      "discard": "Discard draft",
+      "saveFirst": "Save your profile edits before adopting this draft.",
+      "adopted": "The selected entries were saved to your profile.",
+      "discarded": "The draft was discarded.",
+      "draftRetained": "The profile was saved, but the draft could not be removed. It is still available for review.",
+      "flags": {
+        "quote_missing": "This quote was not found in the source.",
+        "quote_too_short": "This quote is too short to verify.",
+        "figure_missing": "A number in the value is missing from the quote.",
+        "year_missing": "The date’s year is missing from the quote.",
+        "date_invalid": "The date was invalid and was cleared. Enter a valid date or leave it empty.",
+        "pii": "Possible contact information. Review before adopting."
+      },
+      "errors": {
+        "profileInvalid": "The career profile could not be read or contains invalid fields. Check the profile and try again.",
+        "contactInvalid": "The contact details could not be read or contain invalid fields. Check the details and try again.",
+        "unknownId": "A profile entry is no longer recognized. Reload the page before editing again.",
+        "limits": "The profile exceeds an entry, wording or text limit. Shorten it or adjust the maximum values in settings.",
+        "historyInvalid": "The version history could not be read. Refresh the versions and try again.",
+        "versionMissing": "This version is no longer available. Refresh the version list.",
+        "writeFailed": "The changes could not be written. Try again.",
+        "stale": "This file changed. Reload before saving again.",
+        "disabled": "Career profile is off. Enable it in workflow settings to continue.",
+        "confirmationRequired": "Confirm the deletion before continuing.",
+        "requestFailed": "The request could not be completed. Try again.",
+        "historyFailed": "Your profile changes are stored, but the history version could not be created.",
+        "generic": "The extraction could not be completed. Try again.",
+        "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+        "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
+        "contact_invalid": "Contact details are invalid. Check the local file and try again.",
+        "profile_invalid": "The career profile is invalid. Check it and try again.",
+        "deleted": "The career data was deleted and this request was cancelled.",
+        "draft_write_failed": "The extracted draft could not be saved. Try again.",
+        "handler_failed": "Career extraction failed. Try again.",
+        "draft_invalid": "The extraction draft is invalid.",
+        "draft_missing": "The extraction draft is no longer available.",
+        "invalid": "Check the source and try again.",
+        "too_large": "The file or text exceeds the configured size limit.",
+        "bad_type": "This file format is not supported.",
+        "unreadable": "The file could not be read. Try pasting its text.",
+        "too_complex": "The PDF could not be processed within its resource limits.",
+        "no_text": "There is not enough readable text to extract.",
+        "too_long": "The edited text exceeds the configured character limit. Shorten it before sending.",
+        "review_again": "Some details were removed during the final check. Review the updated text and confirm again.",
+        "busy": "Another extraction is running. Wait for it to finish.",
+        "too_many": "The upload or pending draft limit was reached. Wait or review existing drafts.",
+        "config_error": "The extraction settings could not be read.",
+        "unavailable": "Extraction is unavailable. Try again.",
+        "invalid_output": "The AI response could not be read. Try again.",
+        "output_truncated": "The AI response was cut off. Try a shorter source.",
+        "timeout": "Extraction timed out. Try again.",
+        "queue_timeout": "The queued extraction expired. Send it again.",
+        "failed": "Extraction failed. Try again."
+      }
     }
   },
   "writer": {
@@ -8251,7 +8417,14 @@
         "handler_error": "Something went wrong handling the request. Try again.",
         "no_handler": "No AI worker handles this request yet. Check that the ai-worker runs.",
         "too_long": "The text is longer than the limit in writer.yaml (draft_max_chars).",
-        "busy": "Another request for this question is still running (maybe from another tab or device). Wait for it to finish, then try again."
+        "busy": "Another request for this question is still running (maybe from another tab or device). Wait for it to finish, then try again.",
+        "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+        "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
+        "contact_invalid": "Contact details are invalid. Check the local file and try again.",
+        "profile_invalid": "The career profile is invalid. Check it and try again.",
+        "deleted": "The career data was deleted and this request was cancelled.",
+        "draft_write_failed": "The extracted draft could not be saved. Try again.",
+        "handler_failed": "Career extraction failed. Try again."
       },
       "versionsLabel": "Versions",
       "manual": "Edited by you",
@@ -8480,5 +8653,27 @@
       "filterIntro": "Paste this into a Gmail search, then create a filter from it that applies the label \"{label}\" (tick \"also apply to matching conversations\"):",
       "filterEmpty": "No application in a candidate status yet, so only the ATS sender domains are listed."
     }
+  },
+  "outbound": {
+    "title": "Review before sending",
+    "warning": "Names and addresses may not all be recognized. Check and edit the entire text. Only the text below is sent after you confirm.",
+    "removed": "{count, plural, one {# occurrence removed.} other {# occurrences removed.}}",
+    "truncated": "The source was shortened to the configured text limit. Only the visible text will be sent.",
+    "name": "Name to remove (optional)",
+    "address": "Address to remove (optional)",
+    "guessed": "The name was guessed. Restore it if the guess is wrong, then edit the text yourself.",
+    "apply": "Remove these values",
+    "restoreName": "Restore guessed name",
+    "applyFirst": "Apply the name and address changes before sending.",
+    "text": "Text to send",
+    "highlights": "Highlighted text",
+    "legendTitle": "Highlighted text is still sent. Review these possible sensitive details:",
+    "legend": {
+      "phone": "Possible phone number",
+      "location": "Location",
+      "sensitive": "Sensitive label or stored value"
+    },
+    "send": "Confirm and extract",
+    "cancel": "Back to source"
   }
 }

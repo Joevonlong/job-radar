@@ -2,8 +2,7 @@
 
 [中文](career-profile.zh.md)
 
-The optional career profile is a local library of career facts and alternative wordings. This version supports manual
-editing only: it makes no AI requests and does not import, generate or export résumés. It is independent of the
+The optional career profile is a local library of career facts and alternative wordings. You can edit it manually or extract a reviewable draft from your own text. It does not generate or export résumés. It is independent of the
 application writer and does not change matching, scores or the experience library on **My profile**.
 
 ## Turn it on
@@ -14,6 +13,20 @@ links to `/career`. Before the first write, the card says the profile has not be
 Turning it off keeps all saved files and history. Disabled pages and actions do not read or clean the career directory.
 A missing or invalid career config closes the feature, including after it was previously enabled. If the profile itself
 is unreadable, its card and editor show a readable error message; the rest of My profile continues to work.
+
+## Extract a draft
+
+With the feature enabled, open the career profile and choose **Résumé** or **Self-description**, then upload a PDF, Markdown or text file, or paste text. Prepare the preview before sending. Uploads are read in memory; the file and its name are not saved. File, text and upload limits are configurable.
+
+The preview replaces detected email addresses, phone numbers, links and matching saved contact values with placeholders. It may guess a name; check it, restore it if wrong, or enter a name and address and apply them for removal. Possible phone numbers, saved locations and sensitive labels are highlighted for review. Edit the preview directly and check it carefully: detection can miss details or replace the wrong text, and highlighted text remains unless you remove it. The confirmed text goes to the configured AI provider, not the contact file; detected links are removed, so project links are not extracted. Avoid putting contact details or links back into the preview. A final check may ask you to review again if it changes the text.
+
+The page shows queued and running status, then a draft or an error. If a request times out, fails, or the upload is unsupported, unreadable or too large, follow the displayed message and try again. Only one extraction can run or wait at a time.
+
+Review each suggested field against its source quote and any warning flags. Edit fields, choose which bullets to keep, and select **Add**, **Merge** when a match is suggested, or **Skip** for each entry. Matches are suggestions, so check them. Merging keeps existing facts and adds different text as another wording and new bullets. Save any unsaved profile edits first, then adopt your selections; discard removes the draft without adopting it. Extracted project links must be added manually.
+
+**Add** always creates a separate entry, even when a match exists. Adopting the same draft again adds nothing twice; `adopted_entries` is internal metadata preserved across edits and restores, never edited by users or shown in comparisons. If a PDF is longer than the reading limit, the preview marks it as cut off.
+
+Unreviewed drafts expire after `import.draft_ttl_days` (default 14 days). At `import.max_pending_drafts` (default 5), adopt or discard a draft before starting another. Drafts are stored under `data/profile/career/drafts/` and included in backups.
 
 ## Edit facts and wordings
 
@@ -44,9 +57,7 @@ Files written by the app have mode `0600`. The directory is created on the first
 save button and stale-file check. They are overwritten without history: old contact values are never copied into career
 history. The optional contact photo field is reserved; this editor does not use images.
 
-Contact details are stored only on this machine and never sent to AI. A city identical to your contact location may
-still occur in an experience's location and be sent as part of that content by future AI features. This manual editor
-sends no career content to AI, Telegram or MCP and writes no database profile snapshots. Profile text can itself contain
+The contact file is not sent to AI. A city or other personal detail in source text can still be sent if it remains in the confirmed preview. The manual editor sends no career content to AI, Telegram or MCP and writes no database profile snapshots. Profile text can itself contain
 contact details; its warning is advisory. Saved files, including contact details, can remain in backups.
 
 ## History and restoration
@@ -62,7 +73,7 @@ shows a warning that the history version could not be created; check file permis
 ## Delete and backups
 
 **Clear history** removes only `career/history/`. **Delete all career data** removes the entire career directory,
-including the contact file. Both require a second confirmation and an enabled feature. To delete while it is off,
+including the contact file and drafts, and cancels running or queued extraction requests (an already-started provider call may continue). Both require a second confirmation and an enabled feature. To delete while it is off,
 turn it on first; turning it off alone never deletes anything.
 
 Deletion does not affect existing backups, `before-restore` directories or content already sent to an AI provider.

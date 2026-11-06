@@ -1,0 +1,138 @@
+language: en
+experience:
+  - company:
+      value: Dreamwillow Tools Ltd
+      quote: Dreamwillow Tools Ltd
+    role:
+      value: Community Engineer
+      quote: Community Engineer
+    start:
+      value: 2023-01
+      quote: January 2023
+    end:
+      value: present
+      quote: Present
+    bullets:
+      - value: Organised nine workshops for new contributors.
+        quote: Organised nine workshops for new contributors.
+      - value: Built a small documentation site with clear navigation.
+        quote: Built a small documentation site with clear navigation.
+      - value: Collected feedback and prioritised updates with the community.
+        quote: Collected feedback and prioritised updates with the community.
+      - value: Gathered feedback in regular conversations and translated recurring issues into practical, testable next steps for the team.
+        quote: Gathered feedback in regular conversations and translated recurring issues into practical, testable next steps for the team.
+      - value: Aligned priorities with neighbouring teams and recorded decisions, trade-offs and open questions in a shared working document.
+        quote: Aligned priorities with neighbouring teams and recorded decisions, trade-offs and open questions in a shared working document.
+      - value: Checked outcomes against agreed examples and discussed unexpected results early with the people responsible for follow-up.
+        quote: Checked outcomes against agreed examples and discussed unexpected results early with the people responsible for follow-up.
+  - company:
+      value: Pebblefern Design Ltd
+      quote: Pebblefern Design Ltd
+    role:
+      value: Designer
+      quote: Designer
+    start:
+      value: 2019-01
+      quote: January 2019
+    end:
+      value: 2022-12
+      quote: December 2022
+    bullets:
+      - value: Created prototypes for internal learning tools.
+        quote: Created prototypes for internal learning tools.
+      - value: Ran usability sessions and shared observations with developers.
+        quote: Ran usability sessions and shared observations with developers.
+      - value: Maintained a library of reusable interface patterns.
+        quote: Maintained a library of reusable interface patterns.
+      - value: Prepared handover material for new colleagues, including worked examples and answers to questions raised during onboarding.
+        quote: Prepared handover material for new colleagues, including worked examples and answers to questions raised during onboarding.
+      - value: Compared possible approaches for cost and usefulness, then presented the trade-offs in concise team discussions.
+        quote: Compared possible approaches for cost and usefulness, then presented the trade-offs in concise team discussions.
+      - value: Reviewed feedback after each release and planned focused improvements with the people who used the service every day.
+        quote: Reviewed feedback after each release and planned focused improvements with the people who used the service every day.
+  - company:
+      value: Starwillow Workshop Ltd
+      quote: Starwillow Workshop Ltd
+    role:
+      value: Design Assistant
+      quote: Design Assistant
+    start:
+      value: 2016-01
+      quote: January 2016
+    end:
+      value: 2018-12
+      quote: December 2018
+    bullets:
+      - value: Prepared workshop materials and organised feedback from participants.
+        quote: Prepared workshop materials and organised feedback from participants.
+      - value: Maintained accessible templates for internal presentations and learning guides.
+        quote: Maintained accessible templates for internal presentations and learning guides.
+      - value: Tested early interface sketches with colleagues and recorded their observations.
+        quote: Tested early interface sketches with colleagues and recorded their observations.
+      - value: Worked with a small delivery team to turn approved sketches into reusable assets.
+        quote: Worked with a small delivery team to turn approved sketches into reusable assets.
+education:
+  - school:
+      value: Mistpebble College
+      quote: Mistpebble College
+    degree:
+      value: BA Design
+      quote: BA Design
+    start:
+      value: "2015"
+      quote: "2015"
+    end:
+      value: "2019"
+      quote: "2019"
+    summary:
+      value: "Focus: applied methods and collaborative practice"
+      quote: "Focus: applied methods and collaborative practice"
+skills:
+  - group: Design
+    items:
+      - value: Prototyping
+        quote: Prototyping
+      - value: Usability testing
+        quote: Usability testing
+  - group: Web
+    items:
+      - value: HTML
+        quote: HTML
+      - value: CSS
+        quote: CSS
+languages:
+  - name:
+      value: English
+      quote: English
+    level:
+      value: C2
+      quote: C2
+  - name:
+      value: German
+      quote: German
+    level:
+      value: B2
+      quote: B2
+custom_sections:
+  - title:
+      value: Volunteering
+      quote: Volunteering
+    items:
+      - kind: entry
+        heading:
+          value: Willow Garden Mentoring
+          quote: Willow Garden Mentoring
+        date:
+          value: "2024"
+          quote: "2024"
+        bullets: []
+certifications:
+  - name:
+      value: Community Facilitation Certificate
+      quote: Community Facilitation Certificate
+    date:
+      value: "2023"
+      quote: "2023"
+summary:
+  value: A collaborative practitioner who combines careful analysis with practical delivery. I work from the first conversation through handover, making decisions visible and explaining trade-offs to colleagues with different backgrounds. My focus is on useful, maintainable work, clear documentation and steady improvements informed by the people who use it. I enjoy sharing knowledge, making ownership explicit and adapting plans as requirements change. Regular feedback helps me keep the work useful and understandable for everyone involved.
+  quote: A collaborative practitioner who combines careful analysis with practical delivery. I work from the first conversation through handover, making decisions visible and explaining trade-offs to colleagues with different backgrounds. My focus is on useful, maintainable work, clear documentation and steady improvements informed by the people who use it. I enjoy sharing knowledge, making ownership explicit and adapting plans as requirements change. Regular feedback helps me keep the work useful and understandable for everyone involved.

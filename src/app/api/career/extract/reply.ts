@@ -1,0 +1,17 @@
+import { NextResponse } from "next/server";
+import { CareerStoreError } from "@/lib/career/contact/errors";
+import { ConfigError } from "@/lib/config";
+import type { Highlight } from "@/lib/outbound/scrub";
+
+const STATUS = { invalid: 400, too_large: 413, too_long: 413, bad_type: 415, unreadable: 422, too_complex: 422, no_text: 422, disabled: 409, review_again: 409, busy: 409, too_many: 429, config_error: 500, unavailable: 503, contact_invalid: 422, contact_unreadable: 503, profile_invalid: 422 } as const;
+export function reply(body: unknown, status = 200): NextResponse {
+  return NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
+}
+export function refuse(error: keyof typeof STATUS, extra: { text?: string; highlights?: Highlight[] } = {}): NextResponse {
+  return reply({ ok: false, error, ...extra }, STATUS[error]);
+}
+export function storeFailure(error: unknown): NextResponse {
+  if (error instanceof ConfigError) return refuse("config_error");
+  if (error instanceof CareerStoreError && (error.code === "contact_invalid" || error.code === "contact_unreadable" || error.code === "profile_invalid")) return refuse(error.code);
+  return refuse("unavailable");
+}

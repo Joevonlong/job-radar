@@ -5,6 +5,10 @@ type ErrorCode = CareerErrorCode | "stale" | "disabled" | "confirmation_required
 type ErrorMessageKey = `errors.${keyof typeof messages.career.errors}`;
 
 const errorMessages = {
+  scrub_mismatch: "errors.scrub_mismatch",
+  contact_unreadable: "errors.contact_unreadable",
+  draft_invalid: "errors.draft_invalid",
+  draft_missing: "errors.draft_missing",
   profile_invalid: "errors.profileInvalid",
   contact_invalid: "errors.contactInvalid",
   unknown_id: "errors.unknownId",

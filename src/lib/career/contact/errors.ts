@@ -5,7 +5,11 @@ export type CareerErrorCode =
   | "limits"
   | "history_invalid"
   | "version_missing"
-  | "write_failed";
+  | "write_failed"
+  | "scrub_mismatch"
+  | "contact_unreadable"
+  | "draft_invalid"
+  | "draft_missing";
 
 /** Private file contents and parser exceptions never cross the storage boundary. */
 export class CareerStoreError extends Error {

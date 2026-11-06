@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { useState } from "react";
 import { expect, it, vi } from "vitest";
@@ -109,6 +109,26 @@ it("keeps profile edits and shows a human-readable error if the action transport
   expect(error.textContent).not.toContain("request_failed");
   expect(screen.getByLabelText("Company")).toHaveValue("Edited company");
   expect(screen.queryByText("private failure detail")).toBeNull();
+});
+
+it("shows no adoption metadata and submits only editable profile content", async () => {
+  const stored = { ...profile(), adopted_entries: ["1:d0", "2:headline"] };
+  vi.mocked(saveProfileAction).mockClear();
+  vi.mocked(saveProfileAction).mockResolvedValueOnce({ ok: false, code: "stale" });
+  const { container } = render(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      <ProfileForm profile={stored} baseHash={null} limits={careerSchema.parse({}).profile} onSaved={vi.fn()} onDirty={vi.fn()} />
+    </NextIntlClientProvider>,
+  );
+  expect(container.innerHTML).not.toMatch(/adopted_entries|1:d0|2:headline/);
+  fireEvent.change(screen.getByLabelText("Company"), { target: { value: "Edited company" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+  await waitFor(() => expect(saveProfileAction).toHaveBeenCalledOnce());
+  const submitted = vi.mocked(saveProfileAction).mock.calls[0]![0];
+  expect(submitted).toMatchObject({ profile: { experience: [{ company: "Edited company" }] }, baseHash: null });
+  expect(submitted).toHaveProperty("profile");
+  expect((submitted as { profile: unknown }).profile).not.toHaveProperty("adopted_entries");
+  await screen.findByText(messages.career.errors.stale);
 });
 
 it("keeps a custom item's text and wordings when its kind changes", () => {

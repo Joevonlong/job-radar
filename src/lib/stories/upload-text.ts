@@ -3,11 +3,17 @@
  * name is not kept. Server only.
  */
 import { Worker } from "node:worker_threads";
+import { z } from "zod";
 
 import { STORY_IMPORT_FORMATS, type StoryImportFormat } from "@/lib/config/schemas/writer";
 
 export type UploadTextError = "bad_type" | "unreadable" | "no_text" | "too_complex" | "aborted";
-export type UploadTextResult = { ok: true; text: string } | { ok: false; error: UploadTextError };
+type UploadTextSuccess = { ok: true; text: string; pagesNotRead?: boolean };
+export type UploadTextResult = UploadTextSuccess | { ok: false; error: UploadTextError };
+const pdfReplySchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), text: z.string(), pagesNotRead: z.boolean() }),
+  z.object({ ok: z.literal(false) }),
+]);
 
 /** The format a file name claims, or null. The content is checked as well: a name alone proves nothing. */
 export function formatOfName(name: string): StoryImportFormat | null {
@@ -53,7 +59,7 @@ export interface UploadTextLimits {
  * goes away. It gets a copy of the bytes (they move to the thread), no environment and the file's text nowhere but in the
  * message back. No OCR: a scanned page has no text.
  */
-function pdfText(bytes: Uint8Array, limits: UploadTextLimits): Promise<{ ok: true; text: string } | { ok: false; error: "unreadable" | "too_complex" | "aborted" }> {
+function pdfText(bytes: Uint8Array, limits: UploadTextLimits): Promise<UploadTextResult> {
   return new Promise((resolve) => {
     if (limits.signal?.aborted) {
       resolve({ ok: false, error: "aborted" });
@@ -68,8 +74,7 @@ function pdfText(bytes: Uint8Array, limits: UploadTextLimits): Promise<{ ok: tru
       resourceLimits: { maxOldGenerationSizeMb: limits.pdfMaxMemoryMb },
     });
     let settled = false;
-    // the answer waits for the thread to be gone, so the caller's slot is not given back while it still holds memory (terminating takes milliseconds)
-    const finish = (result: { ok: true; text: string } | { ok: false; error: "unreadable" | "too_complex" | "aborted" }): void => {
+    const finish = (result: UploadTextResult): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -83,10 +88,11 @@ function pdfText(bytes: Uint8Array, limits: UploadTextLimits): Promise<{ ok: tru
     const timer = setTimeout(() => finish({ ok: false, error: "too_complex" }), limits.pdfTimeoutMs);
     limits.signal?.addEventListener("abort", onAbort, { once: true });
     worker.once("message", (raw: unknown) => {
-      const message = raw as { ok: boolean; text?: unknown };
-      finish(message.ok && typeof message.text === "string" ? { ok: true, text: foldCjkRadicals(message.text) } : { ok: false, error: "unreadable" });
+      const message = pdfReplySchema.safeParse(raw);
+      finish(message.success && message.data.ok
+        ? { ok: true, text: foldCjkRadicals(message.data.text), pagesNotRead: message.data.pagesNotRead }
+        : { ok: false, error: "unreadable" });
     });
-    // the reason is not shown or logged: it may quote the file
     worker.once("error", (error: NodeJS.ErrnoException) => finish({ ok: false, error: error.code === "ERR_WORKER_OUT_OF_MEMORY" ? "too_complex" : "unreadable" }));
     worker.once("exit", () => finish({ ok: false, error: "unreadable" }));
   });
@@ -95,17 +101,20 @@ function pdfText(bytes: Uint8Array, limits: UploadTextLimits): Promise<{ ok: tru
 /** Read the text of a file of `format`; `maxChars`: `import.max_chars` (the caller cuts it exactly). */
 export async function textOfUpload(bytes: Uint8Array, format: StoryImportFormat, limits: UploadTextLimits): Promise<UploadTextResult> {
   let text: string;
+  let pagesNotRead = false;
   if (format === "pdf") {
     if (!startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) return { ok: false, error: "bad_type" };
-    // corrupt or protected by a password: unreadable
     const read = await pdfText(bytes, limits);
     if (!read.ok) return read;
     text = read.text;
+    pagesNotRead = read.pagesNotRead ?? false;
   } else {
     const decoded = decodeText(bytes);
     if (decoded === null) return { ok: false, error: "bad_type" };
     text = decoded;
   }
   const trimmed = text.trim();
-  return trimmed.length < limits.minChars ? { ok: false, error: "no_text" } : { ok: true, text: trimmed };
+  return trimmed.length < limits.minChars
+    ? { ok: false, error: "no_text" }
+    : { ok: true, text: trimmed, ...(pagesNotRead ? { pagesNotRead } : {}) };
 }

@@ -1,0 +1,15 @@
+schema_version: 1
+headline: null
+summary: null
+experience: []
+projects: []
+education: []
+certifications:
+  - id: crt_aaaaaaaaaa
+    name: Example certificate
+    issuer: Example institute
+    date: "2020"
+languages: []
+skills: []
+approach: []
+custom_sections: []

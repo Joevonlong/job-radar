@@ -120,6 +120,7 @@ export function visitProfile(value: unknown, visit: (object: Record<string, unkn
 export const careerProfileSchema = z
   .strictObject({
     schema_version: z.literal(1).default(1),
+    adopted_entries: z.array(z.string().regex(/^[1-9]\d*:(?:headline|summary|d\d+(?:\.\d+)*)$/)).default([]),
     headline: textSchema.nullable().default(null),
     summary: textSchema.nullable().default(null),
     experience: entries(experienceSchema),
@@ -166,6 +167,12 @@ export type CareerProfile = z.infer<typeof careerProfileSchema>;
 
 export function emptyProfile(): CareerProfile {
   return careerProfileSchema.parse({});
+}
+
+export function profileContent(profile: CareerProfile): Omit<CareerProfile, "adopted_entries"> {
+  const content: Omit<CareerProfile, "adopted_entries"> & { adopted_entries?: string[] } = { ...profile };
+  delete content.adopted_entries;
+  return content;
 }
 
 export function primaryText(text: Text | null): string {
