@@ -31,7 +31,7 @@ it("requires a second explicit confirmation when final scrubbing changes the pre
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(screen.getByRole("alert")).toHaveAttribute("data-code", "review_again");
   expect(screen.getByRole("alert")).toHaveTextContent(en.career.extract.errors.review_again);
-  expect(screen.getByTestId("outbound-text")).toHaveFocus();
+  await waitFor(() => expect(screen.getByTestId("outbound-text")).toHaveFocus());
   expect(screen.getByText("Corrected", { selector: "mark" })).toBeVisible();
   fireEvent.click(screen.getByTestId("outbound-send"));
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
