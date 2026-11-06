@@ -51,3 +51,12 @@ describe("document format", () => {
     expect(documentSchema.safeParse(value).success).toBe(false);
   });
 });
+
+it("preserves optional bullet inclusion while accepting older documents", () => {
+  const value = document();
+  const bullet = value.experience[0]!.bullets[0]!;
+  expect(bullet.included).toBeUndefined();
+  bullet.included = false;
+  expect(parseStoredDocument(value).experience[0]!.bullets[0]!.included).toBe(false);
+  expect(documentSchema.safeParse({ ...value, summary: { ...value.summary!, included: "false" } }).success).toBe(false);
+});

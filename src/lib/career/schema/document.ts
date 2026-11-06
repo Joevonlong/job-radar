@@ -27,6 +27,7 @@ export const docTextSchema = z.strictObject({
   }).nullable(),
   text: value,
   origin: z.enum(["source", "ai", "user"]),
+  included: z.boolean().optional(),
 });
 export type DocText = z.infer<typeof docTextSchema>;
 const bullets = z.array(docTextSchema).max(CAREER_FILE_BOUNDS.bullets).default([]);

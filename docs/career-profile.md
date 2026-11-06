@@ -59,27 +59,7 @@ All career data is under `data/profile/career/` (or the configured profile direc
 
 Files written by the app have mode `0600`. The directory is created on the first save. Contact details have a separate
 save button and stale-file check. They are overwritten without history: old contact values are never copied into career
-history. The optional contact photo field is reserved; this editor does not use images.
-
-## Document actions and preview API
-
-Document server actions in `src/app/career/documents/actions.ts` create a general résumé from a nonempty saved profile,
-list and edit documents, restore versions and manage preferences and images. Changed text becomes user wording;
-saves and restores require the current file hash. A restore appends a version through the same save path, including
-when an entry has been removed since the selected version. New documents use the current preferences; existing
-documents keep their own layout. An unreadable source profile returns a warning without blocking document loading
-or saving. Deleting a document requires literal confirmation and removes its history.
-
-`POST /api/career/documents/preview` accepts JSON `{ document, doc: "resume" | "letter" }`, including unsaved documents
-with empty ids. It projects included content and loads contact details and shared images only for the in-memory HTML
-render. It writes no files. Automatic dates use the configured display time zone. Responses contain either HTML or
-machine error codes; render issues contain paths and codes only.
-
-`POST /api/career/images?kind=photo|signature` accepts a raw `application/octet-stream` body. PNG and JPEG are detected
-from magic bytes; unsupported types return 415 and oversized bodies return 413. `DELETE` at the same URL removes that
-shared image. Documents can hide the photo with `hide_contact`. Request and image byte limits come from
-`career.yaml: document`; request timeouts use `import.upload_timeout_seconds`. Both APIs send `Cache-Control: no-store`.
-All document actions and these APIs check the career gate before reading input or career files; disabled APIs return 409.
+history. The contact photo field is not used; résumé documents use the shared photo uploaded in the document editor.
 
 The contact file is not sent to AI. A city or other personal detail in source text can still be sent if it remains in the confirmed preview. The manual editor sends no career content to AI, Telegram or MCP and writes no database profile snapshots. Profile text can itself contain
 contact details; its warning is advisory. Saved files, including contact details, can remain in backups.
@@ -108,3 +88,22 @@ archives and retained profile directories yourself. See [Backup and restore](bac
 
 A save request can carry at most 1 MB. A very large profile can reach that before the entry and wording limits; the
 save then fails with an error and your edits stay in the form. Shorten the content and save again.
+
+## Résumé documents
+
+From `/career`, open **Résumé documents** and create a document from your saved, nonempty profile.
+Each document is an independent copy: later profile edits do not change it, and a banner tells you
+when the profile has changed.
+
+Open a document to edit and reorder entries, include or exclude entries and bullets, or add handwritten
+entries. Edited text and sources deleted from the profile are marked. Add a cover letter in the Letter tab.
+Use the live preview to check your changes. The preview is rendered on your machine; nothing is sent to AI.
+Contact details are read only for the preview and are never copied into document files. You can hide
+individual contact fields for each document.
+
+Upload a shared photo or signature as PNG or JPEG; the size limit is `career.yaml: document.image_max_bytes`.
+Images are shared across documents. In the layout menu, choose the theme, accent, page budget, paper,
+density, colours, language, filename, section order and signature. **Save as my defaults** applies the
+layout to future documents. Use history to view and restore earlier versions; save pending edits first.
+Delete a document from the list after confirmation; this also removes its history. Page count and PDF
+export are not available yet.

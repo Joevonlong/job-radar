@@ -547,7 +547,8 @@ The projects are planned in `e2e/projects.ts` (unit-tested by `tests/e2e-project
   cards on the Sources page, the UI language). They therefore run as single-spec projects chained with `dependencies`, one
   after another. In full mode they start only after `chromium-exclusive` has finished; in the `chain` part the first
   project starts immediately. First the config chain: `chromium-config-settings`,
-  `-settings-invalid`, `-language`, `-breakdown`, `-resume`. Then the interests chain: `chromium-interests`,
+  `-settings-invalid`, `-language`, `-breakdown`, `-research`, `-resume`, `-career`, `-career-builder`. The career profile
+  and document builder both rewrite `career.yaml` and clean their temporary career files. Then the interests chain: `chromium-interests`,
   `chromium-interests-suggestions`, `chromium-multi-filters` and `chromium-companies` (save views, accepted suggestions or
   watched companies to the one `interests.yaml`). Then `chromium-sources-registry` and `chromium-sources-discovery` (both rewrite `sources.yaml`), then
   `chromium-settings-advanced` and `chromium-settings-workflow` (the advanced editor and the workflow tab rewrite ui, notify,

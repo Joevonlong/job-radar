@@ -32,6 +32,14 @@ describe("specFiltersFromArgv", () => {
 });
 
 describe("planProjects", () => {
+  it("runs the document builder immediately after the career profile in the serial chain", () => {
+    const index = SERIAL_CHAIN.findIndex((entry) => entry.spec === "career.spec.ts");
+    expect(SERIAL_CHAIN[index + 1]).toEqual({ name: "chromium-config-career-builder", spec: "career-builder.spec.ts" });
+    expect(planProjects(SPECS, TEST_DIR, ["career.spec.ts", "career-builder.spec.ts"], "chain").map((project) => [project.name, project.dependencies])).toEqual([
+      ["chromium-config-career", []],
+      ["chromium-config-career-builder", ["chromium-config-career"]],
+    ]);
+  });
   it("a full run: parallel, then exclusive (one worker), then the serial chain, each after the one before", () => {
     const plan = planProjects(SPECS, TEST_DIR, []);
     expect(plan.map((p) => p.name)).toEqual(["chromium", "chromium-exclusive", ...SERIAL_CHAIN.map((e) => e.name)]);

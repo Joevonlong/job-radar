@@ -137,3 +137,43 @@ it("returns engine diagnostics without private wording or unknown filename varia
   doc.experience[0]!.start = null;
   expect(renderDocumentHtml(doc, { contact: contact(), images: {}, doc: "resume", today: "2026-01-02" }).ok).toBe(false);
 });
+
+it("excludes unchecked bullets from every projected section and keeps legacy bullets included", () => {
+  const doc = document();
+  for (const entries of [doc.experience, doc.projects, doc.education]) {
+    for (const entry of entries) {
+      entry.bullets = [{ ...entry.bullets[0]!, text: "Kept bullet" }, { ...entry.bullets[0]!, text: "Excluded bullet", included: false }];
+    }
+  }
+  const item = doc.custom_sections[0]!.items[0]!;
+  if (item.kind === "entry") item.bullets = [{ ...doc.summary!, text: "Excluded custom bullet", included: false }];
+  doc.letter = { recipient: [], place: null, date: null, subject: null, salutation: null, closing: null, body: [{ ...doc.summary!, text: "Kept paragraph" }, { ...doc.summary!, text: "Excluded paragraph", included: false }] };
+  const result = toResume(doc, contact(), {}, "resume");
+  expect(result.resume.experience[0]!.bullets).toEqual(["Kept bullet"]);
+  expect(result.resume.projects[0]!.bullets).toEqual(["Kept bullet"]);
+  expect(result.resume.education[0]!.bullets).toEqual(["Kept bullet"]);
+  expect(result.resume.letter?.body).toEqual(["Kept paragraph"]);
+  expect(JSON.stringify(result.resume)).not.toContain("Excluded");
+});
+
+it("does not invalidate the resume when every letter paragraph is excluded", () => {
+  const doc = document();
+  doc.letter = { recipient: [], place: null, date: null, subject: null, salutation: null, closing: null, body: [{ ...doc.summary!, included: false }] };
+  const projected = toResume(doc, contact(), { signature: bytes }, "resume");
+  expect(projected.resume.letter).toBeUndefined();
+  expect(projected.images.signature).toBeUndefined();
+  expect(renderDocumentHtml(doc, { contact: contact(), images: {}, doc: "resume", today: "2026-01-02" }).ok).toBe(true);
+});
+
+it("previews multiple unsaved custom sections and appends included sections absent from explicit order", () => {
+  const doc = document();
+  doc.custom_sections = doc.custom_sections.slice(0, 2).map((section, index) => ({ ...section, id: "", title: { ...section.title, text: `Unsaved section ${index + 1}` } }));
+  doc.layout.sections = null;
+  expect(toResume(doc, contact(), {}, "resume").resume.sections?.slice(8)).toMatchObject([{ title: "Unsaved section 1" }, { title: "Unsaved section 2" }]);
+  doc.layout.sections = ["summary", "experience"];
+  expect(toResume(doc, contact(), {}, "resume").resume.sections?.slice(2)).toMatchObject([{ title: "Unsaved section 1" }, { title: "Unsaved section 2" }]);
+  doc.custom_sections[0]!.id = "ent_aaaaaaaaaa";
+  doc.custom_sections[1]!.id = "ent_bbbbbbbbbb";
+  doc.layout.sections = ["experience", { custom: "ent_bbbbbbbbbb" }];
+  expect(toResume(doc, contact(), {}, "resume").resume.sections).toMatchObject(["experience", { title: "Unsaved section 2" }, { title: "Unsaved section 1" }]);
+});
