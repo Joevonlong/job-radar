@@ -5,6 +5,14 @@
 The optional career profile is a local library of career facts and alternative wordings. You can edit it manually or extract a reviewable draft from your own text. The profile editor does not export résumés. It is independent of the
 application writer and does not change matching, scores or the experience library on **My profile**.
 
+## Quick start
+
+1. Enable the career profile as described below, then upload or paste a résumé.
+2. Review the extracted draft before adopting it.
+3. Add and edit entries by hand.
+
+Later, this profile will support tailored résumés, cover letters and job matching; these uses are not available yet. Profile data stays on this machine; AI extraction sends only the preview text you confirm to your configured provider. The guidance on `/career` can be collapsed once the profile has content.
+
 ## Turn it on
 
 Open **Settings → Workflow → Career profile**, enable it and save. A card below the matching profile on **My profile**

@@ -845,3 +845,6 @@ Extraction settings are `timeout_seconds`, `expiry_grace_seconds`, `queue_timeou
 `stored_value_min_chars`, `title_words`, `sensitive_labels` (all under `import` after `formats`), and
 `evidence.min_quote_chars`, `quote_max_chars`, `figure_units` (all under `evidence`). Figure units share the writer's
 scale and multiple defaults. The three top-level time settings limit running time, the expiry grace period and queue wait. Import settings control file types and size, upload and PDF processing time and memory, text length, concurrent uploads, draft expiry and count, suspected output truncation, and preview removal and highlighting rules. Evidence settings control quote length and figure verification. The `career_extract` task in `ai.yaml` selects the provider and model for extraction.
+
+`writer.yaml: import.title_words` lists résumé title lines skipped when guessing a name.
+`writer.yaml: import.sensitive_labels` lists labels highlighted for review in the outbound preview.
