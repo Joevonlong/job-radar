@@ -65,6 +65,7 @@ export function StoryImport({ view, baseHash, dirty }: StoryImportProps) {
   const [sending, setSending] = useState(false);
   const [waiting, setWaiting] = useState<{ requestId: number; stage?: ControlRequestStage; queue?: ControlQueueView | null } | null>(view.open);
   const [failure, setFailure] = useState<Failure | null>(null);
+  const [dismissedInitialError, setDismissedInitialError] = useState(false);
   const [preview, setPreview] = useState<PreparedText | null>(null);
   const [previewOrigin, setPreviewOrigin] = useState<StoryExtractOrigin>("resume");
   const [previewRevision, setPreviewRevision] = useState(0);
@@ -102,9 +103,11 @@ export function StoryImport({ view, baseHash, dirty }: StoryImportProps) {
   });
 
   const busy = sending || waiting !== null;
+  const visibleFailure = failure ?? (!dismissedInitialError && view.error ? { error: view.error, resumeAt: null } : null);
 
   async function prepare(origin: StoryExtractOrigin, input?: { text: string; name: string; address: string; mode: "values" }): Promise<boolean> {
     setFailure(null);
+    setDismissedInitialError(true);
     let body: FormData | string;
     if (input) body = JSON.stringify(input);
     else if (origin === "profile") body = JSON.stringify({ origin });
@@ -179,7 +182,7 @@ export function StoryImport({ view, baseHash, dirty }: StoryImportProps) {
                 </a>
               </p>
             </div>
-            {preview ? <SendPreview key={previewRevision} preview={preview} busy={busy} onChange={setPreview} onPrepare={(input) => prepare(previewOrigin, input)} onSend={(value) => void send(value)} onCancel={() => setPreview(null)} /> : <>
+            {preview ? <SendPreview key={previewRevision} preview={preview} busy={busy} onChange={setPreview} onPrepare={(input) => prepare(previewOrigin, input)} onSend={(value) => void send(value)} onCancel={() => { setPreview(null); setFile(null); }} /> : <>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void prepare("profile")} data-testid="story-import-profile">
                 <Sparkles aria-hidden />
@@ -238,10 +241,13 @@ export function StoryImport({ view, baseHash, dirty }: StoryImportProps) {
                 <QueueHint queue={wait.queue} stage={wait.stage} live={false} />
               </div>
             ) : null}
-            {failure && !busy ? (
-              <p role="alert" className="text-bad text-body-sm font-semibold [overflow-wrap:anywhere]" data-testid="story-import-error" data-error={failure.error}>
-                {errorText(failure)}
-              </p>
+            {visibleFailure && !busy ? (
+              <div className="flex items-center gap-2">
+                <p role="alert" className="text-bad text-body-sm font-semibold [overflow-wrap:anywhere]" data-testid="story-import-error" data-error={visibleFailure.error}>
+                  {errorText(visibleFailure)}
+                </p>
+                {visibleFailure.error === "preview_required" ? <Button type="button" variant="ghost" size="sm" onClick={() => { setFailure(null); setDismissedInitialError(true); }}>{t("dismissError")}</Button> : null}
+              </div>
             ) : null}
           </>
         ) : (

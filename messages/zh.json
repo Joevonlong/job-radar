@@ -831,6 +831,7 @@
       }
     },
     "storyImport": {
+      "dismissError": "关闭这条提示。",
       "title": "从你写过的内容里提取素材",
       "description": "AI 从你的画像、粘贴的文字或简历里起草素材。你采用之前，素材库不会有任何变化。",
       "sendsTo": "文字会发给：",
@@ -7765,6 +7766,7 @@
       "no_material": "没有选择素材",
       "no_text": "没有可提取的文字",
       "too_long": "文字超过长度上限",
+      "review_again": "隐私检查修改了文字，请检查预览并再次确认。",
       "busy": "这道题已有别的请求在进行",
       "output_truncated": "回答在输出上限处被截断",
       "expired": "请求已过期",

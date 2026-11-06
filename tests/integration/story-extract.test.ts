@@ -19,7 +19,8 @@ import { readProfileText, reloadConfig, resetConfigCache, writerSchema, type Wri
 import { processNextControlRequest, registerControlHandler, resetControlHandlers } from "@/lib/control";
 import { expireScrubbedRequests } from "@/lib/control/expire";
 import { createStoryExtractHandler } from "@/lib/control/story-extract";
-import { readOpenStoryExtract, readStoryExtractRequest, requestStoryExtract } from "@/lib/control/story-extract-request";
+import { readLatestStoryExtract, readStoryExtractRequest, requestStoryExtract } from "@/lib/control/story-extract-request";
+import { loadProfilePage } from "@/lib/profile/view";
 import { closeDb, getDb, hashProfileYaml, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { claimNextControlRequest, insertControlRequest, requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
@@ -244,7 +245,7 @@ describe("queueing", () => {
     const id = await queue();
     expect(await requestStoryExtract(db(), { origin: "resume", text: SOURCE, writer: writerOn() })).toMatchObject({ state: "queued", requestId: id, existing: true });
     expect(await requestStoryExtract(db(), { origin: "resume", text: `${SOURCE} More.`, writer: writerOn() })).toEqual({ state: "error", error: "busy" });
-    expect(await readOpenStoryExtract(db())).toMatchObject({ requestId: id, stage: "pending" });
+    expect(await readLatestStoryExtract(db())).toMatchObject({ requestId: id, state: "waiting", stage: "pending" });
   });
 
   it("rejects a long confirmed text without queueing or truncating it", async () => {
@@ -270,6 +271,23 @@ describe("queueing", () => {
 });
 
 describe("the upload route", () => {
+  it("returns scrubbed final text for review without queueing confirmed text containing an email", async () => {
+    const response = await POST(jsonRequest({ origin: "self_description", text: `${SOURCE}\nEmail: private@example.invalid` }));
+    expect(response.status).toBe(409);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({ ok: false, error: "review_again", text: `${SOURCE}\nEmail: [email]`, highlights: [] });
+    expect(await db().select().from(schema.controlRequests)).toEqual([]);
+  });
+
+  it("refuses confirmed text over the configured limit without queueing a truncated request", async () => {
+    writerFile("enabled: true\nimport:\n  min_chars: 5\n  max_chars: 1000\n");
+    const text = "x".repeat(1001);
+    const response = await POST(jsonRequest({ origin: "self_description", text }));
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ ok: false, error: "too_long" });
+    expect(await db().select().from(schema.controlRequests)).toEqual([]);
+  });
+
   it("takes a PDF, writes no file and puts its text in the request only", async () => {
     const started = Date.now() - 1000;
     const writes = [vi.spyOn(fs, "writeFileSync"), vi.spyOn(fs, "writeFile"), vi.spyOn(fs.promises, "writeFile"), vi.spyOn(fs, "createWriteStream"), vi.spyOn(fs, "appendFileSync"), vi.spyOn(fs.promises, "appendFile")];
@@ -418,6 +436,23 @@ describe("the review", () => {
 
 
 describe("confirmed extraction privacy", () => {
+  it("loads the upgrade failure after the worker ends an old request, until a newer extraction exists", async () => {
+    const old = await insertControlRequest(db(), { kind: "story_extract", payload: { origin: "resume", sourceHash: createHash("sha256").update(SOURCE).digest("hex"), sourceChars: SOURCE.length, truncated: false, text: SOURCE } });
+    const createRouter = vi.fn();
+    registerControlHandler("story_extract", createStoryExtractHandler({ createRouter, loadSettings: writerOn }));
+    expect(await poll()).toMatchObject({ id: old.id, status: "failed" });
+    const initial = await loadProfilePage();
+    expect(initial.dbAvailable).toBe(true);
+    expect(initial.storyImport).toMatchObject({ open: null, error: "preview_required" });
+    expect(JSON.stringify(initial.storyImport)).not.toContain(SOURCE);
+    expect(createRouter).not.toHaveBeenCalled();
+    const newer = await queue();
+    expect((await loadProfilePage()).storyImport).toMatchObject({ open: { requestId: newer, stage: "pending" }, error: null });
+    handlerWith([reply()]);
+    expect(await poll()).toMatchObject({ id: newer, status: "done" });
+    expect((await loadProfilePage()).storyImport).toMatchObject({ open: null, error: null });
+  });
+
   it("removes sentinels through real preparation, the queue, router, drafts, activity and logs with career off", async () => {
     const sentinels = ["Fictional Person", "99 Imaginary Lane", "private@example.invalid", "+49 30 1234-5678", "+49 (0)30 2015-2019", "https://private.example.invalid/path"];
     const storedOnly = "Stored Value Sentinel";

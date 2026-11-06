@@ -831,6 +831,7 @@
       }
     },
     "storyImport": {
+      "dismissError": "Dismiss this message.",
       "title": "Get stories from what you already wrote",
       "description": "The AI drafts stories from your profile, a text you paste or your résumé. Nothing enters your library until you adopt it.",
       "sendsTo": "The text goes to:",
@@ -7765,6 +7766,7 @@
       "no_material": "No material chosen",
       "no_text": "No text to extract from",
       "too_long": "Text longer than allowed",
+      "review_again": "The text changed during the privacy check. Review the preview and confirm again.",
       "busy": "Another request for this question is running",
       "output_truncated": "Answer cut off at the output limit",
       "expired": "Request expired",

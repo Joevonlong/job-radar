@@ -54,6 +54,8 @@ These actions require the writer to be enabled and open an editable preview befo
 
 Story extraction works independently of the career profile switch. It does not use stored contact values for replacement or read the career profile folder while that profile is off. Requests queued by an older version without a confirmed preview fail and ask you to open the preview again; existing story drafts remain available. Drafts that appear to contain an email address or phone number are marked. See [Story extraction](privacy.md#story-extraction) for what may remain of the text.
 
+If the newest extraction failed because it needs a preview, the card shows that message even when it failed before you opened the page. You can dismiss it for the current page; a newer extraction replaces it. Cancelling an upload preview clears the selected file, so select the file again to retry.
+
 The results wait in **drafts to review**. `stories.yaml` does not change until you adopt one. For each draft:
 
 - Every field shows the passage of your text it rests on. A field is marked **Check** when that quote is not in the text, is

@@ -93,10 +93,10 @@ export async function readStoryExtractRequest(db: Db, requestId: number): Promis
   return stateOf(db, request);
 }
 
-/** What the card starts with after a page load: the open extraction, to follow it. A failure is shown only by the page that started it. */
-export async function readOpenStoryExtract(db: Db): Promise<{ requestId: number; stage: "pending" | "running"; queue: ControlQueueView | null } | null> {
+/** The newest extraction determines what the card shows after a page load. */
+export async function readLatestStoryExtract(db: Db): Promise<({ requestId: number } & Exclude<StoryExtractState, { state: "missing" }>) | null> {
   await expireScrubbedRequests(db);
   const latest = await findLatestStoryExtractRequest(db);
-  if (!latest || !isOpen(latest)) return null;
-  return { requestId: latest.id, stage: latest.status as "pending" | "running", queue: await loadQueueView(db, latest) };
+  if (!latest) return null;
+  return { requestId: latest.id, ...await stateOf(db, latest) };
 }
