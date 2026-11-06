@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { createChannelContext } from "@/lib/channels/context";
+import { placeGeo } from "@/lib/market/places";
 import { createMemoryDiscoveryStore } from "@/lib/channels/discovery";
 import { ChannelError, PartialCollectError } from "@/lib/channels/errors";
 import {
@@ -177,7 +178,7 @@ function prefilter(options: Parameters<typeof inputs>[0] = {}, s: HandpickedSett
 
 function placesOf(options: Parameters<typeof inputs>[0] = {}) {
   const i = inputs(options);
-  return buildPlaces({ locations: i.search.locations, cityAliases: i.pipeline.filter.city_aliases, remoteScope: i.search.remote_scope, country: i.country });
+  return buildPlaces({ locations: i.search.locations, geo: placeGeo(i.pipeline), remoteScope: i.search.remote_scope, country: i.country });
 }
 
 describe("fixtures", () => {
@@ -208,8 +209,8 @@ describe("places", () => {
   });
 
   it("has no city when none is configured, and compares without case or accents", () => {
-    expect(matchesPlace(entry("b000000002"), buildPlaces({ locations: ["BERLIN"], cityAliases: {}, remoteScope: "none", country: "DE" }))).toBe(true);
-    expect(matchesPlace(entry("b000000005"), buildPlaces({ locations: ["Berlin"], cityAliases: {}, remoteScope: "none", country: "DE" }))).toBe(false);
+    expect(matchesPlace(entry("b000000002"), buildPlaces({ locations: ["BERLIN"], geo: { cityAliases: {}, cities: {} }, remoteScope: "none", country: "DE" }))).toBe(true);
+    expect(matchesPlace(entry("b000000005"), buildPlaces({ locations: ["Berlin"], geo: { cityAliases: {}, cities: {} }, remoteScope: "none", country: "DE" }))).toBe(false);
   });
 });
 

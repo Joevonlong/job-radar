@@ -1,4 +1,5 @@
 import { foldText } from "@/lib/filter/text";
+import { citySpellings, type PlaceGeo } from "@/lib/market/places";
 
 import type { TitlePrefilter } from "../ats/prefilter";
 import { boardFromUrl, boardKey } from "../discovery/boards";
@@ -8,7 +9,7 @@ import type { HandpickedIndexEntry } from "./schema";
 
 /**
  * Which index entries the channel keeps. Pure functions of the entries and the user's configuration: the places come from
- * `search.yaml: locations` (with the spellings of `filter.city_aliases`), never from the code.
+ * `search.yaml: locations` (with every spelling the tables know), never from the code.
  */
 
 export interface Places {
@@ -20,16 +21,9 @@ export interface Places {
   country: string;
 }
 
-export function buildPlaces(input: { locations: readonly string[]; cityAliases: Readonly<Record<string, readonly string[]>>; remoteScope: unknown; country: string }): Places {
+export function buildPlaces(input: { locations: readonly string[]; geo: Pick<PlaceGeo, "cityAliases" | "cities">; remoteScope: unknown; country: string }): Places {
   const cities = new Set<string>();
-  for (const location of input.locations) {
-    const folded = foldText(location);
-    cities.add(folded);
-    for (const [canonical, aliases] of Object.entries(input.cityAliases)) {
-      const names = [canonical, ...aliases].map(foldText);
-      if (names.includes(folded)) for (const name of names) cities.add(name);
-    }
-  }
+  for (const location of input.locations) for (const name of citySpellings(location, input.geo)) cities.add(foldText(name));
   return { cities, remote: input.remoteScope !== "none", country: input.country.toUpperCase() };
 }
 

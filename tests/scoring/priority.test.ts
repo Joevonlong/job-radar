@@ -70,6 +70,12 @@ describe("title match", () => {
 });
 
 describe("the other components", () => {
+  it("location: a wanted city by a spelling only the city table knows", () => {
+    const base = inputs();
+    const noAliases = inputs({ pipeline: { ...base.pipeline, filter: { ...base.pipeline.filter, city_aliases: {} } } });
+    expect(score({ locations: [place("Munich")] }, noAliases).location).toBe(1);
+  });
+
   it("location: a wanted city (also by alias) beats a nearby place, remote and the rest", () => {
     const exact = score({ locations: [place("Munich")] }).location;
     const nearby = score({ locations: [place("Potsdam")] }).location;
