@@ -31,8 +31,10 @@ test("manual profile: save, wording, diff, restore, history cleanup and delete",
   await withCareer(true, async () => {
     await page.goto("/me");
     await expect(page.getByTestId("career-card")).toBeVisible();
+    await expect(page.getByTestId("career-card-hint")).toBeVisible();
     await page.getByTestId("career-card").getByRole("link").click();
     await expect(page).toHaveURL(/\/career$/);
+    await expect(page.getByTestId("career-guidance-steps").getByRole("listitem")).toHaveCount(3);
     const experience = page.getByTestId("career-experience");
     await experience.getByRole("button", { name: "添加经历", exact: true }).click();
     await experience.getByLabel("公司", { exact: true }).fill("Example Company");
@@ -40,7 +42,10 @@ test("manual profile: save, wording, diff, restore, history cleanup and delete",
     await experience.getByRole("button", { name: "添加要点", exact: true }).click();
     await experience.getByLabel("写法 1", { exact: true }).nth(1).fill("Built a reliable service");
     await save(page);
+    await page.getByTestId("career-guidance").getByRole("button", { name: "收起说明" }).click();
+    await expect(page.getByTestId("career-guidance-content")).toHaveCount(0);
     await page.reload();
+    await expect(page.getByTestId("career-guidance-content")).toBeVisible();
     await expect(experience.getByLabel("公司", { exact: true })).toHaveValue("Example Company");
     await expect(experience.getByLabel("写法 1", { exact: true }).nth(1)).toHaveValue("Built a reliable service");
     await experience.getByRole("button", { name: "另一种写法", exact: true }).nth(1).click();
