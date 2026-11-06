@@ -1,0 +1,70 @@
+language: de
+experience:
+  - company:
+      value: Funkelwald Forschung GmbH
+      quote: Funkelwald Forschung GmbH
+    role:
+      value: Forscher
+      quote: Forscher
+    start:
+      value: "2018"
+      quote: "2018"
+    end:
+      value: "2022"
+      quote: "2022"
+    bullets:
+      - value: Entwickelte 3 reproduzierbare Experimente.
+        quote: Entwickelte 3 reproduzierbare Experimente.
+    stack:
+      - value: Rust
+        quote: Rust
+education:
+  - school:
+      value: Universitaet Morgenkiesel
+      quote: Universitaet Morgenkiesel
+    degree:
+      value: Dr Informatik
+      quote: Dr Informatik
+    start:
+      value: "2014"
+      quote: "2014"
+    end:
+      value: "2017"
+      quote: "2017"
+skills:
+  - group: Technology
+    items:
+      - value: Rust
+        quote: Rust
+languages:
+  - name:
+      value: Englisch
+      quote: Englisch
+    level:
+      value: B2
+      quote: B2
+custom_sections:
+  - title:
+      value: Publikationen
+      quote: Publikationen
+    items:
+      - kind: entry
+        heading:
+          value: Fiktive Warteschlangen im Nebel
+          quote: Fiktive Warteschlangen im Nebel
+        date:
+          value: "2021"
+          quote: "2021"
+        bullets: []
+  - title:
+      value: Auszeichnungen
+      quote: Auszeichnungen
+    items:
+      - kind: entry
+        heading:
+          value: Fiktiver Kieselpreis
+          quote: Fiktiver Kieselpreis
+        date:
+          value: "2022"
+          quote: "2022"
+        bullets: []

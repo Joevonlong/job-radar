@@ -1,0 +1,45 @@
+language: de
+experience:
+  - company:
+      value: Nebelfalter Systeme GmbH
+      quote: Nebelfalter Systeme GmbH
+    role:
+      value: Plattformentwicklerin
+      quote: Plattformentwicklerin
+    start:
+      value: 2020-01
+      quote: 2020-01
+    end:
+      value: 2023-03
+      quote: 2023-03
+    bullets:
+      - value: Aufbau eines Dienstes fuer 10 000 000 Anfragen.
+        quote: Aufbau eines Dienstes fuer 10 000 000 Anfragen.
+    stack:
+      - value: Go
+        quote: Go
+education:
+  - school:
+      value: Hochschule Kieselgarten
+      quote: Hochschule Kieselgarten
+    degree:
+      value: BSc Informatik
+      quote: BSc Informatik
+    start:
+      value: "2014"
+      quote: "2014"
+    end:
+      value: "2017"
+      quote: "2017"
+skills:
+  - group: Technology
+    items:
+      - value: Go
+        quote: Go
+languages:
+  - name:
+      value: Deutsch
+      quote: Deutsch
+    level:
+      value: Muttersprache
+      quote: Muttersprache

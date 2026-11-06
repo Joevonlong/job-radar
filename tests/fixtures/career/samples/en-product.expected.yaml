@@ -1,0 +1,45 @@
+language: en
+experience:
+  - company:
+      value: Moonpebble Software Ltd
+      quote: Moonpebble Software Ltd
+    role:
+      value: Product Engineer
+      quote: Product Engineer
+    start:
+      value: 2020-02
+      quote: 2020-02
+    end:
+      value: 2024-11
+      quote: 2024-11
+    bullets:
+      - value: Built a queue handling 20% more events.
+        quote: Built a queue handling 20% more events.
+    stack:
+      - value: TypeScript
+        quote: TypeScript
+education:
+  - school:
+      value: Cloudfern Institute
+      quote: Cloudfern Institute
+    degree:
+      value: BSc Computing
+      quote: BSc Computing
+    start:
+      value: "2014"
+      quote: "2014"
+    end:
+      value: "2017"
+      quote: "2017"
+skills:
+  - group: Technology
+    items:
+      - value: TypeScript
+        quote: TypeScript
+languages:
+  - name:
+      value: English
+      quote: English
+    level:
+      value: Native
+      quote: Native

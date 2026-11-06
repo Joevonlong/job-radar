@@ -1,0 +1,24 @@
+Lebenslauf
+Mira Wolkenfels
+de-platform@example.invalid
++49 30 0000000
+Anschrift: Fabelweg 00, 00000 Musterort
+Geburtsdatum: 12/05/1990
+
+Berufserfahrung
+Nebelfalter Systeme GmbH
+Plattformentwicklerin
+2020-01 - 2023-03
+- Aufbau eines Dienstes fuer 10 000 000 Anfragen.
+Stack: Go
+
+Ausbildung
+Hochschule Kieselgarten
+BSc Informatik
+2014 - 2017
+
+Kenntnisse
+Technology: Go
+
+Sprachen
+Deutsch: Muttersprache

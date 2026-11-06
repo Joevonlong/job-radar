@@ -41,8 +41,16 @@ export function adoptDraft(profile: CareerProfile, draft: CareerDraft, decisions
     const decision = choose.get(original.key);
     if (!decision) continue;
     choose.delete(original.key);
-    if (decision.action === "skip") continue;
     const entry: DraftEntry = structuredClone(original);
+    entry.items = entry.items.flatMap((item) => {
+      const nested = choose.get(item.key);
+      choose.delete(item.key);
+      if (nested?.action === "skip") return [];
+      for (const [key, value] of Object.entries(nested?.fields ?? {})) item.fields[key as typeof DRAFT_FIELDS[number]] = value == null ? null : { value, quote: "", flags: [] };
+      if (nested?.bullets) item.bullets = nested.bullets.map((value) => ({ value, quote: "", flags: [] }));
+      return [item];
+    });
+    if (decision.action === "skip") continue;
     for (const [key, value] of Object.entries(decision.fields ?? {})) entry.fields[key as typeof DRAFT_FIELDS[number]] = value == null ? null : { value, quote: "", flags: [] };
     const v = (key: typeof DRAFT_FIELDS[number]) => entry.fields[key]?.value ?? "";
     const nullable = (key: typeof DRAFT_FIELDS[number]) => v(key) || null;

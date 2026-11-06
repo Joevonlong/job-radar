@@ -17,6 +17,7 @@ import { formatFullTime } from "@/lib/format/time";
 import { CareerStatus } from "./career-status";
 import { ContactForm } from "./contact-form";
 import { careerErrorMessageKey } from "./error-messages";
+import { CareerExtraction, type ExtractionView } from "./career-extraction";
 import { ProfileForm } from "./profile-form";
 
 type Change = { added: boolean; removed: boolean; value: string };
@@ -27,6 +28,7 @@ type CareerEditorProps = {
   errors: string[];
   limits: CareerConfig["profile"];
   timeZone: string;
+  extraction?: ExtractionView;
 };
 
 function DiffLine({ change }: { change: Change }) {
@@ -52,7 +54,7 @@ function DiffLine({ change }: { change: Change }) {
   );
 }
 
-export function CareerEditor({ initial, contact, initialVersions, errors, limits, timeZone }: CareerEditorProps) {
+export function CareerEditor({ initial, contact, initialVersions, errors, limits, timeZone, extraction }: CareerEditorProps) {
   const t = useTranslations("career");
   const locale = resolveLocale(useLocale());
   const [saved, setSaved] = useState(initial);
@@ -62,6 +64,7 @@ export function CareerEditor({ initial, contact, initialVersions, errors, limits
   const [message, setMessage] = useState("");
   const [confirm, setConfirm] = useState<"history" | "all" | null>(null);
   const [pending, startTransition] = useTransition();
+  const [adopting, setAdopting] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [revision, setRevision] = useState(0);
 
@@ -133,9 +136,14 @@ export function CareerEditor({ initial, contact, initialVersions, errors, limits
           {t(careerErrorMessageKey(code))}
         </p>
       ))}
+      {saved && extraction && <CareerExtraction view={extraction} profile={saved.profile} baseHash={saved.baseHash} dirty={dirty || pending || adopting} onAdopting={setAdopting} onAdopted={(result) => {
+        setSaved({ profile: result.profile, baseHash: result.baseHash, updatedAt: null });
+        setRevision((old) => old + 1); setDirty(false); clearDiff(); setMessage(result.warnings.length ? "history_failed" : "saved"); run(refreshHistory);
+      }} />}
       {saved && (
         <ProfileForm
           key={revision}
+          disabled={adopting}
           profile={saved.profile}
           baseHash={saved.baseHash}
           limits={limits}
@@ -158,7 +166,7 @@ export function CareerEditor({ initial, contact, initialVersions, errors, limits
           <CardTitle>{t("history")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <Button variant="outline" disabled={pending} onClick={() => run(refreshHistory)}>
+          <Button variant="outline" disabled={pending || adopting} onClick={() => run(refreshHistory)}>
             {t("refresh")}
           </Button>
           {versions.length === 0 ? (
@@ -173,13 +181,13 @@ export function CareerEditor({ initial, contact, initialVersions, errors, limits
                   <time className="font-mono text-data" dateTime={version.createdAt}>
                     {formatFullTime(version.createdAt, { locale, timeZone })}
                   </time>
-                  <span className="font-mono text-data">{version.hash}</span>
-                  <Button variant="outline" disabled={pending} onClick={() => run(() => showDiff(version.id))}>
+                  <span className="max-w-full break-all font-mono text-data">{version.hash}</span>
+                  <Button variant="outline" disabled={pending || adopting} onClick={() => run(() => showDiff(version.id))}>
                     {t("diff")}
                   </Button>
                   <Button
                     variant="outline"
-                    disabled={pending || !saved || dirty}
+                    disabled={pending || adopting || !saved || dirty}
                     onClick={() => run(() => restoreVersion(version.id))}
                   >
                     {t("restore")}
@@ -208,10 +216,10 @@ export function CareerEditor({ initial, contact, initialVersions, errors, limits
         <CardContent>
           <p className="text-body-sm">{t("deleteNote")}</p>
           <div className="flex flex-wrap gap-3">
-            <Button variant="outline" disabled={pending} onClick={() => setConfirm("history")}>
+            <Button variant="outline" disabled={pending || adopting} onClick={() => setConfirm("history")}>
               {t("clearHistory")}
             </Button>
-            <Button variant="outline" disabled={pending} onClick={() => setConfirm("all")}>
+            <Button variant="outline" disabled={pending || adopting} onClick={() => setConfirm("all")}>
               {t("deleteProfile")}
             </Button>
           </div>
@@ -229,11 +237,11 @@ export function CareerEditor({ initial, contact, initialVersions, errors, limits
             {t(confirm === "history" ? "clearHistoryDescription" : "deleteProfileDescription")}
           </DialogDescription>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirm(null)} disabled={pending}>
+            <Button variant="outline" onClick={() => setConfirm(null)} disabled={pending || adopting}>
               {t("cancel")}
             </Button>
             <Button
-              disabled={pending}
+              disabled={pending || adopting}
               onClick={() => {
                 if (confirm) run(() => deleteData(confirm));
               }}

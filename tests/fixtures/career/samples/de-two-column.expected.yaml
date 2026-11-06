@@ -1,0 +1,45 @@
+language: de
+experience:
+  - company:
+      value: Drachenmoos Labor GmbH
+      quote: Drachenmoos Labor GmbH
+    role:
+      value: Dateningenieurin
+      quote: Dateningenieurin
+    start:
+      value: 2021-03
+      quote: 2021-03
+    end:
+      value: 2023-08
+      quote: 2023-08
+    bullets:
+      - value: Senkung der Laufzeit um 40%.
+        quote: Senkung der Laufzeit um 40%.
+    stack:
+      - value: SQL
+        quote: SQL
+education:
+  - school:
+      value: Institut Farnwolke
+      quote: Institut Farnwolke
+    degree:
+      value: BSc Mathematik
+      quote: BSc Mathematik
+    start:
+      value: "2014"
+      quote: "2014"
+    end:
+      value: "2017"
+      quote: "2017"
+skills:
+  - group: Technology
+    items:
+      - value: SQL
+        quote: SQL
+languages:
+  - name:
+      value: Deutsch
+      quote: Deutsch
+    level:
+      value: C2
+      quote: C2

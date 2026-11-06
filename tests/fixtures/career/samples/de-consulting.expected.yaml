@@ -1,0 +1,45 @@
+language: de
+experience:
+  - company:
+      value: Silberkiesel Beratung GmbH
+      quote: Silberkiesel Beratung GmbH
+    role:
+      value: Technischer Berater
+      quote: Technischer Berater
+    start:
+      value: "2019"
+      quote: "2019"
+    end:
+      value: present
+      quote: present
+    bullets:
+      - value: Begleitete 12 fiktive Pilotprojekte.
+        quote: Begleitete 12 fiktive Pilotprojekte.
+    stack:
+      - value: Python
+        quote: Python
+education:
+  - school:
+      value: Akademie Wolkensteg
+      quote: Akademie Wolkensteg
+    degree:
+      value: MSc Wirtschaftsinformatik
+      quote: MSc Wirtschaftsinformatik
+    start:
+      value: "2014"
+      quote: "2014"
+    end:
+      value: "2017"
+      quote: "2017"
+skills:
+  - group: Technology
+    items:
+      - value: Python
+        quote: Python
+languages:
+  - name:
+      value: Englisch
+      quote: Englisch
+    level:
+      value: C1
+      quote: C1

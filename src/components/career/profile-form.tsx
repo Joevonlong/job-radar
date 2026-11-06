@@ -19,12 +19,14 @@ export function ProfileForm({
   limits,
   onSaved,
   onDirty,
+  disabled = false,
 }: {
   profile: CareerProfile;
   baseHash: string | null;
   limits: CareerConfig["profile"];
   onSaved: (profile: CareerProfile, hash: string) => void;
   onDirty: (dirty: boolean) => void;
+  disabled?: boolean;
 }) {
   const t = useTranslations("career");
   const [draft, setDraftState] = useState(profile);
@@ -41,6 +43,7 @@ export function ProfileForm({
       className="flex min-w-0 flex-col gap-6"
       onSubmit={(event) => {
         event.preventDefault();
+        if (disabled || pending) return;
         startTransition(async () => {
           try {
             const result = await saveProfileAction({ profile: draft, baseHash });
@@ -58,7 +61,7 @@ export function ProfileForm({
         });
       }}
     >
-      <fieldset disabled={pending} className="flex min-w-0 flex-col gap-6">
+      <fieldset disabled={pending || disabled} className="flex min-w-0 flex-col gap-6">
         <Card>
           <CardHeader>
             <CardTitle>{t("title")}</CardTitle>
@@ -125,7 +128,7 @@ export function ProfileForm({
         </p>
       )}
       <CareerStatus code={status} />
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" disabled={pending || disabled}>
         {pending ? t("saving") : t("save")}
       </Button>
     </form>

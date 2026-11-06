@@ -1,0 +1,45 @@
+language: de
+experience:
+  - company:
+      value: Mondfalter Handel GmbH
+      quote: Mondfalter Handel GmbH
+    role:
+      value: Projektleiterin
+      quote: Projektleiterin
+    start:
+      value: "2022"
+      quote: "2022"
+    end:
+      value: present
+      quote: present
+    bullets:
+      - value: Koordinierte 7 interne Schulungen.
+        quote: Koordinierte 7 interne Schulungen.
+    stack:
+      - value: TypeScript
+        quote: TypeScript
+education:
+  - school:
+      value: Hochschule Sternmoos
+      quote: Hochschule Sternmoos
+    degree:
+      value: BA Kommunikation
+      quote: BA Kommunikation
+    start:
+      value: "2014"
+      quote: "2014"
+    end:
+      value: "2017"
+      quote: "2017"
+skills:
+  - group: Technology
+    items:
+      - value: TypeScript
+        quote: TypeScript
+languages:
+  - name:
+      value: Deutsch
+      quote: Deutsch
+    level:
+      value: C1
+      quote: C1

@@ -1,0 +1,24 @@
+Lebenslauf
+Juna Federquell
+de-career-change@example.invalid
++49 30 0000000
+Anschrift: Fabelweg 00, 00000 Musterort
+Geburtsdatum: 12/05/1990
+
+Berufserfahrung
+Mondfalter Handel GmbH
+Projektleiterin
+2022 - present
+- Koordinierte 7 interne Schulungen.
+Stack: TypeScript
+
+Ausbildung
+Hochschule Sternmoos
+BA Kommunikation
+2014 - 2017
+
+Kenntnisse
+Technology: TypeScript
+
+Sprachen
+Deutsch: C1

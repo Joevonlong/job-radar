@@ -11,6 +11,8 @@ import { loadContact } from "@/lib/career/contact/store";
 import { listVersions } from "@/lib/career/store/history";
 import { loadCareerProfile } from "@/lib/career/store/profile";
 import { getDisplayTimeZone } from "@/lib/dashboard/context";
+import { aiDisclosure } from "@/lib/ai/disclosure";
+import { getCareerExtractStatus, listCareerDrafts } from "./actions";
 import { cleanupExpiredDrafts } from "@/lib/career/extract/draft-store";
 import { logActionFailure } from "@/lib/logging/action-failure";
 
@@ -48,10 +50,13 @@ export default async function Page() {
   const versions = await safe(listVersions, []);
   let limits;
   try {
-    limits = reloadConfig("career").profile;
+    limits = reloadConfig("career");
   } catch {
     return <p>{t("disabled")}</p>;
   }
+  const drafts = initial ? await safe(async () => { const result = await listCareerDrafts({}); if (result.ok) return result.drafts; errors.push(result.code); return []; }, []) : [];
+  const status = initial ? await safe(async () => { const result = await getCareerExtractStatus({}); if (!result.ok) { errors.push(result.code); return null; } return result.status.state === "waiting" ? result.status : null; }, null) : null;
+  const providers = await safe(async () => aiDisclosure(reloadConfig("ai")).find((row) => row.task === "career_extract")?.providers ?? [], []);
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader title={t("title")} description={t("description")} />
@@ -60,7 +65,8 @@ export default async function Page() {
         contact={contact}
         initialVersions={versions}
         errors={errors}
-        limits={limits}
+        limits={limits.profile}
+        extraction={{ limits: limits.import, providers, drafts, open: status }}
         timeZone={getDisplayTimeZone()}
       />
     </div>

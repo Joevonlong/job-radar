@@ -70,3 +70,28 @@ it("retains bullets attached to custom text items across re-adoption", () => {
   expect(result.custom_sections[0]!.items.map((item) => item.kind === "entry" ? "" : primaryText(item.text))).toEqual(["Community work", "Organized meetings"]);
   expect(adoptDraft(result, source, decisions)).toEqual(result);
 });
+
+it("applies nested skill and custom item edits, skips and bullet selections", () => {
+  const source = draft();
+  source.sections = verifyCareerExtract(SOURCE, output({
+    skills: [{ group: "Code", items: [field("Go"), field("Rust")] }],
+    custom_sections: [{ title: field("Awards"), items: [
+      { kind: "entry", heading: field("First"), sub: null, date: null, text: null, bullets: [field("Keep"), field("Drop")] },
+      { kind: "entry", heading: field("Second"), sub: null, date: null, text: null, bullets: [] },
+    ] }],
+  }), settings().evidence);
+  const skills = source.sections.skills[0]!; const custom = source.sections.custom_sections[0]!;
+  const decisions = [
+    { key: skills.key, action: "new" as const }, { key: skills.items[0]!.key, action: "skip" as const },
+    { key: skills.items[1]!.key, action: "new" as const, fields: { name: "TypeScript" } },
+    { key: custom.key, action: "new" as const }, { key: custom.items[0]!.key, action: "new" as const, fields: { heading: "Reviewed award" }, bullets: ["Keep"] },
+    { key: custom.items[1]!.key, action: "skip" as const },
+  ];
+  const result = adoptDraft(emptyProfile(), source, decisions);
+  expect(result.skills[0]!.items.map((item) => item.name)).toEqual(["TypeScript"]);
+  const item = result.custom_sections[0]!.items[0]!;
+  expect(result.custom_sections[0]!.items).toHaveLength(1);
+  expect(item.kind === "entry" && primaryText(item.heading)).toBe("Reviewed award");
+  expect(item.kind === "entry" && item.bullets.map(primaryText)).toEqual(["Keep"]);
+  expect(adoptDraft(emptyProfile(), source, decisions.map((decision) => ({ ...decision, action: "skip" })))).toEqual(emptyProfile());
+});

@@ -1,0 +1,24 @@
+Lebenslauf
+Nela Traumwald
+de-two-column@example.invalid
++49 30 0000000
+Anschrift: Fabelweg 00, 00000 Musterort
+Geburtsdatum: 12/05/1990
+
+Berufserfahrung
+Drachenmoos Labor GmbH
+Dateningenieurin
+2021-03 - 2023-08
+- Senkung der Laufzeit um 40%.
+Stack: SQL
+
+Ausbildung
+Institut Farnwolke
+BSc Mathematik
+2014 - 2017
+
+Kenntnisse
+Technology: SQL
+
+Sprachen
+Deutsch: C2

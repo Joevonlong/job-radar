@@ -1,0 +1,70 @@
+language: en
+experience:
+  - company:
+      value: Dreamwillow Tools Ltd
+      quote: Dreamwillow Tools Ltd
+    role:
+      value: Community Engineer
+      quote: Community Engineer
+    start:
+      value: "2023"
+      quote: "2023"
+    end:
+      value: present
+      quote: present
+    bullets:
+      - value: Organized 9 fictional workshops.
+        quote: Organized 9 fictional workshops.
+    stack:
+      - value: HTML
+        quote: HTML
+education:
+  - school:
+      value: Mistpebble College
+      quote: Mistpebble College
+    degree:
+      value: BA Design
+      quote: BA Design
+    start:
+      value: "2014"
+      quote: "2014"
+    end:
+      value: "2017"
+      quote: "2017"
+skills:
+  - group: Technology
+    items:
+      - value: HTML
+        quote: HTML
+languages:
+  - name:
+      value: English
+      quote: English
+    level:
+      value: C2
+      quote: C2
+custom_sections:
+  - title:
+      value: Volunteering
+      quote: Volunteering
+    items:
+      - kind: entry
+        heading:
+          value: Imaginary Garden Mentoring
+          quote: Imaginary Garden Mentoring
+        date:
+          value: "2024"
+          quote: "2024"
+        bullets: []
+  - title:
+      value: Patents
+      quote: Patents
+    items:
+      - kind: entry
+        heading:
+          value: Fictional cloud sorter
+          quote: Fictional cloud sorter
+        date:
+          value: "2025"
+          quote: "2025"
+        bullets: []
