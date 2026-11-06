@@ -19,7 +19,9 @@ export async function POST(request: Request) {
     try { raw = JSON.parse(new TextDecoder().decode(body)); }
     catch { return refuse("invalid"); }
     const outcome = await requestCareerExtract(getDb(), raw);
-    if (outcome.state === "error") return refuse(outcome.error, outcome.text === undefined ? {} : { text: outcome.text });
+    if (outcome.state === "error") return refuse(outcome.error, outcome.text === undefined ? {} : {
+      text: outcome.text, highlights: outcome.highlights,
+    });
     return reply({ ok: true, requestId: outcome.requestId, existing: outcome.existing });
   } catch (error) {
     logActionFailure("careerExtractRoute", error);

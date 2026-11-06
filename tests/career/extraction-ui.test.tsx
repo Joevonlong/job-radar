@@ -18,8 +18,8 @@ afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 it("requires a second explicit confirmation when final scrubbing changes the preview", async () => {
   const reply = (body: unknown) => new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } });
-  const fetch = vi.fn().mockResolvedValueOnce(reply({ ok: true, text: "Original preview [email]", candidates: { name: null, address: null }, removed: 1, chars: 24, truncated: false, highlights: [] }))
-    .mockResolvedValueOnce(reply({ ok: false, error: "review_again", text: "Corrected preview [email]" }))
+  const fetch = vi.fn().mockResolvedValueOnce(reply({ ok: true, text: "Original preview [email]", candidates: { name: null, address: null }, removed: 1, chars: 24, truncated: false, highlights: [{ start: 0, end: 8, kind: "location" }] }))
+    .mockResolvedValueOnce(reply({ ok: false, error: "review_again", text: "Corrected preview [email]", highlights: [{ start: 0, end: 9, kind: "location" }] }))
     .mockResolvedValueOnce(reply({ ok: true, requestId: 21 }));
   vi.stubGlobal("fetch", fetch);
   render(<NextIntlClientProvider locale="en" messages={en}><CareerExtraction view={{ limits: settings().import, providers: [], drafts: [], open: null }} profile={emptyProfile()} baseHash={null} dirty={false} onAdopted={vi.fn()} /></NextIntlClientProvider>);
@@ -32,6 +32,7 @@ it("requires a second explicit confirmation when final scrubbing changes the pre
   expect(screen.getByRole("alert")).toHaveAttribute("data-code", "review_again");
   expect(screen.getByRole("alert")).toHaveTextContent(en.career.extract.errors.review_again);
   expect(screen.getByTestId("outbound-text")).toHaveFocus();
+  expect(screen.getByText("Corrected", { selector: "mark" })).toBeVisible();
   fireEvent.click(screen.getByTestId("outbound-send"));
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
   expect(JSON.parse(fetch.mock.calls[2]![1].body)).toEqual({ origin: "resume", text: "Corrected preview [email]" });
@@ -58,6 +59,16 @@ it("blocks adoption with unsaved profile changes and allows discarding the draft
   expect(screen.getByRole("button", { name: en.career.extract.adopt })).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: en.career.extract.discard }));
   await waitFor(() => expect(removed).toHaveBeenCalledOnce());
+});
+it("requires a selected parent entry even when a nested item is selected", () => {
+  const source = draft();
+  const parent = source.sections.experience[0]!;
+  parent.items = [{ ...structuredClone(parent), key: "d1.1", items: [] }];
+  render(<NextIntlClientProvider locale="en" messages={en}><DraftReview draft={source} profile={emptyProfile()} baseHash={null} dirty={false} onAdopted={vi.fn()} onRemoved={vi.fn()} /></NextIntlClientProvider>);
+  expect(screen.getByRole("checkbox", { name: en.career.extract.include })).toBeChecked();
+  expect(screen.getByRole("button", { name: en.career.extract.adopt })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText(en.career.extract.decision), { target: { value: "new" } });
+  expect(screen.getByRole("button", { name: en.career.extract.adopt })).toBeEnabled();
 });
 it("announces adoption activity until the request settles", async () => {
   const pending = Promise.withResolvers<Awaited<ReturnType<typeof adoptCareerDraftAction>>>();

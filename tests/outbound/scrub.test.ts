@@ -5,11 +5,12 @@ import { findPii, findPiiSpans } from "@/lib/stories/pii";
 
 const rules = { max_chars: 10000, title_words: ["Lebenslauf", "Curriculum Vitae"], sensitive_labels: ["Geburtsdatum", "Nationality"] };
 describe("outbound spans", () => {
-  it.each(["01/2020 - 03/2022", "10/2019-12/2023", "2021-03 - 2023-08", "2021-03-2023-08", "12/05/1990", "10 000 000 users", "(2015-2019)", "(03/2021-08/2023)", "2020/21 - 2022/23"])("preserves dates and amounts: %s", (source) => {
+  it.each(["01/2020 - 03/2022", "10/2019-12/2023", "2021-03 - 2023-08", "2021-03-2023-08", "12/05/1990", "10 000 000 users", "(2015-2019)", "[2015-2019]", "(03/2021-08/2023)", "2020/21 - 2022/23"])("preserves dates and amounts: %s", (source) => {
     expect(findPiiSpans(source)).toEqual([]);
     expect(scrubOutbound(source, NO_STORED_VALUES).text).toBe(source);
   });
-  it.each(["+49 30 1234567", "0151 12345678", "(030) 123456", "030/1234567", "+49 (0)30 123 456", "0049 30 123456", "(0201-1234)"])("still removes actual phones: %s", (source) => {
+  it.each(["+49 30 1234567", "0151 12345678", "(030) 123456", "030/1234567", "+49 (0)30 123 456", "0049 30 123456", "(0201-1234)",
+    "+49 30 1234-5678", "+49 (0)30 2015-2019", "0049 30 2020/2021", "+49 30 03/2021-08", "030 2015-2019"])("still removes actual phones: %s", (source) => {
     expect(findPiiSpans(source)).toEqual([{ kind: "phone", start: 0, end: source.length }]);
     expect(scrubOutbound(source, NO_STORED_VALUES).text).toBe("[phone]");
   });

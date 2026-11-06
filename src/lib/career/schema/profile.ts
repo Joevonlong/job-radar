@@ -120,6 +120,7 @@ export function visitProfile(value: unknown, visit: (object: Record<string, unkn
 export const careerProfileSchema = z
   .strictObject({
     schema_version: z.literal(1).default(1),
+    adopted_entries: z.array(z.string().regex(/^[1-9]\d*:(?:headline|summary|d\d+(?:\.\d+)*)$/)).default([]),
     headline: textSchema.nullable().default(null),
     summary: textSchema.nullable().default(null),
     experience: entries(experienceSchema),

@@ -1,12 +1,13 @@
 import { z } from "zod";
 
+const highlightsSchema = z.array(z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative(), kind: z.string() }));
 export const preparedTextSchema = z.object({
   ok: z.literal(true), text: z.string(), candidates: z.object({ name: z.string().nullable(), address: z.string().nullable() }),
   removed: z.number().int().nonnegative(), chars: z.number().int().nonnegative(), truncated: z.boolean(),
-  highlights: z.array(z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative(), kind: z.string() })),
+  highlights: highlightsSchema,
 });
 export type PreparedText = z.infer<typeof preparedTextSchema>;
-export const outboundFailureSchema = z.object({ ok: z.literal(false), error: z.string(), text: z.string().optional() });
+export const outboundFailureSchema = z.object({ ok: z.literal(false), error: z.string(), text: z.string().optional(), highlights: highlightsSchema.optional() });
 
 /** Keep untouched highlights aligned when the editable text changes. */
 export function editedPreview(preview: PreparedText, text: string): PreparedText {

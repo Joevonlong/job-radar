@@ -321,7 +321,10 @@ export async function finishControlRequest(
     // a request of a scrubbed kind that already ended (expired while its handler ran) stays as it ended
     .where(and(eq(controlRequests.id, id), sql`(${controlRequests.status} = 'running' or ${controlRequests.kind}::text not in (${kindList(SCRUBBED_PAYLOAD_KINDS)}))`))
     .returning();
-  return row ?? null;
+  if (row) return row;
+  const completed = await getControlRequest(db, id);
+  if (input.status === "done" && completed?.kind === "career_extract" && completed.status === "done") return completed;
+  return null;
 }
 
 export interface RequeueOutcome {

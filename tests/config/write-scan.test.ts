@@ -20,6 +20,7 @@ const REPO = path.resolve(import.meta.dirname, "../..");
 const LOCKED = new Map<string, string>([
   ["src/lib/career/extract/draft-store.ts#pruneCareerDrafts", "expired career drafts under the config write lock"],
   ["src/lib/career/extract/draft-store.ts#discardCareerDraft", "reviewed career drafts under their file and config write locks"],
+  ["src/lib/career/extract/draft-store.ts#writeCareerDraft", "rolls back publication before releasing the file and config write locks"],
   ["src/lib/career/store/history.ts#prune", "profile history retention under its config write lock"],
   ["src/lib/career/store/delete.ts#clearCareerHistory", "removes history under the profile and config write locks"],
   ["src/lib/career/store/delete.ts#deleteCareerData", "removes career data under the profile, contact and config write locks"],

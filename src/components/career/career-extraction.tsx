@@ -101,7 +101,12 @@ export function CareerExtraction({ view, profile, baseHash, dirty, onAdopted, on
         const error = outboundFailureSchema.safeParse(raw);
         setFailure(error.success ? error.data.error : "unavailable");
         if (error.success && error.data.error === "review_again" && error.data.text !== undefined) {
-          setPreview((old) => old && ({ ...old, text: error.data.text!, chars: error.data.text!.length, highlights: [] }));
+          setPreview((old) => old && ({
+            ...old,
+            text: error.data.text!,
+            chars: error.data.text!.length,
+            highlights: error.data.highlights ?? [],
+          }));
           setPreviewRevision((value) => value + 1);
         }
       }

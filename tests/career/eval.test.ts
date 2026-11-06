@@ -55,3 +55,22 @@ it("does not reward roles and dates assigned to the wrong company", () => {
   expect(scoreExtraction(expected, actual)["experience.role"]).toMatchObject({ truePositive: 0, falsePositive: 2, falseNegative: 2 });
   expect(scoreExtraction(expected, actual)["experience.start"]).toMatchObject({ truePositive: 0, falsePositive: 2, falseNegative: 2 });
 });
+
+it.each(["promotion", "rehire", "overlap"])("matches %s experiences at one company one-to-one", (scenario) => {
+  const first = { ...output().experience[0]!, end: field(scenario === "overlap" ? "2025" : "2022") };
+  const second = { ...first, role: field(scenario === "rehire" ? "Engineer" : "Lead"),
+    start: field(scenario === "promotion" ? "2022" : "2024"), end: null, bullets: [field("Led a team")] };
+  const expected = output({ experience: [first, second] });
+  const actual = output({ experience: [
+    { ...first, start: second.start, bullets: second.bullets },
+    { ...second, start: first.start, bullets: first.bullets },
+  ] });
+  if (scenario === "rehire") {
+    actual.experience[0]!.bullets = first.bullets;
+    actual.experience[1]!.bullets = second.bullets;
+  }
+  const scores = scoreExtraction(expected, actual);
+  expect(Object.values(scores).every((score) => score.precision === 1 && score.recall === 1)).toBe(false);
+  const reordered = output({ experience: [second, first] });
+  expect(Object.values(scoreExtraction(expected, reordered)).every((score) => score.precision === 1 && score.recall === 1)).toBe(true);
+});

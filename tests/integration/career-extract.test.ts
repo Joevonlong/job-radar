@@ -24,6 +24,7 @@ import { emptyContact } from "@/lib/career/schema/contact";
 import { createCareerExtractHandler } from "@/lib/career/extract/handler";
 import { requestCareerExtract, readCareerExtractStatus } from "@/lib/career/extract/request";
 import * as draftStore from "@/lib/career/extract/draft-store";
+import * as atomic from "@/lib/config/atomic";
 import * as scrub from "@/lib/career/contact/scrub";
 import * as verify from "@/lib/career/extract/verify";
 import { careerContactPath, careerDir, careerProfilePath } from "@/lib/career/store/paths";
@@ -169,6 +170,75 @@ it("handles empty contact storage and preview-supplied values without rerunning 
   await scrubbed(id);
   expect(transport.calls[0]!.user).toContain(restoredPhone);
   expect(fs.existsSync(careerContactPath())).toBe(false);
+});
+
+it("recomputes corrected preview highlights server-side without replacing restored phones", async () => {
+  await saveContact({ ...emptyContact(), location: "Publiccity" }, { baseHash: null });
+  const text = `${SOURCE}\nperson@example.invalid\nPubliccity\n+49 30 1234567`;
+  const response = await extract(jsonRequest({ origin: "resume", text }));
+  const corrected = await response.json() as { error: string; text: string; highlights: { start: number; end: number; kind: string }[] };
+  expect(corrected.error).toBe("review_again");
+  expect(corrected.text).toContain("[email]");
+  expect(corrected.text).toContain("+49 30 1234567");
+  expect(corrected.highlights).toEqual(expect.arrayContaining([
+    { start: corrected.text.indexOf("Publiccity"), end: corrected.text.indexOf("Publiccity") + "Publiccity".length, kind: "location" },
+  ]));
+});
+
+it("keeps date-shaped phone sentinels out of the confirmed extraction path", async () => {
+  const phones = ["+49 30 1234-5678", "+49 (0)30 2015-2019", "+49 30 03/2021-08"];
+  const response = await prepare(jsonRequest({ text: `${SOURCE}\n${phones.join("\n")}` }));
+  const preview = await response.json() as { text: string };
+  const transport = handlerWith();
+  const id = await queue(preview.text);
+  const queuedPayload = (await row(id)).payload;
+  expect(await poll()).toMatchObject({ id, status: "done" });
+  expect(transport.calls).toHaveLength(1);
+  expect(transport.calls[0]!.user).toContain(preview.text);
+  const surfaces = [preview.text, transport.calls, queuedPayload, (await row(id)).payload,
+    fs.readFileSync(draftStore.careerDraftPath(id), "utf8"), records];
+  for (const surface of surfaces) {
+    const serialized = JSON.stringify(surface);
+    for (const phone of phones) {
+      expect(serialized).not.toContain(phone);
+      expect(serialized.replace(/\D/g, "")).not.toContain(phone.replace(/\D/g, ""));
+    }
+  }
+});
+
+it.each([
+  ["expired", "before"], ["expired", "after"], ["aborted", "before"], ["aborted", "after"],
+] as const)("removes a draft when its request is %s during commit (%s publication)", async (reason, stage) => {
+  handlerWith();
+  const id = await queue();
+  const controller = new AbortController();
+  const entered = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  const commit = atomic.commitConfigFile;
+  vi.spyOn(atomic, "commitConfigFile").mockImplementation(async (...args) => {
+    if (args[0] !== draftStore.careerDraftPath(id)) return commit(...args);
+    const pause = async () => { entered.resolve(); await resume.promise; };
+    if (stage === "before") await pause();
+    const result = await commit(...args);
+    if (stage === "after") await pause();
+    return result;
+  });
+  const running = processNextControlRequest({ db: db(), signal: controller.signal, logger: logger(), kinds: () => ["career_extract"] });
+  await entered.promise;
+  const reviewing = draftStore.readCareerDraft(id);
+  const reviewResult = expect(reviewing).rejects.toMatchObject({ code: "draft_missing" });
+  try {
+    if (reason === "expired") {
+      await db().execute(sql`update control_requests set started_at = now() - interval '120 seconds' where id = ${id}`);
+      await expireScrubbedRequests(db(), { careerSettings: { timeout_seconds: 10, expiry_grace_seconds: 1, queue_timeout_seconds: 10 } });
+      expect((await row(id)).status).toBe("failed");
+    } else controller.abort();
+  } finally { resume.resolve(); }
+  expect(await running).toMatchObject({ id, status: "failed" });
+  await scrubbed(id, reason);
+  expect(fs.existsSync(draftStore.careerDraftPath(id))).toBe(false);
+  expect(await draftStore.listPendingCareerDrafts()).toEqual([]);
+  await reviewResult;
 });
 
 describe("end paths remove source text", () => {

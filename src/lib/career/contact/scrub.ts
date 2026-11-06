@@ -1,7 +1,7 @@
 import { loadConfig } from "@/lib/config";
 import { readUserFile } from "@/lib/config/read-user-file";
 import { parseConfigYaml } from "@/lib/config/yaml-options";
-import { prepareScrub, scrubFinal, scrubOutbound, type ScrubKind, type ScrubRules, type StoredValues } from "@/lib/outbound/scrub";
+import { prepareScrub, previewHighlights, scrubFinal, scrubOutbound, type ScrubKind, type ScrubRules, type StoredValues } from "@/lib/outbound/scrub";
 import { confirmedOutbound, toOutbound } from "@/lib/outbound/outbound";
 import { careerContactSchema, emptyContact, type CareerContact } from "../schema/contact";
 import { careerContactPath } from "../store/paths";
@@ -36,7 +36,11 @@ export function scrubCareerOutbound(text: string) { return scrubOutbound(text, s
 export function outboundCareerText(text: string) { return toOutbound(text, storedValues()); }
 export function confirmCareerText(text: string) { return confirmedOutbound(text, storedValues()); }
 
+export function careerPreviewHighlights(text: string, rules: ScrubRules) {
+  return previewHighlights(text, storedValues(), rules);
+}
+
 /** Only preview routes may return the local candidate values to the browser. */
-export function prepareCareerScrub(text: string, input: { rules: ScrubRules; name?: string; address?: string; mode?: "values" }) {
+export function prepareCareerScrub(text: string, input: { rules: ScrubRules; name?: string; address?: string; mode?: "values"; pagesNotRead?: boolean }) {
   return prepareScrub(text, { ...input, stored: storedValues() });
 }

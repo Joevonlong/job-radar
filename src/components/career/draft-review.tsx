@@ -118,6 +118,25 @@ export function DraftReview({ draft, profile, baseHash, dirty, onAdopted, onRemo
     </section>)}
     {dirty && <p role="status">{t("saveFirst")}</p>}
     {error && <p ref={alert} tabIndex={-1} role="alert" data-code={error}>{tc(careerErrorMessageKey(error))}</p>}
-    <div className="flex flex-wrap gap-2"><Button variant="primary" disabled={busy || dirty || !decisions.some((item) => item.action !== "skip" && (["headline", "summary"].includes(item.key) || DRAFT_SECTIONS.some((section) => draft.sections[section].some((entry) => entry.key === item.key))))} onClick={() => void run(true)}>{t("adopt")}</Button><Button variant="outline" disabled={busy} onClick={() => void run(false)}>{t("discard")}</Button></div>
+    <div className="flex flex-wrap gap-2">
+      <Button
+        variant="primary"
+        disabled={busy || dirty || !hasAdoptableSelection(draft, decisions)}
+        onClick={() => void run(true)}
+      >
+        {t("adopt")}
+      </Button>
+      <Button variant="outline" disabled={busy} onClick={() => void run(false)}>
+        {t("discard")}
+      </Button>
+    </div>
   </div>;
+}
+
+function hasAdoptableSelection(draft: CareerDraft, decisions: AdoptDecisions): boolean {
+  const parentKeys = new Set([
+    "headline", "summary",
+    ...DRAFT_SECTIONS.flatMap((section) => draft.sections[section].map((entry) => entry.key)),
+  ]);
+  return decisions.some((decision) => decision.action !== "skip" && parentKeys.has(decision.key));
 }

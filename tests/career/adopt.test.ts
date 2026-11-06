@@ -51,7 +51,7 @@ it("preserves meaningful punctuation in skills and deduplicates bullets on first
   expect(result.experience[0]!.bullets).toHaveLength(1);
 });
 
-it("merges duplicate new entries into the matching object before IDs are assigned", () => {
+it("keeps explicitly new entries separate before IDs are assigned", () => {
   const source = draft();
   source.sections = verifyCareerExtract(SOURCE, output({ projects: [
     { name: field("A"), tagline: null, bullets: [field("Bullet A")], stack: [] },
@@ -59,7 +59,27 @@ it("merges duplicate new entries into the matching object before IDs are assigne
     { name: field("B"), tagline: null, bullets: [field("Another B")], stack: [] },
   ] }), settings().evidence);
   const result = adoptDraft(emptyProfile(), source, source.sections.projects.map((entry) => ({ key: entry.key, action: "new" })));
-  expect(result.projects.map((project) => [project.name, project.bullets.map(primaryText)])).toEqual([["A", ["Bullet A"]], ["B", ["Bullet B", "Another B"]]]);
+  expect(result.projects.map((project) => [project.name, project.bullets.map(primaryText)])).toEqual([
+    ["A", ["Bullet A"]], ["B", ["Bullet B"]], ["B", ["Another B"]],
+  ]);
+});
+
+it("respects explicit new despite an inferred match and persists retry identity", () => {
+  const source = draft();
+  source.sections = verifyCareerExtract(SOURCE, output({ certifications: [
+    { name: field("Cloud Certificate"), issuer: null, date: field("2026") },
+  ] }), settings().evidence);
+  const existing = assignIds({ ...emptyProfile(), certifications: [
+    { id: "", name: "Cloud Certificate", issuer: null, date: "2022" },
+  ] }, emptyProfile());
+  const entry = source.sections.certifications[0]!;
+  entry.match = existing.certifications[0]!.id;
+  const decisions = [{ key: entry.key, action: "new" as const }];
+  const first = assignIds(adoptDraft(existing, source, decisions), existing);
+  expect(first.certifications.map((item) => item.date)).toEqual(["2022", "2026"]);
+  first.certifications[1]!.name = "Edited after adoption";
+  expect(adoptDraft(first, source, decisions)).toEqual(first);
+  expect(adoptDraft(first, { ...source, request_id: 2 }, decisions).certifications).toHaveLength(3);
 });
 
 it("retains bullets attached to custom text items across re-adoption", () => {

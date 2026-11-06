@@ -5,7 +5,7 @@ import { ConfigError, loadConfig } from "@/lib/config";
 import { readCareerGate } from "@/lib/config/career-gate";
 import type { CareerConfig } from "@/lib/config/schemas/career";
 import { careerExtractPayloadSchema, type ControlHandler, type ControlHandlerContext } from "@/lib/control/types";
-import { isControlRequestOpen } from "@/lib/db/repos/control-requests";
+import { finishControlRequest, isControlRequestOpen } from "@/lib/db/repos/control-requests";
 import { createRequestRouter } from "@/lib/translation/router";
 import { classifyTranslationFailure } from "@/lib/translation/errors";
 import { confirmedOutbound } from "../ai/outbound";
@@ -35,15 +35,27 @@ export function createCareerExtractHandler(options: CareerExtractHandlerOptions 
       if (!settings.enabled) return { status: "failed", result: { error: "disabled" } };
       const text = confirmedOutbound(payload.data.text);
       const prompt = buildCareerExtractPrompt({ text, quoteMaxChars: settings.evidence.quote_max_chars });
-      timeout = AbortSignal.timeout(Math.max(1, (request.startedAt?.getTime() ?? Date.now()) + settings.timeout_seconds * 1000 - Date.now()));
+      const remainingMs = (request.startedAt?.getTime() ?? Date.now()) + settings.timeout_seconds * 1000 - Date.now();
+      const deadline = AbortSignal.timeout(Math.max(1, remainingMs));
+      timeout = deadline;
       context.signal.throwIfAborted();
       const router = options.createRouter?.(context) ?? createRequestRouter(context.db, context.logger);
       const ai = await router.run("career_extract", prompt, careerExtractOutputSchema, {
-        signal: AbortSignal.any([context.signal, timeout]), onCall: (call) => { lastCall = call; },
+        signal: AbortSignal.any([context.signal, deadline]),
+        onCall: (call) => { lastCall = call; },
       });
       context.signal.throwIfAborted();
       timeout.throwIfAborted();
       const sections = suggestCareerMatches((await loadCareerProfile()).profile, verifyCareerExtract(text, ai.value, settings.evidence));
+      const outcome = {
+        status: "done" as const,
+        result: {
+          entries: DRAFT_SECTIONS.reduce((count, section) => count + sections[section].length, 0),
+          flagged: draftFields(sections).filter((field) => field.flags.length).length,
+          model: ai.model ?? null,
+          promptVersion: CAREER_EXTRACT_PROMPT_VERSION,
+        },
+      };
       let written: boolean;
       try {
         written = await writeCareerDraft({
@@ -51,25 +63,28 @@ export function createCareerExtractHandler(options: CareerExtractHandlerOptions 
           created_at: new Date().toISOString(), language: ai.value.language, sections,
         }, async () => {
           context.signal.throwIfAborted();
-          timeout!.throwIfAborted();
+          deadline.throwIfAborted();
           return isControlRequestOpen(context.db, request.id);
+        }, async () => {
+          context.signal.throwIfAborted();
+          deadline.throwIfAborted();
+          return (await finishControlRequest(context.db, request.id, outcome)) !== null;
         });
       } catch (error) {
         context.logger.error("career extraction failed", { error: safeName(error) });
-        return { status: "failed", result: { error: context.signal.aborted ? "aborted" : timeout.aborted ? "timeout" : "draft_write_failed" } };
+        return { status: "failed", result: { error: abortCode(context.signal, deadline, "draft_write_failed") } };
       }
       if (!written) return { status: "failed", result: { error: "deleted" } };
-      return { status: "done", result: { entries: DRAFT_SECTIONS.reduce((count, section) => count + sections[section].length, 0), flagged: draftFields(sections).filter((field) => field.flags.length).length, model: ai.model ?? null, promptVersion: CAREER_EXTRACT_PROMPT_VERSION } };
+      return outcome;
     } catch (error) {
       context.logger.error("career extraction failed", { error: safeName(error) });
-      let code = error instanceof CareerStoreError ? error.code : error instanceof ConfigError ? "config_error" : error instanceof AiProviderError ? error.kind : error instanceof AiUnavailableError ? classifyTranslationFailure(error).code : "handler_failed";
-      if (context.signal.aborted) code = "aborted";
-      if (timeout?.aborted && !context.signal.aborted) code = "timeout";
+      let code = abortCode(context.signal, timeout, failureCode(error));
       const call = lastCall as AiCallRecord | null;
       if (code === "invalid_output" && settings && call) {
         try {
           const ai = loadConfig("ai");
-          if (call.usage.tokensOut >= (ai.tasks.career_extract.max_output_tokens ?? ai.max_output_tokens) * settings.import.output_truncated_share) code = "output_truncated";
+          const tokenLimit = ai.tasks.career_extract.max_output_tokens ?? ai.max_output_tokens;
+          if (call.usage.tokensOut >= tokenLimit * settings.import.output_truncated_share) code = "output_truncated";
         } catch { code = "config_error"; }
       }
       return { status: "failed", result: { error: code } };
@@ -77,8 +92,25 @@ export function createCareerExtractHandler(options: CareerExtractHandlerOptions 
   };
 }
 
+function failureCode(error: unknown): string {
+  if (error instanceof CareerStoreError) return error.code;
+  if (error instanceof ConfigError) return "config_error";
+  if (error instanceof AiProviderError) return error.kind;
+  if (error instanceof AiUnavailableError) return classifyTranslationFailure(error).code;
+  return "handler_failed";
+}
+
+function abortCode(signal: AbortSignal, timeout: AbortSignal | undefined, fallback: string): string {
+  if (signal.aborted) return "aborted";
+  if (timeout?.aborted) return "timeout";
+  return fallback;
+}
+
 function safeName(error: unknown): string {
-  try { return error instanceof Error && /^[A-Za-z][A-Za-z0-9_]{0,79}$/.test(error.name) ? error.name : "Error"; }
-  catch { return "Error"; }
+  try {
+    return error instanceof Error && /^[A-Za-z][A-Za-z0-9_]{0,79}$/.test(error.name) ? error.name : "Error";
+  } catch {
+    return "Error";
+  }
 }
 export const careerExtractHandler: ControlHandler = createCareerExtractHandler();

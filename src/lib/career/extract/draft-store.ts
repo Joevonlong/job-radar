@@ -1,3 +1,8 @@
+/**
+ * Draft publication and request completion run under the career deletion lock. After the file commit, cancellation and
+ * request state are checked again, then a guarded terminal update claims success. If either check or completion fails,
+ * the published draft is removed before releasing the lock, so locked readers cannot review a failed request's draft.
+ */
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { stringify } from "yaml";
@@ -25,7 +30,11 @@ export const careerDraftPath = (id: number) => path.join(careerDraftDir(), `${dr
 
 async function draftIds(): Promise<number[]> {
   try {
-    return (await fsp.readdir(careerDraftDir())).filter((file) => /^[1-9]\d*\.yaml$/.test(file)).map((file) => Number(file.slice(0, -5))).filter((id) => draftIdSchema.safeParse(id).success).sort((a, b) => b - a);
+    return (await fsp.readdir(careerDraftDir()))
+      .filter((file) => /^[1-9]\d*\.yaml$/.test(file))
+      .map((file) => Number(file.slice(0, -5)))
+      .filter((id) => draftIdSchema.safeParse(id).success)
+      .sort((a, b) => b - a);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw new CareerStoreError("draft_invalid");
@@ -33,14 +42,18 @@ async function draftIds(): Promise<number[]> {
 }
 
 export async function readCareerDraft(id: number): Promise<CareerDraft> {
-  try {
-    const draft = careerDraftSchema.parse(parseConfigYaml(readUserFile(careerDraftPath(id)).toString("utf8")));
-    if (draft.request_id !== id) throw new CareerStoreError("draft_invalid");
-    return draft;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new CareerStoreError("draft_missing");
-    throw new CareerStoreError("draft_invalid");
-  }
+  if (!draftIdSchema.safeParse(id).success) throw new CareerStoreError("draft_invalid");
+  const file = careerDraftPath(id);
+  return withConfigWriteLock(async () => {
+    try {
+      const draft = careerDraftSchema.parse(parseConfigYaml(readUserFile(file).toString("utf8")));
+      if (draft.request_id !== id) throw new CareerStoreError("draft_invalid");
+      return draft;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new CareerStoreError("draft_missing");
+      throw new CareerStoreError("draft_invalid");
+    }
+  }, file);
 }
 
 async function pruneCareerDrafts(): Promise<void> {
@@ -65,15 +78,29 @@ export async function listPendingCareerDrafts(): Promise<CareerDraft[]> {
   }, careerDraftDir());
 }
 
-/** The request check and filesystem commit share the same database lock as complete career deletion. */
-export async function writeCareerDraft(raw: CareerDraft, canWrite: () => Promise<boolean>): Promise<boolean> {
+export async function writeCareerDraft(
+  raw: CareerDraft,
+  canWrite: () => Promise<boolean>,
+  complete: () => Promise<boolean> = async () => true,
+): Promise<boolean> {
   const draft = careerDraftSchema.parse(raw);
   const file = careerDraftPath(draft.request_id);
-  return withFileLock(file, () => withConfigWriteLock(async () => {
+  return withFileLock(file, () => withConfigWriteLock(async (lock) => {
     if (!(await canWrite())) return false;
     await pruneCareerDrafts();
-    await commitConfigFile(file, stringify(draft));
-    return true;
+    let published = false;
+    let completed = false;
+    try {
+      await commitConfigFile(file, stringify(draft));
+      published = true;
+      completed = await canWrite() && await complete();
+      return completed;
+    } finally {
+      if (published && !completed) {
+        if (!(await lock.fence())) throw lockLostError(file);
+        await fsp.rm(file, { force: true });
+      }
+    }
   }, file));
 }
 
