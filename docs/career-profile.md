@@ -16,7 +16,8 @@ Later, this profile will support tailored résumés, cover letters and job match
 ## Turn it on
 
 Open **Settings → Workflow → Career profile**, enable it and save. A card below the matching profile on **My profile**
-links to `/career`. Before the first write, the card says the profile has not been created. There is no sidebar entry. Advanced settings also lists `career.yaml`.
+links to `/career`. Before the first write, the card says the profile has not been created. While it is on, the sidebar, the phone menu and the command palette also list **Career profile** after
+**Pipeline**. Advanced settings also lists `career.yaml`.
 
 Turning it off keeps all saved files and history. Disabled pages and actions do not read or clean the career directory.
 A missing or invalid career config closes the feature, including after it was previously enabled. If the profile itself

@@ -347,6 +347,7 @@
     "companies": "Companies",
     "favorites": "Favorites",
     "pipeline": "Pipeline",
+    "career": "Career profile",
     "sources": "Sources",
     "insights": "Insights",
     "settings": "Settings",
@@ -483,6 +484,10 @@
     "pipeline": {
       "title": "Pipeline",
       "description": "Application board: drag cards to change their status."
+    },
+    "career": {
+      "title": "Career profile",
+      "description": "Build your local career profile by reviewing an extraction or editing entries and alternative wordings."
     },
     "sources": {
       "title": "Sources",
