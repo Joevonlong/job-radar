@@ -94,6 +94,7 @@ preview:
 pdf:
   url: http://career-pdf:8090
   timeout_seconds: 60
+  busy_retry_ms: 250
   max_html_bytes: 8000000
 
 check:

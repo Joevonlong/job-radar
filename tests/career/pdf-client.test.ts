@@ -23,12 +23,43 @@ it("sends transient HTML with a timeout and returns PDF bytes and a validated pa
   }));
 });
 
-it.each([[429, "pdf_busy"], [413, "pdf_too_large"], [500, "pdf_failed"], [504, "pdf_failed"]])(
+it.each([[413, "pdf_too_large"], [500, "pdf_failed"], [504, "pdf_failed"]])(
   "maps status %s without reading private response text", async (status, code) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("private-sentinel", { status: Number(status) })));
     expect(await renderPdf("html", settings)).toEqual({ ok: false, code });
   },
 );
+
+it("waits while the service prints another document, then returns the PDF", async () => {
+  const fetcher = vi.fn()
+    .mockResolvedValueOnce(new Response("busy", { status: 429 }))
+    .mockResolvedValueOnce(new Response("busy", { status: 429 }))
+    .mockResolvedValueOnce(new Response("%PDF-test", { headers: { "Content-Type": "application/pdf", "X-Page-Count": "1" } }));
+  vi.stubGlobal("fetch", fetcher);
+  const quick = { ...settings, busy_retry_ms: 10 };
+  expect(await renderPdf("html", quick)).toMatchObject({ ok: true, pages: 1 });
+  expect(fetcher).toHaveBeenCalledTimes(3);
+});
+
+it("reports busy once the time limit passes without a free service", async () => {
+  const fetcher = vi.fn().mockImplementation(() => Promise.resolve(new Response("private-sentinel", { status: 429 })));
+  vi.stubGlobal("fetch", fetcher);
+  const started = performance.now();
+  expect(await renderPdf("html", { ...settings, busy_retry_ms: 100 })).toEqual({ ok: false, code: "pdf_busy" });
+  expect(performance.now() - started).toBeGreaterThanOrEqual(900);
+  expect(fetcher.mock.calls.length).toBeGreaterThan(1);
+});
+
+it("stops waiting for a busy service when the caller aborts", async () => {
+  const fetcher = vi.fn().mockImplementation(() => Promise.resolve(new Response("busy", { status: 429 })));
+  vi.stubGlobal("fetch", fetcher);
+  const controller = new AbortController();
+  const result = renderPdf("html", { ...settings, timeout_seconds: 60, busy_retry_ms: 5000 }, controller.signal);
+  await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+  controller.abort();
+  expect(await result).toEqual({ ok: false, code: "pdf_busy" });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
 
 it("maps network errors and timeouts without their message", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("private-sentinel")));

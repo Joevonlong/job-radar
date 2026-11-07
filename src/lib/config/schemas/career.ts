@@ -144,6 +144,7 @@ export const careerSchema = z.strictObject({
   pdf: z.strictObject({
     url: z.url({ protocol: /^https?$/ }).default("http://career-pdf:8090"),
     timeout_seconds: positive(60, 300),
+    busy_retry_ms: positive(250, 10000),
     max_html_bytes: positive(8000000, 50000000),
   }).prefault({}),
   evidence: z

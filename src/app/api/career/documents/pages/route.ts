@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       contact, images, doc: parsed.data.doc, today,
     });
     if (!rendered.ok) return refuse("render_invalid", { issues: rendered.issues });
-    const printed = await renderPdf(rendered.html, settings.pdf);
+    const printed = await renderPdf(rendered.html, settings.pdf, request.signal);
     if (!printed.ok) return reply({ ok: true, pages: null, budget: null, findings: [], code: printed.code });
     const projected = toResume(parsed.data.document, contact, images, parsed.data.doc);
     try {
