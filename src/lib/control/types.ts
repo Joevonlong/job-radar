@@ -100,6 +100,16 @@ export const careerExtractPayloadSchema = z.strictObject({
 export type CareerExtractPayload = z.infer<typeof careerExtractPayloadSchema>;
 
 
+export const careerTailorPayloadSchema = z.strictObject({
+  mode: z.enum(["tailor", "shrink"]),
+  doc_id: z.string().regex(/^doc_[a-z2-7]{10}$/),
+  jobId: z.number().int().positive().nullable().default(null),
+  with_letter: z.boolean().default(false),
+  over_pages: z.number().int().positive().max(100).nullable().default(null),
+  outbound_hash: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export type CareerTailorPayload = z.infer<typeof careerTailorPayloadSchema>;
+
 /**
  * Payload of a `writer_fit` request (the "what this means for your application" button). `materials` holds the ticked company
  * background and the chosen stories and is removed when the request ends, like a `writer_job`'s.

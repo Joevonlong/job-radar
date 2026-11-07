@@ -873,6 +873,7 @@ scale and multiple defaults. The three top-level time settings limit running tim
 
 `writer.yaml: import.title_words` lists résumé title lines skipped when guessing a name.
 `writer.yaml: import.sensitive_labels` lists labels highlighted for review in the outbound preview.
+Résumé tailoring settings live under `tailor`: `max_requirements` (separate requirements per document), `requirement_max_chars`, `duty_min_coverage` (the share of a rewritten duty's content words that the quotes must cover), `max_proposals` (kept from one request), `jd_max_chars` and `jd_head_share` (how much JD is sent and how much of it comes from the beginning), and the word lists of the check: `first_person`, `names` and `stopwords` by language. `duty_min_coverage: 0.7` is a starting value measured on fictional samples and will be recalibrated with real model output. Tailoring uses the same three time settings as extraction, and the `career_tailor` task in `ai.yaml` selects its provider, model and `max_output_tokens` per call. See [Résumé tailoring](resume-tailoring.md).
 
 ### Résumé checks and page counts
 

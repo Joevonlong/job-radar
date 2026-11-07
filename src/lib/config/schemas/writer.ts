@@ -79,6 +79,24 @@ export const figureUnitsSchema = z.strictObject({
   multiple: z.array(nonEmptyString.max(12)).max(20).default(() => defaultFigureUnits().multiple),
 });
 
+export const namesSchema = z
+  .strictObject({
+    /** Names in quotation marks ("…", “…”, „…“, «…», 「…」). */
+    quoted: z.boolean().default(true),
+    /** Words with digits, inner capitals or all capitals (S3, GitLab, AWS). */
+    mixed_tokens: z.boolean().default(true),
+    /**
+     * Capitalised words not at the start of a sentence: `single` = each one, `multi` = only two or more in a row (for
+     * languages that capitalise every noun, such as German), `off` = none. `default` applies to every other language.
+     */
+    capitalized_non_initial: z.record(z.string().regex(/^([a-z]{2,3}|default)$/), z.enum(NAME_RULES)).default({ default: "single", de: "multi" }),
+    /** Capitalised words that are never names. */
+    stopwords: z.array(nonEmptyString.max(40)).max(200).default(["I", "OK"]),
+  })
+  .prefault({});
+
+export const firstPersonSchema = z.record(z.string().regex(/^[a-z]{2,3}$/), z.union([wordList, substringList])).default(defaultFirstPerson);
+
 /**
  * config/writer.yaml: the application writer and its experience library (`data/profile/stories.yaml`). Every key has a
  * default, so a missing file or section means "off" and the defaults below (a file written before a section existed keeps working).
@@ -218,28 +236,14 @@ export const writerSchema = z.strictObject({
       /** Shortest quote that counts as evidence (characters); a shorter one counts only when it is a known name such as a skill ("Go"). */
       min_quote_chars: z.number().int().min(1).max(50).default(4),
       /** Per language: words that make a sentence one about you, whatever the AI labelled it. */
-      first_person: z.record(z.string().regex(/^[a-z]{2,3}$/), z.union([wordList, substringList])).default(defaultFirstPerson),
+      first_person: firstPersonSchema,
       /**
        * Words written right after a digit that change what the figure means: `scale` multiplies it (5万 is 50,000, so it
        * matches 50,000 and not 5), `multiple` makes it a multiple (40倍), which matches only a multiple, never 40 or 40%.
        */
       figure_units: figureUnitsSchema.prefault({}),
       /** Which words count as names to check (language-independent; a name not found in the sentence's valid quotes is flagged; a sentence about the job or company may also find it in the JD or company background). */
-      names: z
-        .strictObject({
-          /** Names in quotation marks ("…", “…”, „…“, «…», 「…」). */
-          quoted: z.boolean().default(true),
-          /** Words with digits, inner capitals or all capitals (S3, GitLab, AWS). */
-          mixed_tokens: z.boolean().default(true),
-          /**
-           * Capitalised words not at the start of a sentence: `single` = each one, `multi` = only two or more in a row (for
-           * languages that capitalise every noun, such as German), `off` = none. `default` applies to every other language.
-           */
-          capitalized_non_initial: z.record(z.string().regex(/^([a-z]{2,3}|default)$/), z.enum(NAME_RULES)).default({ default: "single", de: "multi" }),
-          /** Capitalised words that are never names. */
-          stopwords: z.array(nonEmptyString.max(40)).max(200).default(["I", "OK"]),
-        })
-        .prefault({}),
+      names: namesSchema,
     })
     .prefault({}),
 });

@@ -21,7 +21,7 @@ export type IdPrefix = (typeof ID_PREFIXES)[number];
 export const DOCUMENT_ID_PREFIXES = ["doc", "ent", "dtx", "itm"] as const;
 export type DocumentIdPrefix = (typeof DOCUMENT_ID_PREFIXES)[number];
 
-export function newId(prefix: IdPrefix | DocumentIdPrefix): string {
+export function newId(prefix: IdPrefix | DocumentIdPrefix | "clm" | "prp"): string {
   const alphabet = "abcdefghijklmnopqrstuvwxyz234567";
   return `${prefix}_${Array.from(randomBytes(10), (byte) => alphabet[byte & 31]).join("")}`;
 }

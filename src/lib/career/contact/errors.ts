@@ -1,4 +1,12 @@
 export type CareerErrorCode =
+  | "unresolved_claims"
+  | "target_gone"
+  | "proposal_invalid"
+  | "proposal_write_failed"
+  | "outbound_changed"
+  | "doc_gone"
+  | "job_gone"
+  | "no_jd"
   | "document_invalid"
   | "document_missing"
   | "document_limit"

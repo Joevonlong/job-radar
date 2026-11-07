@@ -1,6 +1,7 @@
 # 文档
 
 - [职业档案](career-profile.zh.md)：可选的本机手动编辑、多写法和历史版本。
+- [简历定制](resume-tailoring.zh.md)：AI 提议怎么让一份简历文档贴合一个岗位，由你逐条审核。
 
 [English](README.md) | [中文](README.zh.md)
 
@@ -42,6 +43,7 @@
 | [insights.zh.md](insights.zh.md) | 统计页 /insights：每张卡片怎么算、`insights.yaml` |
 | [interest-suggestions.zh.md](interest-suggestions.zh.md) | 每周 AI 建议：证据规则、批准 / 拒绝、`suggest` 配置 |
 | [resume-kit.zh.md](resume-kit.zh.md) | 定制简历联动：`resume.yaml`、导出 JD、`/tailor` 命令 |
+| [resume-tailoring.zh.md](resume-tailoring.zh.md) | 按岗位定制简历文档：发送内容预览、提议审核、“档案里没有”标记及其可靠程度、缩减、存回档案、`career.yaml: tailor` |
 | [application-writer.zh.md](application-writer.zh.md) | `/me` 上的经历素材库（`stories.yaml`）：一条素材有什么、id、历史和回滚、`writer.yaml` 里的上限、什么会发到哪里；工作台 `/jobs/<id>/apply`（申请回答和动机信，逐句核对依据） |
 | [mcp.zh.md](mcp.zh.md) | 在 Claude Desktop、Claude Code 等 MCP 客户端里问你的岗位和申请：可选的 MCP 服务（`pnpm mcp:serve`、`mcp.yaml`）、工具、给什么和永远不给什么，以及默认关闭的两个申请写作工具 |
 | [telegram.zh.md](telegram.zh.md) | 建 bot、拿 chat id |

@@ -27,8 +27,16 @@ function storedValues(): StoredValues {
     if (value?.trim()) values.push({ value, kind, highlightOnly: (kind === "work_auth" || kind === "availability") && value.trim().length < min });
   }
   if (contact.name?.trim()) values.push({ value: contact.name.trim().split(/\s+/).reverse().join(" "), kind: "name" });
-  for (const link of contact.links) values.push({ value: link.url, kind: "link" });
-  return { values, location: contact.location };
+  for (const link of contact.links) {
+    values.push({ value: link.url, kind: "link" });
+    if (link.label.trim()) values.push({ value: link.label, kind: "link" });
+  }
+  if (contact.photo) values.push({ value: contact.photo, kind: "link" });
+  const variants = values.flatMap((item) => {
+    const escaped = JSON.stringify(item.value).slice(1, -1);
+    return escaped === item.value ? [item] : [item, { ...item, value: escaped }];
+  });
+  return { values: variants, location: contact.location };
 }
 
 export function scrubCareerFinal(text: string) { return scrubFinal(text, storedValues()); }

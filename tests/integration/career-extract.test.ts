@@ -108,8 +108,9 @@ it("upgrades from the preceding migration, preserving rows and supporting the ne
     fs.cpSync(path.resolve("drizzle"), directory, { recursive: true });
     const journalFile = path.join(directory, "meta/_journal.json");
     const journal = JSON.parse(fs.readFileSync(journalFile, "utf8")) as { entries: { tag: string }[] };
-    expect(journal.entries.at(-1)?.tag).toBe("0057_career_extract_kind");
-    journal.entries = journal.entries.slice(0, -1);
+    const targetIndex = journal.entries.findIndex((entry) => entry.tag === "0057_career_extract_kind");
+    expect(targetIndex).toBeGreaterThan(0);
+    journal.entries = journal.entries.slice(0, targetIndex);
     fs.writeFileSync(journalFile, JSON.stringify(journal));
     await runMigrations({ url: testUrl.toString(), migrationsFolder: directory, currentScoresBackfill: backfill });
     expect(await findLatestCareerExtractRequest(connection.db)).toBeNull();

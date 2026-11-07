@@ -159,3 +159,5 @@ Checks run while you edit: placeholders left in the text, length and wording lim
 also the page budget and reading order. Placeholders are shown next to the export buttons. Characters that the bundled
 fonts do not cover (for example Chinese) are listed before export. Checks and font hints never block an export. The
 limits and word lists are `career.yaml: check.limits` and `check.lexicon`; words you add keep the shipped lists.
+
+To fit a document to one job with AI proposals you review one by one, see [Résumé tailoring](resume-tailoring.md).

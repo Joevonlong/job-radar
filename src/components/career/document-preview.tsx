@@ -39,6 +39,7 @@ export function DocumentPreview({
   pageCountDebounceMs,
   countRevision = 0,
   onHints,
+  onPageCount,
 }: {
   document: CareerDocument;
   doc: "resume" | "letter";
@@ -47,6 +48,7 @@ export function DocumentPreview({
   pageCountDebounceMs: number;
   countRevision?: number;
   onHints?: (hints: { findings: DocumentFinding[]; uncovered: string[] }) => void;
+  onPageCount?: (pages: number | null) => void;
 }) {
   const t = useTranslations("career.documents");
   const key = JSON.stringify({ document, doc, revision });
@@ -55,6 +57,10 @@ export function DocumentPreview({
   const [count, setCount] = useState<{ key: string; value: PageCheck } | null>(null);
   const pages = count?.key === key ? count.value : null;
   const pageCounter = useRef(0);
+  const measured = doc === "resume" ? pages?.pages ?? null : null;
+  useEffect(() => {
+    onPageCount?.(measured);
+  }, [measured, onPageCount]);
   const [loading, setLoading] = useState(false);
   const counter = useRef(0);
   const emptyLetter =

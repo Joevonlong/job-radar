@@ -20,7 +20,7 @@ export function DisclosureSection({ ctx }: { ctx: Pick<AiTabContext, "t" | "aiDi
       <ul className="border-border bg-card rounded-tag border-bw divide-grid divide-y-[1.5px]">
         {aiDisclosure.map((row) => (
           <li key={row.task} className="grid items-center gap-x-4 gap-y-1.5 px-3 py-2.5 sm:grid-cols-[9rem_1fr]" data-testid={`disclosure-row-${row.task}`}>
-            <span className="text-label font-bold">{t(`fields.task_${row.task}.label`)}</span>
+            <span className="text-label font-bold">{t(`fields.task_${row.task}.label`)}{row.task === "career_tailor" ? <span className="text-body-sm text-ink-2 block font-normal">{t("fields.task_career_tailor.hint")}</span> : null}</span>
             {row.providers.length === 0 ? (
               <span className="text-body-sm text-ink-2" data-testid={`disclosure-none-${row.task}`}>
                 {t("ai.disclosure.none")}

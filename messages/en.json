@@ -3470,6 +3470,13 @@
       },
       "reasoning_effort_career_extract": {
         "label": "Reasoning effort: Career extraction"
+      },
+      "task_career_tailor": {
+        "label": "Resume tailoring",
+        "hint": "Sends confirmed resume blocks, profile wordings, preferences, requirements and the cleaned JD; excludes contact details and links, and never searches the web."
+      },
+      "reasoning_effort_career_tailor": {
+        "label": "Reasoning effort: Resume tailoring"
       }
     },
     "control": {
@@ -3532,7 +3539,8 @@
           "models_sync": "Model list refresh",
           "story_extract": "Story extraction",
           "writer_fit": "Application fit note",
-          "career_extract": "Career extraction"
+          "career_extract": "Career extraction",
+          "career_tailor": "Resume tailoring"
         },
         "status": {
           "pending": "Queued",
@@ -3572,7 +3580,12 @@
           "profile_invalid": "The career profile is invalid. Check it and try again.",
           "deleted": "The career data was deleted and this request was cancelled.",
           "draft_write_failed": "The extracted draft could not be saved. Try again.",
-          "handler_failed": "Career extraction failed. Try again."
+          "handler_failed": "Career extraction failed. Try again.",
+          "outbound_changed": "Confirmed content changed; review it again.",
+          "doc_gone": "The document was deleted.",
+          "job_gone": "The job no longer exists.",
+          "no_jd": "The job has no description.",
+          "proposal_write_failed": "Suggestions could not be saved."
         },
         "scoreResult": "Scoring finished: {scored} scored, {failed} failed",
         "timeBudget": "Stopped at the time budget: {remaining} still to score.",
@@ -4079,7 +4092,8 @@
         "company_research": "Company background",
         "write": "Application writer",
         "story_extract": "Story extraction",
-        "career_extract": "Career extraction"
+        "career_extract": "Career extraction",
+        "career_tailor": "Resume tailoring"
       },
       "details": "Details →"
     },
@@ -7657,7 +7671,8 @@
       "request__models_sync": "Refresh model list",
       "request__story_extract": "Extract stories",
       "request__writer_fit": "Write application fit note",
-      "request__career_extract": "Extract career profile"
+      "request__career_extract": "Extract career profile",
+      "request__career_tailor": "Resume tailoring"
     },
     "event": {
       "item__ok": "Item completed",
@@ -7864,7 +7879,12 @@
       "profile_invalid": "The career profile is invalid. Check it and try again.",
       "deleted": "The career data was deleted and this request was cancelled.",
       "draft_write_failed": "The extracted draft could not be saved. Try again.",
-      "handler_failed": "Career extraction failed. Try again."
+      "handler_failed": "Career extraction failed. Try again.",
+      "outbound_changed": "Confirmed content changed; review it again.",
+      "doc_gone": "The document was deleted.",
+      "job_gone": "The job no longer exists.",
+      "no_jd": "The job has no description.",
+      "proposal_write_failed": "Suggestions could not be saved."
     },
     "callbackResult": {
       "changed": "Changed",
@@ -8015,7 +8035,8 @@
       "models_sync": "Refresh model list",
       "story_extract": "Extract stories",
       "writer_fit": "Application fit note",
-      "career_extract": "Career extraction"
+      "career_extract": "Career extraction",
+      "career_tailor": "Resume tailoring"
     },
     "level": {
       "all": "All levels",
@@ -8097,9 +8118,9 @@
       "accentPicker": "Choose accent colour",
       "saveDefaults": "Save as my defaults",
       "defaultsTitle": "Defaults",
-      "defaultsHint": "Layout defaults apply to new documents only. Emphasis and tone are preferences; no AI uses them in this version.",
-      "emphasis": "Emphasis preference (not used by AI yet)",
-      "tone": "Tone preference (not used by AI yet)",
+      "defaultsHint": "Layout defaults apply to new documents only. Emphasis and tone are sent with every résumé tailoring request.",
+      "emphasis": "Emphasis preference",
+      "tone": "Tone preference",
       "save": "Save document",
       "saving": "Saving…",
       "history": "Document history",
@@ -8376,7 +8397,12 @@
           "unknown": "Unknown theme {name}. Available: {available}."
         }
       },
-      "checksUnavailable": "PDF text checks could not be completed. Page count is available; export remains available."
+      "checksUnavailable": "PDF text checks could not be completed. Page count is available; export remains available.",
+      "proposalsWaiting": "This document has AI suggestions to review.",
+      "reviewProposals": "Review suggestions",
+      "tailor": "Tailor to a job",
+      "tailorLink": "Tailor to a job",
+      "saveBeforeMarks": "Save the document before deciding marks or saving texts back to your profile."
     },
     "title": "Career profile",
     "description": "Build your local career profile by reviewing an extraction or editing entries and alternative wordings.",
@@ -8675,6 +8701,171 @@
         "config_error": "A settings file cannot be read.",
         "invalid": "The request was not understood. Reload the page.",
         "unavailable": "That did not work. Nothing changed; try again."
+      }
+    },
+    "tailor": {
+      "title": "Tailor to a job",
+      "description": "AI suggests how to fit a résumé document to one job. You review every suggestion.",
+      "formTitle": "Tailor a résumé",
+      "shrinkTitle": "Suggest shortening",
+      "difference": "The application writer drafts answer text from your story material. This turns your résumé document into a formatted résumé and cover letter for one job.",
+      "job": "Job",
+      "search": "Search jobs",
+      "searchPlaceholder": "Title or company",
+      "results": "Search results",
+      "choose": "Choose",
+      "chooseJob": "Choose {title} at {company}",
+      "noResults": "No matching jobs.",
+      "jobChosen": "Job: {title} · {company}",
+      "shrinkNote": "\"{title}\" is {over, plural, one {# page} other {# pages}} over its page budget. The AI may only suggest dropping or shortening content.",
+      "requirements": "Requirements for this application",
+      "requirementsHint": "Up to {max} requirements, {chars} characters each. They are saved in this document only.",
+      "requirement": "Requirement {number}",
+      "removeRequirement": "Remove requirement {number}",
+      "addRequirement": "Add requirement",
+      "chars": "{count}/{max}",
+      "tooMany": "At most {max} requirements.",
+      "tooLong": "Each requirement can have at most {chars} characters.",
+      "withLetter": "Also suggest a cover letter",
+      "defaults": "Your defaults (sent with every tailoring request)",
+      "emphasis": "Emphasis: {value}",
+      "tone": "Tone: {value}",
+      "unset": "not set",
+      "editDefaults": "Edit them in a document's Layout tab",
+      "existing": "This job already has a tailored document.",
+      "openExisting": "Open existing",
+      "createNew": "Create new",
+      "preview": "Preview what will be sent",
+      "previewTitle": "What will be sent",
+      "previewHint": "{count, plural, one {# block} other {# blocks}} and the job description. Contact details, links and photos are never sent.",
+      "jdTruncated": "The job description is long; only its beginning and end are sent.",
+      "noJd": "No job description is sent.",
+      "replaces": "This document has suggestions you have not reviewed. Generating again replaces them.",
+      "confirm": "Confirm and generate",
+      "confirmReplace": "Replace suggestions and generate",
+      "back": "Back to editing",
+      "waiting": "Queued…",
+      "running": "Generating suggestions…",
+      "done": "Done: {proposals} suggestions, {flagged} with content not in your profile, {dropped} discarded.",
+      "openDocument": "Open document",
+      "startOver": "Start a new tailoring",
+      "shrink": "Suggest shortening",
+      "shrinkUnknown": "Page count unknown.",
+      "shrinkWithin": "Within the page budget.",
+      "blocks": {
+        "headline": "Headline",
+        "summary": "Summary",
+        "letter": "Cover letter",
+        "emphasis": "Emphasis",
+        "tone": "Tone",
+        "job": "Job title and company",
+        "requirement": "Requirement {number}",
+        "facts": "Profile facts",
+        "entry": "Document entry",
+        "jd": "Job description (cleaned)"
+      },
+      "errors": {
+        "disabled": "Résumé tailoring is not enabled.",
+        "busy": "Another tailoring request for this document is still running with different content. Wait for it to finish.",
+        "review_again": "The content to send changed. Review the updated preview and confirm again.",
+        "stale": "The document changed elsewhere. Reload and try again.",
+        "unresolved_claims": "Confirm or remove the marked content first.",
+        "job_gone": "The job no longer exists.",
+        "doc_gone": "The document was deleted.",
+        "document_missing": "The document no longer exists.",
+        "no_jd": "This job has no description to tailor to.",
+        "invalid": "The request was not valid.",
+        "invalid_payload": "The request was not valid.",
+        "limits": "A requirement list or text exceeds the configured limits.",
+        "target_gone": "The target of this suggestion no longer exists.",
+        "unavailable": "The server could not be reached. Try again.",
+        "outbound_changed": "The confirmed content changed before generation. Preview again and confirm.",
+        "timeout": "Generation took longer than the time budget.",
+        "aborted": "Generation was stopped.",
+        "invalid_output": "The AI answer could not be read.",
+        "output_truncated": "The AI answer was cut off.",
+        "proposal_write_failed": "The suggestions could not be saved.",
+        "proposal_invalid": "The suggestions file is invalid.",
+        "deleted": "The career data was deleted and this request was cancelled.",
+        "handler_failed": "Tailoring failed. Try again.",
+        "config_error": "The configuration could not be read.",
+        "write_failed": "The changes could not be saved. Try again.",
+        "generic": "Tailoring failed. Try again."
+      }
+    },
+    "proposals": {
+      "title": "Suggestions to review",
+      "none": "No suggestions to review.",
+      "loadFailed": "The suggestions could not be loaded.",
+      "documentChanged": "The document changed after these suggestions were generated. Check each one against the current text.",
+      "structure": "Include, exclude and order",
+      "wording": "Wording",
+      "sectionEmpty": "Nothing here.",
+      "targetGone": "The target no longer exists.",
+      "support": "Evidence from your profile",
+      "cites": "Cites: {entry}",
+      "summary": "Summary",
+      "rationale": "Why:",
+      "claims": "Content not in your profile",
+      "removed": "removed",
+      "added": "added",
+      "accept": "Accept",
+      "reject": "Reject",
+      "actions": {
+        "rewrite": "Rewrite",
+        "shorten": "Shorten",
+        "drop": "Exclude",
+        "include": "Include",
+        "add": "Add",
+        "reorder": "Reorder"
+      },
+      "letter": {
+        "recipient": "Letter recipient",
+        "subject": "Letter subject",
+        "salutation": "Letter salutation",
+        "closing": "Letter closing",
+        "place": "Letter place",
+        "date": "Letter date"
+      }
+    },
+    "claims": {
+      "marks": {
+        "unverified": "Not in your profile",
+        "confirmed": "Confirmed",
+        "user_written": "Written by you",
+        "rewritten": "Rewritten",
+        "verbatim": "From your profile"
+      },
+      "kinds": {
+        "figure": "Figure",
+        "skill": "Skill",
+        "duty": "Duty",
+        "fact": "Fact"
+      },
+      "status": {
+        "pending": "to check",
+        "confirmed": "confirmed",
+        "rejected": "rejected",
+        "noted": "noted"
+      },
+      "inJd": "Only in the job description",
+      "translation": "Translation",
+      "listLabel": "Marked content",
+      "confirm": "Confirm",
+      "reject": "Reject",
+      "saveBack": "Save back to profile",
+      "saveBackEntry": "Profile entry",
+      "fieldClaims": "Marked list items and letter fields",
+      "translationTitle": "This is a translation",
+      "translationHint": "These texts were translated from another language, so word-level evidence cannot apply. Confirm once that the translation keeps the facts.",
+      "jdOnlyWords": "Words only the job description has: {words}",
+      "confirmTranslation": "Confirm the translation",
+      "errors": {
+        "unresolved_claims": "Confirm or remove the content marked \"Not in your profile\" before saving it to your profile.",
+        "target_gone": "This text no longer exists.",
+        "stale": "The document changed elsewhere. Reload and try again.",
+        "limits": "Your profile reached a wording limit.",
+        "generic": "This could not be saved. Try again."
       }
     }
   },

@@ -78,7 +78,7 @@ export interface AiRouterOptions {
 
 
 /** A provider's error can echo its input. For these tasks that input is your résumé or draft: logs and the health table get the error's kind only. */
-const TASKS_WITH_PRIVATE_INPUT: ReadonlySet<AiTask> = new Set<AiTask>(["write", "story_extract", "career_extract"]);
+const TASKS_WITH_PRIVATE_INPUT: ReadonlySet<AiTask> = new Set<AiTask>(["write", "story_extract", "career_extract", "career_tailor"]);
 
 export interface AiRouter {
   /** The providers that would be tried for `task`, in order (configured or not). */

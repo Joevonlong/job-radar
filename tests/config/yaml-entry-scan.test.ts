@@ -12,6 +12,8 @@ const ALLOWED: Record<string, string> = {
   "src/lib/career/contact/store.ts": "strict local contact file without config overlays or history",
   "src/lib/career/extract/draft-store.ts": "serializes validated career extraction drafts for local storage",
   "src/lib/career/store/documents.ts": "strict local résumé documents and their history",
+  "src/lib/career/tailor/proposals.ts": "strict local AI proposal file next to a document, not a config file",
+  "scripts/career-tailor-calibrate.ts": "reads fictional calibration samples, not config files",
   "src/lib/career/store/preferences.ts": "strict local document preferences without overlays",
   "src/lib/career/store/apply-state.ts": "strict local record of the last apply to matching, without overlays",
   "src/lib/career/apply/service.ts": "serializes a candidate me.yaml value only to count the scores its save would mark stale",

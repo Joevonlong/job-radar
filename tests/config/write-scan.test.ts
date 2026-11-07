@@ -18,6 +18,8 @@ const REPO = path.resolve(import.meta.dirname, "../..");
 
 /** Writes that are under the lock: what the second check below proves. */
 const LOCKED = new Map<string, string>([
+  ["src/lib/career/tailor/proposals.ts#writeProposals", "guarded publication and rollback under file and config locks"],
+  ["src/lib/career/tailor/proposals.ts#removeProposal", "removes reviewed proposals under file and config locks"],
   ["src/lib/career/store/documents.ts#createDocument", "counts and creates documents under the config write lock"],
   ["src/lib/career/store/documents.ts#persistDocument", "commits edits and restores under document and config write locks"],
   ["src/lib/career/store/documents.ts#deleteDocument", "fenced removal of document, proposals and history"],

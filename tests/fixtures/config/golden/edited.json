@@ -29,7 +29,7 @@
     },
     "ai": {
       "layer": "user",
-      "hash": "5784dfb4cb49f10707b5dbca16a2548a5dfb8942db6c3a2d01c3cd036ea8cfb2",
+      "hash": "8235ec14466b8674c453902c5e383719578efd12400b01f02b5606f80c3bda63",
       "valid": true
     },
     "breakdown": {
@@ -154,7 +154,7 @@
     },
     "career": {
       "layer": "default",
-      "hash": "be4ff6feee60ea844ffb63b69be43153f085e7df6766844206d08781b4e3894e",
+      "hash": "a90f66d9dd395c89a3d0fc46d6414a6a0a90286c41eee87ecd88b8250a3d1874",
       "valid": true
     }
   }

@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 import { outboundImportFields } from "./outbound-import";
-import { figureUnitsSchema } from "./writer";
+import { figureUnitsSchema, firstPersonSchema, namesSchema } from "./writer";
 
-export const CAREER_DEFAULT_TIMEOUT_SECONDS = 300;
+export const CAREER_DEFAULT_TIMEOUT_SECONDS = 600;
 export const CAREER_DEFAULT_EXPIRY_GRACE_SECONDS = 60;
 export const CAREER_DEFAULT_QUEUE_TIMEOUT_SECONDS = 900;
 export const CAREER_LANGS = ["en", "de"] as const;
@@ -120,6 +120,17 @@ export const careerSchema = z.strictObject({
     max_request_bytes: positive(4000000, 50000000)
       .describe("Maximum preview request body in bytes. Document saves carry at most 1 MB, like profile saves."),
     defaults: careerLayoutDefaultsSchema.prefault({}),
+  }).prefault({}),
+  tailor: z.strictObject({
+    max_requirements: positive(10, 100),
+    requirement_max_chars: positive(500, 20000),
+    duty_min_coverage: z.number().min(0).max(1).default(0.7),
+    max_proposals: positive(100, 1000),
+    jd_max_chars: positive(6000, 50000),
+    jd_head_share: z.number().min(0.1).max(0.9).default(0.7),
+    first_person: firstPersonSchema,
+    names: namesSchema,
+    stopwords: z.record(z.string().regex(/^[a-z]{2,3}$/), z.array(z.string().min(1).max(100)).max(1000)).default({ en: [], de: [] }),
   }).prefault({}),
   preview: z.strictObject({
     debounce_ms: z.number().int().min(50).max(10000).default(400),

@@ -1,8 +1,8 @@
 # File format version.
 config_version: 2
 enabled: false
-# Maximum running time for an extraction request.
-timeout_seconds: 300
+# Total running time for an extraction or tailoring request.
+timeout_seconds: 600
 # Margin before an abandoned running request expires.
 expiry_grace_seconds: 60
 # Maximum wait for a queued request.
@@ -986,3 +986,43 @@ check:
           - rank: 2
             words:
               - grundkenntnisse
+# JD tailoring and evidence verification.
+tailor:
+  # Maximum separate instructions saved in a document.
+  max_requirements: 10
+  # Maximum characters in one separate instruction.
+  requirement_max_chars: 500
+  # Minimum content-word coverage by supporting quotes; provisional pending model calibration.
+  duty_min_coverage: 0.7
+  # Maximum suggestions retained from one request.
+  max_proposals: 100
+  # Maximum cleaned JD characters sent to the provider.
+  jd_max_chars: 6000
+  # Share of a truncated JD taken from its beginning.
+  jd_head_share: 0.7
+  # First-person words excluded from name detection, by language.
+  first_person:
+    # English first-person words.
+    en: [i, "i'm", "i've", "i'd", my, me, myself]
+    # German first-person words.
+    de: [ich, mein, meine, meinen, meinem, meiner, mich, mir]
+  # Name shapes checked against the complete factual pool.
+  names:
+    # Treat quoted text as a name.
+    quoted: true
+    # Detect inner capitals, digits and acronyms.
+    mixed_tokens: true
+    # Capitalized-name policy by language.
+    capitalized_non_initial:
+      # Detect individual capitalized words in other languages.
+      default: single
+      # German nouns require consecutive capitalized words.
+      de: multi
+    # Tokens excluded from name detection.
+    stopwords: [I, OK]
+  # Grammatical words excluded from lexical coverage, by language.
+  stopwords:
+    # English grammatical words.
+    en: [a, an, the, and, or, of, to, in, on, at, for, with, by, from, as, is, are, was, were, be, been, being, have, has, had, this, that, these, those, i, my, we, our, you, your, it, its]
+    # German grammatical words.
+    de: [der, die, das, den, dem, des, ein, eine, einen, einem, einer, eines, und, oder, mit, von, zu, zur, zum, für, in, im, auf, an, am, als, bei, aus, ist, sind, war, waren, sein, hat, haben, ich, mein, meine, wir, unser, sie, ihre]
