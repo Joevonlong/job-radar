@@ -204,6 +204,11 @@ exec "${realGit}" "$@"
 echo "docker $*" >> "$DEPLOY_TEST_LOG"
 export DEPLOY_PID=$PPID
 [[ "$1" == "info" ]] && exit \${DOCKER_INFO_EXIT:-0}
+if [[ "$1" == compose && "$*" == *" config --services" ]]; then
+  printf '%s\\n' db web runner jobspy
+  [[ "\${PDF_PROFILE:-0}" == 1 ]] && echo career-pdf
+  exit 0
+fi
 # What real compose does: --images lists the dependencies too, in no fixed order; the model has no \`image\` for a build-only service.
 if [[ "$1" == compose && "$*" == *" config --images "* ]]; then
   printf 'postgres:17\\nradar-test-%s:latest\\n' "\${*: -1}"; exit 0
@@ -261,6 +266,7 @@ if [[ "$*" == *" up "* && "\${*: -1}" == jobspy ]]; then
   if [[ -n "\${UP_JOBSPY_HOOK:-}" ]]; then bash -c "$UP_JOBSPY_HOOK"; fi
   exit \${UP_JOBSPY_EXIT:-0}
 fi
+if [[ "$*" == *" up "* && "\${*: -1}" == career-pdf ]]; then exit \${UP_PDF_EXIT:-0}; fi
 if [[ "$*" == *" up "* ]]; then
   echo "\${JOB_RADAR_BUILD_CONTEXT:-<unset>}" >> "$DEPLOY_TEST_LOG.ctx"
   if [[ -n "\${UP_HOOK:-}" ]]; then bash -c "$UP_HOOK"; fi
@@ -637,10 +643,25 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     }
     expect(r.out).toContain("dry-run finished: nothing was changed");
     // only read-only probes: docker info and the `ps` that asks whether the db runs
-    expect(r.calls.every((c) => c === "docker info" || c.includes("ps --status running --services"))).toBe(true);
+    expect(r.calls.every((c) => c === "docker info" || c.includes("ps --status running --services") || c.endsWith(" config --services"))).toBe(true);
     // a dry run takes no lock and builds nothing
     expect(fs.existsSync(lockDir)).toBe(false);
     expect(buildContexts()).toEqual([]);
+  });
+
+  it.each(["0", "1"])("only starts the PDF service with its profile active (%s), including dry-run", (active) => {
+    const r = deploy(["--dry-run", "--skip-pull"], { PDF_PROFILE: active });
+    expect(r.status).toBe(0);
+    expect(r.out.includes("up -d --no-deps --wait --wait-timeout 300 career-pdf")).toBe(active === "1");
+    expect(r.calls.some((call) => call.includes(" up "))).toBe(false);
+  });
+
+  it("warns and continues through doctor when the optional PDF service fails", () => {
+    const r = deploy(["--skip-pull", "--no-ai-worker", "--settle", "0"], { PDF_PROFILE: "1", UP_PDF_EXIT: "1" });
+    expect(r.status).toBe(0);
+    expect(r.out).toContain("career-pdf did not become healthy");
+    expect(r.calls).toContain("docker compose -p radar-test up -d --no-deps --wait --wait-timeout 300 career-pdf");
+    expect(r.calls).toContain("pnpm run doctor");
   });
 
   it("--dry-run shows what would stop a real run, and still prints every step", () => {
@@ -807,6 +828,7 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       "pnpm ops:drain",
       "docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner",
       "docker compose -p radar-test up -d --no-deps --wait --wait-timeout 300 jobspy",
+      "docker compose -p radar-test config --services",
       "pnpm migrate:run",
       `install-ai-worker.sh --release ${realWork}/data/releases/ai-worker/${head()} --root ${realWork}`,
       "docker compose -p radar-test ps -a -q web",

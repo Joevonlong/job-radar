@@ -30,24 +30,24 @@ it("sandboxes preview HTML and ignores an obsolete response even if fetch ignore
     ),
   );
   const doc = document();
-  const view = render(wrap(<DocumentPreview document={doc} doc="resume" debounceMs={75} />));
+  const view = render(wrap(<DocumentPreview document={doc} doc="resume" debounceMs={75} pageCountDebounceMs={3000} />));
   await act(async () => {
     await vi.advanceTimersByTimeAsync(75);
   });
   expect(requests).toHaveLength(1);
-  view.rerender(wrap(<DocumentPreview document={{ ...doc, title: "New title" }} doc="resume" debounceMs={75} />));
+  view.rerender(wrap(<DocumentPreview document={{ ...doc, title: "New title" }} doc="resume" debounceMs={75} pageCountDebounceMs={3000} />));
   expect(requests[0]!.signal.aborted).toBe(true);
   await act(async () => {
     await vi.advanceTimersByTimeAsync(75);
   });
   await act(async () => {
-    requests[1]!.resolve(new Response(JSON.stringify({ ok: true, html: "<html><body>new preview</body></html>" })));
+    requests[1]!.resolve(new Response(JSON.stringify({ ok: true, findings: [], uncovered: [], html: "<html><body>new preview</body></html>" })));
   });
   const frame = screen.getByTitle("Document preview");
   expect(frame).toHaveAttribute("sandbox", "");
   expect(frame).toHaveAttribute("srcdoc", expect.stringContaining("new preview"));
   await act(async () => {
-    requests[0]!.resolve(new Response(JSON.stringify({ ok: true, html: "old preview" })));
+    requests[0]!.resolve(new Response(JSON.stringify({ ok: true, findings: [], uncovered: [], html: "old preview" })));
   });
   expect(frame).toHaveAttribute("srcdoc", expect.stringContaining("new preview"));
   expect(frame.getAttribute("sandbox")).not.toContain("allow-scripts");
@@ -70,11 +70,11 @@ it("debounces changes, translates schema issues, and conceals unknown error code
   );
   vi.stubGlobal("fetch", fetcher);
   const doc = document();
-  const view = render(wrap(<DocumentPreview document={doc} doc="resume" debounceMs={90} />));
+  const view = render(wrap(<DocumentPreview document={doc} doc="resume" debounceMs={90} pageCountDebounceMs={3000} />));
   await act(async () => {
     await vi.advanceTimersByTimeAsync(50);
   });
-  view.rerender(wrap(<DocumentPreview document={{ ...doc, title: "Changed" }} doc="resume" debounceMs={90} />));
+  view.rerender(wrap(<DocumentPreview document={{ ...doc, title: "Changed" }} doc="resume" debounceMs={90} pageCountDebounceMs={3000} />));
   await act(async () => {
     await vi.advanceTimersByTimeAsync(89);
   });
@@ -91,7 +91,7 @@ it("does not request a letter preview until it has body text", async () => {
   vi.useFakeTimers();
   const fetcher = vi.fn();
   vi.stubGlobal("fetch", fetcher);
-  render(wrap(<DocumentPreview document={document()} doc="letter" debounceMs={75} />));
+  render(wrap(<DocumentPreview document={document()} doc="letter" debounceMs={75} pageCountDebounceMs={3000} />));
   await act(async () => {
     await vi.advanceTimersByTimeAsync(200);
   });

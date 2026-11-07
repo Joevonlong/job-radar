@@ -39,6 +39,7 @@ export const SERIAL_CHAIN: readonly ChainEntry[] = [
   { name: "chromium-config-resume", spec: "resume.spec.ts" },
   { name: "chromium-config-career", spec: "career.spec.ts" },
   { name: "chromium-config-career-builder", spec: "career-builder.spec.ts" },
+  { name: "chromium-config-career-print", spec: "career-print.spec.ts" },
   // career.yaml and writer.yaml on, stories.yaml written by applying the career profile to matching
   { name: "chromium-config-career-integration", spec: "career-integration.spec.ts" },
   // interests.yaml (saved views, accepted suggestions)

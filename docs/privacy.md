@@ -146,6 +146,12 @@ to an outbound service, and are overwritten without history. The local file can 
 Extraction sends the confirmed preview to an AI provider. A contact location or other personal detail remaining in that preview can also be sent. An email or phone written into profile text is allowed
 with an advisory warning; it remains in profile history until you remove that history.
 
+Résumé documents, their history, layout preferences and the shared photo and signature are local files in the same
+directory. Contact details are added only when a preview or PDF is rendered in memory and are never written to document
+files. The optional `career-pdf` service (compose profile `career-pdf`) receives that HTML, contact details included,
+over an internal Docker network: it has no data volume, no environment file and no internet access, keeps nothing after
+printing and logs only status, size and duration. The PDF goes straight to your browser and is not stored by the app.
+
 The files are readable and writable by the local web process, have mode `0600` when written by the app and enter the
 configuration archive. They are not stored in long-lived database tables and are not exposed over MCP. They change matching only when you
 confirm **Apply to matching**: that copies languages, skills, years of experience and optionally the summary into `me.yaml`,

@@ -4,6 +4,7 @@ import { countPages } from "../engine";
 export interface PdfOptions { tagged: boolean; outline: boolean; timeoutMs: number }
 export interface Printer {
   print(html: string, opts: PdfOptions): Promise<{ pdf: Uint8Array; pages: number }>;
+  isConnected(): boolean;
   close(): Promise<void>;
 }
 
@@ -12,6 +13,7 @@ export const PRINT_LAUNCH_ARGS = ["--disable-dev-shm-usage", "--font-render-hint
 export async function openPrinter(launch?: LaunchOptions): Promise<Printer> {
   const browser = await chromium.launch({ ...launch, args: [...PRINT_LAUNCH_ARGS, ...(launch?.args ?? [])] });
   return {
+    isConnected: () => browser.isConnected(),
     async print(html, opts) {
       let context: BrowserContext | undefined;
       let timer: ReturnType<typeof setTimeout> | undefined;

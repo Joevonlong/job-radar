@@ -1,5 +1,9 @@
+import { parse, stringify } from "yaml";
+import type { AddressInfo } from "node:net";
+import type { Download } from "./fixtures";
+import { createPdfService } from "../src/career-pdf/service";
 import { execFileSync, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import fs, { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -290,4 +294,148 @@ test("real letter checks accept the signed example and reject two pages with a m
   expect(bad.issues[0].level).toBe("error");
   expect(bad.lint).toContainEqual(expect.objectContaining({ where: "letter.signature", code: "career.check.signature_unreadable", level: "error" }));
   expect(content).not.toContain('class="l-sig"');
+});
+
+const letterSample = z.object({ letter: z.object({
+  recipient: z.array(z.string()), subject: z.string(), salutation: z.string(),
+  body: z.array(z.string()), closing: z.string(),
+}) });
+
+async function pdfHeader(download: Download) {
+  const file = await download.path();
+  expect(file).not.toBeNull();
+  expect(fs.readFileSync(file!).subarray(0, 5).toString()).toBe("%PDF-");
+  expect(download.suggestedFilename()).toMatch(/\.pdf$/);
+}
+
+test.describe("document editor PDF service", () => {
+  test.describe.configure({ mode: "serial", timeout: 120000 });
+  test("counts pages, downloads saved résumé and German letter, and shows uncovered characters on mobile", async ({
+    page, browser,
+  }) => {
+    const configDir = process.env.E2E_CONFIG_DIR;
+    const profileDir = process.env.E2E_PROFILE_DIR;
+    if (!configDir || !profileDir) throw new Error("Disposable e2e directories are required");
+    const file = path.join(configDir, "career.yaml");
+    const original = fs.existsSync(file) ? fs.readFileSync(file) : null;
+    const career = path.join(profileDir, "career");
+    if (fs.existsSync(career)) throw new Error("career print e2e requires an unused career directory");
+    const service = await createPdfService({
+      open: () => openPrinter({ executablePath: browser.browserType().executablePath() }),
+      maxHtmlBytes: 8000000, timeoutMs: 30000, log: () => undefined,
+    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        service.server.once("error", reject);
+        service.server.listen(0, "127.0.0.1", resolve);
+      });
+      const url = `http://127.0.0.1:${(service.server.address() as AddressInfo).port}`;
+      fs.writeFileSync(file, stringify({ config_version: 2, enabled: true, pdf: { url },
+        preview: { debounce_ms: 50, page_count_debounce_ms: 250 } }));
+      await page.goto("/career");
+      const experience = page.getByTestId("career-experience");
+      await experience.getByRole("button", { name: "添加经历", exact: true }).click();
+      await experience.getByLabel("公司", { exact: true }).fill("Example Company");
+      await experience.getByLabel(/^开始日期/).fill("2024");
+      await experience.getByLabel("写法 1", { exact: true }).fill("Engineer");
+      await experience.getByRole("button", { name: "添加要点", exact: true }).click();
+      await experience.getByLabel("写法 1", { exact: true }).last().fill("Built a reliable service for 20 teams");
+      await page.getByRole("button", { name: "保存档案", exact: true }).click();
+      await expect(page.getByTestId("career-profile-form").getByRole("status")).toContainText("已保存");
+      await page.getByRole("link", { name: "简历文档", exact: true }).click();
+      await page.getByLabel("文档标题（可选）").fill("Printable résumé");
+      await page.getByRole("button", { name: "从档案创建", exact: true }).click();
+      await expect(page.getByTestId("document-editor")).toBeVisible();
+      await expect(page.getByTestId("document-page-count")).toHaveText("1 页");
+      const role = page.getByTestId("document-experience").getByRole("textbox", { name: "职位", exact: true });
+      await role.fill("Saved before exporting");
+      const resumeReady = page.waitForEvent("download");
+      await page.getByRole("button", { name: "导出简历 PDF", exact: true }).click();
+      const resume = await resumeReady;
+      await pdfHeader(resume);
+      const resumeFile = (await resume.path())!;
+      expect(await extractText(new Uint8Array(fs.readFileSync(resumeFile)))).toContain("Saved before exporting");
+      await page.reload();
+      await expect(role).toHaveValue("Saved before exporting");
+      await page.getByRole("combobox", { name: "文档语言", exact: true }).selectOption("de");
+      await page.getByRole("tab", { name: "求职信", exact: true }).click();
+      await page.getByRole("button", { name: "添加求职信", exact: true }).click();
+      const sample = letterSample.parse(parse(fs.readFileSync(path.resolve("tests/fixtures/career/letter.de.yaml"), "utf8")));
+      await page.getByLabel("收件人（每行一项）", { exact: true }).fill(sample.letter.recipient.join("\n"));
+      await page.getByLabel("主题", { exact: true }).fill(sample.letter.subject);
+      await page.getByLabel("称呼", { exact: true }).fill(sample.letter.salutation);
+      await page.getByLabel("落款", { exact: true }).fill(sample.letter.closing);
+      for (const [index, text] of sample.letter.body.entries()) {
+        await page.getByRole("button", { name: "添加条目", exact: true }).click();
+        await page.getByRole("textbox", { name: `文本 ${index + 1}`, exact: true }).fill(text);
+      }
+      await expect(page.getByTestId("document-page-count")).toHaveText(/\d+ 页/);
+      const letterReady = page.waitForEvent("download");
+      await page.getByRole("button", { name: "导出求职信 PDF", exact: true }).click();
+      const letter = await letterReady;
+      await pdfHeader(letter);
+      expect(letter.suggestedFilename()).not.toBe(resume.suggestedFilename());
+      expect(letter.suggestedFilename()).toContain("Anschreiben");
+      expect(await extractText(new Uint8Array(fs.readFileSync((await letter.path())!)))).toContain("Sehr geehrte Frau Muster");
+      await page.getByRole("tab", { name: "内容", exact: true }).click();
+      await page.getByTestId("document-experience").getByRole("textbox", { name: "文本 1", exact: true }).fill("中文成果");
+      await expect(page.getByTestId("document-font-hint")).toContainText("中 文 成 果");
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.evaluate(() => {
+        document.documentElement.classList.remove("light");
+        document.documentElement.classList.add("dark");
+      });
+      await page.getByRole("tab", { name: "预览", exact: true }).click();
+      await expect(page.getByTestId("document-checks")).toBeVisible();
+      await expect(page.locator('iframe[title="文档预览"]')).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: test.info().outputPath("career-print-mobile-dark.png") });
+    } finally {
+      await service.close();
+      if (original) fs.writeFileSync(file, original);
+      else fs.rmSync(file, { force: true });
+      fs.rmSync(career, { recursive: true, force: true });
+    }
+  });
+
+  test("prints hostile HTML without external traffic or script execution", async ({ browser }) => {
+    const requests: string[] = [];
+    const external = createServer((request, response) => {
+      requests.push(request.url ?? "");
+      response.end("external response");
+    });
+    await new Promise<void>((resolve, reject) => {
+      external.once("error", reject);
+      external.listen(0, "127.0.0.1", resolve);
+    });
+    const service = await createPdfService({
+      open: () => openPrinter({ executablePath: browser.browserType().executablePath() }),
+      maxHtmlBytes: 8000000, timeoutMs: 30000, log: () => undefined,
+    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        service.server.once("error", reject);
+        service.server.listen(0, "127.0.0.1", resolve);
+      });
+      const origin = `http://127.0.0.1:${(external.address() as AddressInfo).port}`;
+      const url = `http://127.0.0.1:${(service.server.address() as AddressInfo).port}`;
+      const html = `<!doctype html><html><head><link rel="stylesheet" href="${origin}/external.css"></head>
+        <body><p id="sentinel">script did not run</p><img src="${origin}/external.png">
+        <script>document.getElementById('sentinel').textContent='script executed';fetch('${origin}/script');</script>
+        </body></html>`;
+      const response = await fetch(`${url}/render`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ html }),
+      });
+      expect(response.status).toBe(200);
+      const text = await extractText(new Uint8Array(await response.arrayBuffer()));
+      expect(text).toContain("script did not run");
+      expect(text).not.toContain("script executed");
+      expect(requests).toEqual([]);
+    } finally {
+      await service.close();
+      external.closeAllConnections();
+      await new Promise<void>((resolve) => external.close(() => resolve()));
+    }
+  });
+
 });

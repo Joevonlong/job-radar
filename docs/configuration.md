@@ -834,6 +834,31 @@ that before the entry and wording limits; the save then fails with an error and 
 preview delay (50–10000 ms). Open the editor at `/career/documents`; see
 [Résumé documents](career-profile.md#résumé-documents) for editing and live preview.
 
+`preview.page_count_debounce_ms` supplies the page-count refresh delay (default 3000 ms).
+`pdf.url` defaults to `http://career-pdf:8090` and is protected: change it by hand, never through settings or the
+advanced editor. The `pdf` block is hidden from the settings form. `pdf.timeout_seconds` (default 60, maximum 300)
+bounds the web request, and `pdf.max_html_bytes` (default 8000000, maximum 50000000) bounds UTF-8 HTML before sending.
+
+The optional PDF service starts with `COMPOSE_PROFILES=career-pdf docker compose up -d --build career-pdf`.
+It reads no config files or data volumes. Its environment settings are `CAREER_PDF_PORT` (default 8090),
+`CAREER_PDF_TIMEOUT_SECONDS` (default 60) and `CAREER_PDF_MAX_HTML_BYTES` (default 8000000). Compose fixes the port to
+8090 and passes the latter two settings from the host environment. When changing the web limits, match the service
+limits with those environment overrides. The JSON body is limited to six times the HTML limit plus 1024 bytes to
+allow JSON escapes; decoded HTML has the separate byte limit. Only one render runs at a time; busy requests return 429,
+and timeouts return 504. Health reflects the browser connection; a disconnected browser is relaunched on the next render.
+
+`POST /api/career/documents/preview` accepts `{ document, doc }` and returns HTML, active-document `findings` and
+`uncovered` characters, plus `exportHints: { findings, uncovered }` covering both renderable export documents.
+Findings contain only `{ code, params, severity, path? }`.
+`POST /api/career/documents/pages` accepts the same JSON and returns `{ ok: true, pages, budget, findings }`, where
+`budget` is `{ pages, exceeded }`. When PDF rendering is unavailable it returns
+`{ ok: true, pages: null, budget: null, findings: [], code }`. If PDF text checking fails, `pages` and `budget` stay
+available with empty findings and `code: pdf_checks_failed`. `POST /api/career/documents/<id>/pdf?doc=resume`
+(or `doc=letter`) exports the saved document. Save edits first. These endpoints return `Cache-Control: no-store` and
+write no HTML or PDF files. A letter needs a nonempty included body. The filename uses the engine's résumé template
+(`layout.filename`); letters use the separate language-specific letter name. With no PDF service, editing and HTML
+preview continue to work; the response codes have localized messages including the startup command.
+
 Documents live in `career/documents/` under the profile directory and retain source references while being edited
 independently. `history.keep_versions` applies separately to each document under `career/history/documents/` as well
 as the profile. Contact is merged only for rendering; it is absent from document and history files. Preferences and
@@ -848,3 +873,26 @@ scale and multiple defaults. The three top-level time settings limit running tim
 
 `writer.yaml: import.title_words` lists résumé title lines skipped when guessing a name.
 `writer.yaml: import.sensitive_labels` lists labels highlighted for review in the outbound preview.
+
+### Résumé checks and page counts
+
+`career.yaml: check.limits` supplies every engine check threshold, including bullet length, page budget for letters,
+word counts and PDF text matching. `check.lexicon.en` and `.de` contain the check word lists and keyword dictionaries.
+The configuration schema stays independent of the rendering engine. These settings are available in YAML, outside the
+settings form. Dictionary entries under `check.lexicon.*.*` merge independently: adding a keyword leaves other shipped
+keywords following product updates. A list explicitly overridden by the user replaces that list as a whole.
+`check.uncovered_max_chars` caps the deduplicated list of characters outside the bundled font faces' Unicode ranges.
+
+The editor runs text and placeholder checks with the HTML preview. Page counts refresh separately after
+`preview.page_count_debounce_ms`; responses for older edits are ignored. An unavailable PDF service leaves the count
+unknown. If PDF text parsing fails, the service page count stays visible with a check-unavailable hint.
+PDF checks add page budget, reading order and parser findings. All findings are advisory, including placeholders
+and excess pages, and never block PDF export. Only English and German document layouts are supported; other content
+can be edited and previewed with a font coverage hint.
+
+PDF export saves unsaved edits first; a stale save stops the download and keeps the edits on screen. Résumé and letter
+buttons download separate PDFs without a page reload. Export warnings cover both available documents, independent of
+which preview is selected. A letter needs included body text before its button appears.
+After a successful export, the page-count endpoint refreshes the full checks with another transient print; the export
+response remains PDF bytes with its existing filename headers. Busy and unavailable service states appear beside the
+buttons, including the `COMPOSE_PROFILES=career-pdf` start hint. No PDF or HTML is saved by these operations.

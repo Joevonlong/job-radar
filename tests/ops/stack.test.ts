@@ -14,6 +14,10 @@ const root = path.resolve(import.meta.dirname, "..", "..");
 const read = (file: string) => readFileSync(path.join(root, file), "utf8");
 
 interface ComposeService {
+  profiles?: string[];
+  networks?: string[];
+  command?: string[];
+  env_file?: unknown;
   image?: string;
   restart?: string;
   logging?: { driver?: string; options?: Record<string, string> };
@@ -30,15 +34,19 @@ interface ComposeService {
   build?: { context?: string; target?: string };
 }
 // merge: the `<<: *hardening` keys, as docker compose reads them
-const compose = parse(read("compose.yaml"), { merge: true }) as { name?: string; services: Record<string, ComposeService>; volumes?: Record<string, { name?: string }> };
+const compose = parse(read("compose.yaml"), { merge: true }) as {
+  name?: string; services: Record<string, ComposeService>;
+  volumes?: Record<string, { name?: string }>; networks?: Record<string, { internal?: boolean }>;
+};
 const dockerfile = read("Dockerfile");
 const pkg = JSON.parse(read("package.json")) as { scripts: Record<string, string> };
 
 describe("compose.yaml: restart, logging and healthchecks", () => {
   const services = Object.entries(compose.services);
 
-  it("has the four services", () => {
-    expect(services.map(([name]) => name).sort()).toEqual(["db", "jobspy", "runner", "web"]);
+  it("keeps the four core services in the default profile", () => {
+    const names = services.filter(([, service]) => !service.profiles?.length).map(([name]) => name).sort();
+    expect(names).toEqual(["db", "jobspy", "runner", "web"]);
   });
 
   it.each(services)("%s restarts unless stopped", (_name, service) => {
@@ -194,7 +202,7 @@ describe("compose.yaml: instance names and ownership", () => {
     expect(compose.services.web?.environment?.JOB_RADAR_WEB_BIND).toBe("${JOB_RADAR_WEB_BIND:-127.0.0.1}");
   });
 
-  it.each(["web", "runner", "jobspy"])("%s drops every capability and cannot gain privileges", (name) => {
+  it.each(["web", "runner", "jobspy", "career-pdf"])("%s drops every capability and cannot gain privileges", (name) => {
     expect(compose.services[name]?.cap_drop).toEqual(["ALL"]);
     expect(compose.services[name]?.security_opt).toContain("no-new-privileges:true");
   });
@@ -249,4 +257,26 @@ describe("compose.yaml: instance names and ownership", () => {
     expect(rendered.services.web?.ports?.[0]).toMatchObject({ host_ip: "127.0.0.1", published: "3100" });
     expect(rendered.services.runner?.user).toBe("1001:1002");
   });
+});
+
+it("isolates the optional PDF service from credentials, stored data, the database and external networks", () => {
+  const pdf = compose.services["career-pdf"];
+  expect(pdf?.profiles).toEqual(["career-pdf"]);
+  expect(pdf?.networks).toEqual(["career-pdf"]);
+  expect(compose.networks?.["career-pdf"]).toEqual({ internal: true });
+  expect(compose.services.web?.networks).toEqual(["default", "career-pdf"]);
+  expect(pdf?.env_file).toBeUndefined();
+  expect(pdf?.volumes).toBeUndefined();
+  expect(pdf?.ports).toBeUndefined();
+  expect(pdf?.read_only).toBe(true);
+  expect(pdf?.tmpfs).toContain("/tmp");
+  expect(pdf?.tmpfs).toContain(`${pdf?.environment?.HOME}:mode=1777`);
+  expect(Object.keys(pdf?.environment ?? {}).sort()).toEqual([
+    "CAREER_PDF_MAX_HTML_BYTES", "CAREER_PDF_PORT", "CAREER_PDF_TIMEOUT_SECONDS", "HOME",
+  ]);
+  expect(pdf?.mem_limit).toBe("${CAREER_PDF_MEM_LIMIT:-1g}");
+  expect(pdf?.command).toEqual(["node", "dist/career-pdf.mjs"]);
+  expect(pdf?.build).toMatchObject({ context: "${JOB_RADAR_BUILD_CONTEXT:-.}", target: "runner" });
+  expect(dockerfile).toContain("/app/dist/career-pdf.mjs ./dist/career-pdf.mjs");
+  expect(pkg.scripts["build:runner"]).toContain("career-pdf=src/career-pdf/index.ts");
 });

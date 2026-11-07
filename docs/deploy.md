@@ -500,3 +500,16 @@ Do a "power-loss drill" on day 3 or 4 (reboot the Mac and do nothing by hand) an
 ### At the end
 
 At the end of your log write the conclusion: whether all 7 days passed consecutively, the incidents you met, any ⚠️ that persists in doctor and why, and what needs improving.
+
+## Optional résumé PDF service
+
+Set `COMPOSE_PROFILES=career-pdf` in the instance environment to include the PDF service in builds and deploys.
+Deploy starts it after jobspy with `--no-deps --wait`; failure warns and deployment continues.
+Doctor expects it only when the career feature is enabled and Compose lists it as active.
+Without the profile, deploy leaves it untouched. The default profile still contains db, web, runner and jobspy.
+
+The PDF container shares the runner image, with no credentials, data mounts or published ports. It runs read-only
+with temporary `/tmp` and home directories and a memory cap (`CAREER_PDF_MEM_LIMIT`, default 1g).
+Only web joins its dedicated internal network as well as the default network. Each Compose project gets its own
+PDF network and service; there is no extra host port to allocate for another instance.
+See [PDF configuration](configuration.md#career-profile-careeryaml) for limits and the HTTP interfaces.

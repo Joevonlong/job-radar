@@ -76,3 +76,17 @@ it.each(["resume", "letter"] as const)("validates the whole document structure f
   expect(await saveDocumentAction({ id: unsaved.id, document: invalid, baseHash: "a".repeat(64) }))
     .toEqual({ ok: false, code: "document_invalid" });
 });
+
+it("returns export hints for both buttons while keeping checks scoped to the preview", async () => {
+  const unsaved = draft("resume");
+  unsaved.headline!.text = "TODO 中文";
+  unsaved.letter!.body[0]!.text = "A finished letter body";
+  const response = await preview(request(unsaved, "letter"));
+  expect(await response.json()).toMatchObject({
+    ok: true, uncovered: [],
+    exportHints: {
+      uncovered: ["中", "文"],
+      findings: expect.arrayContaining([expect.objectContaining({ code: "career.lint.placeholder" })]),
+    },
+  });
+});
