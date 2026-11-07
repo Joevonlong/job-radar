@@ -37,3 +37,12 @@ Telegram 的 📄 按钮走同一个导出函数：导出 JD、状态改为"准�
 ## Docker
 
 `compose.yaml` 把 `./data/exports` 挂进 web 和 runner。命令要在宿主机终端里粘贴，所以把 `jd_export_host_dir` 设成宿主机上这个目录的绝对路径。`pdf_dir` 要让容器里的 web 也看得到：把它所在目录用**相同的绝对路径**挂进 web 容器（compose override），否则只在 `pnpm dev` / 宿主机运行时可以挂简历。
+
+## 与职业档案并存
+
+[职业档案](career-profile.zh.md)在应用内覆盖同样的事：带实时预览和 PDF 导出的简历文档，以及逐条审核提议的按岗位定制。
+迁移时在 `/career` 的**导入 resume-kit 简历**处导入你的主简历 YAML（[详情](career-profile.zh.md#导入-resume-kit-主简历)）；
+主简历文件和 `resume.yaml` 都不会改动。
+
+两者可以并存。职业档案开启时，岗位详情页显示职业档案的**定制简历**面板，本面板折叠在其中的**外部 resume-kit** 下（仅在设置了
+`resume_kit_path` 时）。职业档案关闭时，本页所述一切照旧。

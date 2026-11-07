@@ -48,6 +48,7 @@ import { runMigrations } from "@/lib/db/migrate";
 import { claimNextControlRequest, failOpenControlRequests, findLatestCareerTailorRequest, insertControlRequest, requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
 import { getOrCreateCompany } from "@/lib/db/repos/companies";
 import { insertJob } from "@/lib/db/repos/jobs";
+import * as applications from "@/lib/db/repos/applications";
 import { tempCareer, profile, text } from "../career/fixtures";
 import { tailorSettings } from "../career/tailor-fixtures";
 import { pinnedAi, scriptedProvider, type Step } from "../ai/helpers";
@@ -201,6 +202,38 @@ it.each(["requirements", "profile", "preference", "jd", "contact"])("rejects cha
   } else if (part === "jd") await db().update(schema.jobs).set({ description: "Changed JD" }).where(eq(schema.jobs.id, job.id));
   else await saveContact({ ...emptyContact(), name: "Built a service" }, { baseHash: null });
   await poll(); await scrubbed(id, "outbound_changed"); expect(transport.calls).toHaveLength(0);
+});
+
+it("moves the application to preparing only when a tailoring run is newly queued", async () => {
+  const { payload, job } = await setup();
+  await prepareTailor(db(), { jobId: job.id, mode: "tailor", new: false, requirements: ["Keep it concise"] });
+  expect(await applications.getApplicationByJobId(db(), job.id)).toBeNull();
+  await queue(payload);
+  const application = await applications.getApplicationByJobId(db(), job.id);
+  expect(application?.status).toBe("preparing");
+  await requestCareerTailor(db(), payload);
+  const events = await applications.listApplicationEvents(db(), application!.id);
+  expect(events.map((event) => [event.toStatus, event.note])).toEqual([["preparing", "career"]]);
+});
+
+it("never moves an applied job back", async () => {
+  const { payload, job } = await setup();
+  await applications.setApplicationStatus(db(), job.id, "applied");
+  await queue(payload);
+  expect((await applications.getApplicationByJobId(db(), job.id))?.status).toBe("applied");
+});
+
+it("never advances the status for shrink", async () => {
+  const { payload, job } = await setup("shrink");
+  await queue(payload);
+  expect(await applications.getApplicationByJobId(db(), job.id)).toBeNull();
+});
+
+it("a failing status write does not fail the queued request", async () => {
+  const { payload, job } = await setup();
+  vi.spyOn(applications, "setApplicationStatus").mockRejectedValueOnce(Object.assign(new Error("boom"), { code: "XX000" }));
+  expect(await requestCareerTailor(db(), payload)).toMatchObject({ state: "queued", existing: false });
+  expect(await applications.getApplicationByJobId(db(), job.id)).toBeNull();
 });
 
 it("rechecks the hash at enqueue and permits layout-only changes", async () => {

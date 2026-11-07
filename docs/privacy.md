@@ -69,6 +69,10 @@ With the career profile enabled, you can send a reviewed preview of a résumé o
 
 The confirmed text stays in a control request while queued or running and is cleared when it ends or is cancelled; database backups, old Postgres row versions, WAL and database logs can retain it, as described for story extraction below. Draft files contain extracted fields and quotes until adoption, discard or expiry, and configuration archives can retain them longer. Adopted content remains in the profile and its history. Deleting all career data cancels active requests and removes local drafts; an already-started provider call may continue, but not backups or provider copies. Provider retention depends on the provider and your settings.
 
+Importing a resume-kit master résumé makes no AI call: the file is parsed in memory and not stored, contact values are
+shown for confirmation and saved only to the contact file, and the rest becomes a local draft retained like an extracted
+one until adoption, discard or expiry. Adding a story to the profile is local too and leaves `stories.yaml` unchanged.
+
 ### Résumé tailoring
 
 With the career profile enabled, **Confirm and generate** on `/career/tailor` sends the `career_tailor` provider in `ai.yaml` exactly the blocks and the JD that the preview showed: the document's entries and texts, your profile facts as evidence, your emphasis and tone, the separate requirements, the job title and company and the cleaned JD, cut to `tailor.jd_max_chars`. Contact details, links, photos and signatures are not sent; contact values detected in other text are replaced, but detection can miss details. If the content changes after you confirmed, nothing is sent and you confirm again. The control request carries only ids and a checksum of the preview; the material is read from the local files when the request runs. Proposals are stored beside the document (`career/documents/<id>.proposals.yaml`) until reviewed or until the document is deleted, and backups can retain them. See [Résumé tailoring](resume-tailoring.md#what-is-sent).

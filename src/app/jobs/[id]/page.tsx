@@ -34,6 +34,7 @@ import { buildPostedView } from "@/lib/jobs/posted-view";
 import { PostingLink } from "@/components/jobs/detail/posting-link";
 import { SeenTracker } from "@/components/jobs/detail/seen-tracker";
 import { FilterNotice, FilterOverrideAction, overrideActionFor } from "@/components/jobs/filter-notice";
+import { JobEntry } from "@/components/career/job-entry";
 import { ResumeChip } from "@/components/resume/resume-chip";
 import { ResumePanel } from "@/components/resume/resume-panel";
 import { TranslationPanel } from "@/components/jobs/detail/translation-panel";
@@ -90,6 +91,7 @@ import { createProcessLogger } from "@/lib/logging/process-logger";
 import { loadPipeline } from "@/lib/market";
 import { salaryAxisScale } from "@/components/viz/salary-shared";
 import { readResumeConfig } from "@/lib/resume/config";
+import { readCareerGate } from "@/lib/config/career-gate";
 import { readProfileReadiness } from "@/lib/scoring/profile";
 import { listPdfs } from "@/lib/resume/paths";
 import { bonusPolicy, isHighPayAmount, otherRegionOfAmount, signalBonus } from "@/lib/signals/bonus";
@@ -154,6 +156,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const markerCategories = categories.map((category) => ({ id: category.id, color: category.color }));
   const activeSignals = job.signals.filter((s) => catalog.isActive(s.tier)).sort((a, b) => catalog.order(a.tier) - catalog.order(b.tier));
   const resumeConfig = readResumeConfig();
+  const career = await readCareerGate();
   const pdfs = resumeConfig ? await listPdfs(resumeConfig.pdf_dir, resumeConfig.pdf_list_limit) : [];
   const now = new Date();
   const absolute = (date: Date) => format.dateTime(date, { dateStyle: "medium", timeStyle: "short", timeZone: timezone });
@@ -214,6 +217,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const floor = floorCheck(job.salary, salaryFloor, baseCurrency);
   // The salary panel: the level within the benchmark and the on-demand salary lookup (salary.yaml; the lookup is off by default)
   const tGhost = await getTranslations("ghostJobs");
+  const tCareer = await getTranslations("career.jobEntry");
   const tEvidence = await getTranslations("scoreEvidence");
   const salarySettings = readSalarySettings();
   let salaryAi: AiConfig | null = null;
@@ -413,7 +417,11 @@ export default async function JobDetailPage({ params }: { params: Params }) {
           <MarkAppliedButton jobId={job.id} title={job.title} status={status} appliedOn={appliedOn} variant="header" />
           <FavoriteButton jobId={job.id} title={job.title} favorite={job.favorite !== null} variant="labeled" />
           {/* the "Tailor resume" button needs a resume-kit folder; without one the panel below only exports the JD */}
-          {resumeConfig?.resume_kit_path ? (
+          {career.enabled ? (
+            <a href="#h-career" className={cn(buttonVariants({ variant: "outline" }), actionLink)} data-testid="action-career">
+              {t("actions.resume")}
+            </a>
+          ) : resumeConfig?.resume_kit_path ? (
             <a href="#h-resume" className={cn(buttonVariants({ variant: "outline" }), actionLink)} data-testid="action-resume">
               {t("actions.resume")}
             </a>
@@ -676,13 +684,27 @@ export default async function JobDetailPage({ params }: { params: Params }) {
             <StatusPanel jobId={job.id} status={status} notes={job.application?.notesMd ?? ""} history={history} firstSeen={format.dateTime(job.firstSeenAt, { dateStyle: "short", timeStyle: "short", timeZone: timezone })} />
           </Panel>
 
-          <Panel id="h-resume" title={tResume("title")}>
-            {resumeConfig ? (
-              <ResumePanel jobId={job.id} resumePath={job.application?.resumeVariantPath ?? null} pdfEnabled={resumeConfig.pdf_dir !== null} pdfs={pdfs.map((p) => p.name)} />
-            ) : (
-              <PlaceholderBox testId="resume-config-error">{tResume("error.config")}</PlaceholderBox>
-            )}
-          </Panel>
+          {career.enabled ? (
+            <Panel id="h-career" title={tCareer("title")}>
+              <JobEntry jobId={job.id} description={job.description} />
+              {resumeConfig?.resume_kit_path ? (
+                <details className="mt-4" data-testid="career-external-kit">
+                  <summary className="cursor-pointer text-sm">{tCareer("externalKit")}</summary>
+                  <div className="mt-3">
+                    <ResumePanel jobId={job.id} resumePath={job.application?.resumeVariantPath ?? null} pdfEnabled={resumeConfig.pdf_dir !== null} pdfs={pdfs.map((p) => p.name)} />
+                  </div>
+                </details>
+              ) : null}
+            </Panel>
+          ) : (
+            <Panel id="h-resume" title={tResume("title")}>
+              {resumeConfig ? (
+                <ResumePanel jobId={job.id} resumePath={job.application?.resumeVariantPath ?? null} pdfEnabled={resumeConfig.pdf_dir !== null} pdfs={pdfs.map((p) => p.name)} />
+              ) : (
+                <PlaceholderBox testId="resume-config-error">{tResume("error.config")}</PlaceholderBox>
+              )}
+            </Panel>
+          )}
         </aside>
       </div>
 

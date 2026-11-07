@@ -80,3 +80,47 @@ test("applies the career profile to matching after a preview with the retention 
     await expect(page).toHaveURL(/\/career$/);
   });
 });
+
+test("the job page lists its tailored résumés and links to tailoring for that job", async ({ page }) => {
+  await withCareerProfile(async () => {
+    await page.goto("/jobs?q=LLM%20Engineer");
+    const href = await page.locator('a[href^="/jobs/"]').filter({ hasText: "LLM Engineer" }).first().getAttribute("href");
+    const jobId = href?.match(/^\/jobs\/(\d+)/)?.[1];
+    expect(jobId).toBeTruthy();
+
+    await page.goto(`/jobs/${jobId}`);
+    await page.getByTestId("action-career").click();
+    const entry = page.getByTestId("career-job-entry");
+    await expect(entry).toBeVisible();
+    await expect(entry.getByTestId("career-job-documents")).toHaveCount(0);
+    await expect(entry.getByTestId("career-job-error")).toHaveCount(0);
+    await entry.getByTestId("career-job-tailor").click();
+    await expect(page).toHaveURL(new RegExp(`/career/tailor\\?job=${jobId}$`));
+    await expect(page.getByTestId("career-tailor").getByTestId("tailor-job")).toContainText("LLM Engineer");
+  });
+});
+
+test("imports a resume-kit file into a draft and copies a story into the profile without changing the stories file", async ({ page }) => {
+  await withCareerProfile(async () => {
+    const storiesFile = path.join(process.env.E2E_PROFILE_DIR!, "stories.yaml");
+    fs.writeFileSync(storiesFile, "config_version: 1\nstories:\n  - id: billing-migration\n    title: Moved billing\n    what: Led the billing migration.\n    result: No downtime.\n");
+    const before = fs.readFileSync(storiesFile);
+    await page.goto("/career");
+
+    const kit = page.getByTestId("career-kit-import");
+    await kit.getByTestId("career-kit-file").setInputFiles(path.resolve("tests/fixtures/career/sample.en.yaml"));
+    await kit.getByRole("button", { name: "导入文件", exact: true }).click();
+    await expect(kit.getByTestId("career-kit-result")).toContainText("内容已放进待审核草稿");
+    await expect(page.getByText(/^导入的 resume-kit 文件 · /)).toBeVisible();
+    await expect(kit.getByTestId("career-kit-contact")).toBeVisible();
+
+    const card = page.getByTestId("career-from-story");
+    await expect(card.getByTestId("career-from-story-text")).toHaveText("Led the billing migration. No downtime.");
+    await card.getByTestId("career-from-story-add").click();
+    await expect(card.getByRole("status")).toHaveText("已加入档案。");
+    await card.getByTestId("career-from-story-add").click();
+    await expect(card.getByRole("alert")).toHaveAttribute("data-code", "story_present");
+    expect(fs.readFileSync(storiesFile).equals(before)).toBe(true);
+    expect(fs.readFileSync(path.join(process.env.E2E_PROFILE_DIR!, "career", "profile.yaml"), "utf8")).toContain("from_story: billing-migration");
+  });
+});

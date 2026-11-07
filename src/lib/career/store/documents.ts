@@ -45,6 +45,28 @@ export async function listDocuments(): Promise<DocumentSummary[]> {
     : "invalid" in b ? -1 : Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.id.localeCompare(b.id));
 }
 
+export interface JobDocument { id: string; title: string; updatedAt: string; jdChanged: boolean }
+
+/** Documents tailored for one job, newest first; any unreadable directory or document fails the whole list. */
+export async function listJobDocuments(jobId: number, jdHash: string | null): Promise<JobDocument[]> {
+  let files: string[];
+  try {
+    files = await fsp.readdir(careerDocumentsDir());
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw new CareerStoreError("document_invalid");
+  }
+  const ids = files.filter((file) => file.endsWith(".yaml")).map((file) => path.basename(file, ".yaml"))
+    .filter((id) => documentIdSchema.safeParse(id).success).sort();
+  const found: JobDocument[] = [];
+  for (const id of ids) {
+    const { document } = await loadDocument(id);
+    if (document.job?.id !== jobId) continue;
+    found.push({ id, title: document.title, updatedAt: document.updated_at, jdChanged: jdHash !== null && document.job.jd_hash !== jdHash });
+  }
+  return found.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.id.localeCompare(b.id));
+}
+
 export async function loadDocument(id: string): Promise<LoadedDocument> {
   const file = careerDocumentPath(id);
   try {

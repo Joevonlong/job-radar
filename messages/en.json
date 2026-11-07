@@ -8640,7 +8640,8 @@
         "timeout": "Extraction timed out. Try again.",
         "queue_timeout": "The queued extraction expired. Send it again.",
         "failed": "Extraction failed. Try again."
-      }
+      },
+      "imported": "Imported resume-kit file"
     },
     "emptyHint": "Start by uploading or pasting a résumé in your career profile.",
     "guidance": {
@@ -8866,6 +8867,79 @@
         "stale": "The document changed elsewhere. Reload and try again.",
         "limits": "Your profile reached a wording limit.",
         "generic": "This could not be saved. Try again."
+      }
+    },
+    "jobEntry": {
+      "title": "Tailored résumés",
+      "tailor": "Tailor résumé",
+      "empty": "No résumé tailored for this job yet.",
+      "error": "The tailored résumés could not be read. Check the career folder.",
+      "jdChanged": "The job description changed after this résumé was tailored.",
+      "externalKit": "External resume-kit"
+    },
+    "kitImport": {
+      "title": "Import a resume-kit résumé",
+      "hint": "Upload a resume-kit master résumé (YAML). Nothing is sent to AI and the file is not stored. Its content becomes a draft below for review; contact details and layout are applied only after you confirm them.",
+      "file": "resume-kit YAML file",
+      "upload": "Import file",
+      "drafted": "The content is ready for review in the pending drafts.",
+      "noContent": "The file has no profile content to review.",
+      "skipped": "Not imported: {parts}.",
+      "parts": {
+        "photo": "photo (upload it again)",
+        "approach": "approach notes",
+        "target": "target",
+        "letter": "cover letter"
+      },
+      "confirm": "Choose what to apply from the file",
+      "change": "{from} → {to}",
+      "links": "Add {count, plural, one {# contact link} other {# contact links}}",
+      "layout": "Use the file's layout: {fields}",
+      "layoutFields": {
+        "lang": "language",
+        "theme": "theme",
+        "accent": "accent",
+        "pages": "pages",
+        "paper": "paper",
+        "density": "density"
+      },
+      "apply": "Apply selected",
+      "dismiss": "Skip",
+      "applied": "Contact details and layout updated.",
+      "nothingToApply": "Contact details and layout already match the file.",
+      "errors": {
+        "kit_invalid": "This is not a valid resume-kit résumé file.",
+        "too_large": "The file is larger than the allowed size.",
+        "timeout": "The upload took too long.",
+        "too_many": "Another upload is running. Try again shortly.",
+        "stale": "Your contact details or layout changed meanwhile. Import the file again.",
+        "disabled": "The career profile is turned off.",
+        "generic": "The import failed. Try again.",
+        "drafts_full": "You have reached the pending draft limit. Adopt or discard a draft first."
+      },
+      "saveContactFirst": "Save your contact edits first."
+    },
+    "fromStory": {
+      "title": "Add a story to the profile",
+      "hint": "Pick a story from your experience library and add it to one experience as a new bullet or summary wording. The stories file is not changed. Stories created by apply to matching are not listed.",
+      "noStories": "No stories to add yet.",
+      "noExperience": "Add an experience entry to the profile first.",
+      "story": "Story",
+      "experience": "Experience",
+      "target": "Add as",
+      "bullet": "New bullet",
+      "summary": "New summary wording",
+      "pii": "This story looks like it contains contact details. Check the text after adding it.",
+      "add": "Add to profile",
+      "added": "Added to the profile.",
+      "saveFirst": "Save or discard the profile edits first.",
+      "errors": {
+        "stale": "The profile changed meanwhile. Reload and try again.",
+        "story_present": "This text is already on the selected experience.",
+        "unknown_id": "The story or experience no longer exists.",
+        "limits": "The profile limits do not allow another text here.",
+        "disabled": "The career profile is turned off.",
+        "generic": "The story could not be added. Try again."
       }
     }
   },
