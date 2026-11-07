@@ -12,11 +12,27 @@ const READONLY_PSQL_DYNAMIC = {
   message: "src/lib/db/readonly-psql.ts is for scripts/ only: it runs docker, and must not reach the web or runner builds.",
 };
 
-export const CORE_IMPORTING_CAREER = {};
+export const CORE_IMPORTING_CAREER = {
+  "src/app/jobs/[id]/page.tsx": ["src/components/career/job-entry.tsx"],
+  "src/app/me/page.tsx": ["src/components/career/career-card.tsx"],
+  "src/lib/control/ai-handlers.ts": ["src/lib/career/extract/handler.ts", "src/lib/career/tailor/handler.ts"],
+};
 export const ENGINE_FORBIDDEN_GLOBALS = [
   "Buffer", "process", "__dirname", "__filename", "require", "fetch", "XMLHttpRequest", "WebSocket",
 ];
 
+const ENGINE_PATTERN = {
+  regex: "(^|/)engine(/|$)", allowTypeImports: false, message: "Import the engine only from career render, print modules or routes.",
+};
+const ENGINE_DYNAMIC = {
+  selector: "ImportExpression[source.value=/(^|\\/)engine(\\/|$)/]", message: ENGINE_PATTERN.message,
+};
+const PRINT_PATTERN = {
+  regex: "(^|/)print(/|$)", allowTypeImports: false, message: "Printing belongs to the PDF entry point.",
+};
+const PRINT_DYNAMIC = {
+  selector: "ImportExpression[source.value=/(^|\\/)print(\\/|$)/]", message: PRINT_PATTERN.message,
+};
 const CAREER_PATTERN = {
   group: ["@/lib/career", "@/lib/career/*", "@/components/career", "@/components/career/*", "@/app/career", "@/app/career/*", "@/app/api/career", "@/app/api/career/*", "@/career-pdf", "@/career-pdf/*"],
   message: "Core code must not import the career module; keep its consumers inside the module.",
@@ -146,6 +162,120 @@ const eslintConfig = defineConfig([
     rules: {
       "@typescript-eslint/no-restricted-imports": ["error", { paths: DATABASE_PATHS, patterns: [DATABASE_PATTERN, READONLY_PSQL_PATTERN] }],
       "no-restricted-syntax": ["error", DATABASE_DYNAMIC, READONLY_PSQL_DYNAMIC],
+    },
+  },
+  ...Object.entries(CORE_IMPORTING_CAREER).map(([file, targets]) => {
+    const allowed = targets.map((target) => target.replace(/^src\//, "@/").replace(/\.tsx?$/, ""));
+    const except = allowed.map((target) => target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+    const regex = `^(?!(?:${except})$)@/(?:lib/career|components/career|app/career|app/api/career|career-pdf)(?:/|$)`;
+    const forbidden = { regex, message: CAREER_PATTERN.message, allowTypeImports: false };
+    return {
+      files: [file.replace(/[\[\]]/g, "\\$&")],
+      rules: {
+        "@typescript-eslint/no-restricted-imports": [
+          "error",
+          { paths: DATABASE_PATHS, patterns: [DATABASE_PATTERN, READONLY_PSQL_PATTERN, PRINT_PATTERN, ENGINE_PATTERN, forbidden] },
+        ],
+        "no-restricted-syntax": [
+          "error",
+          DATABASE_DYNAMIC,
+          READONLY_PSQL_DYNAMIC,
+          PRINT_DYNAMIC,
+          ENGINE_DYNAMIC,
+          { selector: `ImportExpression[source.value=/${new RegExp(regex).source}/]`, message: CAREER_PATTERN.message },
+        ],
+      },
+    };
+  }),
+  {
+    files: ["src/lib/career/{schema,store,contact,ai,extract,tailor,document}/**"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          paths: DATABASE_PATHS,
+          patterns: [
+            DATABASE_PATTERN,
+            READONLY_PSQL_PATTERN,
+            {
+              group: [
+                "@/lib/career/engine",
+                "@/lib/career/engine/*",
+                "**/engine",
+                "**/engine/**",
+                "**/print",
+                "**/print/**",
+                "@/lib/career/print",
+                "@/lib/career/print/*",
+                "@fontsource/*",
+                "@fontsource-variable/*",
+                "**/fonts/*",
+              ],
+              message: "Career storage and schema modules must not load the rendering engine, printer or fonts.",
+              allowTypeImports: false,
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        DATABASE_DYNAMIC,
+        READONLY_PSQL_DYNAMIC,
+        {
+          selector: "ImportExpression[source.value=/((^|\\/)(engine|print)(\\/|$)|@fontsource|\\/fonts\\/)/]",
+          message: "Career storage and schema modules must not load rendering dependencies.",
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/lib/career/{ai,extract,tailor}/**"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": ["error", { paths: DATABASE_PATHS, patterns: [DATABASE_PATTERN, READONLY_PSQL_PATTERN, { group: ["@/lib/career/contact/store", "**/contact/store", "@/lib/career/engine", "@/lib/career/engine/*", "@/lib/career/print/*", "@/lib/career/print", "**/engine", "**/engine/**", "**/print", "**/print/**", "@fontsource/*", "@fontsource-variable/*", "**/fonts/*"], allowTypeImports: false, message: "AI modules must use the scrub boundary and must not load rendering dependencies." }] }],
+      "no-restricted-syntax": ["error", DATABASE_DYNAMIC, READONLY_PSQL_DYNAMIC, { selector: "ImportExpression[source.value=/(contact\\/store|(^|\\/)(engine|print)(\\/|$)|@fontsource|\\/fonts\\/)/]", message: "AI modules must use the scrub boundary." }, { selector: "Identifier[name='NO_STORED_VALUES']", message: "Career AI must scrub stored contact values." }],
+    },
+  },
+  {
+    // These blocks replace import rules, so database restrictions must be repeated.
+    files: ["src/lib/career/**", "src/components/career/**"],
+    ignores: ["src/lib/career/{schema,store,contact,ai,extract,tailor,document,render,engine,print,import}/**"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": ["error", { paths: DATABASE_PATHS, patterns: [DATABASE_PATTERN, READONLY_PSQL_PATTERN, {
+        regex: "(^|/)(engine|print)(/|$)", allowTypeImports: false,
+        message: "Only career render, print modules and routes may consume the rendering engine.",
+      }] }],
+      "no-restricted-syntax": ["error", DATABASE_DYNAMIC, READONLY_PSQL_DYNAMIC, {
+        selector: "ImportExpression[source.value=/(^|\\/)(engine|print)(\\/|$)/]",
+        message: "Only career render, print modules and routes may consume the rendering engine.",
+      }],
+    },
+  },
+  {
+    // Rendering consumers retain database restrictions and cannot load the PDF process.
+    files: ["src/lib/career/render/**", "src/lib/career/import/**", "src/app/career/**", "src/app/api/career/**"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": ["error", { paths: DATABASE_PATHS, patterns: [DATABASE_PATTERN, READONLY_PSQL_PATTERN, {
+        regex: "(^|/)print(/|$)", allowTypeImports: false, message: "Printing belongs to the PDF entry point.",
+      }] }],
+      "no-restricted-syntax": ["error", DATABASE_DYNAMIC, READONLY_PSQL_DYNAMIC, {
+        selector: "ImportExpression[source.value=/(^|\\/)print(\\/|$)/]", message: "Printing belongs to the PDF entry point.",
+      }],
+    },
+  },
+  {
+    // Core app rules also cover relative engine and print imports; whitelisted files keep their scoped rules.
+    files: ["src/app/**"],
+    ignores: ["src/app/career/**", "src/app/api/career/**", ...Object.keys(CORE_IMPORTING_CAREER).map((file) => file.replace(/[\[\]]/g, "\\$&"))],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": ["error", { paths: DATABASE_PATHS, patterns: [DATABASE_PATTERN, READONLY_PSQL_PATTERN, CAREER_PATTERN, PRINT_PATTERN, ENGINE_PATTERN] }],
+      "no-restricted-syntax": ["error", DATABASE_DYNAMIC, READONLY_PSQL_DYNAMIC, CAREER_DYNAMIC, PRINT_DYNAMIC, ENGINE_DYNAMIC],
+    },
+  },
+  {
+    files: ["src/career-pdf/**"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": ["error", { paths: DATABASE_PATHS, patterns: [DATABASE_PATTERN, READONLY_PSQL_PATTERN, ENGINE_PATTERN] }],
+      "no-restricted-syntax": ["error", DATABASE_DYNAMIC, READONLY_PSQL_DYNAMIC, ENGINE_DYNAMIC],
     },
   },
   {

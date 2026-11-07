@@ -2,9 +2,9 @@
 
 [English](upgrade.md) | [中文](upgrade.zh.md)
 
-Job Radar runs from a git checkout. Releases are signed git tags `vX.Y.Z` (see the [changelog](../CHANGELOG.md)). If you
-only use Job Radar, **stay on a release tag** and upgrade from tag to tag; `main` is the development branch and can change
-between releases.
+Job Radar runs from a git checkout. Releases are signed git tags `vX.Y.Z` (see the [changelog](../CHANGELOG.md)). From 3.0.0 on,
+users who only use Job Radar follow **`stable`** for the newest release. Release tags stay available; `main` is the
+development branch and can change between releases.
 
 ## Job search behavior change
 
@@ -16,24 +16,33 @@ This change adds no database migration or saved-view format change. To roll it b
 
 ## Upgrade to a release
 
-```bash
-git status                                   # must be clean (your data/ and .env are ignored by git, that is fine)
-scripts/ops/deploy.sh --ref v2.0.0 --dry-run # read what it would do, change nothing
-scripts/ops/deploy.sh --ref v2.0.0           # the real thing
-```
+Read the changelog section of the release first: it says whether you have to do something. Run `git status` and
+confirm the checkout is clean (your `data/` and `.env` are ignored by git, that is fine).
 
-Replace `v2.0.0` with the release you want (`git fetch --tags && git tag --list 'v*'` lists them). Read the changelog
-section of that release first: it says whether you have to do something.
+Starting with 3.0.0, choose one of three channels:
+
+- **`stable` (newest release):** on `stable`, run `git pull --ff-only && scripts/ops/deploy.sh`.
+- **A release tag:** `scripts/ops/deploy.sh --ref vX.Y.Z` deploys that release; add `--dry-run` to preview it.
+  Replace `vX.Y.Z` with the release you want (`git fetch --tags && git tag --list 'v*'` lists them).
+  Add `--verify` to check the tag signature: `scripts/ops/deploy.sh --ref vX.Y.Z --verify`.
+  A plain deploy on `stable` does not verify a signature.
+- **`main` (development):** `git switch main && scripts/ops/deploy.sh`; it may change between releases.
 
 `--ref` accepts a tag or a branch. The checkout ends up on that commit (for a tag, git calls this a detached HEAD, which is
-expected). Without `--ref` the script follows `main`.
+expected). Without `--ref` or `--branch`, the script follows the current branch: `stable` pulls `stable`,
+`main` pulls `main`. Any other branch or a detached HEAD is refused, with a suggestion to use `--ref <tag>` or, only
+when `origin/stable` exists, `git switch stable`. `--skip-pull` still deploys the current checkout without pulling.
+
+After a deploy the script prints a "development build" note when the deployed tree differs from the
+`v<package.json version>` tag, including how many commits it is after that tag. For such a build, if `origin/stable` exists,
+it also shows how to switch back to the release channel.
 
 Deploy does not verify signatures by default. Pass `--verify` to run `git verify-tag` on the tag first and stop if it is
 invalid. It uses the maintainer's public key shipped as [`signing-key.pub`](signing-key.pub) (an `allowed_signers` file;
 its fingerprint is `SHA256:HHRRfExpbUjcK0/pdc5E1qf94ogkREVkt9+1VP58JQc`, also given in [SECURITY.md](../SECURITY.md)); a key list you set yourself with
 `git config gpg.ssh.allowedSignersFile` wins. Releases are signed when a signing key was available, see
 [RELEASING.md](../RELEASING.md). To check by hand:
-`git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=docs/signing-key.pub tag -v v2.0.0`.
+`git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=docs/signing-key.pub tag -v vX.Y.Z`.
 
 **Upgrading from a version without the config-write step:** run `git pull` (or `git fetch --tags && git checkout --detach <tag>`), then the new `scripts/ops/deploy.sh --skip-pull`. An older `deploy.sh` that pulls or switches by itself keeps running as the old script, does not recognize this target, and writes the config in its own step 4 without the gate of step 11; if that already happened, run the new script with `--skip-pull`.
 
@@ -251,6 +260,27 @@ For a code rollback, leave the added columns, indexes and triggers in place; no 
 needed for this change. The triggers keep fingerprints correct for source writes by older versions and invalidate cached
 filter results when an older writer changes a verdict or its reasons. Re-upgrading safely re-evaluates those results.
 
+<a id="upgrade-to-3-0-0"></a>
+
+## Upgrade to 3.0.0
+
+Once 3.0.0 is released, choose the starting point that matches your checkout:
+
+- **On the `v2.0.1` tag:** follow [the first upgrade to release directories](#first-upgrade-release-dir),
+  [shipped config in the images](#upgrading-across-the-shipped-config-in-the-images) and
+  [settings during an upgrade](#settings-during-an-upgrade). Read the notes for
+  [query run history](#upgrading-with-query-run-history), [the date filter](#upgrading-with-the-date-filter) and
+  [change fingerprints](#upgrading-with-change-fingerprints); if applicable, also follow the
+  [Linux ownership steps](#linux-upgrading-from-a-version-whose-containers-ran-as-root).
+- **Following `main`:** `git fetch origin && git switch stable` after 3.0.0 is out, then `scripts/ops/deploy.sh`.
+  Developers can stay on `main`.
+- **Already using release directories:** on `stable` or `main`, run `scripts/ops/deploy.sh`; from a detached HEAD,
+  use `scripts/ops/deploy.sh --ref v3.0.0`.
+
+To return to `v2.0.1`, follow [Roll back](#roll-back) and
+[Downgrade to a version before release directories](#downgrade-pre-release-dir), including their database and config
+backup instructions.
+
 ## Roll back
 
 **Past the release that made user config files overlays:** older code refuses them. Run `pnpm config:migrate --to-full --write`
@@ -325,8 +355,9 @@ Older versions also reject unknown keys without a config-version change: delete 
 `schedule.yaml` if you added one, and the `deploy.config_write_lock_*` keys that a build from before this version wrote
 there, before starting the old code.
 
-More in [deploy.md](deploy.md) (section 5) and [backup-restore.md](backup-restore.md). To follow `main` again:
-`git switch main && scripts/ops/deploy.sh`.
+More in [deploy.md](deploy.md) (section 5) and [backup-restore.md](backup-restore.md). From 3.0.0 on, to return to the
+newest release: `git switch stable && scripts/ops/deploy.sh`, or deploy the newest tag with `--ref <tag>`. Developers
+can follow `main` with `git switch main && scripts/ops/deploy.sh`.
 
 <a id="downgrade-pre-config-write-step"></a>
 

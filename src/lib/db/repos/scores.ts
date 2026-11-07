@@ -21,6 +21,11 @@ import { uxTablesReady } from "./ux-tables";
  */
 const hasAiScore = isNotNull(scores.score);
 
+/** The rows a profile change to `currentSnapshotId` makes stale: AI scores of any other snapshot not yet flagged. */
+function staleOnChangeTo(currentSnapshotId: number | null) {
+  return currentSnapshotId === null ? and(hasAiScore, isNotNull(scores.profileSnapshotId), eq(scores.stale, false)) : and(hasAiScore, ne(scores.profileSnapshotId, currentSnapshotId), eq(scores.stale, false));
+}
+
 /**
  * Profile changed: every score computed from another snapshot is out of date (the scorer re-scores
  * those). Scores without a snapshot reference are left alone, and so are rows without a score
@@ -31,7 +36,7 @@ export async function markScoresStaleExcept(db: ScoreTx, currentSnapshotId: numb
   const rows = await db
     .update(scores)
     .set({ stale: true })
-    .where(inScoreLockOrder(and(hasAiScore, ne(scores.profileSnapshotId, currentSnapshotId), eq(scores.stale, false))))
+    .where(inScoreLockOrder(staleOnChangeTo(currentSnapshotId)))
     .returning({ id: scores.id, jobId: scores.jobId });
   db.touch(rows.map((row) => row.jobId));
   return rows.length;
@@ -72,6 +77,15 @@ export async function switchScoresToSnapshot(db: ScoreTx, snapshotId: number): P
   const staleMarked = await markScoresStaleExcept(db, snapshotId);
   await promoteSnapshotScores(db, snapshotId);
   return staleMarked;
+}
+
+/**
+ * How many rows `markScoresStaleExcept` would mark now for a change to `currentSnapshotId`, or to a snapshot that does not
+ * exist yet (`null`: every not-yet-stale AI score with a snapshot reference). Reads only.
+ */
+export async function countScoresStaleOnChange(db: Db, currentSnapshotId: number | null): Promise<number> {
+  const [row] = await db.select({ n: count() }).from(scores).where(staleOnChangeTo(currentSnapshotId));
+  return row?.n ?? 0;
 }
 
 /** Number of scores (rows with AI output) currently flagged stale: what "rescore N" would process. */

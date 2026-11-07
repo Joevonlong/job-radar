@@ -192,3 +192,15 @@ tar -xzf data/backups/<名字>.config.tgz -C .
 - **同一块盘**：备份和数据库在同一块盘上，只能防误操作，防不了坏盘。请定期把 `data/backups/` 拷到别处。
 - **权限**：备份文件和配置压缩包只有所有者可读写（`0600`），因为它们包含你的整个数据库和设置。
 - **磁盘空间**：每份备份的大小见 `ls -lh`；14 + 8 份（再加每类最多 5 份安全备份）约等于 22 份或更多的大小，数据量大了之后看一下 `df -h`。
+
+## 职业档案副本
+
+配置归档包含整个 `data/profile/career/`：档案、联系方式、档案历史和 `data/profile/career/drafts/` 中的提取草稿。
+定时归档受 `schedule.yaml: backup.config_archive`、`keep_daily`、`keep_weekly` 控制。
+迁移前系统归档受 `config_archive` 控制；部署前和恢复前始终归档。
+系统归档按类型使用 `keep_system`（默认五份）；手动归档由你自行删除。
+定时备份默认保留十四份每日和八份每周备份，以你的实际配置为准。
+
+应用内删除职业档案不会删除这些归档或 `data/profile.before-restore-<time>` 目录。
+带配置恢复旧备份会整体替换画像目录，可能带回之后删除的档案。
+本机删除操作见[职业档案](career-profile.zh.md#删除与备份)。

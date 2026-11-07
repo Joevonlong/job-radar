@@ -29,7 +29,7 @@
     },
     "ai": {
       "layer": "user",
-      "hash": "8a72ff5848f257ef3e02c206aeecabdcd2021f9e121dfa16a2a8e4121e5577c8",
+      "hash": "05171bcfedaedb6866d04a7d8303d17aac7d6b54b820e2594066c9b6fe004d55",
       "valid": true
     },
     "breakdown": {
@@ -129,7 +129,7 @@
     },
     "writer": {
       "layer": "default",
-      "hash": "82d62102b5d8d927ad4958d45bce551ab027d982172c76a77f77fc552a5b44e1",
+      "hash": "a1a9f0393d07df2fa011c5bc4db20fdd935d5bc742d27ad27099aea6b0f5f341",
       "valid": true
     },
     "replies": {
@@ -150,6 +150,11 @@
     "stories": {
       "layer": "missing",
       "hash": null,
+      "valid": true
+    },
+    "career": {
+      "layer": "default",
+      "hash": "a90f66d9dd395c89a3d0fc46d6414a6a0a90286c41eee87ecd88b8250a3d1874",
       "valid": true
     }
   }

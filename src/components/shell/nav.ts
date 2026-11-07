@@ -3,6 +3,7 @@ import {
   Building2,
   CalendarCheck,
   ChartColumn,
+  IdCard,
   Coins,
   KanbanSquare,
   ListChecks,
@@ -21,6 +22,7 @@ export type NavKey =
   | "companies"
   | "favorites"
   | "pipeline"
+  | "career"
   | "sources"
   | "insights"
   | "settings"
@@ -51,6 +53,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: "me", href: "/me", icon: UserRound, group: "settings" },
   { key: "interests", href: "/interests", icon: Sparkles, group: "settings" },
 ];
+
+/** Shown only while the career feature is on, right after the pipeline; kept apart so `NAV_ITEMS` stays the default navigation. */
+export const CAREER_NAV_ITEM: NavItem = { key: "career", href: "/career", icon: IdCard, group: "main" };
+
+/** The navigation for the current career switch: `NAV_ITEMS` when off, with the career item after the pipeline when on. */
+export function navItems(career: boolean): readonly NavItem[] {
+  if (!career) return NAV_ITEMS;
+  const at = NAV_ITEMS.findIndex((item) => item.key === "pipeline") + 1;
+  return [...NAV_ITEMS.slice(0, at), CAREER_NAV_ITEM, ...NAV_ITEMS.slice(at)];
+}
 
 /** Pages under a main item that the command palette also lists (labels: `sources.subnav.*`). The sidebar shows only the main items. */
 export const PALETTE_SUBPAGES = [

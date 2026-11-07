@@ -55,11 +55,13 @@ import { trapsOverlayFormat } from "./traps/002-overlay-format";
 import type { ConfigMigration } from "./types";
 import { ui002 } from "./ui/002-visibility-blocks";
 import { uiOverlayFormat } from "./ui/003-overlay-format";
+import { careerOverlayFormat } from "./career/002-overlay-format";
 import { writerOverlayFormat } from "./writer/002-overlay-format";
 
 export type { ConfigMigration } from "./types";
 
 export const CONFIG_MIGRATIONS: Readonly<Partial<Record<ConfigName, readonly ConfigMigration[]>>> = {
+  career: [careerOverlayFormat],
   activityLog: [activityLogOverlayFormat],
   ai: [ai002, ai003, aiOverlayFormat],
   breakdown: [breakdownOverlayFormat],

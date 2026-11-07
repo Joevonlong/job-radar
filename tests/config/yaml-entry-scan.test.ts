@@ -8,6 +8,18 @@ const REPO = path.resolve(import.meta.dirname, "../..");
 
 /** Files that parse YAML with the library directly, and why they may. Everything else goes through `config/yaml-options.ts`. */
 const ALLOWED: Record<string, string> = {
+  "src/app/career/actions.ts": "serializes validated profile values for a local version diff",
+  "src/lib/career/contact/store.ts": "strict local contact file without config overlays or history",
+  "src/lib/career/extract/draft-store.ts": "serializes validated career extraction drafts for local storage",
+  "src/lib/career/store/documents.ts": "strict local résumé documents and their history",
+  "src/lib/career/tailor/proposals.ts": "strict local AI proposal file next to a document, not a config file",
+  "scripts/career-tailor-calibrate.ts": "reads fictional calibration samples, not config files",
+  "src/lib/career/store/preferences.ts": "strict local document preferences without overlays",
+  "src/lib/career/store/apply-state.ts": "strict local record of the last apply to matching, without overlays",
+  "src/lib/career/apply/service.ts": "serializes a candidate me.yaml value only to count the scores its save would mark stale",
+  "src/lib/career/render/to-resume.ts": "transient engine validation input, never config or disk",
+  "src/lib/career/store/profile.ts": "strict local career profile format, independent of layered config",
+  "src/lib/career/store/history.ts": "strict local profile history versions, not config files",
   "src/lib/config/yaml-options.ts": "the one way config YAML is parsed",
   "src/lib/config/commented-defaults.ts": "reads a commented block out of a shipped file; never a user's value",
   "src/lib/setup/cli.ts": "the setup CLI's answers file, not a config file",

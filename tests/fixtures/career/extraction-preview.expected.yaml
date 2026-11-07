@@ -1,0 +1,70 @@
+language: en
+experience:
+  - company:
+      value: Fablemoss Research Ltd
+      quote: Fablemoss Research Ltd
+    role:
+      value: Research Engineer
+      quote: Research Engineer
+    start:
+      value: "2017"
+      quote: "2017"
+    end:
+      value: "2021"
+      quote: "2021"
+    bullets:
+      - value: Published 2 reproducible benchmarks.
+        quote: Published 2 reproducible benchmarks.
+    stack:
+      - value: Python
+        quote: Python
+education:
+  - school:
+      value: Silverfern Academy
+      quote: Silverfern Academy
+    degree:
+      value: MSc Computing
+      quote: MSc Computing
+    start:
+      value: "2014"
+      quote: "2014"
+    end:
+      value: "2017"
+      quote: "2017"
+skills:
+  - group: Technology
+    items:
+      - value: Python
+        quote: Python
+languages:
+  - name:
+      value: German
+      quote: German
+    level:
+      value: B1
+      quote: B1
+custom_sections:
+  - title:
+      value: Publications
+      quote: Publications
+    items:
+      - kind: entry
+        heading:
+          value: Queues in an Imaginary Forest
+          quote: Queues in an Imaginary Forest
+        date:
+          value: "2021"
+          quote: "2021"
+        bullets: []
+  - title:
+      value: Awards
+      quote: Awards
+    items:
+      - kind: entry
+        heading:
+          value: Fictional Moss Award
+          quote: Fictional Moss Award
+        date:
+          value: "2022"
+          quote: "2022"
+        bullets: []

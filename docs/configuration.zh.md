@@ -596,3 +596,79 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 `sources.yaml` 中支持的通道默认 `company_queries: true`：`linkedin.session`、`linkedin.guest`、`linkedin.brightdata`、`linkedin.apify`、`sources.arbeitsagentur`、`sources.indeed`、`sources.jobspy_google`、`sources.jsearch`、`sources.stepstone`、`sources.xing`。可在“来源 → 来源清单 → 详情”或“设置 → 通道”编辑。它允许把关注公司名外发，见[隐私](privacy.zh.md)及[查询规则与容量](sources.zh.md#关注公司查询)。“设置 → 搜索”可编辑总开关、每轮上限、间隔和结果上限。
 
 **回退：**只需停用时设 `watched_company_queries.enabled: false`。启动旧代码前，从用户 `data/config/search.yaml` 删除整个 `watched_company_queries` 块，从 `data/config/sources.yaml` 删除所有 `company_queries` 键（包括设置保存时写入的不支持通道块）；再用旧版 `pnpm config:check` 验证。旧版严格 schema 会拒绝新键。保留数据库历史和原始岗位。
+
+## 职业档案（`career.yaml`）
+
+默认关闭，独立于 `writer.enabled`。在**设置 → 工作流**中开启后，通过“我的画像”卡片进入。
+编辑、提取、历史和删除见[职业档案](career-profile.zh.md)。关闭保留数据。
+
+`profile.max_entries`、`profile.max_bullets_per_entry`、`profile.max_wordings_per_text` 和 `profile.text_max_chars`
+约束保存；`history.keep_versions` 限制档案历史，联系方式没有历史。schema 为每个键提供默认值，未知键会被拒绝。
+`config_version: 2` 使用标准分层覆盖格式；初始完整文件格式为版本 1，可用
+`pnpm config:migrate --write --convert-overlays` 转成覆盖层。
+
+`document.max_documents` 限制简历副本数量（1–1000）；`document.image_max_bytes` 限制每张本地 JPEG/PNG
+照片或签名大小（最多 20 MB）；`document.max_request_bytes` 仅配置预览请求体上限（最多 50 MB）。
+和职业档案一样，文档一次保存最多发送 1 MB。文档很大时可能在达到条目和写法上限之前就超出；
+这时保存失败并提示错误，表单里的修改仍在。
+`document.defaults` 提供缺失偏好文件时的 `lang`（en/de）、`theme`（minimal/band/classic/compact/split）、
+`accent`、`pages`（1–10）、`paper`（a4/letter）、`density`（compact/normal/relaxed）。
+`preview.debounce_ms` 配置预览延迟（50–10000 毫秒）。编辑器位于 `/career/documents`；
+编辑和实时预览见[简历文档](career-profile.zh.md#简历文档)。
+
+文档保存在 profile 目录的 `career/documents/`，保留来源引用并独立编辑。
+`history.keep_versions` 分别约束每份文档在 `career/history/documents/` 下的历史及档案历史。
+联系方式仅在渲染时合并，不进入文档或其历史文件；偏好和本地图片没有历史。
+删除全部职业数据会一并删除文档、偏好、图片和历史。
+
+提取配置包括：顶层 `timeout_seconds`、`expiry_grace_seconds`、`queue_timeout_seconds`；
+`import` 下的 `formats`、`max_file_bytes`、`upload_timeout_seconds`、`max_chars`、`min_chars`、`pdf_timeout_seconds`、
+`pdf_max_memory_mb`、`max_concurrent_uploads`、`draft_ttl_days`、`max_pending_drafts`、`output_truncated_share`、
+`stored_value_min_chars`、`title_words`、`sensitive_labels`；`evidence` 下的 `min_quote_chars`、`quote_max_chars`、
+`figure_units`。顶层三个时间控制运行、过期宽限和排队等待；导入设置控制文件类型和大小、上传及 PDF 处理时间和内存、文字长度、并发上传、草稿过期和数量、疑似输出截断，以及预览移除和高亮规则。证据设置控制引用长度和数字核验，数字单位共用申请写作的 scale 和 multiple 默认值。`ai.yaml` 的 `career_extract` 任务选择提取使用的服务商和模型。`import.max_file_bytes`、`upload_timeout_seconds` 和 `max_concurrent_uploads` 也限制 `/career` 上的 resume-kit 导入。
+
+`writer.yaml: import.title_words` 列出猜测姓名时跳过的简历标题行。
+`writer.yaml: import.sensitive_labels` 列出发送预览中需要高亮供检查的标签。
+简历定制配置在 `tailor` 下：`max_requirements`（每份文档的单独要求条数）、`requirement_max_chars`、`duty_min_coverage`（改写后的职责有多少比例的实词要被引用覆盖）、`max_proposals`（一次请求保留的提议数）、`jd_max_chars` 和 `jd_head_share`（发送多少 JD、其中开头占多少），以及核对用的分语言词表 `first_person`、`names` 和 `stopwords`。`duty_min_coverage: 0.7` 是在虚构样本上测出的起始值，会用真实模型输出重新校准。定制沿用提取的三个时间设置，`ai.yaml` 的 `career_tailor` 任务选择服务商、模型和每次调用的 `max_output_tokens`。见[简历定制](resume-tailoring.zh.md)。
+
+### 可选 PDF 服务和接口
+
+`preview.page_count_debounce_ms` 提供页数刷新防抖时间，默认 3000 毫秒。
+`pdf.url` 默认 `http://career-pdf:8090`，是受保护键，只能手改，设置表单和高级编辑器都不能修改；
+整个 `pdf` 块不出现在设置表单。`pdf.timeout_seconds` 默认 60（最多 300），限制 web 请求时间；
+`pdf.max_html_bytes` 默认 8000000（最多 50000000），发送前按 UTF-8 字节数检查 HTML。
+
+运行 `COMPOSE_PROFILES=career-pdf docker compose up -d --build career-pdf` 启动可选服务。
+服务不读取配置文件、没有数据卷；环境变量为 `CAREER_PDF_PORT`（默认 8090）、
+`CAREER_PDF_TIMEOUT_SECONDS`（默认 60）和 `CAREER_PDF_MAX_HTML_BYTES`（默认 8000000）。
+Compose 固定端口为 8090，另外两个变量从主机环境传入。修改 web 限制时，用这两个环境变量同步服务限制。
+JSON 请求体上限是 HTML 上限的六倍加 1024 字节，以容纳转义；解码后的 HTML 再单独检查字节上限。
+服务一次打印一份，忙时返回 429，超时返回 504。健康检查反映浏览器连接状态，断线后下一次渲染会重启浏览器。
+
+`POST /api/career/documents/preview` 接收 `{ document, doc }`，返回 HTML、当前文档的 `findings` 和
+`uncovered` 字符，以及覆盖两份可渲染导出文档的 `exportHints: { findings, uncovered }`。
+检查结果只包含 `{ code, params, severity, path? }`。
+`POST /api/career/documents/pages` 接收相同 JSON，成功返回 `{ ok: true, pages, budget, findings }`；
+`budget` 为 `{ pages, exceeded }`。PDF 不可用时返回
+`{ ok: true, pages: null, budget: null, findings: [], code }`，不影响编辑。
+PDF 文字检查失败时保留 `pages`、`budget`，返回空检查结果及 `code: pdf_checks_failed`。
+`POST /api/career/documents/<id>/pdf?doc=resume`（或 `doc=letter`）只导出已保存版本，应先保存再导出。
+两者都返回 `Cache-Control: no-store`，不写入 HTML 或 PDF 文件。求职信需要非空且纳入的正文。
+简历文件名使用引擎的 `layout.filename` 模板，求职信使用独立的语言对应名称。
+服务未启动时，编辑和 HTML 预览仍可用，错误码有包含启动命令的本地化文案。
+
+### 简历检查与页数
+
+`career.yaml: check.limits` 提供引擎各项检查阈值，包括要点长度、求职信页数预算、词数和 PDF 文字匹配。
+`check.lexicon.en` 和 `.de` 保存检查词表及关键词映射。配置 schema 不依赖排版引擎；这些设置通过 YAML
+修改，不在设置表单显示。`check.lexicon.*.*` 下的映射按词条合并：添加关键词后，其他出厂关键词仍随产品更新。
+用户显式覆盖的列表仍整项替换。`check.uncovered_max_chars` 限制字体 Unicode 范围未覆盖的去重字符列表长度。
+
+编辑器随 HTML 预览运行文字和占位符检查；页数按 `preview.page_count_debounce_ms` 独立防抖刷新，忽略旧编辑的响应。
+PDF 服务不可用时显示页数未知。PDF 文字解析失败时保留服务返回的页数，并提示检查未完成。获得 PDF 后增加页数预算、阅读顺序和解析结果检查。所有结果都是提示，包括占位符
+和超页，均不阻止导出。文档版式仅支持英文、德文；其他语言的内容可编辑和预览，并显示字体覆盖提示。
+
+导出先保存未保存的编辑；保存遇到版本冲突时停止下载，保留屏幕上的编辑。简历、求职信使用独立按钮下载，页面不刷新。
+导出警告同时覆盖两份可导出文档，不随当前预览切换而丢失。求职信需有已包含的正文才显示导出按钮。成功下载后通过页数接口再进行一次临时打印以刷新完整检查；导出响应保持原有的
+PDF 字节及文件名响应头。繁忙和不可用状态显示在按钮旁，不可用时提示 `COMPOSE_PROFILES=career-pdf` 启动方法。
+这些操作不会保存 PDF 或 HTML 文件。

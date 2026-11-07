@@ -21,6 +21,8 @@
 
 打开理由来源（`ai.yaml: scoring.evidence`）后，每次打分为每条理由多写一个来源和一段短引用，输出 token 会变多。对比打开前后 `score` 任务的输出 token 中位数即可；这些调用仍记作 `score`。见 [score-evidence.zh.md](score-evidence.zh.md)。
 
+简历定制是 `career_tailor` 任务。一次请求最多三次调用（选择、措辞，要求求职信时再加求职信；缩减只有一次），每次调用各记一行 `career_tailor`，不带岗位 id。每次调用受 `ai.yaml` 中 `career_tailor` 任务的 `max_output_tokens` 限制。见 [resume-tailoring.zh.md](resume-tailoring.zh.md)。
+
 ## 价格：`price` 和 `equivalent_price`
 
 - `price`：只给 API 服务商，真实计费，参与月预算。可加 `cached_input_per_mtok`（缓存命中的输入）、`cache_write_per_mtok`（写入缓存的输入）；不写就按 `input_per_mtok` 算（和以前一样偏保守）。
