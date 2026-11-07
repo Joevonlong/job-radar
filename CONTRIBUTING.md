@@ -23,9 +23,9 @@ installation: [docs/development.md](docs/development.md#checks) has the commands
 
 ## Pull requests
 
-- Branch from `main` and open PRs against `main`; keep a PR to one change. Starting with 3.0.0, GitHub may
+- Branch from `main` and open PRs against `main`; keep a PR to one change. Starting with 2.1.0, GitHub may
   preselect `stable` as the base; change it to `main`.
-- Link issues with `Refs #N` in the PR body. Starting with 3.0.0, merging into `main` does not close issues because
+- Link issues with `Refs #N` in the PR body. Starting with 2.1.0, merging into `main` does not close issues because
   it is not the default branch; the maintainer closes them when the fix is released.
 - Run `scripts/validate.sh`, `pnpm test:integration` and, for UI changes, `pnpm test:e2e` before you push. CI runs the
   same checks.

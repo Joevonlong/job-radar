@@ -61,7 +61,7 @@ git tag --list 'v*' --sort=-v:refname | head -1  # 最新发布标签
 git checkout <tag>                            # 把 <tag> 换成上面的标签
 ```
 
-从 3.0.0 起，普通克隆已经落在最新发布（`stable`）上，不必再切到标签。`main` 是开发分支，两个版本之间可能变化。发布标签仍可用于指定版本（见[升级](#升级)）。切到标签后 git 会提示“detached HEAD”，这是正常的。
+从 2.1.0 起，普通克隆已经落在最新发布（`stable`）上，不必再切到标签。`main` 是开发分支，两个版本之间可能变化。发布标签仍可用于指定版本（见[升级](#升级)）。切到标签后 git 会提示“detached HEAD”，这是正常的。
 
 ## 2. 可选：创建 `.env`
 
@@ -297,7 +297,7 @@ scripts/ops/deploy.sh --ref <tag> --dry-run   # 列出每一步，不做任何�
 scripts/ops/deploy.sh --ref <tag>
 ```
 
-把 `<tag>` 换成上面列出的标签。从 3.0.0 起，`stable` 上的用户也可运行 `git pull --ff-only && scripts/ops/deploy.sh`。见[发布渠道](upgrade.zh.md#升级到某个发布版本)。
+把 `<tag>` 换成上面列出的标签。从 2.1.0 起，`stable` 上的用户也可运行 `git pull --ff-only && scripts/ops/deploy.sh`。见[发布渠道](upgrade.zh.md#升级到某个发布版本)。
 
 部署脚本会依次：检查工具、切到这个标签、装依赖、迁移你的配置文件（原文件留在 `data/config/.backup/`）、备份数据库、重建镜像、
 等正在跑的轮次结束、重启服务、迁移数据库（迁移前自己再备份一次）、重启 AI worker 服务、跑 doctor。哪一步失败就停在哪一步，并告诉你该怎么办；

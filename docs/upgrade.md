@@ -2,7 +2,7 @@
 
 [English](upgrade.md) | [中文](upgrade.zh.md)
 
-Job Radar runs from a git checkout. Releases are signed git tags `vX.Y.Z` (see the [changelog](../CHANGELOG.md)). From 3.0.0 on,
+Job Radar runs from a git checkout. Releases are signed git tags `vX.Y.Z` (see the [changelog](../CHANGELOG.md)). From 2.1.0 on,
 users who only use Job Radar follow **`stable`** for the newest release. Release tags stay available; `main` is the
 development branch and can change between releases.
 
@@ -19,7 +19,7 @@ This change adds no database migration or saved-view format change. To roll it b
 Read the changelog section of the release first: it says whether you have to do something. Run `git status` and
 confirm the checkout is clean (your `data/` and `.env` are ignored by git, that is fine).
 
-Starting with 3.0.0, choose one of three channels:
+Starting with 2.1.0, choose one of three channels:
 
 - **`stable` (newest release):** on `stable`, run `git pull --ff-only && scripts/ops/deploy.sh`.
 - **A release tag:** `scripts/ops/deploy.sh --ref vX.Y.Z` deploys that release; add `--dry-run` to preview it.
@@ -260,11 +260,11 @@ For a code rollback, leave the added columns, indexes and triggers in place; no 
 needed for this change. The triggers keep fingerprints correct for source writes by older versions and invalidate cached
 filter results when an older writer changes a verdict or its reasons. Re-upgrading safely re-evaluates those results.
 
-<a id="upgrade-to-3-0-0"></a>
+<a id="upgrade-to-2-1-0"></a>
 
-## Upgrade to 3.0.0
+## Upgrade to 2.1.0
 
-Once 3.0.0 is released, choose the starting point that matches your checkout:
+Once 2.1.0 is released, choose the starting point that matches your checkout:
 
 - **On the `v2.0.1` tag:** follow [the first upgrade to release directories](#first-upgrade-release-dir),
   [shipped config in the images](#upgrading-across-the-shipped-config-in-the-images) and
@@ -272,12 +272,12 @@ Once 3.0.0 is released, choose the starting point that matches your checkout:
   [query run history](#upgrading-with-query-run-history), [the date filter](#upgrading-with-the-date-filter) and
   [change fingerprints](#upgrading-with-change-fingerprints); if applicable, also follow the
   [Linux ownership steps](#linux-upgrading-from-a-version-whose-containers-ran-as-root).
-- **Following `main`:** `git fetch origin && git switch stable` after 3.0.0 is out, then `scripts/ops/deploy.sh`.
+- **Following `main`:** `git fetch origin && git switch stable` after 2.1.0 is out, then `scripts/ops/deploy.sh`.
   Developers can stay on `main`.
 - **Already using release directories:** on `stable` or `main`, run `scripts/ops/deploy.sh`; from a detached HEAD,
-  use `scripts/ops/deploy.sh --ref v3.0.0`.
+  use `scripts/ops/deploy.sh --ref v2.1.0`.
 
-The career profile is new in 3.0.0 and off by default (turn it on in **Settings → Workflow → Career profile**). Its résumé PDF
+The career profile is new in 2.1.0 and off by default (turn it on in **Settings → Workflow → Career profile**). Its résumé PDF
 export and page count need the optional PDF service, which is not started by default: add `COMPOSE_PROFILES=career-pdf`
 to `.env` and deploy again. Without it, editing and preview work as before. See
 [Optional résumé PDF service](deploy.md#optional-résumé-pdf-service).
@@ -360,7 +360,7 @@ Older versions also reject unknown keys without a config-version change: delete 
 `schedule.yaml` if you added one, and the `deploy.config_write_lock_*` keys that a build from before this version wrote
 there, before starting the old code.
 
-More in [deploy.md](deploy.md) (section 5) and [backup-restore.md](backup-restore.md). From 3.0.0 on, to return to the
+More in [deploy.md](deploy.md) (section 5) and [backup-restore.md](backup-restore.md). From 2.1.0 on, to return to the
 newest release: `git switch stable && scripts/ops/deploy.sh`, or deploy the newest tag with `--ref <tag>`. Developers
 can follow `main` with `git switch main && scripts/ops/deploy.sh`.
 

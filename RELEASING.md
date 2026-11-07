@@ -40,7 +40,7 @@ Entries are written for users: what changed and what they have to do, in plain E
 
 ## Release steps
 
-Starting with 3.0.0, `main` stays the development branch and `stable` is the GitHub default branch, so a plain clone
+Starting with 2.1.0, `main` stays the development branch and `stable` is the GitHub default branch, so a plain clone
 lands on the newest release. `stable` only moves forward when a release is tagged; never force-push it.
 
 1. **Merge everything that belongs in the release into `main`.** CI must be green (what the pipeline checks:
@@ -65,7 +65,7 @@ lands on the newest release. `stable` only moves forward when a release is tagge
    work only once this tag is pushed.
 5. **GitHub Release.** Create a release from the tag; paste the changelog section as the notes and call out upgrade
    steps for breaking changes. Mark pre-releases (`vX.Y.Z-rc.N`) as such.
-6. **Advance `stable`.** Starting with 3.0.0, fast-forward `stable` to the release tag:
+6. **Advance `stable`.** Starting with 2.1.0, fast-forward `stable` to the release tag:
    `git push origin vX.Y.Z^{commit}:refs/heads/stable`. Never force-push.
 
 **Docker and compose.** The stack is built from the checkout (`docker compose up -d --build`), so no image is
@@ -75,10 +75,10 @@ services or volumes, say so in the notes.
 
 ### Hotfix
 
-Starting with 3.0.0, use this manual procedure for a PATCH of the supported release line (see below):
+Starting with 2.1.0, use this manual procedure for a PATCH of the supported release line (see below):
 
-1. Branch `hotfix/X.Y.Z` from the release tag being fixed, for example `v3.0.0` for hotfix `3.0.1`:
-   `git switch -c hotfix/3.0.1 v3.0.0`.
+1. Branch `hotfix/X.Y.Z` from the release tag being fixed, for example `v2.1.0` for hotfix `2.1.1`:
+   `git switch -c hotfix/2.1.1 v2.1.0`.
 2. Open the fix PR against that hotfix branch, including the version and changelog update. Run the applicable checks
    above and test the merged commit on a **separate preview instance**, instead of the 24-hour observation on the
    production instance.

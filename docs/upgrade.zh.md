@@ -2,7 +2,7 @@
 
 [English](upgrade.md) | [中文](upgrade.zh.md)
 
-Job Radar 从一个 git 检出目录运行。发布版本是签名的 git 标签 `vX.Y.Z`（见[更新日志](../CHANGELOG.md)）。从 3.0.0 起，只使用 Job Radar 的用户跟随 **`stable`**，获取最新发布。发布标签仍可使用。`main` 是开发分支，两次发布之间可能变化。
+Job Radar 从一个 git 检出目录运行。发布版本是签名的 git 标签 `vX.Y.Z`（见[更新日志](../CHANGELOG.md)）。从 2.1.0 起，只使用 Job Radar 的用户跟随 **`stable`**，获取最新发布。发布标签仍可使用。`main` 是开发分支，两次发布之间可能变化。
 
 ## 岗位搜索行为变化
 
@@ -16,7 +16,7 @@ Job Radar 从一个 git 检出目录运行。发布版本是签名的 git 标签
 
 先读目标版本的更新日志。需要手动做的事会写在里面。运行 `git status`，确认检出目录干净（`data/` 和 `.env` 被 git 忽略，没有关系）。
 
-从 3.0.0 起，可以选三个渠道：
+从 2.1.0 起，可以选三个渠道：
 
 - **`stable`（最新发布）：** 在 `stable` 上运行 `git pull --ff-only && scripts/ops/deploy.sh`。
 - **发布标签：** `scripts/ops/deploy.sh --ref vX.Y.Z` 部署指定版本。加 `--dry-run` 可先预览。
@@ -151,17 +151,17 @@ scripts/ops/deploy.sh --skip-pull
 只回滚代码时，请保留新增列、索引和触发器；这项变更不需要修改配置或恢复数据库。触发器会为旧版本的源字段写入维护
 指纹，并在旧版本改变过滤结论或理由时清除相应缓存。再次升级会安全地重新评估这些结果。
 
-<a id="upgrade-to-3-0-0"></a>
+<a id="upgrade-to-2-1-0"></a>
 
-## 升级到 3.0.0
+## 升级到 2.1.0
 
-3.0.0 发布后，按当前检出目录选择：
+2.1.0 发布后，按当前检出目录选择：
 
 - **停在 `v2.0.1` 标签：** 按[首次升级到发布目录](#first-upgrade-release-dir)、[出厂配置打进镜像](#跨过出厂配置打进镜像这一版的升级)和[升级期间的设置](#升级期间的设置)操作。阅读[查询运行历史](#带查询运行历史的升级)、[日期筛选](#带日期筛选的升级)和[变更指纹](#带变更指纹的升级)的说明。适用时，还要做 [Linux 所有权修复](#linux从容器以-root-运行的旧版本升级)。
-- **跟随 `main`：** 3.0.0 发布后，运行 `git fetch origin && git switch stable`，再运行 `scripts/ops/deploy.sh`。开发者可留在 `main`。
-- **已使用发布目录：** 在 `stable` 或 `main` 上直接运行 `scripts/ops/deploy.sh`。detached HEAD 则用 `scripts/ops/deploy.sh --ref v3.0.0`。
+- **跟随 `main`：** 2.1.0 发布后，运行 `git fetch origin && git switch stable`，再运行 `scripts/ops/deploy.sh`。开发者可留在 `main`。
+- **已使用发布目录：** 在 `stable` 或 `main` 上直接运行 `scripts/ops/deploy.sh`。detached HEAD 则用 `scripts/ops/deploy.sh --ref v2.1.0`。
 
-职业档案是 3.0.0 新增的功能，默认关闭（在**设置 → 工作流 → 职业档案**中开启）。简历 PDF 导出和页数需要可选的 PDF 服务，它默认不启动：在 `.env` 加上 `COMPOSE_PROFILES=career-pdf`，再部署一次。没有它时，编辑和预览照常可用。见[可选简历 PDF 服务](deploy.zh.md#可选简历-pdf-服务)。
+职业档案是 2.1.0 新增的功能，默认关闭（在**设置 → 工作流 → 职业档案**中开启）。简历 PDF 导出和页数需要可选的 PDF 服务，它默认不启动：在 `.env` 加上 `COMPOSE_PROFILES=career-pdf`，再部署一次。没有它时，编辑和预览照常可用。见[可选简历 PDF 服务](deploy.zh.md#可选简历-pdf-服务)。
 
 要退回 `v2.0.1`，按[回滚](#回滚)和[降级到发布目录之前的版本](#downgrade-pre-release-dir)操作，包括其中的数据库和配置备份说明。
 
@@ -225,7 +225,7 @@ scripts/ops/restore.sh data/backups/<那个 pre-deploy 备份> --target jobradar
 如果你离开的那个版本迁移过某个配置文件，旧代码会认为它“太新”（`pnpm run doctor` 的 `config.layers` 会提示）：把 `data/config/.backup/<时间戳>/` 里的原件复制回 `data/config/`。
 旧版本即使配置版本未变也会拒绝未知键：启动旧代码前，从 `schedule.yaml` 里删掉自己加的 `config_writes` 块，以及本版本之前的构建写进去的 `deploy.config_write_lock_*` 键。
 
-更多见 [deploy.zh.md](deploy.zh.md)（第 5 节）和 [backup-restore.zh.md](backup-restore.zh.md)。从 3.0.0 起，要回到最新发布，运行 `git switch stable && scripts/ops/deploy.sh`，或用 `--ref <tag>` 部署最新标签。开发者仍可用 `git switch main && scripts/ops/deploy.sh` 跟随 `main`。
+更多见 [deploy.zh.md](deploy.zh.md)（第 5 节）和 [backup-restore.zh.md](backup-restore.zh.md)。从 2.1.0 起，要回到最新发布，运行 `git switch stable && scripts/ops/deploy.sh`，或用 `--ref <tag>` 部署最新标签。开发者仍可用 `git switch main && scripts/ops/deploy.sh` 跟随 `main`。
 
 <a id="downgrade-pre-config-write-step"></a>
 

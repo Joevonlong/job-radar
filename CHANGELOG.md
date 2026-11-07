@@ -5,14 +5,14 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [3.0.0] - 2026-11-07
+## [2.1.0] - 2026-11-07
 
-Job Radar 3.0.0 adds a career profile with résumé tailoring, an application writer, company research and Gmail reply
+Job Radar 2.1.0 adds a career profile with résumé tailoring, an application writer, company research and Gmail reply
 tracking, all off until you turn them on. It also changes how an installation is upgraded: your config files only hold
 what you changed, the shipped config is built into the images, the host AI worker runs from a release directory, and
 releases now land on a `stable` branch.
 
-**Upgrading from 2.0.1 takes a few manual steps once.** Read [Upgrade to 3.0.0](docs/upgrade.md#upgrade-to-3-0-0) before
+**Upgrading from 2.0.1 takes a few manual steps once.** Read [Upgrade to 2.1.0](docs/upgrade.md#upgrade-to-2-1-0) before
 you deploy; the upgrade notes below list what changes for an existing installation.
 
 ### Highlights
@@ -37,7 +37,7 @@ you deploy; the upgrade notes below list what changes for an existing installati
 
 ### Upgrade notes
 
-- **Follow [Upgrade to 3.0.0](docs/upgrade.md#upgrade-to-3-0-0).** From `v2.0.1` the first upgrade stops the AI worker
+- **Follow [Upgrade to 2.1.0](docs/upgrade.md#upgrade-to-2-1-0).** From `v2.0.1` the first upgrade stops the AI worker
   and the containers by hand, updates the code and runs `scripts/ops/deploy.sh --skip-pull`; a plain `docker compose up -d`
   is not enough. The same page explains how to return to `v2.0.1`.
 - **Node.js 22.23.4 or a later 22.x** is required, and pnpm must be the version in `package.json` (`corepack enable`).
