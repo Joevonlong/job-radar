@@ -8909,8 +8909,10 @@
         "too_many": "Another upload is running. Try again shortly.",
         "stale": "Your contact details or layout changed meanwhile. Import the file again.",
         "disabled": "The career profile is turned off.",
-        "generic": "The import failed. Try again."
-      }
+        "generic": "The import failed. Try again.",
+        "drafts_full": "You have reached the pending draft limit. Adopt or discard a draft first."
+      },
+      "saveContactFirst": "Save your contact edits first."
     },
     "fromStory": {
       "title": "Add a story to the profile",

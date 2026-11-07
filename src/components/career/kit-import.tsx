@@ -23,7 +23,7 @@ type Result = z.infer<typeof resultSchema>;
 type ContactField = (typeof KIT_CONTACT_FIELDS)[number];
 
 /** Imports a resume-kit YAML file: content goes to the pending drafts, contact values and layout are applied only when confirmed. */
-export function KitImport({ maxBytes, onDraft, onContactSaved }: { maxBytes: number; onDraft: () => void; onContactSaved?: (saved: { contact: CareerContact; baseHash: string }) => void }) {
+export function KitImport({ maxBytes, onDraft, onContactSaved, contactDirty = false }: { maxBytes: number; onDraft: () => void; onContactSaved?: (saved: { contact: CareerContact; baseHash: string }) => void; contactDirty?: boolean }) {
   const t = useTranslations("career.kitImport");
   const tf = useTranslations("career.fields");
   const id = useId();
@@ -99,7 +99,7 @@ export function KitImport({ maxBytes, onDraft, onContactSaved }: { maxBytes: num
           <p role="status">{result.draftId === null ? t("noContent") : t("drafted")}</p>
           {result.skipped.length > 0 && <p className="text-body-sm">{t("skipped", { parts: result.skipped.map((part) => t(`parts.${part}`)).join(", ") })}</p>}
           {changedFields.length + newLinks.length + layoutChanges.length === 0 ? <p className="text-body-sm">{t("nothingToApply")}</p> : (
-            <fieldset disabled={busy} className="flex min-w-0 flex-col gap-2" data-testid="career-kit-contact">
+            <fieldset disabled={busy || contactDirty} className="flex min-w-0 flex-col gap-2" data-testid="career-kit-contact">
               <legend className="text-label">{t("confirm")}</legend>
               {changedFields.map((key) => (
                 <label key={key} className="flex min-w-0 gap-2 text-body-sm break-words">
@@ -119,8 +119,9 @@ export function KitImport({ maxBytes, onDraft, onContactSaved }: { maxBytes: num
                   {t("layout", { fields: layoutChanges.map((key) => `${t(`layoutFields.${key}`)} ${String(result.layout.incoming[key])}`).join(", ") })}
                 </label>
               )}
+              {contactDirty && <p className="text-body-sm" data-testid="career-kit-save-contact">{t("saveContactFirst")}</p>}
               <div className="flex gap-2">
-                <Button variant="primary" disabled={busy || chosen.size === 0} onClick={() => void apply()} data-testid="career-kit-apply">{t("apply")}</Button>
+                <Button variant="primary" disabled={busy || contactDirty || chosen.size === 0} onClick={() => void apply()} data-testid="career-kit-apply">{t("apply")}</Button>
                 <Button variant="outline" disabled={busy} onClick={() => setResult(null)}>{t("dismiss")}</Button>
               </div>
             </fieldset>

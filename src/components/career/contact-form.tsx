@@ -12,12 +12,13 @@ import type { CareerContact } from "@/lib/career/schema/contact";
 import { CareerStatus } from "./career-status";
 
 const fields = ["name", "address", "location", "email", "phone", "work_auth", "availability"] as const;
-export function ContactForm({ initial, initialHash }: { initial: CareerContact; initialHash: string | null }) {
+export function ContactForm({ initial, initialHash, onDirty }: { initial: CareerContact; initialHash: string | null; onDirty?: (dirty: boolean) => void }) {
   const t = useTranslations("career");
   const [contact, setContact] = useState(initial);
   const [baseHash, setHash] = useState(initialHash);
   const [status, setStatus] = useState("");
   const [pending, startTransition] = useTransition();
+  const edit = (next: CareerContact) => { setContact(next); onDirty?.(true); };
   return (
     <Card>
       <CardHeader>
@@ -37,7 +38,7 @@ export function ContactForm({ initial, initialHash }: { initial: CareerContact; 
                   setStatus(result.code);
                   return;
                 }
-                setContact(result.contact);
+                setContact(result.contact); onDirty?.(false);
                 setHash(result.baseHash);
                 setStatus("saved");
               } catch {
@@ -52,7 +53,7 @@ export function ContactForm({ initial, initialHash }: { initial: CareerContact; 
                 {t(`fields.${key}`)}
                 <Input
                   value={contact[key] ?? ""}
-                  onChange={(event) => setContact({ ...contact, [key]: event.target.value || null })}
+                  onChange={(event) => edit({ ...contact, [key]: event.target.value || null })}
                 />
               </label>
             ))}
@@ -65,7 +66,7 @@ export function ContactForm({ initial, initialHash }: { initial: CareerContact; 
                     <Input
                       value={link.label}
                       onChange={(event) =>
-                        setContact({
+                        edit({
                           ...contact,
                           links: contact.links.map((old, at) =>
                             at === index ? { ...old, label: event.target.value } : old,
@@ -80,7 +81,7 @@ export function ContactForm({ initial, initialHash }: { initial: CareerContact; 
                       type="url"
                       value={link.url}
                       onChange={(event) =>
-                        setContact({
+                        edit({
                           ...contact,
                           links: contact.links.map((old, at) =>
                             at === index ? { ...old, url: event.target.value } : old,
@@ -92,7 +93,7 @@ export function ContactForm({ initial, initialHash }: { initial: CareerContact; 
                   <Button
                     type="button"
                     variant="ghost"
-                    onClick={() => setContact({ ...contact, links: contact.links.filter((_, at) => at !== index) })}
+                    onClick={() => edit({ ...contact, links: contact.links.filter((_, at) => at !== index) })}
                   >
                     {t("remove")}
                   </Button>
@@ -101,7 +102,7 @@ export function ContactForm({ initial, initialHash }: { initial: CareerContact; 
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setContact({ ...contact, links: [...contact.links, { label: "", url: "" }] })}
+                onClick={() => edit({ ...contact, links: [...contact.links, { label: "", url: "" }] })}
               >
                 {t("addField", { label: t("nouns.links") })}
               </Button>

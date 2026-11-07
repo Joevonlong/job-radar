@@ -13,8 +13,8 @@ type Saved = Extract<Awaited<ReturnType<typeof addStoryToProfileAction>>, { ok: 
 const ERRORS = ["stale", "story_present", "unknown_id", "limits", "disabled"] as const;
 
 /** Adds one story from the experience library to an experience entry as a new bullet or summary wording. */
-export function StoryToProfile({ stories, profile, baseHash, dirty, onSaved }: {
-  stories: StoryOption[]; profile: CareerProfile; baseHash: string | null; dirty: boolean; onSaved: (saved: Saved) => void;
+export function StoryToProfile({ stories, profile, baseHash, dirty, onSaved, onBusy }: {
+  stories: StoryOption[]; profile: CareerProfile; baseHash: string | null; dirty: boolean; onSaved: (saved: Saved) => void; onBusy?: (busy: boolean) => void;
 }) {
   const t = useTranslations("career.fromStory");
   const id = useId();
@@ -29,13 +29,13 @@ export function StoryToProfile({ stories, profile, baseHash, dirty, onSaved }: {
 
   async function add() {
     if (!story || !experience) return;
-    setBusy(true); setFailure(null); setAdded(false);
+    setBusy(true); onBusy?.(true); setFailure(null); setAdded(false);
     try {
       const result = await addStoryToProfileAction({ storyId: story.id, experienceId: experience.id, target, baseHash });
       if (!result.ok) { setFailure(result.code); return; }
       setAdded(true); onSaved(result);
     } catch { setFailure("unavailable"); }
-    finally { setBusy(false); }
+    finally { setBusy(false); onBusy?.(false); }
   }
   const errorKey = (ERRORS as readonly string[]).includes(failure ?? "") ? `errors.${failure as (typeof ERRORS)[number]}` as const : "errors.generic" as const;
   return (

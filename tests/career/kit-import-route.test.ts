@@ -50,6 +50,14 @@ test("invalid, oversized and disabled uploads answer with a code and never echo 
   expect(fs.existsSync(careerDir())).toBe(false);
 });
 
+test("an import is refused once the pending draft limit is reached", async () => {
+  temp = tempCareer({ import: { max_pending_drafts: 1 } });
+  expect((await upload(sample)).status).toBe(200);
+  const response = await upload(sample);
+  expect(await response.json()).toMatchObject({ ok: false, error: "drafts_full" });
+  expect(await listPendingCareerDrafts()).toHaveLength(1);
+});
+
 test("adding a story leaves the stories file byte for byte unchanged", async () => {
   temp = tempCareer();
   const storiesFile = path.join(temp.profileDir, "stories.yaml");

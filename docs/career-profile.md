@@ -44,10 +44,13 @@ file is not stored. Size, upload time and concurrent uploads follow the extracti
 `import.upload_timeout_seconds`, `import.max_concurrent_uploads`).
 
 - Experience, projects, education, certifications, languages, skills and custom sections become a pending draft marked
-  *Imported resume-kit file*. Review and adopt it like any other draft; adopted texts keep the origin *imported*.
+  *Imported resume-kit file*. Review and adopt it like any other draft; adopted texts keep the origin *imported*. Texts
+  that repeat the file's name, email, phone or address, or look like an email address or phone number, are flagged. The
+  import counts toward `import.max_pending_drafts`.
 - Contact details never enter the draft. Fields that differ from your saved contact are listed one by one; fields you
   have not filled yet are checked, the rest are not. New links and the layout (language, theme, accent, pages, paper,
-  density) are offered as separate checkboxes. **Apply** saves only what you checked.
+  density) are offered as separate checkboxes. **Apply** saves only what you checked; save
+  your own contact edits first.
 - The photo, approach notes, targets and the letter are not imported; the result lists which of them the file had.
 - An invalid file is refused with a general message; its content is not shown or logged.
 

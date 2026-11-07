@@ -71,6 +71,7 @@ export function CareerEditor({ initial, contact, initialVersions, errors, limits
   const [pending, startTransition] = useTransition();
   const [adopting, setAdopting] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [contactDirty, setContactDirty] = useState(false);
   const [revision, setRevision] = useState(0);
 
   function run(task: () => Promise<void>) {
@@ -142,11 +143,11 @@ export function CareerEditor({ initial, contact, initialVersions, errors, limits
           {t(careerErrorMessageKey(code))}
         </p>
       ))}
-      {saved && extraction && <CareerExtraction onContactSaved={setContactState} view={extraction} profile={saved.profile} baseHash={saved.baseHash} dirty={dirty || pending || adopting} onAdopting={setAdopting} onAdopted={(result) => {
+      {saved && extraction && <CareerExtraction contactDirty={contactDirty} onContactSaved={(next) => { setContactDirty(false); setContactState(next); }} view={extraction} profile={saved.profile} baseHash={saved.baseHash} dirty={dirty || pending || adopting} onAdopting={setAdopting} onAdopted={(result) => {
         setSaved({ profile: result.profile, baseHash: result.baseHash, updatedAt: null });
         setRevision((old) => old + 1); setDirty(false); clearDiff(); setMessage(result.warnings.length ? "history_failed" : "saved"); run(refreshHistory);
       }} />}
-      {saved && stories && <StoryToProfile stories={stories} profile={saved.profile} baseHash={saved.baseHash} dirty={dirty || pending || adopting} onSaved={(result) => {
+      {saved && stories && <StoryToProfile onBusy={setAdopting} stories={stories} profile={saved.profile} baseHash={saved.baseHash} dirty={dirty || pending || adopting} onSaved={(result) => {
         setSaved({ profile: result.profile, baseHash: result.baseHash, updatedAt: null });
         setRevision((old) => old + 1); setDirty(false); clearDiff(); setMessage(result.warnings.length ? "history_failed" : "saved"); run(refreshHistory);
       }} />}
@@ -165,7 +166,7 @@ export function CareerEditor({ initial, contact, initialVersions, errors, limits
           }}
         />
       )}
-      {contactState && <ContactForm key={contactState.baseHash ?? "new"} initial={contactState.contact} initialHash={contactState.baseHash} />}
+      {contactState && <ContactForm key={contactState.baseHash ?? "new"} initial={contactState.contact} initialHash={contactState.baseHash} onDirty={setContactDirty} />}
       {dirty && (
         <p role="status" className="text-body-sm">
           {t("unsaved")}

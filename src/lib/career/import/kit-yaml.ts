@@ -1,14 +1,15 @@
 /**
  * A resume-kit master résumé splits into three parts: contact values the user confirms field by field, profile content
  * that becomes a draft for the normal review, and layout preferences. No AI call is involved, so draft fields carry no
- * quote and no verification flags. Photos, approach notes, targets and letters are not imported and are only counted.
+ * quote and only the contact flag. Photos, approach notes, targets and letters are not imported and are only counted.
  */
 import { parseResume, type Resume } from "@/lib/career/engine";
 import { careerLayoutDefaultsSchema, type CareerConfig } from "@/lib/config/schemas/career";
 import { careerContactSchema, type CareerContact } from "../schema/contact";
 import { CAREER_FILE_BOUNDS, careerDateSchema } from "../schema/profile";
+import { findPiiIn } from "@/lib/stories/pii";
 import { KIT_SKIPPED, type KIT_CONTACT_FIELDS } from "./fields";
-import { draftSectionsSchema, type DraftEntry, type DraftSections, type VerifiedField } from "../extract/verify";
+import { draftFields, draftSectionsSchema, type DraftEntry, type DraftSections, type VerifiedField } from "../extract/verify";
 
 export type KitContact = Pick<CareerContact, (typeof KIT_CONTACT_FIELDS)[number] | "links">;
 export type KitLayout = Partial<CareerConfig["document"]["defaults"]>;
@@ -64,6 +65,16 @@ function layoutOf(meta: Resume["meta"]): KitLayout {
   return layout;
 }
 
+/** Marks draft texts that repeat a contact value of the file or look like an email address or phone number, so review catches them. */
+function flagContact(sections: DraftSections, contact: KitContact): void {
+  const values = [contact.name, contact.email, contact.phone, ...(contact.address?.split("\n") ?? [])]
+    .map((value) => value?.trim().toLowerCase() ?? "").filter((value) => value.length > 0);
+  for (const field of draftFields(sections)) {
+    const text = field.value.toLowerCase();
+    if (!field.flags.includes("pii") && (findPiiIn([field.value]).length > 0 || values.some((value) => text.includes(value)))) field.flags.push("pii");
+  }
+}
+
 function customItem(item: CustomItem, key: string): DraftEntry {
   const base = { key, match: null, bullets: [], stack: [], items: [] };
   if (item.kind === "entry") {
@@ -115,6 +126,8 @@ export function importKitYaml(text: string): { ok: true; result: KitImport } | {
   const bounded = Object.fromEntries(Object.entries(sections).map(([name, value]) => [name, Array.isArray(value) ? value.slice(0, 1000) : value]));
   const skipped = KIT_SKIPPED.filter((name) => name === "photo" ? Boolean(resume.basics.photo) : name === "approach" ? resume.approach.length > 0 : resume[name] !== undefined);
   const draft = draftSectionsSchema.parse(bounded);
+  const contact = contactOf(resume.basics);
+  flagContact(draft, contact);
   const entries = next;
-  return { ok: true, result: { contact: contactOf(resume.basics), layout: layoutOf(resume.meta), language: resume.meta.lang, sections: draft, skipped, entries } };
+  return { ok: true, result: { contact, layout: layoutOf(resume.meta), language: resume.meta.lang, sections: draft, skipped, entries } };
 }

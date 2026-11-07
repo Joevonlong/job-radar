@@ -56,9 +56,8 @@ export async function listJobDocuments(jobId: number, jdHash: string | null): Pr
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw new CareerStoreError("document_invalid");
   }
-  const limit = reloadConfig("career").document.max_documents;
   const ids = files.filter((file) => file.endsWith(".yaml")).map((file) => path.basename(file, ".yaml"))
-    .filter((id) => documentIdSchema.safeParse(id).success).sort().slice(0, limit);
+    .filter((id) => documentIdSchema.safeParse(id).success).sort();
   const found: JobDocument[] = [];
   for (const id of ids) {
     const { document } = await loadDocument(id);

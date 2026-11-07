@@ -1,6 +1,7 @@
 import { readCareerGate } from "@/lib/config/career-gate";
 import { loadConfig } from "@/lib/config";
 import { loadContact } from "@/lib/career/contact/store";
+import { listPendingCareerDrafts } from "@/lib/career/extract/draft-store";
 import { importKitYaml } from "@/lib/career/import/kit-yaml";
 import { writeKitDraft } from "@/lib/career/import/store";
 import { loadPreferences } from "@/lib/career/store/preferences";
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
     const settings = loadConfig("career");
     release = enterUpload(settings.import.max_concurrent_uploads);
     if (release === null) return refuse("too_many");
+    if ((await listPendingCareerDrafts()).length >= settings.import.max_pending_drafts) return refuse("drafts_full");
     const body = await readBody(request, settings.import.max_file_bytes, settings.import.upload_timeout_seconds * 1000);
     if (body === null) return refuse("too_large");
     if (body === "timeout") return refuse("timeout");

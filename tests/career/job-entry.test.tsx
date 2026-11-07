@@ -39,6 +39,16 @@ it("lists only this job's documents and marks a changed description", async () =
   expect(html).not.toContain("Other job");
 });
 
+it("lists a job's documents even when the document limit was lowered below the number of files", async () => {
+  temp = tempCareer();
+  await tailored(9, "Other", "First");
+  await tailored(9, "Other", "Second");
+  const mine = await tailored(7, "Description", "Mine");
+  const file = path.join(temp.configDir, "career.yaml");
+  fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/max_documents: \d+/, "max_documents: 1"));
+  expect((await listJobDocuments(7, null)).map((item) => item.id)).toEqual([mine.id]);
+});
+
 it("shows an error state without file content when a document is invalid or the folder is unreadable", async () => {
   temp = tempCareer();
   await tailored(7, "Description", "Readable");

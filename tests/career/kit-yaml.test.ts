@@ -59,6 +59,16 @@ test("multi-line addresses join, page counts beyond the profile limit are left o
   expect(kit.skipped).toEqual(["photo", "letter"]);
 });
 
+test("texts repeating a contact value or holding an email or phone are marked for review", () => {
+  const kit = imported(stringify({
+    basics: { name: "Avery Example", title: "Engineer", email: "avery@example.test", summary: "Reach me at avery@example.test." },
+    experience: [{ company: "Example Co", role: "Engineer", start: "2020", bullets: ["Worked with Avery Example on billing", "Shipped the API"] }],
+  }));
+  expect(kit.sections.summary?.flags).toEqual(["pii"]);
+  expect(kit.sections.experience[0]?.bullets.map((bullet) => bullet.flags)).toEqual([["pii"], []]);
+  expect(kit.sections.headline?.flags).toEqual([]);
+});
+
 test("the resume-kit hand-off configuration keeps its fields", () => {
   expect(Object.keys(resumeSchema.shape)).toEqual([
     "resume_kit_path", "master_resume_path", "pdf_dir", "jd_export_dir", "jd_export_host_dir", "claude_command", "claude_args",
