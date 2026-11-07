@@ -10,7 +10,7 @@ import { withFileLock } from "@/lib/config/write";
 import { lockLostError, withConfigWriteLock } from "@/lib/config/write-lock";
 import { CareerStoreError } from "../contact/errors";
 import { applyDocumentEdit, applyDocumentRestore, prepareDocumentCreation } from "../document/edit";
-import { rerunClaims } from "../document/claims";
+import { rerunClaims, survivingClaims } from "../document/claims";
 import { loadCareerProfile } from "./profile";
 import { documentIdSchema, parseStoredDocument, type CareerDocument } from "../schema/document";
 import { listVersions, prune, versionIdSchema, writeVersion, type CareerVersion } from "./history";
@@ -82,11 +82,21 @@ export async function createDocument(raw: unknown): Promise<Extract<DocumentSave
 }
 
 export async function saveDocument(id: string, incoming: unknown, { baseHash }: { baseHash: string }): Promise<DocumentSaveResult> {
-  return persistDocument(id, baseHash, async (current) => rerunClaims(current, applyDocumentEdit(current, incoming, new Date().toISOString()), (await loadCareerProfile()).profile, reloadConfig("career")));
+  return persistDocument(id, baseHash, async (current) => checkClaims(current, applyDocumentEdit(current, incoming, new Date().toISOString())));
 }
 
 export async function restoreDocumentVersion(id: string, version: string, { baseHash }: { baseHash: string }): Promise<DocumentSaveResult> {
-  return persistDocument(id, baseHash, async (current) => rerunClaims(current, applyDocumentRestore(current, await readDocumentVersion(id, version), new Date().toISOString()), (await loadCareerProfile()).profile, reloadConfig("career")));
+  return persistDocument(id, baseHash, async (current) => {
+    const restored = await readDocumentVersion(id, version);
+    return checkClaims(restored, applyDocumentRestore(current, restored, new Date().toISOString()));
+  });
+}
+
+/** Claims are checked against the profile when it can be read; an unreadable profile keeps saves working with the claims whose texts survive. */
+async function checkClaims(before: CareerDocument, after: CareerDocument): Promise<CareerDocument> {
+  const config = reloadConfig("career");
+  const profile = await loadCareerProfile().then((loaded) => loaded.profile, () => null);
+  return profile ? rerunClaims(before, after, profile, config) : { ...after, claims: survivingClaims(after, config) };
 }
 
 export async function persistDocument(

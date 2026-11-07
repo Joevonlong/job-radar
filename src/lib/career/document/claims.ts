@@ -42,7 +42,6 @@ export function rerunClaims(before: CareerDocument, after: CareerDocument, profi
   const pool = factPool(profile, toOutbound);
   for (const { value } of documentTexts(result)) {
     if (old.get(value.id)?.text === value.text) continue;
-    value.origin = "user";
     const checked = verifyProposal({ action: "rewrite", target: { text: value.id }, text: toOutbound(value.text), rationale: "", support: [] }, {
       doc: result, profile, pool, settings, jd: null, sentIds: [...objects.keys(), "headline", "summary", "letter"], allowed: ["rewrite"],
     });
