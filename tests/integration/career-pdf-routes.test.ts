@@ -18,12 +18,13 @@ import { saveContact } from "@/lib/career/contact/store";
 import { emptyContact } from "@/lib/career/schema/contact";
 import { saveCareerProfile } from "@/lib/career/store/profile";
 import { careerContactPath, careerDir } from "@/lib/career/store/paths";
+import { textPdf } from "../career/engine/helpers/pdf";
 import { document } from "../career/document-fixtures";
 import { profile, tempCareer } from "../career/fixtures";
 
 const databaseUrl = inject("testDatabaseUrl");
 const payload = z.strictObject({ html: z.string(), tagged: z.boolean(), outline: z.boolean() });
-const pdfBytes = Buffer.from("%PDF-stand-in");
+const pdfBytes = textPdf([[], [], []]);
 let server: Server;
 let serviceUrl: string;
 let temp: ReturnType<typeof tempCareer>;
@@ -98,7 +99,13 @@ it.each([[200, null], [429, "pdf_busy"], [500, "pdf_failed"]] as const)(
     const response = await pages(request({ document: document(), doc: "resume" }));
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
-    expect(await response.json()).toEqual(code ? { ok: true, pages: null, code } : { ok: true, pages: 3 });
+    const body = await response.json();
+    expect(body).toMatchObject(code
+      ? { ok: true, pages: null, budget: null, findings: [], code }
+      : { ok: true, pages: 3, budget: { pages: 2, exceeded: true }, findings: expect.arrayContaining([
+        expect.objectContaining({ code: "career.check.pages" }),
+        expect.objectContaining({ path: "reading_order" }),
+      ]) });
     expect(htmlSent[0]).toContain("<!doctype html>");
     expect(tree()).toEqual(before);
   },
@@ -109,7 +116,7 @@ it("keeps editing usable when the service is absent and exports a localized erro
   await new Promise<void>((resolve) => server.close(() => resolve()));
   const before = tree();
   expect(await (await pages(request({ document: saved.document, doc: "resume" }))).json())
-    .toEqual({ ok: true, pages: null, code: "pdf_unavailable" });
+    .toEqual({ ok: true, pages: null, budget: null, findings: [], code: "pdf_unavailable" });
   const response = await exportSaved(saved.document.id);
   expect(response.status).toBe(503);
   expect(await response.json()).toEqual({ ok: false, error: "pdf_unavailable" });
@@ -132,7 +139,7 @@ it.each(["en", "de"] as const)(
       expect(response.status).toBe(200);
       expect(response.headers.get("Content-Type")).toBe("application/pdf");
       expect(response.headers.get("Cache-Control")).toBe("no-store");
-      expect(Buffer.from(await response.arrayBuffer())).toEqual(pdfBytes);
+      expect(Buffer.from(await response.arrayBuffer())).toEqual(Buffer.from(pdfBytes));
       names.push(response.headers.get("Content-Disposition")!);
     }
     expect(names[0]).toMatch(new RegExp(`filename="Saved_${lang}_\\d{4}-\\d{2}-\\d{2}\\.pdf"`));
@@ -229,4 +236,16 @@ it("keeps every contact sentinel transient through save, preview, page count and
   } finally { await sql.end(); }
   expect(tree()).toEqual(before);
   expect(JSON.stringify(logs)).not.toContain(sentinel);
+});
+
+it("returns live preview findings and uncovered characters without the PDF service", async () => {
+  const draft = document();
+  draft.headline!.text = "TODO 中文";
+  const response = await preview(request({ document: draft, doc: "resume" }));
+  expect(await response.json()).toMatchObject({
+    ok: true,
+    findings: expect.arrayContaining([expect.objectContaining({ code: "career.lint.placeholder" })]),
+    uncovered: ["中", "文"],
+  });
+  expect(htmlSent).toEqual([]);
 });

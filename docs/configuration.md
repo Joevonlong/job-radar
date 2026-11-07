@@ -847,8 +847,13 @@ limits with those environment overrides. The JSON body is limited to six times t
 allow JSON escapes; decoded HTML has the separate byte limit. Only one render runs at a time; busy requests return 429,
 and timeouts return 504. Health reflects the browser connection; a disconnected browser is relaunched on the next render.
 
-`POST /api/career/documents/pages` accepts the same `{ document, doc }` JSON as preview and returns a page count,
-or `{ ok: true, pages: null, code }` when PDF rendering is unavailable. `POST /api/career/documents/<id>/pdf?doc=resume`
+`POST /api/career/documents/preview` accepts `{ document, doc }` and returns HTML, active-document `findings` and
+`uncovered` characters, plus `exportHints: { findings, uncovered }` covering both renderable export documents.
+Findings contain only `{ code, params, severity, path? }`.
+`POST /api/career/documents/pages` accepts the same JSON and returns `{ ok: true, pages, budget, findings }`, where
+`budget` is `{ pages, exceeded }`. When PDF rendering is unavailable it returns
+`{ ok: true, pages: null, budget: null, findings: [], code }`. If PDF text checking fails, `pages` and `budget` stay
+available with empty findings and `code: pdf_checks_failed`. `POST /api/career/documents/<id>/pdf?doc=resume`
 (or `doc=letter`) exports the saved document. Save edits first. These endpoints return `Cache-Control: no-store` and
 write no HTML or PDF files. A letter needs a nonempty included body. The filename uses the engine's résumé template
 (`layout.filename`); letters use the separate language-specific letter name. With no PDF service, editing and HTML
@@ -865,3 +870,26 @@ Extraction settings are `timeout_seconds`, `expiry_grace_seconds`, `queue_timeou
 `stored_value_min_chars`, `title_words`, `sensitive_labels` (all under `import` after `formats`), and
 `evidence.min_quote_chars`, `quote_max_chars`, `figure_units` (all under `evidence`). Figure units share the writer's
 scale and multiple defaults. The three top-level time settings limit running time, the expiry grace period and queue wait. Import settings control file types and size, upload and PDF processing time and memory, text length, concurrent uploads, draft expiry and count, suspected output truncation, and preview removal and highlighting rules. Evidence settings control quote length and figure verification. The `career_extract` task in `ai.yaml` selects the provider and model for extraction.
+
+### Résumé checks and page counts
+
+`career.yaml: check.limits` supplies every engine check threshold, including bullet length, page budget for letters,
+word counts and PDF text matching. `check.lexicon.en` and `.de` contain the check word lists and keyword dictionaries.
+The configuration schema stays independent of the rendering engine. These settings are available in YAML, outside the
+settings form. Dictionary entries under `check.lexicon.*.*` merge independently: adding a keyword leaves other shipped
+keywords following product updates. A list explicitly overridden by the user replaces that list as a whole.
+`check.uncovered_max_chars` caps the deduplicated list of characters outside the bundled font faces' Unicode ranges.
+
+The editor runs text and placeholder checks with the HTML preview. Page counts refresh separately after
+`preview.page_count_debounce_ms`; responses for older edits are ignored. An unavailable PDF service leaves the count
+unknown. If PDF text parsing fails, the service page count stays visible with a check-unavailable hint.
+PDF checks add page budget, reading order and parser findings. All findings are advisory, including placeholders
+and excess pages, and never block PDF export. Only English and German document layouts are supported; other content
+can be edited and previewed with a font coverage hint.
+
+PDF export saves unsaved edits first; a stale save stops the download and keeps the edits on screen. Résumé and letter
+buttons download separate PDFs without a page reload. Export warnings cover both available documents, independent of
+which preview is selected. A letter needs included body text before its button appears.
+After a successful export, the page-count endpoint refreshes the full checks with another transient print; the export
+response remains PDF bytes with its existing filename headers. Busy and unavailable service states appear beside the
+buttons, including the `COMPOSE_PROFILES=career-pdf` start hint. No PDF or HTML is saved by these operations.

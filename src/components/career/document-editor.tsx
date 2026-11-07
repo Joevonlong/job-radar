@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
   deleteDocumentAction,
@@ -26,6 +26,8 @@ import { DocumentContent, DocumentContact } from "./document-fields";
 import { DocumentImages } from "./document-images";
 import { DocumentLayout } from "./document-layout";
 import { DocumentLetter } from "./document-letter";
+import type { DocumentFinding } from "@/lib/career/render/check-result";
+import { DocumentExport } from "./document-export";
 import { DocumentPreview } from "./document-preview";
 import { DocumentConfirm, DocumentStatus } from "./document-shared";
 
@@ -36,6 +38,7 @@ type Props = {
   preferences: { preferences: CareerPreferences; baseHash: string | null };
   images: { photo: boolean; signature: boolean };
   debounceMs: number;
+  pageCountDebounceMs: number;
   imageMaxBytes: number;
   timeZone: string;
   warnings: string[];
@@ -48,6 +51,7 @@ export function DocumentEditor({
   preferences,
   images,
   debounceMs,
+  pageCountDebounceMs,
   imageMaxBytes,
   timeZone,
   warnings,
@@ -64,8 +68,18 @@ export function DocumentEditor({
   const [previewDoc, setPreviewDoc] = useState<"resume" | "letter">("resume");
   const [status, setStatus] = useState("");
   const [confirm, setConfirm] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [pending, startTransition] = useTransition();
   const [imageRevision, setImageRevision] = useState(0);
+  const [countRevision, setCountRevision] = useState(0);
+  const hintKey = JSON.stringify({ draft, previewDoc, imageRevision });
+  const [hints, setHints] = useState<{ key: string; findings: DocumentFinding[]; uncovered: string[] }>({
+    key: "", findings: [], uncovered: [],
+  });
+  const receiveHints = useCallback((value: { findings: DocumentFinding[]; uncovered: string[] }) => {
+    setHints({ ...value, key: hintKey });
+  }, [hintKey]);
+  const locked = pending || exporting;
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved.document);
   useEffect(() => (dirty ? registerUnsaved(guardId) : undefined), [dirty, guardId]);
   function change(document: CareerDocument) {
@@ -77,7 +91,7 @@ export function DocumentEditor({
     if (value === "letter") setPreviewDoc("letter");
     if (value === "content") setPreviewDoc("resume");
   }
-  function run(task: () => Promise<void>) {
+  function run(task: () => Promise<unknown>) {
     startTransition(async () => {
       try {
         await task();
@@ -97,13 +111,14 @@ export function DocumentEditor({
       : await saveDocumentAction({ id: draft.id, document: draft, baseHash: saved.baseHash });
     if (!result.ok) {
       setStatus(result.code);
-      return;
+      return false;
     }
     setSaved({ document: result.document, baseHash: result.baseHash });
     setDraft(result.document);
     setStates(result.states);
     setStatus(result.warnings[0] ?? "saved");
     await history();
+    return true;
   }
   async function remove() {
     const result = await deleteDocumentAction({ id: draft.id, confirmed: true });
@@ -130,14 +145,26 @@ export function DocumentEditor({
         </p>
       )}
       <div className="flex flex-wrap items-center gap-3">
-        <Button disabled={pending || status === "stale"} onClick={() => run(() => persist())}>
+        <Button disabled={locked || status === "stale"} onClick={() => run(() => persist())}>
           {t(pending ? "saving" : "save")}
         </Button>
         <DocumentStatus code={status || (dirty ? "unsaved" : "")} />
-        <Button variant="outline" disabled={pending} onClick={() => setConfirm(true)}>
+        <Button variant="outline" disabled={locked} onClick={() => setConfirm(true)}>
           {t("delete")}
         </Button>
       </div>
+      <DocumentExport
+        document={draft}
+        disabled={locked || status === "stale"}
+        findings={hints.key === hintKey ? hints.findings : []}
+        uncovered={hints.key === hintKey ? hints.uncovered : []}
+        onBusy={setExporting}
+        onSave={async () => dirty ? await persist() : true}
+        onExported={(doc) => {
+          setPreviewDoc(doc);
+          setCountRevision((value) => value + 1);
+        }}
+      />
       <Tabs value={tab} onValueChange={selectTab}>
         <TabsList className="max-w-full overflow-x-auto">
           {(["content", "letter", "layout", "preview"] as const).map((key) => (
@@ -158,7 +185,7 @@ export function DocumentEditor({
               <CardTitle>{t(tab === "letter" ? "letter" : "content")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <fieldset disabled={pending} className="flex min-w-0 flex-col gap-6">
+              <fieldset disabled={locked} className="flex min-w-0 flex-col gap-6">
                 {tab === "letter" ? (
                   <DocumentLetter
                     letter={draft.letter}
@@ -191,7 +218,7 @@ export function DocumentEditor({
               <CardTitle>{t("layout")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <fieldset disabled={pending} className="min-w-0">
+              <fieldset disabled={locked} className="min-w-0">
                 <DocumentLayout
                   document={draft}
                   onChange={(layout) => change({ ...draft, layout })}
@@ -201,7 +228,15 @@ export function DocumentEditor({
             </CardContent>
           </Card>
           <div className={cn(tab !== "preview" && "hidden lg:block")}>
-            <DocumentPreview document={draft} doc={previewDoc} debounceMs={debounceMs} revision={imageRevision} />
+            <DocumentPreview
+              document={draft}
+              doc={previewDoc}
+              debounceMs={debounceMs}
+              pageCountDebounceMs={pageCountDebounceMs}
+              revision={imageRevision}
+              countRevision={countRevision}
+              onHints={receiveHints}
+            />
           </div>
         </div>
       </div>
@@ -210,7 +245,7 @@ export function DocumentEditor({
           <CardTitle>{t("history")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <Button variant="outline" disabled={pending} onClick={() => run(history)}>
+          <Button variant="outline" disabled={locked} onClick={() => run(history)}>
             {t("refresh")}
           </Button>
           {versions.length ? (
@@ -221,7 +256,7 @@ export function DocumentEditor({
                   <span className="font-mono text-data">{version.hash}</span>
                   <Button
                     variant="outline"
-                    disabled={pending || dirty || status === "stale"}
+                    disabled={locked || dirty || status === "stale"}
                     onClick={() => run(() => persist(version.id))}
                   >
                     {t("restore")}
@@ -237,7 +272,7 @@ export function DocumentEditor({
       <DocumentConfirm
         open={confirm}
         title={t("delete")}
-        pending={pending}
+        pending={locked}
         onClose={() => setConfirm(false)}
         onConfirm={() => run(remove)}
       />

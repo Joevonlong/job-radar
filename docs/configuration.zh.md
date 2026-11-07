@@ -641,9 +641,30 @@ Compose 固定端口为 8090，另外两个变量从主机环境传入。修改 
 JSON 请求体上限是 HTML 上限的六倍加 1024 字节，以容纳转义；解码后的 HTML 再单独检查字节上限。
 服务一次打印一份，忙时返回 429，超时返回 504。健康检查反映浏览器连接状态，断线后下一次渲染会重启浏览器。
 
-`POST /api/career/documents/pages` 接收与预览相同的 `{ document, doc }` JSON；成功返回页数，
-PDF 不可用时返回 `{ ok: true, pages: null, code }`，不影响编辑。
+`POST /api/career/documents/preview` 接收 `{ document, doc }`，返回 HTML、当前文档的 `findings` 和
+`uncovered` 字符，以及覆盖两份可渲染导出文档的 `exportHints: { findings, uncovered }`。
+检查结果只包含 `{ code, params, severity, path? }`。
+`POST /api/career/documents/pages` 接收相同 JSON，成功返回 `{ ok: true, pages, budget, findings }`；
+`budget` 为 `{ pages, exceeded }`。PDF 不可用时返回
+`{ ok: true, pages: null, budget: null, findings: [], code }`，不影响编辑。
+PDF 文字检查失败时保留 `pages`、`budget`，返回空检查结果及 `code: pdf_checks_failed`。
 `POST /api/career/documents/<id>/pdf?doc=resume`（或 `doc=letter`）只导出已保存版本，应先保存再导出。
 两者都返回 `Cache-Control: no-store`，不写入 HTML 或 PDF 文件。求职信需要非空且纳入的正文。
 简历文件名使用引擎的 `layout.filename` 模板，求职信使用独立的语言对应名称。
 服务未启动时，编辑和 HTML 预览仍可用，错误码有包含启动命令的本地化文案。
+
+### 简历检查与页数
+
+`career.yaml: check.limits` 提供引擎各项检查阈值，包括要点长度、求职信页数预算、词数和 PDF 文字匹配。
+`check.lexicon.en` 和 `.de` 保存检查词表及关键词映射。配置 schema 不依赖排版引擎；这些设置通过 YAML
+修改，不在设置表单显示。`check.lexicon.*.*` 下的映射按词条合并：添加关键词后，其他出厂关键词仍随产品更新。
+用户显式覆盖的列表仍整项替换。`check.uncovered_max_chars` 限制字体 Unicode 范围未覆盖的去重字符列表长度。
+
+编辑器随 HTML 预览运行文字和占位符检查；页数按 `preview.page_count_debounce_ms` 独立防抖刷新，忽略旧编辑的响应。
+PDF 服务不可用时显示页数未知。PDF 文字解析失败时保留服务返回的页数，并提示检查未完成。获得 PDF 后增加页数预算、阅读顺序和解析结果检查。所有结果都是提示，包括占位符
+和超页，均不阻止导出。文档版式仅支持英文、德文；其他语言的内容可编辑和预览，并显示字体覆盖提示。
+
+导出先保存未保存的编辑；保存遇到版本冲突时停止下载，保留屏幕上的编辑。简历、求职信使用独立按钮下载，页面不刷新。
+导出警告同时覆盖两份可导出文档，不随当前预览切换而丢失。求职信需有已包含的正文才显示导出按钮。成功下载后通过页数接口再进行一次临时打印以刷新完整检查；导出响应保持原有的
+PDF 字节及文件名响应头。繁忙和不可用状态显示在按钮旁，不可用时提示 `COMPOSE_PROFILES=career-pdf` 启动方法。
+这些操作不会保存 PDF 或 HTML 文件。

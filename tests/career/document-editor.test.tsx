@@ -51,7 +51,8 @@ it("offers every schema page budget after switching from five pages to three and
   expect(select).toHaveValue("5");
 });
 
-it("keeps edits and unsaved protection after a stale save", async () => {
+it.each(["Save document", "Export résumé PDF"])("keeps edits and stops %s after a stale save", async (button) => {
+  const fetcher = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("export must not start"));
   vi.mocked(saveDocumentAction).mockResolvedValue({ ok: false, code: "stale" });
   const doc = document();
   const view = render(
@@ -78,6 +79,7 @@ it("keeps edits and unsaved protection after a stale save", async () => {
         }}
         images={{ photo: false, signature: false }}
         debounceMs={70}
+        pageCountDebounceMs={3000}
         imageMaxBytes={1234}
         timeZone="UTC"
         warnings={[]}
@@ -87,7 +89,7 @@ it("keeps edits and unsaved protection after a stale save", async () => {
   const title = screen.getAllByLabelText("Title", { exact: true })[0]!;
   fireEvent.change(title, { target: { value: "My unsaved title" } });
   expect(hasUnsaved()).toBe(true);
-  fireEvent.click(screen.getByRole("button", { name: "Save document" }));
+  fireEvent.click(screen.getByRole("button", { name: button }));
   await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Reload before saving again"));
   expect(title).toHaveValue("My unsaved title");
   expect(hasUnsaved()).toBe(true);
@@ -95,6 +97,8 @@ it("keeps edits and unsaved protection after a stale save", async () => {
   expect(
     within(screen.getByTestId("document-history")).queryByRole("button", { name: "Restore this version" }),
   ).not.toBeInTheDocument();
+  expect(fetcher).not.toHaveBeenCalled();
+  fetcher.mockRestore();
   view.unmount();
   expect(hasUnsaved()).toBe(false);
 });

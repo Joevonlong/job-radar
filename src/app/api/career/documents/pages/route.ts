@@ -4,6 +4,9 @@ import { loadConfig } from "@/lib/config";
 import { readCareerGate } from "@/lib/config/career-gate";
 import { loadContact } from "@/lib/career/contact/store";
 import { renderDocumentHtml } from "@/lib/career/render/html";
+import { pageBudget } from "@/lib/career/engine";
+import { checkWithPdf } from "@/lib/career/render/check";
+import { toResume } from "@/lib/career/render/to-resume";
 import { renderPdf } from "@/lib/career/render/pdf-client";
 import { documentSchema } from "@/lib/career/schema/document";
 import { loadImages } from "@/lib/career/store/images";
@@ -32,12 +35,26 @@ export async function POST(request: Request) {
     });
     const { contact } = await loadContact();
     const images = await loadImages();
+    const today = dayInZone(new Date(), getDisplayTimeZone());
     const rendered = renderDocumentHtml(parsed.data.document, {
-      contact, images, doc: parsed.data.doc, today: dayInZone(new Date(), getDisplayTimeZone()),
+      contact, images, doc: parsed.data.doc, today,
     });
     if (!rendered.ok) return refuse("render_invalid", { issues: rendered.issues });
     const printed = await renderPdf(rendered.html, settings.pdf);
-    return reply(printed.ok ? { ok: true, pages: printed.pages } : { ok: true, pages: null, code: printed.code });
+    if (!printed.ok) return reply({ ok: true, pages: null, budget: null, findings: [], code: printed.code });
+    const projected = toResume(parsed.data.document, contact, images, parsed.data.doc);
+    try {
+      const checked = await checkWithPdf(projected.resume, printed.pdf, {
+        doc: parsed.data.doc, today, check: settings.check, images: projected.images,
+      });
+      return reply({ ok: true, ...checked });
+    } catch {
+      const budget = pageBudget(projected.resume, parsed.data.doc, settings.check.limits);
+      return reply({
+        ok: true, pages: printed.pages, budget: { pages: budget, exceeded: printed.pages > budget },
+        findings: [], code: "pdf_checks_failed",
+      });
+    }
   } catch (error) {
     logActionFailure("careerDocumentPages", error);
     return storeFailure(error);
