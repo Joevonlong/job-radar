@@ -37,7 +37,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const today = dayInZone(new Date(), getDisplayTimeZone());
     const rendered = renderDocumentHtml(document, { contact, images, doc, today });
     if (!rendered.ok) return refuse("render_invalid", { issues: rendered.issues });
-    const printed = await renderPdf(rendered.html, settings.pdf);
+    const printed = await renderPdf(rendered.html, settings.pdf, request.signal);
     if (!printed.ok) return refuse(printed.code);
     const { resume } = toResume(document, contact, images, doc);
     const filename = `${exportStem(resume, today, doc)}.pdf`;
