@@ -318,10 +318,10 @@ of its own; see "Upgrading across the shipped config in the images" in [upgrade.
 ```bash
 scripts/ops/deploy.sh --dry-run     # take a look first
 scripts/ops/deploy.sh --ref vX.Y.Z  # a specific release tag (see upgrade.md)
-scripts/ops/deploy.sh               # from 3.0.0 on: follow the current stable or main branch
+scripts/ops/deploy.sh               # from 2.1.0 on: follow the current stable or main branch
 ```
 
-From 3.0.0 on, use `stable` (or the newest release tag) for the newest release; developers can still follow `main`.
+From 2.1.0 on, use `stable` (or the newest release tag) for the newest release; developers can still follow `main`.
 See [release channels](upgrade.md#upgrade-to-a-release).
 
 Before upgrading the script automatically takes a `jobradar-manual-…-pre-deploy.dump` backup (manual backups are never pruned automatically). During the upgrade web and runner restart for a few tens of seconds; restarting the runner while a cycle is running interrupts that cycle, and on the next start `catch_up` re-runs it. To avoid cycles, upgrade between them: morning cycle 07:00, evening cycle 17:00 (weekdays), weekend 09:00.
@@ -428,7 +428,7 @@ git switch --detach <commit>               # the pre-deploy backup's name contai
 scripts/ops/deploy.sh --skip-pull          # deploy the current checkout without pulling
 ```
 
-From 3.0.0 on, to return to the newest release afterwards: `git switch stable`, then `scripts/ops/deploy.sh`, or
+From 2.1.0 on, to return to the newest release afterwards: `git switch stable`, then `scripts/ops/deploy.sh`, or
 deploy the newest tag with `--ref <tag>`. Developers can still use `git switch main` and `scripts/ops/deploy.sh`.
 
 Config: when rolling back to code from before layered config, the old code reads `config/` (as it was before the switch); changes made in the web UI after the switch exist only in `data/config/`, so copy them back to `config/` by hand if needed. When rolling back to a version before a migration, files in `data/config` that were migrated are "too new" for the old code (`config.layers` ❌): replace them with the originals from `data/config/.backup/<timestamp>/`.

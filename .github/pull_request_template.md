@@ -1,4 +1,4 @@
-<!-- Base must be main. Starting with 3.0.0, GitHub may preselect stable; change it to main. -->
+<!-- Base must be main. Starting with 2.1.0, GitHub may preselect stable; change it to main. -->
 
 ## Summary
 

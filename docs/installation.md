@@ -67,7 +67,7 @@ git tag --list 'v*' --sort=-v:refname | head -1  # newest release tag
 git checkout <tag>                            # replace <tag> with that tag
 ```
 
-From 3.0.0 on, a plain clone already lands on the newest release (`stable`); checking out a tag is optional.
+From 2.1.0 on, a plain clone already lands on the newest release (`stable`); checking out a tag is optional.
 `main` is the development branch and can change between releases. Release tags stay available for a specific version
 (see [Updating](#updating)). Git reports a "detached HEAD" after checking out a tag; that is expected.
 
@@ -327,7 +327,7 @@ scripts/ops/deploy.sh --ref <tag> --dry-run   # shows every step, changes nothin
 scripts/ops/deploy.sh --ref <tag>
 ```
 
-Replace `<tag>` with the tag listed above. From 3.0.0 on, users on `stable` can instead run
+Replace `<tag>` with the tag listed above. From 2.1.0 on, users on `stable` can instead run
 `git pull --ff-only && scripts/ops/deploy.sh`; see the [release channels](upgrade.md#upgrade-to-a-release).
 
 The deploy script checks the tools, checks out the tag, installs dependencies, migrates your config files (originals
