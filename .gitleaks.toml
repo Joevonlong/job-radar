@@ -13,3 +13,11 @@ paths = [
   # recorded job-description vocabulary (skill names such as "REST APIs"), not credentials
   '''(^|/)tests/fixtures/market/golden-inputs\.json$''',
 ]
+regexes = [
+  # keyboard-walk hex placeholders used as fake tokens in the ops, lock and model tests
+  '''0123456789abcdef(0123456789abcdef)?''',
+  '''fedcba9876543210(fedcba9876543210)?''',
+  # fake API keys the tests feed to the redaction checks
+  '''sk-test-0123456789abcdef''',
+  '''sk-or-leak-this-1234567890''',
+]
