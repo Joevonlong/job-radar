@@ -91,7 +91,7 @@ export async function restoreDocumentVersion(id: string, version: string, { base
 
 export async function persistDocument(
   id: string, baseHash: string, edit: (current: CareerDocument) => CareerDocument | Promise<CareerDocument>,
-  afterSave: () => Promise<void> = async () => {},
+  afterSave: (baseHash: string) => Promise<void> = async () => {},
 ): Promise<DocumentSaveResult> {
   const file = careerDocumentPath(id);
   return withFileLock(file, async () => {
@@ -113,9 +113,9 @@ export async function persistDocument(
       if (error instanceof ConfigError && error.kind === "stale") return { ok: false, code: "stale" };
       throw new CareerStoreError("write_failed");
     }
-    if (unchanged) { await afterSave(); return { ok: true, ...current, warnings: [] }; }
+    if (unchanged) { await afterSave(current.baseHash); return { ok: true, ...current, warnings: [] }; }
     const warnings = await recordHistory(id, text, config.history.keep_versions);
-    await afterSave();
+    await afterSave(sha256(text));
     return { ok: true, document, baseHash: sha256(text), warnings };
   });
 }

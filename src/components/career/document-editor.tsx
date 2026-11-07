@@ -28,6 +28,12 @@ import { DocumentLayout } from "./document-layout";
 import { DocumentLetter } from "./document-letter";
 import { DocumentPreview } from "./document-preview";
 import { DocumentConfirm, DocumentStatus } from "./document-shared";
+import { ClaimProvider, ClaimSummary, type ClaimControls, type ClaimEntry } from "./claim-marks";
+import { TranslationConfirm } from "./claim-translation";
+import { objectLabel } from "./proposal-review";
+import { tailorAction } from "./tailor-api";
+import { ShrinkButton } from "./tailor-shrink";
+import { documentObjects, documentTexts } from "@/lib/career/document/targets";
 
 type Props = {
   initial: LoadedDocument;
@@ -39,6 +45,9 @@ type Props = {
   imageMaxBytes: number;
   timeZone: string;
   warnings: string[];
+  hasProposals?: boolean;
+  profileEntries?: ClaimEntry[];
+  pageCount?: number | null;
 };
 
 export function DocumentEditor({
@@ -51,6 +60,9 @@ export function DocumentEditor({
   imageMaxBytes,
   timeZone,
   warnings,
+  hasProposals = false,
+  profileEntries = [],
+  pageCount = null,
 }: Props) {
   const t = useTranslations("career.documents");
   const locale = resolveLocale(useLocale());
@@ -105,6 +117,28 @@ export function DocumentEditor({
     setStatus(result.warnings[0] ?? "saved");
     await history();
   }
+  function adopt(next: LoadedDocument) {
+    setSaved(next);
+    setDraft(next.document);
+    setStatus("saved");
+  }
+  const claimControls: ClaimControls = {
+    claims: saved.document.claims,
+    disabled: pending || dirty || status === "stale",
+    entries: profileEntries,
+    defaultEntry: (textId) => {
+      const entry = documentTexts(saved.document).find((item) => item.value.id === textId)?.entry;
+      const source = entry ? documentObjects(saved.document).get(entry)?.source : null;
+      const id = source && typeof source === "object" && "entry_id" in source ? String(source.entry_id) : null;
+      return id && profileEntries.some((item) => item.id === id) ? id : null;
+    },
+    run: async (body) => {
+      const result = await tailorAction({ ...body, doc_id: saved.document.id, baseHash: saved.baseHash });
+      if (!result.ok) return result.error;
+      if ("document" in result) adopt({ document: result.document, baseHash: result.baseHash });
+      return null;
+    },
+  };
   async function remove() {
     const result = await deleteDocumentAction({ id: draft.id, confirmed: true });
     if (!result.ok) {
@@ -124,6 +158,14 @@ export function DocumentEditor({
       {warnings.map((code, index) => (
         <DocumentStatus key={index} code={code} />
       ))}
+      {hasProposals && (
+        <p role="status" data-testid="document-proposals" className="rounded-card border-bw border-grid bg-soft p-3 text-body-sm">
+          {t("proposalsWaiting")}{" "}
+          <Link href={`/career/tailor?doc=${draft.id}`} className="underline">
+            {t("reviewProposals")}
+          </Link>
+        </p>
+      )}
       {states.profileChanged && (
         <p role="status" className="rounded-card border-bw border-grid bg-soft p-3 text-body-sm">
           {t("profileChanged")}
@@ -137,7 +179,13 @@ export function DocumentEditor({
         <Button variant="outline" disabled={pending} onClick={() => setConfirm(true)}>
           {t("delete")}
         </Button>
+        <Link href={`/career/tailor?doc=${draft.id}`} className="underline">
+          {t("tailor")}
+        </Link>
+        <ShrinkButton docId={draft.id} budget={draft.layout.pages} pageCount={pageCount} />
       </div>
+      <TranslationConfirm document={saved.document} baseHash={saved.baseHash} disabled={claimControls.disabled} onSaved={adopt} />
+      {dirty && saved.document.claims.length > 0 && <p className="text-body-sm">{t("saveBeforeMarks")}</p>}
       <Tabs value={tab} onValueChange={selectTab}>
         <TabsList className="max-w-full overflow-x-auto">
           {(["content", "letter", "layout", "preview"] as const).map((key) => (
@@ -151,6 +199,8 @@ export function DocumentEditor({
           ))}
         </TabsList>
       </Tabs>
+      <ClaimProvider value={claimControls}>
+      <ClaimSummary labels={(claim) => ("letter" in claim.target ? t(`letterFields.${claim.target.letter}`) : "entry" in claim.target ? objectLabel(saved.document, claim.target.entry) : "")} />
       <div className="grid min-w-0 gap-5 lg:grid-cols-2">
         <div className={cn("min-w-0", tab !== "content" && tab !== "letter" && "hidden lg:block")}>
           <Card>
@@ -205,6 +255,7 @@ export function DocumentEditor({
           </div>
         </div>
       </div>
+      </ClaimProvider>
       <Card data-testid="document-history">
         <CardHeader>
           <CardTitle>{t("history")}</CardTitle>

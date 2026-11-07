@@ -4,6 +4,7 @@ import { DocumentEditor } from "@/components/career/document-editor";
 import { readCareerGate } from "@/lib/config/career-gate";
 import { reloadConfig } from "@/lib/config/load";
 import { getDisplayTimeZone } from "@/lib/dashboard/context";
+import { tailorEntries } from "@/app/career/tailor/entries";
 import { documentHistoryAction, imageStateAction, loadDocumentAction, loadPreferencesAction } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +50,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     );
   }
   const config = reloadConfig("career");
+  const tailor = await tailorEntries(id);
   return (
     <DocumentEditor
       initial={{ document: loaded.document, baseHash: loaded.baseHash }}
@@ -60,6 +62,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       debounceMs={config.preview.debounce_ms}
       imageMaxBytes={config.document.image_max_bytes}
       timeZone={getDisplayTimeZone()}
+      hasProposals={tailor.hasProposals}
+      profileEntries={tailor.entries}
     />
   );
 }

@@ -15,6 +15,7 @@ import fs from "node:fs";
 import { parseConfigYaml } from "../src/lib/config/yaml-options";
 import { careerExtractOutputSchema } from "../src/lib/career/extract/prompt";
 import { createCareerExtractHandler } from "../src/lib/career/extract/handler";
+import { createCareerTailorHandler } from "../src/lib/career/tailor/handler";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { sql } from "drizzle-orm";
@@ -348,6 +349,29 @@ registerControlHandler("career_extract", createCareerExtractHandler({
   createRouter: () => createAiRouter({ config: loadConfig("ai"), providers: [createProvider(careerAi)], usage: null, health: null, quota: null, catalog: null, origin: "control" }),
 }));
 
+// Resume tailoring: no selection; in the wording step, an unsupported duty for the first bullet of the first entry with two
+// bullets (marked "not in your profile") and a supported rewording of its second bullet.
+const tailorAi: AiTransport = {
+  id: "codex-cli",
+  availability: () => ({ available: true }),
+  plannedModel: () => "e2e-model",
+  async call(request) {
+    await sleep(STUB_TEST_MS);
+    const bulletSchema = z.object({ bullets: z.array(z.object({ id: z.string(), text: z.string() })).min(2) });
+    const entry = [...request.user.matchAll(/<career_block id="ent_[a-z2-7]{10}">\n([^\n]*)\n<\/career_block>/g)]
+      .map((match) => { try { return bulletSchema.safeParse(JSON.parse(match[1]!)); } catch { return null; } })
+      .find((parsed) => parsed?.success)?.data;
+    const items = request.system.includes("Rewrite included content") && entry ? [
+      { action: "rewrite", target: { text: entry.bullets[0]!.id }, text: "Led a cross-functional team of eight engineers", support: [], rationale: "Leadership matters for this role." },
+      { action: "rewrite", target: { text: entry.bullets[1]!.id }, text: `${entry.bullets[1]!.text} together`, support: [{ quote: entry.bullets[1]!.text }], rationale: "Closer to the job wording." },
+    ] : [];
+    return { text: JSON.stringify({ items }), model: "e2e-model", usage: { tokensIn: 100, tokensOut: 50 } };
+  },
+};
+registerControlHandler("career_tailor", createCareerTailorHandler({
+  createRouter: () => createAiRouter({ config: loadConfig("ai"), providers: [createProvider(tailorAi)], usage: null, health: null, quota: null, catalog: null, origin: "control" }),
+}));
+
 await recordAllConfigLoaded(db);
 await syncSourceRegistry(db, { config: loadConfig("channels"), fingerprint: layeredConfigFingerprint("channels") }).catch(() => {});
 const stopWatching = watchConfig(
@@ -363,7 +387,7 @@ const stopWatching = watchConfig(
 
 // What the settings, sources and interests pages offer, plus the ai-worker's AI test, breakdown, salary lookup, company background and writer (answered
 // here with stand-ins). The other AI requests (scoring, translation, ...) belong to the host ai-worker, which e2e does not run.
-const poller = runControlPoller({ db, signal: abort.signal, logger: createLogger({ sink: () => {} }), kinds: () => ["run_cycle", "rescore_stale", "run_suggest", "test_channel", "test_telegram", "test_ai", "models_sync", "breakdown_job", "salary_lookup", "company_research", "story_extract", "career_extract", "writer_job", "writer_fit"], pollSeconds: () => POLL_SECONDS });
+const poller = runControlPoller({ db, signal: abort.signal, logger: createLogger({ sink: () => {} }), kinds: () => ["run_cycle", "rescore_stale", "run_suggest", "test_channel", "test_telegram", "test_ai", "models_sync", "breakdown_job", "salary_lookup", "company_research", "story_extract", "career_extract", "career_tailor", "writer_job", "writer_fit"], pollSeconds: () => POLL_SECONDS });
 
 log("ready");
 while (!abort.signal.aborted) {

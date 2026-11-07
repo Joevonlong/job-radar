@@ -3,6 +3,7 @@ import { readCareerGate } from "@/lib/config/career-gate";
 import { loadConfig } from "@/lib/config";
 import { documentIdSchema } from "@/lib/career/schema/document";
 import { acceptProposal, rejectProposal } from "@/lib/career/tailor/apply";
+import { removeProposal } from "@/lib/career/tailor/proposals";
 import { confirmTranslation, decideClaim } from "@/lib/career/document/claims";
 import { saveBackToProfile } from "@/lib/career/document/save-back";
 import { persistDocument } from "@/lib/career/store/documents";
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
       : input.action === "save_back" ? await saveBackToProfile(input.doc_id, input.text_id, { baseHash: input.baseHash, target: input.target })
       : await persistDocument(input.doc_id, input.baseHash, (doc) => ({
         ...(input.action === "claim" ? decideClaim(doc, input.claim_id, input.status) : confirmTranslation(doc)), updated_at: new Date().toISOString(),
-      }));
+      }), (saved) => removeProposal(input.doc_id, null, { from: input.baseHash, to: saved }));
     return result.ok ? reply(result) : refuse(result.code);
   } catch (error) { return failure(error); }
 }

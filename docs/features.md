@@ -1,6 +1,7 @@
 # Features and screenshots
 
 - [Career profile](career-profile.md): optional local manual editing, wordings and history.
+- [Résumé tailoring](resume-tailoring.md): AI proposals that fit a résumé document to one job, reviewed one by one.
 
 [English](features.md) | [中文](features.zh.md)
 

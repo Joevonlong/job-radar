@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { documentSchema, type CareerDocument, type DocText } from "@/lib/career/schema/document";
 import type { SourceStates } from "@/lib/career/document/resolve";
 import { DocumentInput } from "./document-shared";
+import { ClaimMarks } from "./claim-marks";
 
 export const documentSections = [
   "experience",
@@ -98,6 +99,7 @@ export function DocumentText({
         {states.texts[value.id] && <Badge>{t(`source.${states.texts[value.id]}`)}</Badge>}
         {value.origin === "user" && <Badge data-testid="document-edited">{t("edited")}</Badge>}
       </div>
+      <ClaimMarks value={value} />
     </div>
   );
 }

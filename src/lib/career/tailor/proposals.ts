@@ -46,12 +46,14 @@ export async function writeProposals(raw: Proposals, canWrite: () => Promise<boo
   }, file));
 }
 
-export async function removeProposal(docId: string, proposalId: string): Promise<void> {
+/** A review step that started from the generation snapshot moves the snapshot along, so only edits made elsewhere show as a change; a null id removes nothing. */
+export async function removeProposal(docId: string, proposalId: string | null, rebase?: { from: string; to: string }): Promise<void> {
   const file = proposalsPath(docId);
   await withFileLock(file, () => withConfigWriteLock(async () => {
     const current = await readProposals(docId);
-    if (!current) return;
+    if (!current || proposalId === null && current.doc_hash !== rebase?.from) return;
     current.items = current.items.filter((item) => item.id !== proposalId);
+    if (rebase && current.doc_hash === rebase.from) current.doc_hash = rebase.to;
     await commitConfigFile(file, stringify(current));
   }, file));
 }

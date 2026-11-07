@@ -43,7 +43,15 @@ export default async function Page() {
     (!profileEntryCount(profile) && !primaryText(profile.headline).trim() && !primaryText(profile.summary).trim());
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("documents.title")} description={t("documents.description")} />
+      <PageHeader
+        title={t("documents.title")}
+        description={t("documents.description")}
+        actions={
+          <Link href="/career/tailor" className="underline">
+            {t("documents.tailorLink")}
+          </Link>
+        }
+      />
       <DocumentListPage
         documents={documents.value}
         profileEmpty={empty}

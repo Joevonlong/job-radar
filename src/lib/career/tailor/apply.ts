@@ -77,7 +77,7 @@ export async function acceptProposal(docId: string, itemId: string, baseHash: st
     const applied = applyProposal(doc, item, loadConfig("career"));
     state = applied.state;
     return { ...applied.document, updated_at: new Date().toISOString() };
-  }, async () => { if (state === "applied") await removeProposal(docId, itemId); });
+  }, async (savedHash) => { if (state === "applied") await removeProposal(docId, itemId, { from: baseHash, to: savedHash }); });
   return { ...saved, state };
 }
 

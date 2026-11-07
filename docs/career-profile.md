@@ -107,3 +107,5 @@ density, colours, language, filename, section order and signature. **Save as my 
 layout to future documents. Use history to view and restore earlier versions; save pending edits first.
 Delete a document from the list after confirmation; this also removes its history. Page count and PDF
 export are not available yet.
+
+To fit a document to one job with AI proposals you review one by one, see [Résumé tailoring](resume-tailoring.md).
