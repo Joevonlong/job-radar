@@ -28,6 +28,9 @@ export function careerDocumentHistoryDir(id: string): string {
   careerDocumentPath(id);
   return path.join(careerHistoryDir(), "documents", id);
 }
+export function careerApplyStatePath(): string {
+  return path.join(careerDir(), "apply-state.yaml");
+}
 export function careerPreferencesPath(): string {
   return path.join(careerDir(), "preferences.yaml");
 }

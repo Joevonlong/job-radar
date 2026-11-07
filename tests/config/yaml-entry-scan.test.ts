@@ -15,6 +15,8 @@ const ALLOWED: Record<string, string> = {
   "src/lib/career/tailor/proposals.ts": "strict local AI proposal file next to a document, not a config file",
   "scripts/career-tailor-calibrate.ts": "reads fictional calibration samples, not config files",
   "src/lib/career/store/preferences.ts": "strict local document preferences without overlays",
+  "src/lib/career/store/apply-state.ts": "strict local record of the last apply to matching, without overlays",
+  "src/lib/career/apply/service.ts": "serializes a candidate me.yaml value only to count the scores its save would mark stale",
   "src/lib/career/render/to-resume.ts": "transient engine validation input, never config or disk",
   "src/lib/career/store/profile.ts": "strict local career profile format, independent of layered config",
   "src/lib/career/store/history.ts": "strict local profile history versions, not config files",

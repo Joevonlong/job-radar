@@ -627,4 +627,6 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 `stored_value_min_chars`、`title_words`、`sensitive_labels`；`evidence` 下的 `min_quote_chars`、`quote_max_chars`、
 `figure_units`。顶层三个时间控制运行、过期宽限和排队等待；导入设置控制文件类型和大小、上传及 PDF 处理时间和内存、文字长度、并发上传、草稿过期和数量、疑似输出截断，以及预览移除和高亮规则。证据设置控制引用长度和数字核验，数字单位共用申请写作的 scale 和 multiple 默认值。`ai.yaml` 的 `career_extract` 任务选择提取使用的服务商和模型。
 
+`writer.yaml: import.title_words` 列出猜测姓名时跳过的简历标题行。
+`writer.yaml: import.sensitive_labels` 列出发送预览中需要高亮供检查的标签。
 简历定制配置在 `tailor` 下：`max_requirements`（每份文档的单独要求条数）、`requirement_max_chars`、`duty_min_coverage`（改写后的职责有多少比例的实词要被引用覆盖）、`max_proposals`（一次请求保留的提议数）、`jd_max_chars` 和 `jd_head_share`（发送多少 JD、其中开头占多少），以及核对用的分语言词表 `first_person`、`names` 和 `stopwords`。`duty_min_coverage: 0.7` 是在虚构样本上测出的起始值，会用真实模型输出重新校准。定制沿用提取的三个时间设置，`ai.yaml` 的 `career_tailor` 任务选择服务商、模型和每次调用的 `max_output_tokens`。见[简历定制](resume-tailoring.zh.md)。

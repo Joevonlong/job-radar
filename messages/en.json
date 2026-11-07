@@ -831,6 +831,7 @@
       }
     },
     "storyImport": {
+      "dismissError": "Dismiss this message.",
       "title": "Get stories from what you already wrote",
       "description": "The AI drafts stories from your profile, a text you paste or your résumé. Nothing enters your library until you adopt it.",
       "sendsTo": "The text goes to:",
@@ -906,8 +907,15 @@
         "profile_invalid": "The career profile is invalid. Check it and try again.",
         "deleted": "The career data was deleted and this request was cancelled.",
         "draft_write_failed": "The extracted draft could not be saved. Try again.",
-        "handler_failed": "Career extraction failed. Try again."
-      }
+        "handler_failed": "Career extraction failed. Try again.",
+        "review_again": "The text changed during the privacy check. Review the preview and confirm again.",
+        "too_long": "The text is too long. Shorten it in the preview before sending.",
+        "preview_required": "This request needs a preview. Start again and confirm the text in the preview.",
+        "use_career": "Extraction moved to the career profile page."
+      },
+      "preview": "Preview text",
+      "useCareer": "With the career profile on, stories come from it: apply it to matching on the career page. Drafts already here can still be reviewed.",
+      "useCareerLink": "Go to the career profile"
     }
   },
   "filter": {
@@ -1435,6 +1443,7 @@
           "score_ai_unavailable": "Scoring did not start: no AI provider is available (cooling down, over its cap or logged out), see the AI card on /sources",
           "quota_guard": "Scoring did not start: Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
           "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+          "preview_required": "Open the preview and confirm the text before extracting again.",
           "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
           "contact_invalid": "Contact details are invalid. Check the local file and try again.",
           "profile_invalid": "The career profile is invalid. Check it and try again.",
@@ -3560,6 +3569,7 @@
           "score_ai_unavailable": "Scoring did not start: no AI provider is available (cooling down, over its cap or logged out), see the AI card on /sources",
           "quota_guard": "Not run: Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
           "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+          "preview_required": "Open the preview and confirm the text before extracting again.",
           "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
           "contact_invalid": "Contact details are invalid. Check the local file and try again.",
           "profile_invalid": "The career profile is invalid. Check it and try again.",
@@ -4526,6 +4536,7 @@
       "quota_guard": "Job Radar's own AI usage cap holds this provider back. {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
       "backfill_over_limit": "The configured backfill limit changed before execution (maximum {max} h). Queue a smaller backfill.",
       "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+      "preview_required": "Open the preview and confirm the text before extracting again.",
       "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
       "contact_invalid": "Contact details are invalid. Check the local file and try again.",
       "profile_invalid": "The career profile is invalid. Check it and try again.",
@@ -4974,6 +4985,7 @@
       "handler_error": "Something went wrong handling the request. Try again.",
       "no_handler": "No process handles breakdown requests (is the ai-worker running?).",
       "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+      "preview_required": "Open the preview and confirm the text before extracting again.",
       "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
       "contact_invalid": "Contact details are invalid. Check the local file and try again.",
       "profile_invalid": "The career profile is invalid. Check it and try again.",
@@ -7196,6 +7208,7 @@
       "handler_error": "Something went wrong handling the request. Try again.",
       "no_handler": "No process handles salary lookups (is the ai-worker running?).",
       "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+      "preview_required": "Open the preview and confirm the text before extracting again.",
       "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
       "contact_invalid": "Contact details are invalid. Check the local file and try again.",
       "profile_invalid": "The career profile is invalid. Check it and try again.",
@@ -7338,6 +7351,7 @@
       "handler_error": "Something went wrong handling the request. Try again.",
       "no_handler": "No process handles company lookups (is the ai-worker running?).",
       "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+      "preview_required": "Open the preview and confirm the text before extracting again.",
       "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
       "contact_invalid": "Contact details are invalid. Check the local file and try again.",
       "profile_invalid": "The career profile is invalid. Check it and try again.",
@@ -7754,6 +7768,7 @@
       "translation_incomplete": "Translation incomplete",
       "error": "Operation error",
       "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+      "preview_required": "Open the preview and confirm the text before extracting again.",
       "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
       "contact_invalid": "Contact details are invalid. Check the local file and try again.",
       "profile_invalid": "The career profile is invalid. Check it and try again.",
@@ -7769,6 +7784,7 @@
       "no_material": "No material chosen",
       "no_text": "No text to extract from",
       "too_long": "Text longer than allowed",
+      "review_again": "The text changed during the privacy check. Review the preview and confirm again.",
       "busy": "Another request for this question is running",
       "output_truncated": "Answer cut off at the output limit",
       "expired": "Request expired",
@@ -7852,6 +7868,7 @@
       "translation_incomplete": "Translation incomplete",
       "error": "Operation error",
       "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+      "preview_required": "Open the preview and confirm the text before extracting again.",
       "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
       "contact_invalid": "Contact details are invalid. Check the local file and try again.",
       "profile_invalid": "The career profile is invalid. Check it and try again.",
@@ -8367,7 +8384,7 @@
     "clearHistoryTitle": "Clear career history?",
     "clearHistoryDescription": "This permanently removes all local career profile versions. The current profile and contact details remain. Existing backups, before-restore directories and content already sent to an AI provider are unaffected; restoring an older backup can bring deleted versions back.",
     "deleteProfileTitle": "Delete all career data?",
-    "deleteProfileDescription": "This permanently removes the local career profile, contact details and version history. Existing backups, before-restore directories and content already sent to an AI provider are unaffected; restoring an older backup can bring deleted data back.",
+    "deleteProfileDescription": "This permanently removes the local career profile, contact details and version history. Existing backups, before-restore directories and content already sent to an AI provider are unaffected; restoring an older backup can bring deleted data back. Content you applied to matching stays in me.yaml, stories.yaml, the profile history and database backups.",
     "errors": {
       "profileInvalid": "The career profile could not be read or contains invalid fields. Check the profile and try again.",
       "contactInvalid": "The contact details could not be read or contain invalid fields. Check the details and try again.",
@@ -8383,6 +8400,7 @@
       "historyFailed": "Your profile changes are stored, but the history version could not be created.",
       "generic": "Something went wrong. Try again.",
       "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+      "preview_required": "Open the preview and confirm the text before extracting again.",
       "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
       "contact_invalid": "Contact details are invalid. Check the local file and try again.",
       "profile_invalid": "The career profile is invalid. Check it and try again.",
@@ -8448,6 +8466,7 @@
         "historyFailed": "Your profile changes are stored, but the history version could not be created.",
         "generic": "The extraction could not be completed. Try again.",
         "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+        "preview_required": "Open the preview and confirm the text before extracting again.",
         "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
         "contact_invalid": "Contact details are invalid. Check the local file and try again.",
         "profile_invalid": "The career profile is invalid. Check it and try again.",
@@ -8473,6 +8492,67 @@
         "timeout": "Extraction timed out. Try again.",
         "queue_timeout": "The queued extraction expired. Send it again.",
         "failed": "Extraction failed. Try again."
+      }
+    },
+    "emptyHint": "Start by uploading or pasting a résumé in your career profile.",
+    "guidance": {
+      "title": "Getting started",
+      "purpose": "Later, this profile will support tailored résumés, cover letters and job matching.",
+      "local": "Your profile data stays on this machine. AI extraction sends only the preview text you confirm to your configured provider.",
+      "upload": "Upload or paste a résumé.",
+      "review": "Review the extracted draft before adopting it.",
+      "edit": "Add and edit entries by hand.",
+      "collapse": "Hide guidance",
+      "expand": "Show guidance"
+    },
+    "apply": {
+      "title": "Apply to matching",
+      "description": "Copy your languages, skills, years of experience and summary into the profile scoring reads (me.yaml), and one story per job into your experience library (stories.yaml). Contact details, links and places are left out. Nothing changes until you confirm, and the career profile itself is never changed by this.",
+      "preview": "Show what would change",
+      "changedSince": "Your career profile changed since you last applied it to matching.",
+      "openMe": "Open your profile",
+      "stale": "Something changed since the preview (a file was saved or scores finished). Check the new preview and confirm again.",
+      "nothing": "Nothing to apply: matching already has what your career profile says.",
+      "meTitle": "Profile for scoring (me.yaml)",
+      "storiesTitle": "Experience library (stories.yaml)",
+      "fields": {
+        "languages": "Languages",
+        "skills": "Skills",
+        "years_experience": "Years of experience",
+        "summary": "Summary"
+      },
+      "from": "Now: {value}",
+      "to": "New: {value}",
+      "truncated": "Shortened",
+      "kind": {
+        "new": "New story",
+        "changed": "Changed story (maybe edited by you)",
+        "removed": "Its entry left your profile — remove it"
+      },
+      "languagesNotApplied": "Not applied (no language code or CEFR level): {names}",
+      "storiesNotApplied": "No story for (no summary or bullets): {names}",
+      "staleCount": "{count, plural, =0 {No score has to be redone.} one {1 score becomes out of date and will be redone (this uses the AI).} other {# scores become out of date and will be redone (this uses the AI).}}",
+      "retention": "What you apply stays for a long time: earlier versions of me.yaml and stories.yaml are kept in the profile history in the database and in database backups. Deleting all career data does not remove them; delete or roll back on your profile page instead.",
+      "confirm": "Apply",
+      "cancel": "Cancel",
+      "result": {
+        "me": "Profile for scoring: {state, select, written {saved} unchanged {unchanged} snapshot_failed {saved, but its history could not be stored} stale {not saved, it changed meanwhile} other {not saved}}",
+        "stories": "Experience library: {state, select, written {saved} unchanged {unchanged} snapshot_failed {saved, but its history could not be stored} stale {not saved, it changed meanwhile} other {not saved}}",
+        "staleMarked": "{count, plural, =0 {No score was marked out of date.} one {1 score was marked out of date.} other {# scores were marked out of date.}}",
+        "staleUnknown": "How many scores went out of date is unknown.",
+        "staleDiffers": "The preview said {expected}: scores finished while you confirmed."
+      },
+      "errors": {
+        "me_required": "Set up your profile for scoring first.",
+        "profile_empty": "Your career profile is empty: there is nothing to apply.",
+        "too_many": "Your experience library would hold more stories than allowed. Uncheck some or remove stories on your profile page.",
+        "disabled": "The career profile is off.",
+        "contact_invalid": "Your contact details cannot be read, so nothing can be checked for them. Fix them first.",
+        "contact_unreadable": "Your contact details cannot be read, so nothing can be checked for them. Fix them first.",
+        "profile_invalid": "Your career profile cannot be read.",
+        "config_error": "A settings file cannot be read.",
+        "invalid": "The request was not understood. Reload the page.",
+        "unavailable": "That did not work. Nothing changed; try again."
       }
     },
     "tailor": {
@@ -8806,6 +8886,7 @@
         "too_long": "The text is longer than the limit in writer.yaml (draft_max_chars).",
         "busy": "Another request for this question is still running (maybe from another tab or device). Wait for it to finish, then try again.",
         "scrub_mismatch": "Contact details changed after confirmation. Review the preview and try again.",
+        "preview_required": "Open the preview and confirm the text before extracting again.",
         "contact_unreadable": "Contact details could not be read. Check the local file and try again.",
         "contact_invalid": "Contact details are invalid. Check the local file and try again.",
         "profile_invalid": "The career profile is invalid. Check it and try again.",

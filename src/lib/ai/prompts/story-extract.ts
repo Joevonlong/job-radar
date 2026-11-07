@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+import type { OutboundText } from "@/lib/outbound/outbound";
+import { neutralizeStorySource } from "@/lib/stories/source";
+
 import type { AiPrompt } from "../types";
 
 /** Bumped whenever the prompt or the output format changes. */
@@ -27,13 +30,8 @@ export const storyExtractOutputSchema = z.object({
 });
 export type StoryExtractOutput = z.infer<typeof storyExtractOutputSchema>;
 
-/** The source must not be able to close its own delimiter. */
-function neutralize(text: string): string {
-  return text.replace(/<\/?\s*story_source\s*>/gi, "[tag removed]");
-}
-
 export interface StoryExtractPromptInput {
-  text: string;
+  text: OutboundText;
   /** writer.yaml `import.max_drafts`. */
   maxDrafts: number;
   /** writer.yaml `evidence.quote_max_chars`. */
@@ -54,5 +52,5 @@ export function buildStoryExtractPrompt(input: StoryExtractPromptInput): AiPromp
     "Remove personal identifiers from every value and every quote: the person's name, email addresses, phone numbers, postal addresses, ID, passport and tax numbers, links to personal pages. Pick a quote that does not contain them.",
     `Every value comes with its "quote": the passage of the text it rests on, copied character for character (never translated or paraphrased), at most ${input.quoteMaxChars} characters. Every figure in a value must be in its quote.`,
   ].join("\n");
-  return { system, user: ["<story_source>", neutralize(input.text), "</story_source>"].join("\n") };
+  return { system, user: ["<story_source>", neutralizeStorySource(input.text), "</story_source>"].join("\n") };
 }

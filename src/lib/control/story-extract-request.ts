@@ -9,6 +9,9 @@ import type { MeConfig, WriterConfig } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
 import { findLatestStoryExtractRequest, getControlRequest, insertControlRequest, type ControlRequest } from "@/lib/db/repos/control-requests";
 import { createProcessLogger } from "@/lib/logging/process-logger";
+import { NO_STORED_VALUES } from "@/lib/outbound/outbound";
+import { scrubFinal, previewHighlights, type Highlight } from "@/lib/outbound/scrub";
+import { neutralizeStorySource } from "@/lib/stories/source";
 import type { StoryExtractOrigin } from "@/lib/stories/extract";
 import { TRANSLATION_FAILURE_CODES } from "@/lib/translation/errors";
 
@@ -20,12 +23,12 @@ import type { StoryExtractPayload } from "./types";
 const log = createProcessLogger({ fields: { component: "control" } });
 
 /** Error codes the stories card has labels for. */
-export const STORY_EXTRACT_ERROR_CODES = [...TRANSLATION_FAILURE_CODES, "disabled", "config_error", "expired", "output_truncated", "aborted", "invalid_payload", "handler_error", "no_handler"] as const;
+export const STORY_EXTRACT_ERROR_CODES = [...TRANSLATION_FAILURE_CODES, "disabled", "config_error", "expired", "output_truncated", "aborted", "invalid_payload", "handler_error", "no_handler", "review_again", "too_long", "scrub_mismatch", "preview_required"] as const;
 export type StoryExtractErrorCode = (typeof STORY_EXTRACT_ERROR_CODES)[number];
 
 export type StoryExtractOutcome =
-  | { state: "queued"; requestId: number; existing: boolean; truncated: boolean }
-  | { state: "error"; error: "disabled" | "config_error" | "no_text" | "busy" };
+  | { state: "queued"; requestId: number; existing: boolean; truncated: false }
+  | { state: "error"; error: "disabled" | "config_error" | "no_text" | "busy" | "too_long" | "review_again"; text?: string; highlights?: Highlight[] };
 
 /** The text a "from profile" extraction sends: your summary and skills, nothing else of me.yaml. */
 export function profileSourceText(me: Pick<MeConfig, "summary" | "skills">): string {
@@ -38,17 +41,22 @@ const isOpen = (request: ControlRequest): boolean => request.status === "pending
 const hashOf = (request: ControlRequest): unknown => (typeof request.payload === "object" && request.payload !== null ? (request.payload as { sourceHash?: unknown }).sourceHash : undefined);
 
 /**
- * Leave a `story_extract` request. The text is cut at `import.max_chars`. One extraction runs at a time: the same text
+ * Leave a confirmed `story_extract` request without changing its text. One extraction runs at a time: the same text
  * joins the open request, another one is refused rather than queued next to it.
  */
 export async function requestStoryExtract(db: Db, input: { origin: StoryExtractOrigin; text: string; writer: WriterConfig | null }): Promise<StoryExtractOutcome> {
   const { writer } = input;
   if (writer === null) return { state: "error", error: "config_error" };
   if (!writer.enabled) return { state: "error", error: "disabled" };
-  const whole = input.text.trim();
-  if (whole.length < writer.import.min_chars) return { state: "error", error: "no_text" };
-  const truncated = whole.length > writer.import.max_chars;
-  const text = truncated ? whole.slice(0, writer.import.max_chars) : whole;
+  const { text } = input;
+  if (text.trim().length < writer.import.min_chars) return { state: "error", error: "no_text" };
+  if (text.length > writer.import.max_chars) return { state: "error", error: "too_long" };
+  const final = neutralizeStorySource(scrubFinal(text, NO_STORED_VALUES).text);
+  if (final !== text) return {
+    state: "error", error: "review_again", text: final,
+    highlights: previewHighlights(final, NO_STORED_VALUES, writer.import),
+  };
+  const truncated = false;
   const sourceHash = createHash("sha256").update(text).digest("hex");
   await expireScrubbedRequests(db, { settings: writer });
   const latest = await findLatestStoryExtractRequest(db);
@@ -56,7 +64,7 @@ export async function requestStoryExtract(db: Db, input: { origin: StoryExtractO
     if (hashOf(latest) === sourceHash) return { state: "queued", requestId: latest.id, existing: true, truncated };
     return { state: "error", error: "busy" };
   }
-  const payload: StoryExtractPayload = { origin: input.origin, sourceHash, sourceChars: text.length, truncated, text };
+  const payload: StoryExtractPayload = { origin: input.origin, sourceHash, sourceChars: text.length, truncated, text, confirmed: true };
   const created = await insertControlRequest(db, { kind: "story_extract", payload });
   log.info("story extraction queued", { request: created.id, origin: input.origin, chars: text.length, truncated });
   return { state: "queued", requestId: created.id, existing: false, truncated };
@@ -85,10 +93,10 @@ export async function readStoryExtractRequest(db: Db, requestId: number): Promis
   return stateOf(db, request);
 }
 
-/** What the card starts with after a page load: the open extraction, to follow it. A failure is shown only by the page that started it. */
-export async function readOpenStoryExtract(db: Db): Promise<{ requestId: number; stage: "pending" | "running"; queue: ControlQueueView | null } | null> {
+/** The newest extraction determines what the card shows after a page load. */
+export async function readLatestStoryExtract(db: Db): Promise<({ requestId: number } & Exclude<StoryExtractState, { state: "missing" }>) | null> {
   await expireScrubbedRequests(db);
   const latest = await findLatestStoryExtractRequest(db);
-  if (!latest || !isOpen(latest)) return null;
-  return { requestId: latest.id, stage: latest.status as "pending" | "running", queue: await loadQueueView(db, latest) };
+  if (!latest) return null;
+  return { requestId: latest.id, ...await stateOf(db, latest) };
 }

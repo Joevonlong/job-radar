@@ -30,8 +30,8 @@ import {
 import { registerProfileSnapshotHook } from "./snapshots";
 import type { FormErrorKey, ProfileActionState } from "./types";
 
-function saved(kind: ProfileName): ProfileActionState {
-  return { status: "saved", kind, nonce: Date.now() };
+function saved(kind: ProfileName, staleMarked?: number): ProfileActionState {
+  return staleMarked === undefined ? { status: "saved", kind, nonce: Date.now() } : { status: "saved", kind, nonce: Date.now(), staleMarked };
 }
 
 async function currentHash(kind: ProfileName): Promise<string> {
@@ -76,7 +76,11 @@ function preferencesProblems(value: PreferencesConfig): FieldError[] {
  * step failed (`writeConfig` throws after the file was written only when the snapshot hook fails).
  */
 async function write(kind: ProfileName, candidate: unknown, baseHash: string | undefined, update?: (current: PreferencesConfig) => unknown): Promise<ProfileActionState> {
-  const options = baseHash === undefined ? {} : { baseHash };
+  let staleMarked: number | undefined;
+  const onProfileSaved = (result: { staleMarked?: number }) => {
+    staleMarked = result.staleMarked;
+  };
+  const options = baseHash === undefined ? { onProfileSaved } : { baseHash, onProfileSaved };
   registerProfileSnapshotHook();
   let before = await currentHash(kind);
   try {
@@ -108,7 +112,7 @@ async function write(kind: ProfileName, candidate: unknown, baseHash: string | u
       }
       if (errors.length > 0) return failed(kind, null, errors);
     }
-    return saved(kind);
+    return saved(kind, staleMarked);
   } catch (error) {
     logActionFailure("saveProfile", error);
     if (error instanceof ConfigError) return failed(kind, error.kind === "db_unavailable" ? "dbUnavailable" : error.kind === "busy" ? "busy" : error.kind === "stale" ? "stale" : "writeFailed");

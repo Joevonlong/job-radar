@@ -75,10 +75,9 @@ With the career profile enabled, **Confirm and generate** on `/career/tailor` se
 
 ### Story extraction
 
-The buttons in the stories card on `/me` send your profile summary and skills, a text you paste or the text of your résumé to
-the providers of the `story_extract` task in `ai.yaml`, only when you press them and only while `writer.yaml: enabled` is true.
-No web search. An uploaded file is read in memory and never written to disk, not even to a temporary folder; its name is not
-kept. Its text goes into one `story_extract` control request, where it stays until the request ends: every way it ends (done,
+With `writer.yaml: enabled`, the stories card on `/me` prepares an editable preview of your profile summary and skills, pasted text or résumé. Only the preview text you confirm is sent to the `story_extract` providers in `ai.yaml`; there is no web search. Detected contact details and links are replaced, but detection can miss details, so review all the text. Story extraction does not use stored contact values for replacement, regardless of the career profile switch. You can enter a name and address in the preview for removal. When the career profile is off, it does not read that profile folder.
+
+An uploaded file is read in memory and never written to disk, not even to a temporary folder; its name is not kept. The confirmed text goes into one `story_extract` control request, where it stays until the request ends: every way it ends (done,
 failed, expired, cut off by a restart) clears the text in the same statement and leaves only the SHA-256 and the length. A
 request is not retried after a restart.
 
@@ -153,8 +152,11 @@ Extraction sends the confirmed preview to an AI provider. A contact location or 
 with an advisory warning; it remains in profile history until you remove that history.
 
 The files are readable and writable by the local web process, have mode `0600` when written by the app and enter the
-configuration archive. They are not stored in long-lived database tables, do not change matching profile snapshots,
-and are not exposed over MCP. Disabling retains the data and performs no cleanup. Delete controls remove local career
+configuration archive. They are not stored in long-lived database tables and are not exposed over MCP. They change matching only when you
+confirm **Apply to matching**: that copies languages, skills, years of experience and optionally the summary into `me.yaml`,
+and one story per experience into `stories.yaml`, never contact details or entry locations. Those saves are ordinary
+profile saves, so earlier versions stay in the database's profile snapshots and in database backups, and deleting career
+data does not remove them. Disabling retains the data and performs no cleanup. Delete controls remove local career
 files only: backups, before-restore copies and content already sent to an AI provider remain. An older backup can
 restore data deleted later. Retention differs for scheduled, manual and system backups; see
 [Backup and restore](backup-restore.md#career-profile-copies) and [Career profile](career-profile.md).

@@ -90,6 +90,16 @@ it("shows a not-created card before the first profile write without formatting a
   temp = tempCareer();
   const markup = renderToStaticMarkup(await CareerCard());
   expect(markup).toContain("notCreated");
+  expect(markup).toContain("career-card-hint");
+  expect(markup).toContain('href="/career"');
   expect(markup).not.toContain("updated");
   expect(fs.existsSync(careerDir())).toBe(false);
+});
+
+it("omits the empty-profile hint once the profile has content", async () => {
+  temp = tempCareer();
+  vi.spyOn(store, "loadCareerProfile").mockResolvedValue({ profile: profile(), baseHash: "stored", updatedAt: null });
+  const markup = renderToStaticMarkup(await CareerCard());
+  expect(markup).not.toContain("career-card-hint");
+  expect(markup).toContain('href="/career"');
 });
