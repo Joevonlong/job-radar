@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { resolveLocale } from "@/i18n/locale";
 import { readCareerGate } from "@/lib/config/career-gate";
 import { CareerStoreError } from "@/lib/career/contact/errors";
-import { profileEntryCount } from "@/lib/career/schema/profile";
+import { profileEntryCount, hasCareerContent } from "@/lib/career/schema/profile";
 import { loadCareerProfile } from "@/lib/career/store/profile";
 import { getDisplayTimeZone } from "@/lib/dashboard/context";
 import { formatFullTime } from "@/lib/format/time";
@@ -44,9 +44,10 @@ export async function CareerCard() {
             {t(careerErrorMessageKey(code))}
           </p>
         )}
-        <Link href="/career" className="text-label underline">
+        {loaded && !hasCareerContent(loaded.profile) && <p className="text-body-sm" data-testid="career-card-hint"><Link href="/career" className="underline">{t("emptyHint")}</Link></p>}
+        {(!loaded || hasCareerContent(loaded.profile)) && <Link href="/career" className="text-label underline">
           {t("open")}
-        </Link>
+        </Link>}
       </CardContent>
     </Card>
   );

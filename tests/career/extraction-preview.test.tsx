@@ -62,6 +62,6 @@ it("renders sensitive labels from the real prepare and review-again responses", 
   await waitFor(() => expect(screen.getByRole("alert")).toHaveAttribute("data-code", "review_again"));
   expect(within(screen.getByTestId("outbound-highlights")).getAllByText(/Address:|Nationality:/, { selector: "mark" }).map((mark) => mark.textContent)).toEqual(sensitiveLines);
   expect(screen.getByTestId("outbound-text")).toHaveValue(`[email]\n${text}`);
-  expect(screen.getByTestId("outbound-text")).toHaveFocus();
+  await waitFor(() => expect(screen.getByTestId("outbound-text")).toHaveFocus());
   expect(fetch).toHaveBeenCalledTimes(2);
 });

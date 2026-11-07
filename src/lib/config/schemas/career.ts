@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { outboundImportFields } from "./outbound-import";
 import { figureUnitsSchema } from "./writer";
 
 export const CAREER_DEFAULT_TIMEOUT_SECONDS = 300;
@@ -21,7 +22,6 @@ export const careerLayoutDefaultsSchema = z.strictObject({
 });
 
 const positive = (fallback: number, max: number) => z.number().int().min(1).max(max).default(fallback);
-const words = z.array(z.string().trim().min(1).max(200)).max(100);
 
 export const careerCheckLimitsSchema = z.strictObject({
   maxMentions: positive(4, 100000),
@@ -101,27 +101,7 @@ export const careerSchema = z.strictObject({
       max_pending_drafts: positive(5, 100),
       output_truncated_share: z.number().min(0).max(1).default(0.95),
       stored_value_min_chars: positive(3, 100),
-      title_words: words.default([
-        "Lebenslauf",
-        "Curriculum Vitae",
-        "CV",
-        "Resume",
-        "Résumé",
-        "Tabellarischer Lebenslauf",
-      ]),
-      sensitive_labels: words.default([
-        "Geburtsdatum",
-        "Geburtsort",
-        "Staatsangehörigkeit",
-        "Nationalität",
-        "Familienstand",
-        "Anschrift",
-        "Date of birth",
-        "Place of birth",
-        "Nationality",
-        "Marital status",
-        "Address",
-      ]),
+      ...outboundImportFields,
     })
     .prefault({})
     .refine((value) => value.min_chars <= value.max_chars, { path: ["min_chars"], message: "invalid limits" }),

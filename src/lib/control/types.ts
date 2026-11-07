@@ -82,6 +82,7 @@ export type WriterJobPayload = z.infer<typeof writerJobPayloadSchema>;
  * value here also means the interactive lane: only `"auto"` means batch.
  */
 export const storyExtractPayloadSchema = z.strictObject({
+  confirmed: z.literal(true).optional(),
   origin: z.enum(STORY_EXTRACT_ORIGINS),
   sourceHash: z.string().regex(/^[0-9a-f]{64}$/),
   sourceChars: z.number().int().min(0),

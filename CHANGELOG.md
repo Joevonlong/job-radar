@@ -15,6 +15,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Review story extraction before sending.** All three sources on My profile now open an editable privacy preview; older queued requests need a new preview. The career profile also has a short getting-started guide.
 - **Release channels: `stable` for users, `main` for development.** Starting with 3.0.0, the `stable` branch carries the newest release and only moves forward when a release is tagged; contributors still branch from and open PRs against `main`, and link issues with `Refs #N`. See `docs/upgrade.md` and `CONTRIBUTING.md`.
 - **`scripts/ops/deploy.sh` follows the branch you are on.** Without `--ref` or `--branch` it pulls `main` on `main` and `stable` on `stable`, and refuses any other branch or a detached HEAD with a hint (`--ref <tag>`, `--skip-pull`, or `git switch stable` when that branch exists); it never switches branches by itself. After a deploy that is not a release tag's tree it prints a development-build note with the number of commits since the tag. `--skip-pull` is unchanged.
 - **The project website moved to [jobradar.bid](https://jobradar.bid/).** The READMEs and docs link there now; the old address redirects, so existing links keep working.

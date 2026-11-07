@@ -180,6 +180,10 @@ export function primaryText(text: Text | null): string {
   return text?.wordings.find((wording) => wording.id === text.primary)?.text ?? text?.wordings[0]?.text ?? "";
 }
 
+export function hasCareerContent(profile: CareerProfile): boolean {
+  return profileEntryCount(profile) > 0 || !!profile.headline || !!profile.summary;
+}
+
 export function profileEntryCount(profile: CareerProfile): number {
   let count = 0;
   visitProfile(profile, (object) => {

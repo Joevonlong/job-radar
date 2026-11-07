@@ -627,6 +627,9 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 `stored_value_min_chars`、`title_words`、`sensitive_labels`；`evidence` 下的 `min_quote_chars`、`quote_max_chars`、
 `figure_units`。顶层三个时间控制运行、过期宽限和排队等待；导入设置控制文件类型和大小、上传及 PDF 处理时间和内存、文字长度、并发上传、草稿过期和数量、疑似输出截断，以及预览移除和高亮规则。证据设置控制引用长度和数字核验，数字单位共用申请写作的 scale 和 multiple 默认值。`ai.yaml` 的 `career_extract` 任务选择提取使用的服务商和模型。
 
+`writer.yaml: import.title_words` 列出猜测姓名时跳过的简历标题行。
+`writer.yaml: import.sensitive_labels` 列出发送预览中需要高亮供检查的标签。
+
 ### 可选 PDF 服务和接口
 
 `preview.page_count_debounce_ms` 提供页数刷新防抖时间，默认 3000 毫秒。

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { outboundImportFields } from "./outbound-import";
 import { nonEmptyString } from "./common";
 import { STORY_FILE_BOUNDS } from "./stories";
 
@@ -116,9 +117,10 @@ export const writerSchema = z.strictObject({
   /** Extracting stories from your profile, a pasted text or an uploaded résumé. */
   import: z
     .strictObject({
+      ...outboundImportFields,
       /** Largest résumé file, in bytes; a larger one is refused unread. */
       max_file_bytes: z.number().int().min(10_000).max(9_000_000).default(2_000_000),
-      /** Longest source text sent to the AI, in characters; a longer one is cut and the page says so. */
+      /** Longest confirmed text sent to the AI, in characters; the preview shows any earlier truncation. */
       max_chars: z.number().int().min(1000).max(200_000).default(30_000),
       /** A source with less text than this has nothing to extract (a scanned PDF has no text layer). */
       min_chars: z.number().int().min(1).max(1000).default(20),

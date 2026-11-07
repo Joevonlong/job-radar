@@ -9,11 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { resolveLocale } from "@/i18n/locale";
 import type { CareerConfig } from "@/lib/config/schemas/career";
-import { emptyProfile } from "@/lib/career/schema/profile";
+import { emptyProfile, hasCareerContent } from "@/lib/career/schema/profile";
 import type { loadContact } from "@/lib/career/contact/store";
 import type { CareerVersion } from "@/lib/career/store/history";
 import type { LoadedCareerProfile } from "@/lib/career/store/profile";
 import { formatFullTime } from "@/lib/format/time";
+import { CareerGuidance } from "./career-guidance";
 import { CareerStatus } from "./career-status";
 import { ContactForm } from "./contact-form";
 import { careerErrorMessageKey } from "./error-messages";
@@ -131,6 +132,7 @@ export function CareerEditor({ initial, contact, initialVersions, errors, limits
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      <CareerGuidance empty={!saved || !hasCareerContent(saved.profile)} />
       {errors.map((code) => (
         <p key={code} role="alert" data-code={code}>
           {t(careerErrorMessageKey(code))}

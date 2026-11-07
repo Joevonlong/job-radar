@@ -5,6 +5,14 @@
 The optional career profile is a local library of career facts and alternative wordings. You can edit it manually or extract a reviewable draft from your own text. The profile editor does not export résumés. It is independent of the
 application writer and does not change matching, scores or the experience library on **My profile**.
 
+## Quick start
+
+1. Enable the career profile as described below, then upload or paste a résumé.
+2. Review the extracted draft before adopting it.
+3. Add and edit entries by hand.
+
+Later, this profile will support tailored résumés, cover letters and job matching; these uses are not available yet. Profile data stays on this machine; AI extraction sends only the preview text you confirm to your configured provider. The guidance on `/career` can be collapsed once the profile has content.
+
 ## Turn it on
 
 Open **Settings → Workflow → Career profile**, enable it and save. A card below the matching profile on **My profile**
@@ -74,6 +82,33 @@ that content again as a new current version; it never rewinds or deletes subsequ
 Only the most recent `history.keep_versions` versions are kept. If history fails, the profile save still succeeds and
 shows a warning that the history version could not be created; check file permissions and free disk space before saving again.
 
+## Apply to matching
+
+The profile itself is not read by scoring or by the application writer. **Apply to matching** at the bottom of the career
+page copies parts of it, one way and only when you confirm, into the files those read:
+
+- `me.yaml` (scoring): languages that have both a language code and a CEFR level (others are listed as not applied and
+  never guessed), skills with their years (the same name in several groups is merged, keeping the highest years), years of
+  experience counted from the experience dates (overlapping periods count once), and the summary (unchecked by default).
+  City and visa sponsorship keep their values; contact details and entry locations are never copied.
+- `stories.yaml` (the writer): one story per experience, titled "Company – Role", with the summary and bullets as its
+  text, the figures in them as metrics and the stack as skills. Text longer than the `writer.yaml` story limits is cut at
+  a whole bullet and marked *truncated*. An experience with neither a summary nor bullets gets no story. Your own stories
+  are never touched; a profile story you edited after applying is offered unchecked; a profile story whose experience
+  left the profile is kept unless you tick its removal.
+
+**Preview** shows each change against the current value, how many existing scores the `me.yaml` change would mark stale
+(they are scored again, which uses AI), and a retention notice. Untick anything you do not want; the counts follow.
+**Apply** writes only what is ticked, through the same saves as the profile page. If either file or the stale count
+changed since the preview, nothing is written and a new preview is shown. Each file reports its own result, and applying
+the same profile again changes nothing. After you edit the profile, the page notes that it changed since the last apply.
+
+What is applied stays: earlier versions of `me.yaml` and `stories.yaml` are kept in the database's profile history and in
+database backups. **Delete all career data** does not remove them; delete or roll back on the profile page if needed.
+
+While the career profile is on, the extraction entries of the experience library move here: the library card links to
+this page instead.
+
 ## Delete and backups
 
 **Clear history** removes only `career/history/`. **Delete all career data** removes the entire career directory,
@@ -84,7 +119,8 @@ Deletion does not affect existing backups, `before-restore` directories or conte
 The career directory is included in the configuration archive. Scheduled archives follow `config_archive` and daily /
 weekly retention; manual archives are kept until you remove them; system archives have their own retention. Restoring
 an older backup can bring a profile deleted later back. To remove all retained copies, also remove the relevant backup
-archives and retained profile directories yourself. See [Backup and restore](backup-restore.md) and [Privacy](privacy.md).
+archives and retained profile directories yourself. Content already applied to matching stays in `me.yaml`,
+`stories.yaml`, the profile history and database backups (see [Apply to matching](#apply-to-matching)). See [Backup and restore](backup-restore.md) and [Privacy](privacy.md).
 
 A save request can carry at most 1 MB. A very large profile can reach that before the entry and wording limits; the
 save then fails with an error and your edits stay in the form. Shorten the content and save again.
