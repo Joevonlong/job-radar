@@ -1,7 +1,6 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
 
@@ -9,7 +8,7 @@ import { saveContactAction } from "@/app/career/actions";
 import { savePreferencesAction } from "@/app/career/documents/actions";
 import { Button } from "@/components/ui/button";
 import { KIT_CONTACT_FIELDS, KIT_LAYOUT_FIELDS, KIT_SKIPPED } from "@/lib/career/import/fields";
-import { careerContactSchema } from "@/lib/career/schema/contact";
+import { careerContactSchema, type CareerContact } from "@/lib/career/schema/contact";
 import { preferencesSchema } from "@/lib/career/schema/preferences";
 
 const hash = z.string().nullable();
@@ -24,10 +23,9 @@ type Result = z.infer<typeof resultSchema>;
 type ContactField = (typeof KIT_CONTACT_FIELDS)[number];
 
 /** Imports a resume-kit YAML file: content goes to the pending drafts, contact values and layout are applied only when confirmed. */
-export function KitImport({ maxBytes, onDraft }: { maxBytes: number; onDraft: () => void }) {
+export function KitImport({ maxBytes, onDraft, onContactSaved }: { maxBytes: number; onDraft: () => void; onContactSaved?: (saved: { contact: CareerContact; baseHash: string }) => void }) {
   const t = useTranslations("career.kitImport");
   const tf = useTranslations("career.fields");
-  const router = useRouter();
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -71,13 +69,14 @@ export function KitImport({ maxBytes, onDraft }: { maxBytes: number; onDraft: ()
         const contact = { ...result.contact.current, ...Object.fromEntries(fields.map((key) => [key, result.contact.incoming[key]])), links: chosen.has("links") ? [...result.contact.current.links, ...newLinks] : result.contact.current.links };
         const saved = await saveContactAction({ contact, baseHash: result.contact.baseHash });
         if (!saved.ok) { setFailure(saved.code); return; }
+        onContactSaved?.({ contact: saved.contact, baseHash: saved.baseHash });
       }
       if (chosen.has("layout") && layoutChanges.length) {
         const preferences = { ...result.layout.current, layout: { ...result.layout.current.layout, ...result.layout.incoming } };
         const saved = await savePreferencesAction({ preferences, baseHash: result.layout.baseHash });
         if (!saved.ok) { setFailure(saved.code); return; }
       }
-      setResult(null); setNotice("applied"); router.refresh();
+      setResult(null); setNotice("applied");
     } catch { setFailure("unavailable"); }
     finally { setBusy(false); }
   }

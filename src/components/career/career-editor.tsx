@@ -20,6 +20,8 @@ import { ContactForm } from "./contact-form";
 import { careerErrorMessageKey } from "./error-messages";
 import { CareerExtraction, type ExtractionView } from "./career-extraction";
 import { ProfileForm } from "./profile-form";
+import { StoryToProfile } from "./story-to-profile";
+import type { StoryOption } from "@/lib/career/apply/from-story";
 
 type Change = { added: boolean; removed: boolean; value: string };
 type CareerEditorProps = {
@@ -30,6 +32,7 @@ type CareerEditorProps = {
   limits: CareerConfig["profile"];
   timeZone: string;
   extraction?: ExtractionView;
+  stories?: StoryOption[];
 };
 
 function DiffLine({ change }: { change: Change }) {
@@ -55,8 +58,9 @@ function DiffLine({ change }: { change: Change }) {
   );
 }
 
-export function CareerEditor({ initial, contact, initialVersions, errors, limits, timeZone, extraction }: CareerEditorProps) {
+export function CareerEditor({ initial, contact, initialVersions, errors, limits, timeZone, extraction, stories }: CareerEditorProps) {
   const t = useTranslations("career");
+  const [contactState, setContactState] = useState(contact);
   const locale = resolveLocale(useLocale());
   const [saved, setSaved] = useState(initial);
   const [versions, setVersions] = useState(initialVersions);
@@ -138,7 +142,11 @@ export function CareerEditor({ initial, contact, initialVersions, errors, limits
           {t(careerErrorMessageKey(code))}
         </p>
       ))}
-      {saved && extraction && <CareerExtraction view={extraction} profile={saved.profile} baseHash={saved.baseHash} dirty={dirty || pending || adopting} onAdopting={setAdopting} onAdopted={(result) => {
+      {saved && extraction && <CareerExtraction onContactSaved={setContactState} view={extraction} profile={saved.profile} baseHash={saved.baseHash} dirty={dirty || pending || adopting} onAdopting={setAdopting} onAdopted={(result) => {
+        setSaved({ profile: result.profile, baseHash: result.baseHash, updatedAt: null });
+        setRevision((old) => old + 1); setDirty(false); clearDiff(); setMessage(result.warnings.length ? "history_failed" : "saved"); run(refreshHistory);
+      }} />}
+      {saved && stories && <StoryToProfile stories={stories} profile={saved.profile} baseHash={saved.baseHash} dirty={dirty || pending || adopting} onSaved={(result) => {
         setSaved({ profile: result.profile, baseHash: result.baseHash, updatedAt: null });
         setRevision((old) => old + 1); setDirty(false); clearDiff(); setMessage(result.warnings.length ? "history_failed" : "saved"); run(refreshHistory);
       }} />}
@@ -157,7 +165,7 @@ export function CareerEditor({ initial, contact, initialVersions, errors, limits
           }}
         />
       )}
-      {contact && <ContactForm key={contact.baseHash ?? "new"} initial={contact.contact} initialHash={contact.baseHash} />}
+      {contactState && <ContactForm key={contactState.baseHash ?? "new"} initial={contactState.contact} initialHash={contactState.baseHash} />}
       {dirty && (
         <p role="status" className="text-body-sm">
           {t("unsaved")}

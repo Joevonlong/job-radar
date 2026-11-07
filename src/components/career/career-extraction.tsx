@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type ComponentProps } from "react";
 import { useFormatter, useNow, useTranslations } from "next-intl";
 import { z } from "zod";
 import type messages from "../../../messages/en.json";
@@ -27,8 +27,9 @@ type Status = Extract<Awaited<ReturnType<typeof getCareerExtractStatus>>, { ok: 
 type Saved = Extract<Awaited<ReturnType<typeof adoptCareerDraftAction>>, { ok: true }>;
 export type ExtractionView = { limits: CareerConfig["import"]; providers: AiProviderId[]; drafts: CareerDraft[]; open: Extract<Status, { state: "waiting" }> | null };
 
-export function CareerExtraction({ view, profile, baseHash, dirty, onAdopted, onAdopting }: {
+export function CareerExtraction({ view, profile, baseHash, dirty, onAdopted, onAdopting, onContactSaved }: {
   view: ExtractionView; profile: CareerProfile; baseHash: string | null; dirty: boolean; onAdopted: (saved: Saved) => void; onAdopting?: (busy: boolean) => void;
+  onContactSaved?: ComponentProps<typeof KitImport>["onContactSaved"];
 }) {
   const t = useTranslations("career.extract");
   const ts = useTranslations("settings");
@@ -137,7 +138,7 @@ export function CareerExtraction({ view, profile, baseHash, dirty, onAdopted, on
       {busy && <div role="status"><p>{t(wait.stage === "running" ? "running" : "waiting")}</p><QueueHint queue={wait.queue} stage={wait.stage} live={false} /></div>}
       {failure && <p role="alert" data-code={failure} className="text-bad break-words">{t.has(errorKey) ? t(errorKey) : t("errors.generic")}</p>}
       {notice && <p role="status">{t(notice as "done" | "adopted" | "discarded" | "draftRetained")}</p>}
-      <KitImport maxBytes={view.limits.max_file_bytes} onDraft={refreshDrafts} />
+      <KitImport maxBytes={view.limits.max_file_bytes} onDraft={refreshDrafts} onContactSaved={onContactSaved} />
       {drafts.length > 0 && <section className="flex min-w-0 flex-col gap-4" aria-label={t("pending", { count: drafts.length })}>
         <h3 className="text-title-sm font-bold">{t("pending", { count: drafts.length })}</h3>
         <p className="text-body-sm">{t("ttl", { days: view.limits.draft_ttl_days })}</p>

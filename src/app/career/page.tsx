@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 
+import { readUserStories, storyOptions } from "@/lib/career/apply/from-story";
 import { ApplyPanel } from "@/components/career/apply-panel";
 import { CareerEditor } from "@/components/career/career-editor";
 import { PageHeader } from "@/components/shell/page-header";
@@ -58,6 +59,7 @@ export default async function Page() {
   }
   const drafts = initial ? await safe(async () => { const result = await listCareerDrafts({}); if (result.ok) return result.drafts; errors.push(result.code); return []; }, []) : [];
   const status = initial ? await safe(async () => { const result = await getCareerExtractStatus({}); if (!result.ok) { errors.push(result.code); return null; } return result.status.state === "waiting" ? result.status : null; }, null) : null;
+  const stories = initial ? await safe(async () => storyOptions(readUserStories()), []) : [];
   const providers = await safe(async () => aiDisclosure(reloadConfig("ai")).find((row) => row.task === "career_extract")?.providers ?? [], []);
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -71,6 +73,7 @@ export default async function Page() {
         limits={limits.profile}
         extraction={{ limits: limits.import, providers, drafts, open: status }}
         timeZone={getDisplayTimeZone()}
+        stories={stories}
       />
       {initial ? <ApplyPanel changedSinceApply={changedSinceApply(initial.baseHash)} /> : null}
     </div>

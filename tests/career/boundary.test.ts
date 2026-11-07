@@ -273,7 +273,7 @@ test("all source dependencies respect the career and engine boundaries", () => {
   expect(coreCareerImports(sources)).toEqual(CORE_IMPORTING_CAREER);
 });
 
-test("the core career import whitelist contains only the card and career handler registration", () => {
+test("the core career import whitelist contains only the card, the job page entry and career handler registration", () => {
   expect(CORE_IMPORTING_CAREER).toEqual({ "src/app/jobs/[id]/page.tsx": ["src/components/career/job-entry.tsx"], "src/app/me/page.tsx": ["src/components/career/career-card.tsx"], "src/lib/control/ai-handlers.ts": ["src/lib/career/extract/handler.ts", "src/lib/career/tailor/handler.ts"] });
 });
 
@@ -531,4 +531,34 @@ test("every whitelisted core file retains its permitted career imports", async (
       for (const code of eslintImportForms(specifier)) expect(await restricted(file, code), `${file}: ${code}`).toBeGreaterThan(0);
     }
   }
+});
+
+function importedTargets(directory: string): { file: string; to: string }[] {
+  if (!fs.existsSync(path.join(ROOT, directory))) return [];
+  return sourceFiles(path.join(ROOT, directory)).flatMap((full) => {
+    const file = path.relative(ROOT, full).replaceAll(path.sep, "/");
+    const { importedFiles } = ts.preProcessFile(fs.readFileSync(full, "utf8"), true, true);
+    return importedFiles.flatMap(({ fileName }) => {
+      const to = target(file, fileName);
+      return to ? [{ file, to }] : [];
+    });
+  });
+}
+
+test("the resume-kit import is reachable only from web routes and pages, never from AI, extraction, apply or the runner", () => {
+  const forbidden = ["src/lib/career/ai", "src/lib/career/extract", "src/lib/career/apply", "src/lib/career/tailor", "src/runner"]
+    .flatMap(importedTargets)
+    .filter(({ to }) => to.startsWith("src/lib/career/import/"));
+  expect(forbidden).toEqual([]);
+  const users = ["src"].flatMap(importedTargets)
+    .filter(({ file, to }) => to.startsWith("src/lib/career/import/") && !file.startsWith("src/lib/career/import/"))
+    .map(({ file }) => file);
+  expect([...new Set(users)].sort()).toEqual(["src/app/api/career/import/route.ts", "src/components/career/kit-import.tsx"]);
+});
+
+test("MCP modules never import career modules and the tool list is unchanged", async () => {
+  const career = importedTargets("src/lib/mcp").filter(({ to }) => CAREER.some((directory) => to.startsWith(`${directory}/`)));
+  expect(career).toEqual([]);
+  const { MCP_TOOL_NAMES } = await import("@/lib/config/schemas/mcp");
+  expect(MCP_TOOL_NAMES).toEqual(["search_jobs", "get_job", "list_applications", "get_application_context", "save_application_answer"]);
 });

@@ -18,6 +18,7 @@ import { failOpenControlRequests } from "@/lib/db/repos/control-requests";
 import { CAREER_SCRUBBED_KINDS } from "@/lib/control/expire";
 import { readCareerExtractStatus } from "@/lib/career/extract/request";
 import { adoptDraft, adoptDecisionsSchema } from "@/lib/career/extract/adopt";
+import { addStoryToProfile, fromStoryInputSchema, readUserStories } from "@/lib/career/apply/from-story";
 import { discardCareerDraft, draftIdSchema, listPendingCareerDrafts, readCareerDraft } from "@/lib/career/extract/draft-store";
 
 const hash = z
@@ -162,4 +163,17 @@ export async function discardCareerDraftAction(input: unknown) {
   if (!parsed.success) return { ok: false as const, code: "draft_invalid" };
   try { await discardCareerDraft(parsed.data.requestId); return { ok: true as const }; }
   catch (error) { return failure("discardCareerDraft", error); }
+}
+
+export async function addStoryToProfileAction(input: unknown) {
+  if (!(await readCareerGate()).enabled) return { ok: false as const, code: "disabled" };
+  const parsed = fromStoryInputSchema.extend({ baseHash: hash }).safeParse(input);
+  if (!parsed.success) return { ok: false as const, code: "profile_invalid" };
+  try {
+    const { baseHash, ...request } = parsed.data;
+    const current = await loadCareerProfile();
+    const added = addStoryToProfile(current.profile, readUserStories(), request, new Date().toISOString());
+    if (!added.changed) return { ok: false as const, code: "story_present" };
+    return await saveCareerProfile(added.profile, { baseHash });
+  } catch (error) { return failure("addStoryToProfile", error); }
 }

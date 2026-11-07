@@ -8911,6 +8911,29 @@
         "disabled": "The career profile is turned off.",
         "generic": "The import failed. Try again."
       }
+    },
+    "fromStory": {
+      "title": "Add a story to the profile",
+      "hint": "Pick a story from your experience library and add it to one experience as a new bullet or summary wording. The stories file is not changed. Stories created by apply to matching are not listed.",
+      "noStories": "No stories to add yet.",
+      "noExperience": "Add an experience entry to the profile first.",
+      "story": "Story",
+      "experience": "Experience",
+      "target": "Add as",
+      "bullet": "New bullet",
+      "summary": "New summary wording",
+      "pii": "This story looks like it contains contact details. Check the text after adding it.",
+      "add": "Add to profile",
+      "added": "Added to the profile.",
+      "saveFirst": "Save or discard the profile edits first.",
+      "errors": {
+        "stale": "The profile changed meanwhile. Reload and try again.",
+        "story_present": "This text is already on the selected experience.",
+        "unknown_id": "The story or experience no longer exists.",
+        "limits": "The profile limits do not allow another text here.",
+        "disabled": "The career profile is turned off.",
+        "generic": "The story could not be added. Try again."
+      }
     }
   },
   "writer": {
