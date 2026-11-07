@@ -9,6 +9,7 @@ import { deleteExpiredStoryDrafts } from "@/lib/db/repos/story-drafts";
 import { loadPendingStoryDrafts } from "@/lib/stories/adopt";
 import type { PendingStoryDraft } from "@/lib/stories/extract";
 import { storiesConfigToDraft, type StoriesDraft } from "@/lib/stories/draft";
+import { readCareerGate } from "@/lib/config/career-gate";
 import { countStaleScores, getDb, hashProfileYaml, listProfileSnapshots, type ProfileSnapshot } from "@/lib/db";
 
 import {
@@ -38,6 +39,8 @@ export interface StoryImportView {
   /** The extraction still running, to follow after a reload. */
   open: { requestId: number; stage: "pending" | "running"; queue: ControlQueueView | null } | null;
   error: StoryExtractErrorCode | null;
+  /** The career profile is on: extraction moved to the career page, this card only finishes what is already here. */
+  careerEnabled: boolean;
 }
 
 async function loadStoryImport(dbAvailable: boolean): Promise<StoryImportView> {
@@ -69,7 +72,8 @@ async function loadStoryImport(dbAvailable: boolean): Promise<StoryImportView> {
       // not migrated yet, or gone since the first read: the card shows no drafts
     }
   }
-  return { enabled: writer?.enabled ?? false, maxFileBytes: limits.max_file_bytes, maxChars: limits.max_chars, formats: limits.formats, ttlDays: limits.draft_ttl_days, providers, drafts, open, error };
+  const careerEnabled = (await readCareerGate()).enabled;
+  return { careerEnabled, enabled: writer?.enabled ?? false, maxFileBytes: limits.max_file_bytes, maxChars: limits.max_chars, formats: limits.formats, ttlDays: limits.draft_ttl_days, providers, drafts, open, error };
 }
 
 export interface ProfilePageData {

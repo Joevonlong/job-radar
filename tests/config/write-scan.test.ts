@@ -22,6 +22,7 @@ const LOCKED = new Map<string, string>([
   ["src/lib/career/store/documents.ts#persistDocument", "commits edits and restores under document and config write locks"],
   ["src/lib/career/store/documents.ts#deleteDocument", "fenced removal of document, proposals and history"],
   ["src/lib/career/store/preferences.ts#savePreferences", "private preferences with stale detection under both locks"],
+  ["src/lib/career/store/apply-state.ts#saveApplyState", "the profile version last applied to matching, under both locks"],
   ["src/lib/career/store/images.ts#saveImage", "publishes image bytes and removes the alternate extension under both locks"],
   ["src/lib/career/store/images.ts#deleteImage", "fenced image removal under both locks"],
   ["src/lib/career/store/profile.ts#persistProfile", "profile commits under the config write lock"],

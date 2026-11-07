@@ -910,9 +910,12 @@
         "handler_failed": "职业档案提取失败，请重试。",
         "review_again": "隐私检查修改了文字，请检查预览后再次确认。",
         "too_long": "文字过长，请在预览中缩短后再发送。",
-        "preview_required": "此请求需要预览，请重新开始并在预览中确认文字。"
+        "preview_required": "此请求需要预览，请重新开始并在预览中确认文字。",
+        "use_career": "提取已移到职业档案页。"
       },
-      "preview": "生成预览"
+      "preview": "生成预览",
+      "useCareer": "职业档案开启后，素材从档案生成：在职业档案页应用到匹配。这里已有的草稿仍然可以审核。",
+      "useCareerLink": "去职业档案"
     }
   },
   "filter": {
@@ -8355,7 +8358,7 @@
     "clearHistoryTitle": "清空职业档案历史？",
     "clearHistoryDescription": "此操作会永久删除本机所有职业档案历史版本，当前档案和联系方式会保留。已有备份、恢复前保留的目录和已发给 AI 服务商的内容不受影响；恢复旧备份可能带回已删除的版本。",
     "deleteProfileTitle": "删除全部职业档案数据？",
-    "deleteProfileDescription": "此操作会永久删除本机职业档案、联系方式和版本历史。已有备份、恢复前保留的目录和已发给 AI 服务商的内容不受影响；恢复旧备份可能带回已删除的数据。",
+    "deleteProfileDescription": "此操作会永久删除本机职业档案、联系方式和版本历史。已有备份、恢复前保留的目录和已发给 AI 服务商的内容不受影响；恢复旧备份可能带回已删除的数据。已应用到匹配的内容留在 me.yaml、stories.yaml、画像历史和数据库备份里，不会被删除。",
     "errors": {
       "profileInvalid": "职业档案无法读取或包含无效字段，请检查后重试。",
       "contactInvalid": "联系方式无法读取或包含无效字段，请检查后重试。",
@@ -8475,6 +8478,56 @@
       "edit": "手动补充和修改条目。",
       "collapse": "收起说明",
       "expand": "展开说明"
+    },
+    "apply": {
+      "title": "应用到匹配",
+      "description": "把语言、技能、工作年限和简介复制到打分用的画像（me.yaml），并为每段工作经历在经历素材（stories.yaml）里生成一条素材。联系方式、链接和地点不会带过去。确认之前什么都不改，职业档案本身也不会被改动。",
+      "preview": "查看会改什么",
+      "changedSince": "上次应用到匹配之后，职业档案改过。",
+      "openMe": "打开画像",
+      "stale": "预览之后有东西变了（文件被保存，或有打分完成）。请看新的预览，再确认一次。",
+      "nothing": "没有要应用的：匹配里已经是职业档案的内容。",
+      "meTitle": "打分用的画像（me.yaml）",
+      "storiesTitle": "经历素材（stories.yaml）",
+      "fields": {
+        "languages": "语言",
+        "skills": "技能",
+        "years_experience": "工作年限",
+        "summary": "简介"
+      },
+      "from": "现在：{value}",
+      "to": "改为：{value}",
+      "truncated": "已截断",
+      "kind": {
+        "new": "新素材",
+        "changed": "有变化的素材（可能是你改过的）",
+        "removed": "档案里已删除这段经历，勾选后删除"
+      },
+      "languagesNotApplied": "未应用（缺语言代码或 CEFR 等级）：{names}",
+      "storiesNotApplied": "没有生成素材（没有简介和要点）：{names}",
+      "staleCount": "{count, plural, =0 {不需要重新打分。} other {# 个分数会过期并重新打分（会用到 AI）。}}",
+      "retention": "应用的内容会长期留存：me.yaml 和 stories.yaml 的旧版本保存在数据库的画像历史和数据库备份里。“删除全部职业数据”不会删掉它们；需要的话请在画像页删除或回滚。",
+      "confirm": "应用",
+      "cancel": "取消",
+      "result": {
+        "me": "打分用的画像：{state, select, written {已保存} unchanged {没有变化} snapshot_failed {已保存，但历史记录没存上} stale {没有保存，期间被改过} other {没有保存}}",
+        "stories": "经历素材：{state, select, written {已保存} unchanged {没有变化} snapshot_failed {已保存，但历史记录没存上} stale {没有保存，期间被改过} other {没有保存}}",
+        "staleMarked": "{count, plural, =0 {没有分数被标为过期。} other {# 个分数被标为过期。}}",
+        "staleUnknown": "过期的分数数量未知。",
+        "staleDiffers": "预览时是 {expected} 个：确认期间有新的打分完成。"
+      },
+      "errors": {
+        "me_required": "请先设置打分用的画像。",
+        "profile_empty": "职业档案是空的，没有可应用的内容。",
+        "too_many": "经历素材会超过允许的条数。取消勾选一些，或先在画像页删除素材。",
+        "disabled": "职业档案没有开启。",
+        "contact_invalid": "联系方式读不出来，无法检查。请先修好。",
+        "contact_unreadable": "联系方式读不出来，无法检查。请先修好。",
+        "profile_invalid": "职业档案读不出来。",
+        "config_error": "有设置文件读不出来。",
+        "invalid": "请求无法识别，请刷新页面。",
+        "unavailable": "没有成功，什么都没改，请重试。"
+      }
     }
   },
   "writer": {

@@ -147,8 +147,11 @@ Extraction sends the confirmed preview to an AI provider. A contact location or 
 with an advisory warning; it remains in profile history until you remove that history.
 
 The files are readable and writable by the local web process, have mode `0600` when written by the app and enter the
-configuration archive. They are not stored in long-lived database tables, do not change matching profile snapshots,
-and are not exposed over MCP. Disabling retains the data and performs no cleanup. Delete controls remove local career
+configuration archive. They are not stored in long-lived database tables and are not exposed over MCP. They change matching only when you
+confirm **Apply to matching**: that copies languages, skills, years of experience and optionally the summary into `me.yaml`,
+and one story per experience into `stories.yaml`, never contact details or entry locations. Those saves are ordinary
+profile saves, so earlier versions stay in the database's profile snapshots and in database backups, and deleting career
+data does not remove them. Disabling retains the data and performs no cleanup. Delete controls remove local career
 files only: backups, before-restore copies and content already sent to an AI provider remain. An older backup can
 restore data deleted later. Retention differs for scheduled, manual and system backups; see
 [Backup and restore](backup-restore.md#career-profile-copies) and [Career profile](career-profile.md).

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { ConfigError, reloadConfig } from "@/lib/config";
+import { readCareerGate } from "@/lib/config/career-gate";
 import { profileSourceText } from "@/lib/control/story-extract-request";
 import { logActionFailure } from "@/lib/logging/action-failure";
 import { NO_STORED_VALUES } from "@/lib/outbound/outbound";
@@ -18,11 +19,13 @@ const profileInput = z.strictObject({ origin: z.literal("profile") });
  * `POST /api/me/story-extract/prepare`: the editable preview of a story extraction from your profile (`{ origin: "profile" }`),
  * a pasted text (`{ text }`) or a résumé (multipart `file`). A route rather than a server action, whose body limit is smaller
  * than a résumé. Host, Origin and login are checked by `src/proxy.ts`, like every other route. The file stays in memory and
- * only its scrubbed text is returned; nothing is stored, and neither its name nor its text is logged.
+ * only its scrubbed text is returned; nothing is stored, and neither its name nor its text is logged. With the career profile
+ * on, every source is refused with `use_career` before its body is read.
  */
 export async function POST(request: Request) {
   let release: (() => void) | null = null;
   try {
+    if ((await readCareerGate()).enabled) return refuse("use_career");
     const writer = reloadConfig("writer");
     if (!writer.enabled) return refuse("disabled");
     const limits = writer.import;
