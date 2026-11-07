@@ -347,6 +347,7 @@
     "companies": "公司",
     "favorites": "收藏",
     "pipeline": "申请",
+    "career": "职业档案",
     "sources": "来源",
     "insights": "统计",
     "settings": "设置",
@@ -483,6 +484,10 @@
     "pipeline": {
       "title": "申请",
       "description": "申请看板：拖拽改变申请状态。"
+    },
+    "career": {
+      "title": "职业档案",
+      "description": "通过提取审核或手动编辑，维护本机职业档案与多种写法。"
     },
     "sources": {
       "title": "来源",

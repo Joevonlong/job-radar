@@ -102,3 +102,29 @@ test("disabled document pages only show the enablement note", async ({ page }) =
     expect(fs.existsSync(path.join(process.env.E2E_PROFILE_DIR!, "career"))).toBe(false);
   });
 });
+
+test("the career item follows the switch without a reload and hides when career.yaml breaks", async ({ page }) => {
+  await withCareer(false, async () => {
+    const file = path.join(process.env.E2E_CONFIG_DIR!, "career.yaml");
+    const sidebar = page.getByRole("complementary", { name: "侧栏" });
+    const hrefs = () => sidebar.getByRole("navigation", { name: "主导航" }).getByRole("link").evaluateAll(
+      (links) => links.map((link) => link.getAttribute("href")),
+    );
+    const defaults = ["/", "/jobs", "/companies", "/favorites", "/pipeline", "/sources", "/insights", "/settings", "/me", "/interests"];
+    await page.goto("/settings?tab=workflow");
+    expect(await hrefs()).toEqual(defaults);
+    await page.evaluate(() => Object.assign(window, { sameDocument: true }));
+    const card = page.getByTestId("settings-card-career");
+    await card.getByRole("switch", { name: "开启职业档案" }).click();
+    await card.getByRole("button", { name: "保存", exact: true }).click();
+    await expect(sidebar.getByRole("link", { name: "职业档案", exact: true })).toBeVisible();
+    expect(await hrefs()).toEqual([...defaults.slice(0, 5), "/career", ...defaults.slice(5)]);
+    expect(await page.evaluate(() => "sameDocument" in window)).toBe(true);
+    await sidebar.getByRole("link", { name: "职业档案", exact: true }).click();
+    await expect(page).toHaveURL(/\/career$/);
+    fs.writeFileSync(file, "config_version: 2\nenabled: [\n");
+    await page.goto("/jobs");
+    await expect(sidebar.getByRole("link", { name: "职业档案", exact: true })).toHaveCount(0);
+    expect(await hrefs()).toEqual(defaults);
+  });
+});
