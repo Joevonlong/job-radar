@@ -635,7 +635,8 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 
 `preview.page_count_debounce_ms` 提供页数刷新防抖时间，默认 3000 毫秒。
 `pdf.url` 默认 `http://career-pdf:8090`，是受保护键，只能手改，设置表单和高级编辑器都不能修改；
-整个 `pdf` 块不出现在设置表单。`pdf.timeout_seconds` 默认 60（最多 300），限制 web 请求时间；
+整个 `pdf` 块不出现在设置表单。`pdf.timeout_seconds` 默认 60（最多 300），限制 web 请求时间（含等待服务的时间）。服务一次只打印一份文档，
+忙时（例如正在计算页数）web 每隔 `pdf.busy_retry_ms`（默认 250，最多 10000）毫秒重试，直到超过该时限；
 `pdf.max_html_bytes` 默认 8000000（最多 50000000），发送前按 UTF-8 字节数检查 HTML。
 
 运行 `COMPOSE_PROFILES=career-pdf docker compose up -d --build career-pdf` 启动可选服务。
