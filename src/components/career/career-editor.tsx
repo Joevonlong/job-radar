@@ -157,7 +157,7 @@ export function CareerEditor({ initial, contact, initialVersions, errors, limits
           }}
         />
       )}
-      {contact && <ContactForm initial={contact.contact} initialHash={contact.baseHash} />}
+      {contact && <ContactForm key={contact.baseHash ?? "new"} initial={contact.contact} initialHash={contact.baseHash} />}
       {dirty && (
         <p role="status" className="text-body-sm">
           {t("unsaved")}

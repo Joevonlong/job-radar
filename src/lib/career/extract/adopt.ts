@@ -29,7 +29,7 @@ function adoptionText(draft: CareerDraft) {
     id: "",
     primary: "",
     wordings: [{
-      id: "", text: value, lang: draft.language, label: null, origin: "extracted",
+      id: "", text: value, lang: draft.language, label: null, origin: draft.origin === "imported" ? "imported" : "extracted",
       from_document: null, from_story: null, created_at: draft.created_at,
     }],
   });

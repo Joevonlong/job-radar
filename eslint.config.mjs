@@ -13,6 +13,7 @@ const READONLY_PSQL_DYNAMIC = {
 };
 
 export const CORE_IMPORTING_CAREER = {
+  "src/app/jobs/[id]/page.tsx": ["src/components/career/job-entry.tsx"],
   "src/app/me/page.tsx": ["src/components/career/career-card.tsx"],
   "src/lib/control/ai-handlers.ts": ["src/lib/career/extract/handler.ts", "src/lib/career/tailor/handler.ts"],
 };
@@ -237,7 +238,7 @@ const eslintConfig = defineConfig([
   {
     // These blocks replace import rules, so database restrictions must be repeated.
     files: ["src/lib/career/**", "src/components/career/**"],
-    ignores: ["src/lib/career/{schema,store,contact,ai,extract,tailor,document,render,engine,print}/**"],
+    ignores: ["src/lib/career/{schema,store,contact,ai,extract,tailor,document,render,engine,print,import}/**"],
     rules: {
       "@typescript-eslint/no-restricted-imports": ["error", { paths: DATABASE_PATHS, patterns: [DATABASE_PATTERN, READONLY_PSQL_PATTERN, {
         regex: "(^|/)(engine|print)(/|$)", allowTypeImports: false,
@@ -251,7 +252,7 @@ const eslintConfig = defineConfig([
   },
   {
     // Rendering consumers retain database restrictions and cannot load the PDF process.
-    files: ["src/lib/career/render/**", "src/app/career/**", "src/app/api/career/**"],
+    files: ["src/lib/career/render/**", "src/lib/career/import/**", "src/app/career/**", "src/app/api/career/**"],
     rules: {
       "@typescript-eslint/no-restricted-imports": ["error", { paths: DATABASE_PATHS, patterns: [DATABASE_PATTERN, READONLY_PSQL_PATTERN, {
         regex: "(^|/)print(/|$)", allowTypeImports: false, message: "Printing belongs to the PDF entry point.",

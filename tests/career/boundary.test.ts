@@ -180,7 +180,7 @@ function violations(file: string, text: string): string[] {
     if (within(file, "src") && !isCareer(file) && to && isCareer(to) && !CORE_IMPORTING_CAREER[file]?.includes(to)) {
       out.push(`${file}: core imports ${to}`);
     }
-    const engineConsumer = [ENGINE, "src/lib/career/render", "src/lib/career/print", "src/app/career", "src/app/api/career"]
+    const engineConsumer = [ENGINE, "src/lib/career/render", "src/lib/career/print", "src/lib/career/import", "src/app/career", "src/app/api/career"]
       .some((directory) => within(file, directory));
     if (within(file, "src") && to && within(to, ENGINE) && !engineConsumer) out.push(`${file}: imports engine outside rendering boundary`);
     const isStorage = ["schema", "store", "contact", "ai", "extract", "tailor", "document"].some((part) => within(file, `src/lib/career/${part}`));
@@ -274,7 +274,7 @@ test("all source dependencies respect the career and engine boundaries", () => {
 });
 
 test("the core career import whitelist contains only the card and career handler registration", () => {
-  expect(CORE_IMPORTING_CAREER).toEqual({ "src/app/me/page.tsx": ["src/components/career/career-card.tsx"], "src/lib/control/ai-handlers.ts": ["src/lib/career/extract/handler.ts", "src/lib/career/tailor/handler.ts"] });
+  expect(CORE_IMPORTING_CAREER).toEqual({ "src/app/jobs/[id]/page.tsx": ["src/components/career/job-entry.tsx"], "src/app/me/page.tsx": ["src/components/career/career-card.tsx"], "src/lib/control/ai-handlers.ts": ["src/lib/career/extract/handler.ts", "src/lib/career/tailor/handler.ts"] });
 });
 
 test("core career import comparison rejects unlisted imports and unused whitelist entries", () => {
@@ -485,7 +485,7 @@ test("engine consumers and printer restrictions are enforced across rendering bo
       for (const code of eslintImportForms(specifier)) expect(await restricted(file, code)).toBeGreaterThan(0);
     }
   }
-  for (const file of ["src/lib/career/render/probe.ts", "src/app/career/page.tsx", "src/app/api/career/route.ts"]) {
+  for (const file of ["src/lib/career/render/probe.ts", "src/lib/career/import/probe.ts", "src/app/career/page.tsx", "src/app/api/career/route.ts"]) {
     expect(violations(file, 'import "@/lib/career/engine/render";')).toEqual([]);
     expect(await restricted(file, 'import "@/lib/career/engine/render";')).toBe(0);
     for (const specifier of ["@/lib/career/print/print-pdf", `./${path.posix.relative(path.posix.dirname(file), "src/lib/career/print/print-pdf")}`]) {

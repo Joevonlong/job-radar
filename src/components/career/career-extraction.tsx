@@ -20,6 +20,7 @@ import type { CareerProfile } from "@/lib/career/schema/profile";
 import { STATUS_POLL_MS } from "@/lib/settings/constants";
 import { outboundFailureSchema, preparedTextSchema, type PreparedText } from "@/lib/outbound/preview";
 import { DraftReview } from "./draft-review";
+import { KitImport } from "./kit-import";
 
 const queuedSchema = z.object({ ok: z.literal(true), requestId: z.number().int().positive() });
 type Status = Extract<Awaited<ReturnType<typeof getCareerExtractStatus>>, { ok: true }>["status"];
@@ -49,6 +50,9 @@ export function CareerExtraction({ view, profile, baseHash, dirty, onAdopted, on
   const [notice, setNotice] = useState<string | null>(null);
   const busy = sending || waiting !== null;
   function focusHeading() { requestAnimationFrame(() => heading.current?.focus()); }
+  function refreshDrafts() {
+    void listCareerDrafts({}).then((result) => { if (result.ok) setDrafts(result.drafts); else setFailure(result.code); }).catch(() => setFailure("unavailable"));
+  }
   const wait = useControlRequest<null, number, string>({
     requestId: waiting?.requestId ?? null, initialStage: waiting?.stage, initialQueue: waiting?.queue,
     read: async (requestId) => {
@@ -62,7 +66,7 @@ export function CareerExtraction({ view, profile, baseHash, dirty, onAdopted, on
     },
     onDone: () => {
       setWaiting(null); setNotice("done"); focusHeading();
-      void listCareerDrafts({}).then((result) => { if (result.ok) setDrafts(result.drafts); else setFailure(result.code); }).catch(() => setFailure("unavailable"));
+      refreshDrafts();
     },
     onFailed: (error) => { setWaiting(null); setFailure(error ?? "unavailable"); focusHeading(); },
   });
@@ -133,6 +137,7 @@ export function CareerExtraction({ view, profile, baseHash, dirty, onAdopted, on
       {busy && <div role="status"><p>{t(wait.stage === "running" ? "running" : "waiting")}</p><QueueHint queue={wait.queue} stage={wait.stage} live={false} /></div>}
       {failure && <p role="alert" data-code={failure} className="text-bad break-words">{t.has(errorKey) ? t(errorKey) : t("errors.generic")}</p>}
       {notice && <p role="status">{t(notice as "done" | "adopted" | "discarded" | "draftRetained")}</p>}
+      <KitImport maxBytes={view.limits.max_file_bytes} onDraft={refreshDrafts} />
       {drafts.length > 0 && <section className="flex min-w-0 flex-col gap-4" aria-label={t("pending", { count: drafts.length })}>
         <h3 className="text-title-sm font-bold">{t("pending", { count: drafts.length })}</h3>
         <p className="text-body-sm">{t("ttl", { days: view.limits.draft_ttl_days })}</p>

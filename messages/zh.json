@@ -8635,7 +8635,8 @@
         "timeout": "提取超时，请重试。",
         "queue_timeout": "排队的提取任务已过期，请重新发送。",
         "failed": "提取失败，请重试。"
-      }
+      },
+      "imported": "导入的 resume-kit 文件"
     },
     "emptyHint": "从职业档案开始，上传或粘贴简历来建立档案。",
     "guidance": {
@@ -8861,6 +8862,54 @@
         "stale": "文档在别处改过了。重新加载后再试。",
         "limits": "档案的写法数量到了上限。",
         "generic": "无法保存，请重试。"
+      }
+    },
+    "jobEntry": {
+      "title": "定制简历",
+      "tailor": "定制简历",
+      "empty": "这个岗位还没有定制过简历。",
+      "error": "读不到定制过的简历，请检查职业档案目录。",
+      "jdChanged": "定制之后岗位描述有变化。",
+      "externalKit": "外部 resume-kit"
+    },
+    "kitImport": {
+      "title": "导入 resume-kit 简历",
+      "hint": "上传 resume-kit 主简历（YAML）。不调用 AI，也不保存原文件。内容会变成下面的草稿供审核；联系方式和版式只在你确认后写入。",
+      "file": "resume-kit YAML 文件",
+      "upload": "导入文件",
+      "drafted": "内容已放进待审核草稿。",
+      "noContent": "文件里没有可审核的档案内容。",
+      "skipped": "未导入：{parts}。",
+      "parts": {
+        "photo": "照片（请重新上传）",
+        "approach": "工作方法",
+        "target": "目标岗位",
+        "letter": "求职信"
+      },
+      "confirm": "选择要从文件写入的内容",
+      "change": "{from} → {to}",
+      "links": "添加 {count} 个联系链接",
+      "layout": "使用文件的版式：{fields}",
+      "layoutFields": {
+        "lang": "语言",
+        "theme": "主题",
+        "accent": "强调色",
+        "pages": "页数",
+        "paper": "纸张",
+        "density": "密度"
+      },
+      "apply": "写入所选",
+      "dismiss": "跳过",
+      "applied": "联系方式和版式已更新。",
+      "nothingToApply": "联系方式和版式已和文件一致。",
+      "errors": {
+        "kit_invalid": "这不是有效的 resume-kit 简历文件。",
+        "too_large": "文件超过允许的大小。",
+        "timeout": "上传超时。",
+        "too_many": "另一个上传正在进行，请稍后再试。",
+        "stale": "联系方式或版式在此期间有改动，请重新导入。",
+        "disabled": "职业档案已关闭。",
+        "generic": "导入失败，请重试。"
       }
     }
   },

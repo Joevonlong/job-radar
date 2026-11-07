@@ -20,7 +20,7 @@ import { draftSectionsSchema } from "./verify";
 
 export const draftIdSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 export const careerDraftSchema = z.strictObject({
-  schema_version: z.literal(1), request_id: draftIdSchema, origin: z.enum(["resume", "self_description"]),
+  schema_version: z.literal(1), request_id: draftIdSchema, origin: z.enum(["resume", "self_description", "imported"]),
   source_hash: z.string().regex(/^[a-f0-9]{64}$/), created_at: z.iso.datetime({ offset: true }), language: z.string().max(10).nullable(),
   sections: draftSectionsSchema,
 });

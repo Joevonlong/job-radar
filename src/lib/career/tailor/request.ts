@@ -7,14 +7,28 @@ import { expireScrubbedRequests } from "@/lib/control/expire";
 import { loadQueueView } from "@/lib/control/queue-view";
 import { careerTailorPayloadSchema } from "@/lib/control/types";
 import type { Db } from "@/lib/db/client";
+import { setApplicationStatus } from "@/lib/db/repos/applications";
 import { findLatestCareerTailorRequest, insertControlRequest } from "@/lib/db/repos/control-requests";
+import { logActionFailure } from "@/lib/logging/action-failure";
+import { RESUME_ALLOW_FROM } from "@/lib/resume/export";
 import { careerDocumentPath } from "../store/paths";
 import { loadTailorContext } from "./context";
 import { previewOutbound } from "./assemble";
 import { readProposals } from "./proposals";
 import { z } from "zod";
 
+/** A newly queued tailoring run for a job moves its application to preparing; a status write failure never fails the request. */
 export async function requestCareerTailor(db: Db, raw: unknown) {
+  const result = await queueCareerTailor(db, raw);
+  const payload = careerTailorPayloadSchema.safeParse(raw).data;
+  if (result.state === "queued" && !result.existing && payload?.mode === "tailor" && payload.jobId !== null) {
+    await setApplicationStatus(db, payload.jobId, "preparing", "career", { allowFrom: RESUME_ALLOW_FROM })
+      .catch((error: unknown) => logActionFailure("careerTailorStatus", error));
+  }
+  return result;
+}
+
+async function queueCareerTailor(db: Db, raw: unknown) {
   if (!(await readCareerGate()).enabled) return { state: "error" as const, error: "disabled" as const };
   const parsed = careerTailorPayloadSchema.safeParse(raw);
   if (!parsed.success || parsed.data.mode === "shrink" && (parsed.data.over_pages === null || parsed.data.with_letter)) return { state: "error" as const, error: "invalid" as const };

@@ -33,7 +33,7 @@ export const wordingSchema = z.strictObject({
   text: value,
   lang: optionalValue,
   label: optionalValue,
-  origin: z.enum(["extracted", "manual", "from_document"]).default("manual"),
+  origin: z.enum(["extracted", "manual", "from_document", "imported", "from_story"]).default("manual"),
   from_document: optionalValue,
   from_story: optionalValue,
   created_at: z.iso.datetime({ offset: true }),
