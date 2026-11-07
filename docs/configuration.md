@@ -837,7 +837,9 @@ preview delay (50–10000 ms). Open the editor at `/career/documents`; see
 `preview.page_count_debounce_ms` supplies the page-count refresh delay (default 3000 ms).
 `pdf.url` defaults to `http://career-pdf:8090` and is protected: change it by hand, never through settings or the
 advanced editor. The `pdf` block is hidden from the settings form. `pdf.timeout_seconds` (default 60, maximum 300)
-bounds the web request, and `pdf.max_html_bytes` (default 8000000, maximum 50000000) bounds UTF-8 HTML before sending.
+bounds the web request, including any wait for the service. The service prints one document at a time; while it is
+busy (for example printing a page count) the web retries every `pdf.busy_retry_ms` (default 250, maximum 10000)
+until that limit. `pdf.max_html_bytes` (default 8000000, maximum 50000000) bounds UTF-8 HTML before sending.
 
 The optional PDF service starts with `COMPOSE_PROFILES=career-pdf docker compose up -d --build career-pdf`.
 It reads no config files or data volumes. Its environment settings are `CAREER_PDF_PORT` (default 8090),
