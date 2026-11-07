@@ -11,7 +11,7 @@ application writer and does not change matching, scores or the experience librar
 2. Review the extracted draft before adopting it.
 3. Add and edit entries by hand.
 
-Later, this profile will support tailored résumés, cover letters and job matching; these uses are not available yet. Profile data stays on this machine; AI extraction sends only the preview text you confirm to your configured provider. The guidance on `/career` can be collapsed once the profile has content.
+The profile feeds résumé documents and cover letters, per-job tailoring, and matching (only when you confirm **Apply to matching**). Profile data stays on this machine; AI extraction sends only the preview text you confirm to your configured provider. The guidance on `/career` can be collapsed once the profile has content.
 
 ## Turn it on
 
@@ -35,6 +35,21 @@ Review each suggested field against its source quote and any warning flags. Edit
 **Add** always creates a separate entry, even when a match exists. Adopting the same draft again adds nothing twice; `adopted_entries` is internal metadata preserved across edits and restores, never edited by users or shown in comparisons. If a PDF is longer than the reading limit, the preview marks it as cut off.
 
 Unreviewed drafts expire after `import.draft_ttl_days` (default 14 days). At `import.max_pending_drafts` (default 5), adopt or discard a draft before starting another. Drafts are stored under `data/profile/career/drafts/` and included in backups.
+
+### Import a resume-kit master résumé
+
+If you kept your résumé as a resume-kit master YAML, upload it under **Import a resume-kit résumé** on the extraction
+card. The file is parsed on this machine with the same schema the document renderer uses; nothing is sent to AI and the
+file is not stored. Size, upload time and concurrent uploads follow the extraction limits (`import.max_file_bytes`,
+`import.upload_timeout_seconds`, `import.max_concurrent_uploads`).
+
+- Experience, projects, education, certifications, languages, skills and custom sections become a pending draft marked
+  *Imported resume-kit file*. Review and adopt it like any other draft; adopted texts keep the origin *imported*.
+- Contact details never enter the draft. Fields that differ from your saved contact are listed one by one; fields you
+  have not filled yet are checked, the rest are not. New links and the layout (language, theme, accent, pages, paper,
+  density) are offered as separate checkboxes. **Apply** saves only what you checked.
+- The photo, approach notes, targets and the letter are not imported; the result lists which of them the file had.
+- An invalid file is refused with a general message; its content is not shown or logged.
 
 ## Edit facts and wordings
 
@@ -109,6 +124,14 @@ database backups. **Delete all career data** does not remove them; delete or rol
 While the career profile is on, the extraction entries of the experience library move here: the library card links to
 this page instead.
 
+### Add a story to the profile
+
+The **Add a story to the profile** card on `/career` copies one story from the experience library (`stories.yaml`) to an
+experience entry, as a new bullet or as another summary wording. The text is the story's *what* and *result*; the
+wording records which story it came from. Save pending edits first. Adding the same text again changes nothing.
+Stories that **Apply to matching** wrote are not offered, so profile text does not loop back. The stories file is only
+read, never changed. A story that seems to contain an email address or phone number is marked before you add it.
+
 ## Delete and backups
 
 **Clear history** removes only `career/history/`. **Delete all career data** removes the entire career directory,
@@ -160,3 +183,12 @@ fonts do not cover (for example Chinese) are listed before export. Checks and fo
 limits and word lists are `career.yaml: check.limits` and `check.lexicon`; words you add keep the shipped lists.
 
 To fit a document to one job with AI proposals you review one by one, see [Résumé tailoring](resume-tailoring.md).
+
+### From a job page
+
+While the career profile is on, a job's detail page has a **Tailored résumés** panel (the header button jumps to it). It
+links to tailoring for this job and lists the documents already tailored for it, newest first. A document whose job
+description has changed since tailoring is marked. Starting a tailoring run moves the application to *Preparing*;
+statuses from *Applied* onward are never moved back, and shrinking a document does not change the status. If the
+documents cannot be read, the panel says so without showing their content. The resume-kit panel, when a kit path is set,
+is folded under **External resume-kit** inside this panel.
