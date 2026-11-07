@@ -5,6 +5,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-11-07
+
 ### Added
 
 - **Career profile (optional, off by default).** A local profile on `/career`, reached from a card on **My profile**: edit your experience and other sections by hand, keep several wordings of the same text, look at and restore earlier versions, and delete it all. Contact details are kept in a separate file. Upload or paste a résumé or self-description, check exactly what is sent to AI in a preview (contact details are replaced), and review the extracted entries before adopting them; matching does not change. Adds the `career_extract` control request kind (migration). Turn it on in `career.yaml`. See `docs/career-profile.md`.
