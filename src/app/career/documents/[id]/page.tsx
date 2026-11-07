@@ -60,6 +60,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       initialVersions={history.ok ? history.versions : []}
       warnings={[...loaded.warnings, ...(!history.ok ? [history.code] : [])]}
       debounceMs={config.preview.debounce_ms}
+      pageCountDebounceMs={config.preview.page_count_debounce_ms}
       imageMaxBytes={config.document.image_max_bytes}
       timeZone={getDisplayTimeZone()}
       hasProposals={tailor.hasProposals}

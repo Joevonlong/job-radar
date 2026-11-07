@@ -89,6 +89,903 @@ document:
 preview:
   # Delay before updating a preview in milliseconds.
   debounce_ms: 400
+  page_count_debounce_ms: 3000
+
+pdf:
+  url: http://career-pdf:8090
+  timeout_seconds: 60
+  max_html_bytes: 8000000
+
+check:
+  uncovered_max_chars: 32
+  limits:
+    maxMentions: 4
+    goodCoverage: 70
+    maxBullet: 200
+    minBullet: 40
+    maxBulletsPerEntry: 5
+    maxGapMonths: 6
+    proseMinWords: 12
+    proseClearWords: 20
+    proseRatio: 3
+    proseClearRatio: 4
+    maxRole: 200
+    letterPages: 1
+    letterWords:
+      min: 200
+      max: 450
+    minPiece: 16
+    maxPieces: 3
+  lexicon:
+    en:
+      filler:
+        - spearheaded
+        - leveraged
+        - leveraging
+        - utilize
+        - utilized
+        - utilizing
+        - synergy
+        - synergies
+        - passionate
+        - results-driven
+        - detail-oriented
+        - cutting-edge
+        - state-of-the-art
+        - seamless
+        - seamlessly
+        - robust
+        - delve
+        - tapestry
+        - world-class
+        - best-in-class
+        - game-changer
+        - proven track record
+        - fast-paced
+        - team player
+        - hard-working
+        - go-getter
+        - think outside the box
+        - orchestrated
+        - revolutionized
+        - empowered
+        - holistic
+      weak:
+        - responsible for
+        - worked on
+        - helped
+        - assisted
+        - involved in
+        - participated in
+        - tasked with
+      proseWords:
+        - the
+        - and
+        - of
+        - to
+        - for
+        - with
+        - on
+        - by
+        - from
+        - at
+        - as
+        - is
+        - was
+        - were
+        - that
+        - this
+        - our
+        - my
+        - have
+        - has
+        - their
+        - into
+      asksSalary:
+        - salary\s+(?:expectation|requirement)s?
+        - desired\s+salary
+        - expected\s+salary
+        - compensation\s+expectations?
+      asksStart:
+        - start(?:ing)?\s+date
+        - earliest\s+(?:possible\s+)?start
+        - notice\s+period
+      stockOpener:
+        - i\s+am\s+writing\s+to\s+(?:apply|express\s+my\s+interest)
+      level:
+        - senior
+        - sr
+        - junior
+        - jr
+        - lead
+        - team ?lead
+        - staff
+        - principal
+        - head
+        - intern
+        - working student
+        - mid-level
+      titleStop:
+        - of
+        - for
+        - and
+        - in
+        - the
+        - with
+      legal:
+        - co
+        - ltd
+        - limited
+        - inc
+        - llc
+        - plc
+        - corp
+        - corporation
+        - bv
+        - sarl
+      letterLegal:
+        - inc\.?
+        - ltd\.?
+        - llc
+        - plc
+        - corp\.?
+        - co\.
+      roleWord:
+        - engineer
+        - developer
+        - scientist
+        - manager
+        - architect
+        - analyst
+        - consultant
+        - designer
+        - lead
+        - administrator
+        - specialist
+      nice:
+        - nice[ -]to[ -]have
+        - (?:is|are|would be) a (?:big |strong )?plus
+        - a plus\b
+        - bonus
+        - preferred
+        - ideally
+        - optional
+      requiredHead:
+        - requirements?
+        - qualifications?
+        - what you bring
+        - what we(?:'re| are) looking for
+        - must[ -]haves?
+        - your profile
+        - about you
+        - who you are
+      skipHead:
+        - about us
+        - who we are
+        - benefits
+        - perks
+        - what we offer
+        - we offer
+        - our offer
+        - equal opportunit\w*
+        - diversity
+        - how to apply
+        - application process
+        - contact
+        - "why join(?: us)?"
+        - why us
+      tasksHead:
+        - tasks
+        - responsibilities
+        - what you(?:'ll| will) do
+        - your role
+        - tech stack
+      skipSentence:
+        - equal opportunit\w*
+        - regardless of
+        - without regard to
+        - diversity
+        - recruitment agenc\w*
+        - apply now
+      notTech:
+        - CV
+        - HR
+        - IT
+        - EU
+        - USA
+        - UK
+        - US
+        - CEO
+        - CTO
+        - CFO
+        - COO
+        - CPO
+        - VP
+        - FAQ
+        - PDF
+        - OK
+        - ASAP
+        - NDA
+        - TBD
+        - FTE
+        - KPI
+        - KPIs
+        - OKR
+        - OKRs
+        - USP
+        - B2B
+        - B2C
+        - MSc
+        - BSc
+        - PhD
+        - MBA
+        - EGYM
+        - LinkedIn
+        - YouTube
+        - Instagram
+        - TikTok
+        - StepStone
+        - Glassdoor
+        - A1
+        - A2
+        - B1
+        - B2
+        - C1
+        - C2
+        - Q1
+        - Q2
+        - Q3
+        - Q4
+        - AI
+        - ML
+        - JD
+      degree:
+        words:
+          - degree
+          - bachelor'?s?
+          - (?<!scrum\s)master'?s?(?!\s+data)
+          - ph\.?\s?d
+          - b\.\s?sc
+          - m\.\s?sc
+          - b\.\s?eng
+          - m\.\s?eng
+        suffixes: []
+      langContext:
+        - language
+        - speak
+        - spoken
+        - written
+        - proficien
+        - skills
+        - level
+        - communicat
+      keywords:
+        AI:
+          - =AI
+          - artificial intelligence
+        LLM:
+          - LLM
+          - LLMs
+          - large language model
+          - large language models
+          - GenAI
+          - generative AI
+        RAG:
+          - =RAG
+          - retrieval-augmented
+          - retrieval augmented
+        AI agents:
+          - agent
+          - agents
+          - agentic
+          - AI agent
+          - AI agents
+        multi-agent:
+          - multi-agent
+          - multi agent
+        tool use:
+          - tool use
+          - tool calling
+          - function calling
+        MCP:
+          - =MCP
+          - Model Context Protocol
+        prompt engineering:
+          - prompt engineering
+          - prompting
+          - prompt design
+        evals:
+          - eval
+          - evals
+          - LLM-as-judge
+          - ~evaluation
+          - ~evaluations
+        fine-tuning:
+          - fine-tuning
+          - fine tuning
+          - finetuning
+          - LoRA
+          - SFT
+          - RLHF
+          - DPO
+        embeddings:
+          - embedding
+          - embeddings
+        vector database:
+          - vector database
+          - vector databases
+          - vector db
+          - vector store
+          - pgvector
+          - Pinecone
+          - Weaviate
+          - Qdrant
+          - Chroma
+          - Milvus
+        LangChain:
+          - LangChain
+        LangGraph:
+          - LangGraph
+        LlamaIndex:
+          - LlamaIndex
+        OpenAI:
+          - OpenAI
+          - GPT
+          - GPT-4
+          - GPT-4o
+          - ChatGPT
+        Claude:
+          - Claude
+          - Anthropic
+        Claude Code:
+          - Claude Code
+        Codex:
+          - Codex
+        Hugging Face:
+          - Hugging Face
+          - HuggingFace
+        PyTorch:
+          - PyTorch
+        TensorFlow:
+          - TensorFlow
+        scikit-learn:
+          - scikit-learn
+          - sklearn
+        machine learning:
+          - machine learning
+          - =ML
+        deep learning:
+          - deep learning
+        NLP:
+          - NLP
+          - natural language processing
+        computer vision:
+          - computer vision
+          - OpenCV
+        speech AI:
+          - speech-to-text
+          - ASR
+          - speech recognition
+          - voice AI
+          - TTS
+          - text-to-speech
+        MLOps:
+          - MLOps
+          - LLMOps
+        inference:
+          - inference
+          - model serving
+          - vLLM
+        local models:
+          - Ollama
+          - MLX
+          - llama.cpp
+          - open-source models
+          - open-weight
+        observability:
+          - observability
+          - Langfuse
+          - LangSmith
+          - OpenTelemetry
+          - Prometheus
+          - Grafana
+          - ~tracing
+          - ~monitoring
+        guardrails:
+          - guardrails
+          - AI safety
+          - prompt injection
+        Python:
+          - Python
+        TypeScript:
+          - TypeScript
+        JavaScript:
+          - JavaScript
+          - Node.js
+          - NodeJS
+        Rust:
+          - Rust
+        C++:
+          - =C++
+        C#:
+          - =C#
+        .NET:
+          - =.NET
+          - dotnet
+        Go:
+          - =Go
+          - Golang
+        R:
+          - =R
+        Java:
+          - Java
+        Kotlin:
+          - Kotlin
+        Swift:
+          - =Swift
+          - SwiftUI
+        SQL:
+          - SQL
+        FastAPI:
+          - FastAPI
+        Django:
+          - Django
+        Spring Boot:
+          - Spring Boot
+          - Spring Framework
+        React:
+          - =React
+          - ReactJS
+          - React.js
+        Angular:
+          - =Angular
+          - AngularJS
+        Vue:
+          - =Vue
+          - Vue.js
+          - VueJS
+        Next.js:
+          - Next.js
+          - NextJS
+        REST APIs:
+          - REST
+          - RESTful
+          - REST API
+          - REST APIs
+        GraphQL:
+          - GraphQL
+        gRPC:
+          - gRPC
+        event sourcing:
+          - event sourcing
+          - event sourced
+        CQRS:
+          - CQRS
+          - command query responsibility segregation
+        DDD:
+          - =DDD
+          - domain-driven design
+          - domänengetriebene* Design*
+          - domain-driven
+        hexagonal architecture:
+          - hexagonal architecture
+        clean architecture:
+          - clean architecture
+        microservices:
+          - microservice
+          - microservices
+        Kafka:
+          - Kafka
+        Redis:
+          - Redis
+        PostgreSQL:
+          - PostgreSQL
+          - Postgres
+        MySQL:
+          - MySQL
+        MongoDB:
+          - MongoDB
+          - =Mongo
+        Oracle:
+          - =Oracle
+        Elasticsearch:
+          - Elasticsearch
+          - OpenSearch
+        Spark:
+          - Apache Spark
+          - PySpark
+          - =Spark
+        Airflow:
+          - Airflow
+        dbt:
+          - =dbt
+        Docker:
+          - Docker
+          - ~container
+          - ~containers
+          - ~containerized
+        Kubernetes:
+          - Kubernetes
+          - k8s
+        Helm:
+          - =Helm
+        ArgoCD:
+          - ArgoCD
+          - Argo CD
+        AWS:
+          - AWS
+          - Amazon Web Services
+        GCP:
+          - GCP
+          - Google Cloud
+        Azure:
+          - Azure
+        Terraform:
+          - Terraform
+        CI/CD:
+          - CI/CD
+          - =CI
+          - continuous integration
+          - continuous delivery
+          - continuous deployment
+        GitHub Actions:
+          - GitHub Actions
+        GitLab CI:
+          - GitLab CI
+          - GitLab CI/CD
+        Jenkins:
+          - Jenkins
+        Git:
+          - =Git
+        Linux:
+          - Linux
+        distributed systems:
+          - distributed systems
+          - distributed system
+        system design:
+          - system design
+          - Systemdesign
+          - ~architecture
+          - ~Architektur
+        testing:
+          - testing
+          - unit tests
+          - integration tests
+          - test automation
+        code review:
+          - code review
+          - code reviews
+        Scrum:
+          - Scrum
+        Kanban:
+          - Kanban
+        5G:
+          - 5G
+          - 5G Core
+          - 5GC
+        IMS:
+          - =IMS
+          - IP Multimedia Subsystem
+        SIP:
+          - =SIP
+        Diameter:
+          - =Diameter
+        Kamailio:
+          - Kamailio
+        3GPP:
+          - 3GPP
+        VoIP:
+          - VoIP
+          - VoLTE
+          - VoNR
+        NFV:
+          - NFV
+          - network function virtualization
+      langs:
+        German:
+          - german
+        English:
+          - english
+        French:
+          - french
+        Spanish:
+          - spanish
+        Italian:
+          - italian
+        Dutch:
+          - dutch
+        Polish:
+          - polish
+        Chinese:
+          - chinese
+          - mandarin
+      names:
+        German:
+          - german
+        English:
+          - english
+        French:
+          - french
+          - français
+        Spanish:
+          - spanish
+          - español
+        Italian:
+          - italian
+        Dutch:
+          - dutch
+        Polish:
+          - polish
+        Chinese:
+          - chinese
+          - mandarin
+      levelWords:
+        native:
+          - native
+          - mother tongue
+        ranked:
+          - rank: 5
+            words:
+              - business[ -]fluent
+              - fluent(?:ly)?
+              - proficient
+              - excellent
+              - very good
+          - rank: 4
+            words:
+              - good
+              - professional
+              - working proficiency
+          - rank: 3
+            words:
+              - conversational
+              - intermediate
+          - rank: 2
+            words:
+              - basic
+              - elementary
+              - beginner
+    de:
+      filler:
+        - Leidenschaft
+        - leidenschaftlich~
+        - teamfähig~
+        - belastbar~
+        - motiviert~
+        - hochmotiviert~
+        - engagiert~
+        - zielorientiert~
+        - kommunikationsstark~
+        - innovativ~
+        - ganzheitlich~
+        - flexibel
+        - flexible[nmrs]
+      weak:
+        - verantwortlich für
+        - zuständig für
+        - mitarbeit (?:bei|an)
+        - unterstützung (?:bei|von)
+      proseWords:
+        - der
+        - die
+        - das
+        - und
+        - mit
+        - für
+        - von
+        - zu
+        - im
+        - den
+        - dem
+        - des
+        - ein
+        - eine
+        - einer
+        - auf
+        - ist
+        - wurde
+        - als
+        - bei
+        - aus
+        - sich
+        - nicht
+        - auch
+        - über
+        - durch
+      asksSalary:
+        - gehaltsvorstellung
+        - gehaltswunsch
+        - gehaltsvorstellungen
+        - gehaltsangabe
+      asksStart:
+        - eintrittstermin
+        - eintrittsdatum
+        - starttermin
+        - frühestmöglich
+        - kündigungsfrist
+      stockOpener:
+        - hiermit\s+(?:bewerbe\s+ich\s+mich|möchte\s+ich\s+mich\s+(?:\S+\s+){0,6}bewerben)
+      level:
+        - teamleiter(?:in)?
+        - werkstudent(?:in)?
+      titleStop:
+        - für
+        - und
+        - im
+        - mit
+        - der
+        - die
+        - das
+      legal:
+        - gmbh
+        - mbh
+        - ag
+        - se
+        - kg
+        - ug
+        - ohg
+      letterLegal:
+        - gmbh(?:\s*&\s*co\.?\s*kg)?
+        - mbh
+        - ag
+        - se
+        - kg(?:aa)?
+        - ohg
+        - e\.\s?v\.
+      roleWord:
+        - entwickler
+        - ingenieur
+        - architekt
+      nice:
+        - wünschenswert
+        - von vorteil
+        - idealerweise
+        - ein plus
+        - pluspunkt
+      requiredHead:
+        - ihr profil
+        - dein profil
+        - anforderungen
+        - was (?:du|sie) mitbring(?:st|en)
+        - das bring(?:st du|en sie) mit
+        - voraussetzungen
+      skipHead:
+        - über uns
+        - wer wir sind
+        - wir bieten
+        - was wir (?:dir|ihnen) bieten
+        - unser angebot
+        - deine vorteile
+        - ihre vorteile
+        - bewerbung\w*
+        - kontakt
+        - warum wir
+      tasksHead:
+        - aufgaben
+        - deine rolle
+        - ihre rolle
+      skipSentence:
+        - chancengleichheit
+        - unabhängig von
+        - wir freuen uns auf (?:deine|ihre) bewerbung
+        - personalvermittler
+        - jetzt bewerben
+      notTech:
+        - GmbH
+        - AG
+        - KG
+        - SE
+        - UG
+        - DACH
+        - ÖPNV
+        - PKW
+        - KMU
+        - IHK
+        - BAV
+        - bAV
+        - JobRad
+        - JobTicket
+        - DeutschlandTicket
+        - XING
+        - Xing
+        - Kununu
+        - kununu
+        - KI
+      degree:
+        words:
+          - diplom
+          - promotion
+        suffixes:
+          - studium
+          - studiums
+          - studienabschluss
+          - hochschulabschluss
+          - universitätsabschluss
+          - ausbildung
+      langContext:
+        - kenntnis
+        - sprach
+        - schrift
+        - niveau
+        - kommunikat
+      keywords:
+        AI:
+          - =KI
+          - künstliche* Intelligenz
+        LLM:
+          - generative KI
+        AI agents:
+          - KI-Agent*
+        multi-agent:
+          - Multi-Agenten
+        vector database:
+          - Vektordatenbank*
+        machine learning:
+          - maschinelle* Lernen*
+        hexagonal architecture:
+          - hexagonale Architektur
+        microservices:
+          - Microservice-Architektur
+        distributed systems:
+          - verteilte* System*
+        testing:
+          - Testautomatisierung
+          - automatisierte* Tests
+      langs:
+        German:
+          - deutsch
+        English:
+          - englisch
+        French:
+          - französisch
+        Spanish:
+          - spanisch
+        Italian:
+          - italienisch
+        Dutch:
+          - niederländisch
+        Polish:
+          - polnisch
+        Chinese:
+          - chinesisch
+      names:
+        German:
+          - deutsch
+        English:
+          - englisch
+        French:
+          - französisch
+        Spanish:
+          - spanisch
+        Italian:
+          - italienisch
+        Dutch:
+          - niederländisch
+        Polish:
+          - polnisch
+        Chinese:
+          - chinesisch
+      levelWords:
+        native:
+          - muttersprach\p{L}*
+          - erstsprache
+        ranked:
+          - rank: 5
+            words:
+              - verhandlungssicher\p{L}*
+              - fließend\p{L}*
+              - exzellent\p{L}*
+              - sehr gut(?:e[nmrs]?)?
+              - hervorragend\p{L}*
+          - rank: 4
+            words:
+              - gut(?:e[nmrs]?)?
+              - solid(?:e[nmrs]?)?
+          - rank: 3
+            words: []
+          - rank: 2
+            words:
+              - grundkenntnisse
 # JD tailoring and evidence verification.
 tailor:
   # Maximum separate instructions saved in a document.

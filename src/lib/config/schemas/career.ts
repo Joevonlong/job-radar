@@ -23,6 +23,61 @@ export const careerLayoutDefaultsSchema = z.strictObject({
 
 const positive = (fallback: number, max: number) => z.number().int().min(1).max(max).default(fallback);
 
+export const careerCheckLimitsSchema = z.strictObject({
+  maxMentions: positive(4, 100000),
+  goodCoverage: z.number().min(0).max(100).default(70),
+  maxBullet: positive(200, 100000),
+  minBullet: positive(40, 100000),
+  maxBulletsPerEntry: positive(5, 100000),
+  maxGapMonths: positive(6, 100000),
+  proseMinWords: positive(12, 100000),
+  proseClearWords: positive(20, 100000),
+  proseRatio: positive(3, 100000),
+  proseClearRatio: positive(4, 100000),
+  maxRole: positive(200, 100000),
+  letterPages: positive(1, 10),
+  letterWords: z.strictObject({ min: positive(200, 100000), max: positive(450, 100000) }).prefault({}),
+  minPiece: positive(16, 100000),
+  maxPieces: positive(3, 100000),
+});
+
+const checkWords = z.array(z.string().min(1).max(1000)).max(10000).default([]);
+const checkDictionary = z.record(z.string().min(1).max(200), checkWords).default({});
+
+export const careerLanguageLexiconSchema = z.strictObject({
+  keywords: checkDictionary,
+  filler: checkWords,
+  weak: checkWords,
+  proseWords: checkWords,
+  asksSalary: checkWords,
+  asksStart: checkWords,
+  stockOpener: checkWords,
+  level: checkWords,
+  titleStop: checkWords,
+  legal: checkWords,
+  letterLegal: checkWords,
+  roleWord: checkWords,
+  nice: checkWords,
+  requiredHead: checkWords,
+  skipHead: checkWords,
+  tasksHead: checkWords,
+  skipSentence: checkWords,
+  notTech: checkWords,
+  degree: z.strictObject({ words: checkWords, suffixes: checkWords }).prefault({}),
+  langContext: checkWords,
+  langs: checkDictionary,
+  names: checkDictionary,
+  levelWords: z.strictObject({
+    native: checkWords,
+    ranked: z.array(z.strictObject({ rank: z.number().int().min(1).max(6), words: checkWords })).max(6).default([]),
+  }).prefault({}),
+});
+
+export const careerCheckLexiconSchema = z.strictObject({
+  en: careerLanguageLexiconSchema.prefault({}),
+  de: careerLanguageLexiconSchema.prefault({}),
+});
+
 export const careerSchema = z.strictObject({
   enabled: z.boolean().default(false),
   timeout_seconds: positive(CAREER_DEFAULT_TIMEOUT_SECONDS, 1800),
@@ -77,7 +132,20 @@ export const careerSchema = z.strictObject({
     names: namesSchema,
     stopwords: z.record(z.string().regex(/^[a-z]{2,3}$/), z.array(z.string().min(1).max(100)).max(1000)).default({ en: [], de: [] }),
   }).prefault({}),
-  preview: z.strictObject({ debounce_ms: z.number().int().min(50).max(10000).default(400) }).prefault({}),
+  preview: z.strictObject({
+    debounce_ms: z.number().int().min(50).max(10000).default(400),
+    page_count_debounce_ms: positive(3000, 60000),
+  }).prefault({}),
+  check: z.strictObject({
+    limits: careerCheckLimitsSchema.prefault({}),
+    lexicon: careerCheckLexiconSchema.prefault({}),
+    uncovered_max_chars: positive(32, 1000),
+  }).prefault({}),
+  pdf: z.strictObject({
+    url: z.url({ protocol: /^https?$/ }).default("http://career-pdf:8090"),
+    timeout_seconds: positive(60, 300),
+    max_html_bytes: positive(8000000, 50000000),
+  }).prefault({}),
   evidence: z
     .strictObject({
       min_quote_chars: positive(4, 1000),

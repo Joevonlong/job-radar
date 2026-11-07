@@ -54,6 +54,7 @@ export const OVERLAY_RECORD_RULES: Readonly<Partial<Record<ConfigName, readonly 
     { path: "tailor.first_person", kind: "entries" },
     { path: "tailor.names.capitalized_non_initial", kind: "entries" },
     { path: "tailor.stopwords", kind: "entries" },
+    { path: "check.lexicon.*.*", kind: "entries" },
   ],
   search: [{ path: "keyword_groups", kind: "whole" }],
   jobSearch: [{ path: "countries.extra_aliases", kind: "entries" }],

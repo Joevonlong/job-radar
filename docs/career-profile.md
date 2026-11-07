@@ -141,7 +141,22 @@ Upload a shared photo or signature as PNG or JPEG; the size limit is `career.yam
 Images are shared across documents. In the layout menu, choose the theme, accent, page budget, paper,
 density, colours, language, filename, section order and signature. **Save as my defaults** applies the
 layout to future documents. Use history to view and restore earlier versions; save pending edits first.
-Delete a document from the list after confirmation; this also removes its history. Page count and PDF
-export are not available yet.
+Delete a document from the list after confirmation; this also removes its history.
+
+### Page count, checks and PDF export
+
+Page counts and PDF export need the optional PDF service: set `COMPOSE_PROFILES=career-pdf` and deploy again (see
+[Optional résumé PDF service](deploy.md#optional-résumé-pdf-service)). Without it the page count shows as unknown and
+the editor shows the start hint; editing and preview keep working.
+
+With the service running, the page count next to the preview refreshes a few seconds after you stop typing
+(`preview.page_count_debounce_ms`) and is highlighted when it exceeds the page budget. **Export résumé PDF** and,
+when the letter has text, **Export letter PDF** save the document first and download the PDF; the file name comes from
+the layout's filename, and résumé and letter get different names. The app keeps no copy of the PDF.
+
+Checks run while you edit: placeholders left in the text, length and wording limits, and after a page count or export
+also the page budget and reading order. Placeholders are shown next to the export buttons. Characters that the bundled
+fonts do not cover (for example Chinese) are listed before export. Checks and font hints never block an export. The
+limits and word lists are `career.yaml: check.limits` and `check.lexicon`; words you add keep the shipped lists.
 
 To fit a document to one job with AI proposals you review one by one, see [Résumé tailoring](resume-tailoring.md).

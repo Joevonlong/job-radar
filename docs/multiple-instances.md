@@ -66,3 +66,16 @@ started from another checkout.
 In its checkout: `docker compose down` (containers and network), then, only if you are sure, `docker volume rm
 <its JOBRADAR_PG_VOLUME>`. `docker compose down -v` removes the volume named in **this** checkout's `.env`: run it only in
 the checkout whose database you want to delete. See [upgrade.md](upgrade.md#uninstall).
+
+## Optional résumé PDF service
+
+Set `COMPOSE_PROFILES=career-pdf` in the instance environment to include the PDF service in builds and deploys.
+Deploy starts it after jobspy with `--no-deps --wait`; failure warns and deployment continues.
+Doctor expects it only when the career feature is enabled and Compose lists it as active.
+Without the profile, deploy leaves it untouched. The default profile still contains db, web, runner and jobspy.
+
+The PDF container shares the runner image, with no credentials, data mounts or published ports. It runs read-only
+with temporary `/tmp` and home directories and a memory cap (`CAREER_PDF_MEM_LIMIT`, default 1g).
+Only web joins its dedicated internal network as well as the default network. Each Compose project gets its own
+PDF network and service; there is no extra host port to allocate for another instance.
+See [PDF configuration](configuration.md#career-profile-careeryaml) for limits and the HTTP interfaces.
