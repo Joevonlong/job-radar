@@ -161,6 +161,8 @@ scripts/ops/deploy.sh --skip-pull
 - **跟随 `main`：** 3.0.0 发布后，运行 `git fetch origin && git switch stable`，再运行 `scripts/ops/deploy.sh`。开发者可留在 `main`。
 - **已使用发布目录：** 在 `stable` 或 `main` 上直接运行 `scripts/ops/deploy.sh`。detached HEAD 则用 `scripts/ops/deploy.sh --ref v3.0.0`。
 
+职业档案是 3.0.0 新增的功能，默认关闭（在**设置 → 工作流 → 职业档案**中开启）。简历 PDF 导出和页数需要可选的 PDF 服务，它默认不启动：在 `.env` 加上 `COMPOSE_PROFILES=career-pdf`，再部署一次。没有它时，编辑和预览照常可用。见[可选简历 PDF 服务](deploy.zh.md#可选简历-pdf-服务)。
+
 要退回 `v2.0.1`，按[回滚](#回滚)和[降级到发布目录之前的版本](#downgrade-pre-release-dir)操作，包括其中的数据库和配置备份说明。
 
 ## 回滚

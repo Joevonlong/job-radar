@@ -277,6 +277,11 @@ Once 3.0.0 is released, choose the starting point that matches your checkout:
 - **Already using release directories:** on `stable` or `main`, run `scripts/ops/deploy.sh`; from a detached HEAD,
   use `scripts/ops/deploy.sh --ref v3.0.0`.
 
+The career profile is new in 3.0.0 and off by default (turn it on in **Settings → Workflow → Career profile**). Its résumé PDF
+export and page count need the optional PDF service, which is not started by default: add `COMPOSE_PROFILES=career-pdf`
+to `.env` and deploy again. Without it, editing and preview work as before. See
+[Optional résumé PDF service](deploy.md#optional-résumé-pdf-service).
+
 To return to `v2.0.1`, follow [Roll back](#roll-back) and
 [Downgrade to a version before release directories](#downgrade-pre-release-dir), including their database and config
 backup instructions.
