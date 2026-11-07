@@ -169,3 +169,22 @@ test("document saves enforce instruction limits for raw YAML edits too", async (
   await expect(saveDocument(context.doc.id, { ...context.doc, requirements: ["First", "Second"] }, { baseHash: created.baseHash })).rejects.toMatchObject({ code: "limits" });
   expect((await loadDocument(context.doc.id)).baseHash).toBe(created.baseHash);
 });
+
+test("deleting one word of a merged JD-only claim keeps the remaining words pending", () => {
+  const context = tailorFixture(); context.text.origin = "ai";
+  context.text.text = "Built services with kubernetes redis";
+  context.doc.claims = [claim(context.text.id, { kind: "skill", text: "kubernetes, redis", in_jd: true })];
+  const before = structuredClone(context.doc);
+  context.text.text = "Built services with kubernetes";
+  const after = rerunClaims(before, context.doc, context.profile, context.settings);
+  expect(after.claims).toEqual([expect.objectContaining({ text: "kubernetes", status: "pending", in_jd: true })]);
+  expect(() => saveBack(after, context.profile, context.text.id, undefined, context.settings)).toThrow("unresolved_claims");
+});
+
+test("save back keeps wordings that differ only in punctuation apart", () => {
+  const context = tailorFixture("Built tools in C++");
+  context.doc.claims = []; context.text.origin = "user"; context.text.text = "Built tools in C#";
+  const result = saveBack(context.doc, context.profile, context.text.id, undefined, context.settings);
+  expect(result.wording.text).toBe("Built tools in C#");
+  expect(result.source.wordings.map((wording) => wording.text)).toEqual(["Built tools in C++", "Built tools in C#"]);
+});

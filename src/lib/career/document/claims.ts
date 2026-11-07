@@ -16,13 +16,21 @@ function stillPresent(claim: Claim, value: string, settings: CareerConfig): bool
   return claim.text.split(/,\s*/).every((text) => normalized(value).includes(normalized(text)));
 }
 
+/** A merged JD-only claim keeps the words still in the text, so deleting one word never clears the others. */
+function surviving(claim: Claim, value: string, settings: CareerConfig): Claim | null {
+  if (!claim.in_jd) return stillPresent(claim, value, settings) ? claim : null;
+  const words = claim.text.split(/,\s*/).filter((text) => normalized(value).includes(normalized(text)));
+  return words.length ? { ...claim, text: words.join(", ") } : null;
+}
+
 export function survivingClaims(doc: CareerDocument, settings: CareerConfig): Claim[] {
   const objects = documentObjects(doc);
-  return doc.claims.filter((claim) => {
+  return doc.claims.flatMap((claim) => {
     const target = claim.target;
     const object = "text" in target ? objects.get(target.text) : "entry" in target ? objects.get(target.entry) : null;
     const value = "text" in target ? String(object?.text ?? "") : "entry" in target ? JSON.stringify(object?.[target.field === "skills" ? "items" : target.field] ?? "") : String(doc.letter?.[target.letter] ?? "");
-    return stillPresent(claim, value, settings);
+    const kept = surviving(claim, value, settings);
+    return kept ? [kept] : [];
   });
 }
 

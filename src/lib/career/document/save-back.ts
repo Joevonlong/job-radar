@@ -5,9 +5,11 @@ import { visitProfile, checkProfileLimits, type CareerProfile, type Text } from 
 import { loadCareerProfile, saveCareerProfile } from "../store/profile";
 import { persistDocument } from "../store/documents";
 import { reloadConfig } from "@/lib/config/load";
-import { normalized } from "../tailor/verify";
 import { documentTexts } from "./targets";
 import { markOf } from "./marks";
+
+/** Wordings match when only case and spacing differ; punctuation such as C++ and C# stays significant. */
+const sameText = (text: string) => text.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 
 export function saveBack(doc: CareerDocument, profile: CareerProfile, textId: string, target: string | undefined, settings: CareerConfig) {
   const document = structuredClone(doc);
@@ -23,13 +25,13 @@ export function saveBack(doc: CareerDocument, profile: CareerProfile, textId: st
     let entry: Record<string, unknown> | undefined;
     visitProfile(next, (object) => { if (object.id === target && Array.isArray(object.bullets)) entry = object; });
     if (!entry) throw new CareerStoreError("target_gone");
-    source = (entry.bullets as Text[]).find((candidate) => candidate.wordings.some((value) => value.from_document === doc.id && normalized(value.text) === normalized(text.text)));
+    source = (entry.bullets as Text[]).find((candidate) => candidate.wordings.some((value) => value.from_document === doc.id && sameText(value.text) === sameText(text.text)));
     if (!source) {
       source = { id: "", primary: "", wordings: [wording] };
       (entry.bullets as Text[]).push(source);
     }
   }
-  let existing = source.wordings.find((item) => normalized(item.text) === normalized(text.text));
+  let existing = source.wordings.find((item) => sameText(item.text) === sameText(text.text));
   if (!existing) { source.wordings.push(wording); existing = wording; }
   checkProfileLimits(next, settings.profile);
   return { profile: next, document, source, wording: existing };
@@ -48,11 +50,11 @@ export async function saveBackToProfile(docId: string, textId: string, options: 
     } else {
       visitProfile(saved.profile, (object) => {
         if (object.id !== options.target || !Array.isArray(object.bullets)) return;
-        source = (object.bullets as Text[]).find((text) => text.wordings.some((wording) => wording.from_document === docId && normalized(wording.text) === normalized(prepared.wording.text)));
+        source = (object.bullets as Text[]).find((text) => text.wordings.some((wording) => wording.from_document === docId && sameText(wording.text) === sameText(prepared.wording.text)));
       });
     }
     if (!source) throw new CareerStoreError("write_failed");
-    const wording = source.wordings.find((wording) => normalized(wording.text) === normalized(prepared.wording.text))!;
+    const wording = source.wordings.find((wording) => sameText(wording.text) === sameText(prepared.wording.text))!;
     const text = documentTexts(prepared.document).find((item) => item.value.id === textId)!.value;
     text.source = { text_id: source.id, wording_id: wording.id };
     text.origin = "source";
