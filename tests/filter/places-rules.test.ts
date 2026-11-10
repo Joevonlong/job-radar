@@ -135,6 +135,37 @@ describe("the title of a remote job", () => {
     expect(reasons("Berlin", [], { ...eastCoast, locations: [loc("Germany", null, "DE")] })).toEqual(outOfScope);
   });
 
+  describe("with a qualified foreign marker, as the Germany pack's title patterns return it", () => {
+    const packLike: PipelineConfig = {
+      ...pipeline,
+      filter: { ...pipeline.filter, remote: { ...pipeline.filter.remote, title_outside_patterns: ["\\b(?:us|u\\.s\\.) (?:east|west|central) coast\\b", "\\b(?:east|west) coast\\b", "\\b(?:us|usa|canada)[- ](?:based|only|remote)\\b"] } },
+    };
+    const packReasons = (home: string, places: { place: string; relocate: boolean }[], title: string, country: "Germany" | "Netherlands"): string[] => {
+      const filter = filterWith(prefs((raw) => {
+        raw.home_city = home;
+        raw.places = places;
+        raw.workplace = ["onsite", "hybrid", "remote"];
+      }), packLike);
+      const located = job({ title, workplace: "remote", locations: [loc(country, null, country === "Germany" ? "DE" : "NL")] });
+      return evaluateJob(located, filter).reasons.filter((reason) => /^remote_out_of_scope/.test(reason));
+    };
+
+    it("reads the country in `Canada only`", () => {
+      expect(packReasons("", [], "AI Engineer - Canada only", "Germany")).toEqual(["remote_out_of_scope:Canada only"]);
+      expect(packReasons("Berlin", [moving("NL")], "AI Engineer - Canada only", "Netherlands")).toEqual(["remote_out_of_scope:Canada only"]);
+    });
+
+    it("reads the country in `US East Coast`", () => {
+      expect(packReasons("", [], "FDE - US East Coast", "Germany")).toEqual(["remote_out_of_scope:US East Coast"]);
+      expect(packReasons("Berlin", [moving("NL")], "FDE - US East Coast", "Netherlands")).toEqual(["remote_out_of_scope:US East Coast"]);
+    });
+
+    it("finds no country in a bare `East Coast`", () => {
+      expect(packReasons("", [], "Sales Lead East Coast", "Germany")).toEqual([]);
+      expect(packReasons("Berlin", [moving("NL")], "Sales Lead East Coast", "Netherlands")).toEqual([]);
+    });
+  });
+
   it("does not take a short name written in small letters for the country", () => {
     expect(reasons("Berlin", [moving("US")], { title: "Build with us - India", workplace: "remote", locations: [loc("Germany", null, "DE")] })).toEqual(outOfScope);
   });
