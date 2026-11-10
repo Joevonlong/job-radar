@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { buildQueries, onsiteSearchTexts, queryId } from "@/lib/channels/query";
 import { preferences003 } from "@/lib/config/migrations/preferences/003-places";
 import type { SearchConfig } from "@/lib/config";
-import { placeAreas, placesBeyondSearchEntries, plannedSearches, searchEntriesOutsidePlaces, wantedCities, wantedLocations, wantedRemoteScope, type PlaceGeo } from "@/lib/market/places";
+import { homeCityAbroad, placeAreas, placesBeyondSearchEntries, plannedSearches, searchEntriesOutsidePlaces, wantedCities, wantedLocations, wantedRemoteScope, type PlaceGeo } from "@/lib/market/places";
 
 import { shippedSearch } from "../channels/helpers";
 
@@ -169,6 +169,15 @@ describe("old search.yaml entries", () => {
     expect(searchEntriesOutsidePlaces({ remote_scope: "worldwide" }, prefs, geo, home)).toEqual(["Worldwide"]);
   });
 
+  it("compare on-site and remote entries apart: a remote-only CH does not cover a dropped on-site Switzerland", () => {
+    const doc = parseDocument("target_titles: [Engineer]\nlocations: [Berlin]\nworkplace: [onsite, remote]\nremote_scope: {region: [CH]}\n");
+    preferences003.migrate(doc);
+    const upgraded = doc.toJS() as { home_city: string; places: { place: string; relocate: boolean }[] };
+    expect(upgraded.places).toEqual([remoteOnly("CH")]);
+    expect(searchEntriesOutsidePlaces({ locations: ["Berlin", "Switzerland"], remote_scope: { region: ["CH"] } }, upgraded, geo, home)).toEqual(["Switzerland"]);
+    expect(searchEntriesOutsidePlaces({ locations: ["Berlin", "Switzerland"], remote_scope: { region: ["CH"] } }, { home_city: "Berlin", places: [moving("CH")] }, geo, home)).toEqual([]);
+  });
+
   it("ignore a value of the wrong shape", () => {
     expect(searchEntriesOutsidePlaces({ locations: "Paris", remote_scope: 3 }, prefs, geo, home)).toEqual([]);
   });
@@ -243,5 +252,20 @@ describe("searches the old keys did not list", () => {
     expect(beyond({ remote_scope: { region: ["CH"] } }, [remoteOnly("CH")])).toEqual(["Xaland"]);
     expect(beyond({ remote_scope: "none" }, [], ["onsite"])).toEqual([]);
     expect(beyond({ remote_scope: "home_country" }, [])).toEqual([]);
+  });
+});
+
+describe("homeCityAbroad", () => {
+  it("names the country of a home city the tables put abroad, as an upgrade of [Amsterdam, Berlin] makes it", () => {
+    const doc = parseDocument("target_titles: [Engineer]\nlocations: [Amsterdam, Berlin]\n");
+    preferences003.migrate(doc);
+    const upgraded = doc.toJS() as { home_city: string };
+    expect(homeCityAbroad(upgraded.home_city, geo, home.country)).toEqual({ code: "NL", name: "Netherlands" });
+  });
+
+  it("is quiet for a home city at home, an unknown one, and none", () => {
+    expect(homeCityAbroad("Berlin", geo, home.country)).toBeNull();
+    expect(homeCityAbroad("Atlantis", geo, home.country)).toBeNull();
+    expect(homeCityAbroad("", geo, home.country)).toBeNull();
   });
 });

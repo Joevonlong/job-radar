@@ -75,7 +75,7 @@ import { shippedConfigId, shortShippedConfigId } from "../src/lib/config/shipped
 import { dealBreakerLimitProblems, slowPatternProblems } from "../src/lib/filter/deal-breakers";
 import { vmTimeBox } from "../src/lib/filter/time-box";
 import { listPackIds, loadMarket, loadPipeline, packDirs, readPackDir } from "../src/lib/market";
-import { placeGeo, placesBeyondSearchEntries, searchEntriesOutsidePlaces } from "../src/lib/market/places";
+import { homeCityAbroad, placeGeo, placesBeyondSearchEntries, searchEntriesOutsidePlaces } from "../src/lib/market/places";
 import { compileGhostRules } from "../src/lib/ghost/rules";
 import { compileVisaRules } from "../src/lib/visa/rules";
 
@@ -332,7 +332,7 @@ report("preferences.yaml market", () => {
   }
 }
 
-// search.yaml's old location keys are ignored: warn about what they name that the location settings lack
+// search.yaml's old location keys are ignored: warn about what they name that the location settings lack; and about a home city abroad
 if (fs.existsSync(path.join(getProfileDir(), "preferences.yaml"))) {
   try {
     const preferences = parseConfigText("preferences", readConfigText("preferences"));
@@ -341,6 +341,8 @@ if (fs.existsSync(path.join(getProfileDir(), "preferences.yaml"))) {
     if (added.length > 0) console.log(`! preferences.yaml: ${added.join(", ")} searched now, though search.yaml's old locations, remote_scope did not list them`);
     const names = searchEntriesOutsidePlaces(readEffectiveConfig("search"), preferences, placeGeo(pipeline), { country: pipeline.market.country, countryName: pipeline.market.countryName });
     if (names.length > 0) console.log(`! search.yaml locations, remote_scope: ${names.join(", ")} not in preferences.yaml places; these keys are ignored, so they are not searched`);
+    const abroad = homeCityAbroad(preferences.home_city, placeGeo(pipeline), pipeline.market.country);
+    if (abroad !== null) console.log(`! preferences.yaml home_city: ${preferences.home_city} is in ${abroad.name}, not in the home country ${pipeline.market.countryName}; on-site jobs are looked for there inside ${pipeline.market.countryName}. Set a city in ${pipeline.market.countryName} as home_city and list ${preferences.home_city} under places`);
   } catch {
     // an unreadable file is reported by its own check above
   }

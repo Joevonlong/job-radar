@@ -658,6 +658,7 @@
         "label": "Excluded keywords"
       },
       "searchAdded": "search.yaml's old keys did not list {names}, but your settings here do, so these are searched now. Change your places or workplace here if you don't want the extra searches.",
+      "homeCityAbroad": "Your home city {city} is in {country}, not in your home country {home}, so on-site jobs are looked for in a {city} inside {home}. Set a city in {home} as your home city and add {city} to your places.",
       "searchLeftovers": "search.yaml still lists {names}, which your places lack. Those keys are ignored now, so they are not searched. Add them here if you still want them."
     },
     "options": {

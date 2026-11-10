@@ -213,6 +213,18 @@ export function normalizePlaces<T extends PlacePreferences>(preferences: T, geo:
   return same ? preferences : { ...preferences, places };
 }
 
+/**
+ * The country the tables put the home city in, when that is not the home country; null otherwise (or when the tables do not know the
+ * city). An upgrade makes the first old location the home city without reading the tables, so `[Amsterdam, Berlin]` for a German market
+ * gives a home city abroad: on-site jobs are then looked for in Amsterdam inside Germany.
+ */
+export function homeCityAbroad(homeCity: string, geo: PlaceGeo, homeCountry: string): { code: string; name: string } | null {
+  const place = lookupPlace(homeCity, geo);
+  const code = place?.kind === "city" && !place.countries.includes(homeCountry) ? place.countries[0] : undefined;
+  if (code === undefined) return null;
+  return { code, name: geo.countries.find((country) => country.code === code)?.name ?? code };
+}
+
 /** Worldwide is always remote only, whatever a hand-written file or the command-line setup marks it as. */
 const isWorldwide = (text: string): boolean => placeKey(text) === WORLDWIDE;
 
@@ -383,18 +395,25 @@ const textsOf = (value: unknown): string[] => (Array.isArray(value) ? value.filt
 
 const hasScopeRegion = (scope: unknown): scope is { region: unknown } => typeof scope === "object" && scope !== null && "region" in scope;
 
-/** The places search.yaml's old keys name. */
-function oldSearchNames(search: OldSearchEntries): string[] {
-  const scope = search.remote_scope;
-  return [...textsOf(search.locations), ...(scope === "worldwide" ? ["Worldwide"] : hasScopeRegion(scope) ? textsOf(scope.region) : [])];
+/** The scope tokens search.yaml's old `remote_scope` names, Worldwide as a name. */
+function oldRemoteNames(scope: unknown): string[] {
+  return scope === "worldwide" ? ["Worldwide"] : hasScopeRegion(scope) ? textsOf(scope.region) : [];
 }
 
-/** What search.yaml's old `locations` and `remote_scope` name that the location settings do not list: they are not searched any more. With no home city the home country is searched by name, so it counts as listed. */
+/**
+ * What search.yaml's old `locations` and `remote_scope` name that the location settings do not search any more. An old location
+ * needs the home city or a place I'd move to, since only those get an on-site search; an old scope token needs the home country or any
+ * listed place. So a remote-only `CH` does not stand in for a dropped on-site `Switzerland`. With no home city the home country is
+ * searched by name, so it counts as the home city.
+ */
 export function searchEntriesOutsidePlaces(search: OldSearchEntries, preferences: PlacePreferences, geo: PlaceGeo, home: { country: string; countryName: string }): string[] {
-  const names = oldSearchNames(search);
+  const keys = (texts: readonly string[]): Set<string> => new Set(texts.map((text) => samePlaceKey(text, geo)));
+  const { places } = normalizePlaces(preferences, geo);
   const homeNames = preferences.home_city.trim() === "" ? [home.country, home.countryName] : [preferences.home_city];
-  const listed = new Set([...homeNames, ...preferences.places.map((entry) => entry.place)].map((text) => samePlaceKey(text, geo)));
-  return [...new Set(names.filter((name) => !listed.has(samePlaceKey(name, geo))))];
+  const onsite = keys([...homeNames, ...places.filter((entry) => entry.relocate).map((entry) => entry.place)]);
+  const remote = keys([home.country, home.countryName, ...places.map((entry) => entry.place)]);
+  const dropped = [...textsOf(search.locations).filter((name) => !onsite.has(samePlaceKey(name, geo))), ...oldRemoteNames(search.remote_scope).filter((name) => !remote.has(samePlaceKey(name, geo)))];
+  return [...new Set(dropped)];
 }
 
 /**

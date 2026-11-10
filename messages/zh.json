@@ -658,6 +658,7 @@
         "label": "排除的关键词"
       },
       "searchAdded": "search.yaml 的旧键没有列出 {names}，但你在这里的设置里有，所以现在会搜索它们。如果不需要这些额外的搜索，请在这里修改地点或工作方式。",
+      "homeCityAbroad": "常住城市 {city} 在 {country}，不在本国 {home}，所以现场职位会在 {home} 境内找叫 {city} 的地方。请把 {home} 的一个城市设为常住城市，再把 {city} 加到地点里。",
       "searchLeftovers": "search.yaml 里还列着 {names}，但你的地点里没有。这些键现在已被忽略，不会再用来搜索。如果还需要，请在这里添加。"
     },
     "options": {
