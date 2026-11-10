@@ -136,6 +136,22 @@ pnpm run doctor --only config.market
 
 改了说法之后，`pnpm visa:scan` 预览会改什么，`pnpm visa:scan --write` 写入；规则是每个结果输入的一部分，所以每轮也会把所有岗位重新检查一遍。
 
+## 地名词典
+
+产品自带一份离线地名词典 `config/geo/places.json.gz`：[GeoNames](https://www.geonames.org/) 里人口不少于 1.5 万的全部城市和全部国家，
+带英文、德文、中文和当地名称，以及这些语言里的其他写法。任何写法都查到同一个地点（`慕尼黑`、`Múnich`、`München`、`Munich`
+是同一条），不分大小写和重音；同名的地点（英格兰的 Cambridge 和马萨诸塞州的 Cambridge）是不同条目，靠国家和一级行政区区分。
+查词典不联网。
+
+当前文件有 34 210 个城市、252 个国家、2 764 个一级行政区（压缩后 0.95 MB，JSON 2.8 MB）；其中 11 226 个城市有中文名，其余以英文显示。
+中文名照 GeoNames 原样收录，有些是繁体。
+
+重新生成：`pnpm geo:build` 把 `cities15000.zip`、`countryInfo.txt`、`admin1CodesASCII.txt`、`alternateNamesV2.zip`（约 210 MB）
+下载到仓库外的缓存目录（`--cache <dir>`，默认系统临时目录；`--refresh` 重新下载），再重写这个文件。同样的下载得到同样的字节；
+文件头记录了下载日期。
+
+GeoNames 数据采用 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 许可，署名见 `NOTICE`。
+
 ## 写一个新包
 
 1. 把 `config/packs/de/` 复制到 `data/config/packs/<id>/`，改 `pack.yaml` 的 `id`、`name`、`country`、`currency`、`language`、
