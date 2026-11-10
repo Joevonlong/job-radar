@@ -44,7 +44,7 @@ function placeKey(value: string): string {
   return value.replace(/ß/g, "ss").normalize("NFKD").replace(/\p{M}/gu, "").toLocaleLowerCase("en").replace(/\s+/g, " ").trim();
 }
 
-/** `placeKey`, with the umlauts' "ae oe ue" spellings folded too, so "München", "Munchen" and "Muenchen" are one city. */
+/** `placeKey`, with the umlauts' "ae oe ue" spellings folded too, so "München", "Munchen" and "Muenchen" meet. Only a fallback: it can make two cities ("Au", "Aue") collide. */
 function citySpellingKey(value: string): string {
   return placeKey(value).replace(/ae/g, "a").replace(/oe/g, "o").replace(/ue/g, "u");
 }
@@ -55,33 +55,57 @@ interface CityEntry {
   spellings: string[];
 }
 
+interface CityIndex {
+  /** `placeKey` of a spelling -> its city. The first city to claim a spelling keeps it. */
+  exact: Map<string, CityEntry>;
+  /** `citySpellingKey` -> its city, or null when two cities share the folded key: then only the exact spelling finds either. */
+  folded: Map<string, CityEntry | null>;
+}
+
 const addSpelling = (entry: CityEntry, spelling: string): void => {
   if (!entry.spellings.some((other) => placeKey(other) === placeKey(spelling))) entry.spellings.push(spelling);
 };
 
-function buildCityIndex(geo: Pick<PlaceGeo, "cityAliases" | "cities">): Map<string, CityEntry> {
-  const index = new Map<string, CityEntry>();
-  const register = (spelling: string, entry: CityEntry): void => {
-    const key = citySpellingKey(spelling);
-    if (!index.has(key)) index.set(key, entry);
-  };
-  // the aliases first: the name a user's own table gives a city stays its name
-  for (const [canonical, aliases] of Object.entries(geo.cityAliases)) {
-    const entry: CityEntry = { name: canonical, country: null, spellings: [canonical] };
-    for (const alias of aliases) addSpelling(entry, alias);
-    for (const spelling of entry.spellings) register(spelling, entry);
-  }
+function buildCityIndex(geo: Pick<PlaceGeo, "cityAliases" | "cities">): CityIndex {
+  const entries: CityEntry[] = [];
+  const byCity = new Map<string, CityEntry>();
   for (const [spelling, [canonical, country]] of Object.entries(geo.cities)) {
-    const entry = index.get(citySpellingKey(spelling)) ?? index.get(citySpellingKey(canonical)) ?? { name: canonical, country, spellings: [canonical] };
-    entry.country ??= country;
-    if (entry.country === country) addSpelling(entry, spelling);
-    register(spelling, entry);
-    register(canonical, entry);
+    const id = `${placeKey(canonical)}|${country}`;
+    let entry = byCity.get(id);
+    if (entry === undefined) {
+      entry = { name: canonical, country, spellings: [canonical] };
+      byCity.set(id, entry);
+      entries.push(entry);
+    }
+    addSpelling(entry, spelling);
   }
-  return index;
+  for (const [canonical, aliases] of Object.entries(geo.cityAliases)) {
+    const names = [canonical, ...aliases];
+    const hit = entries.filter((entry) => entry.spellings.some((spelling) => names.some((name) => placeKey(name) === placeKey(spelling))));
+    const target = hit[0] ?? { name: canonical, country: null, spellings: [] };
+    if (hit.length === 0) entries.push(target);
+    for (const other of hit.slice(1)) {
+      for (const spelling of other.spellings) addSpelling(target, spelling);
+      entries.splice(entries.indexOf(other), 1);
+    }
+    for (const name of names) addSpelling(target, name);
+    target.name = canonical;
+    target.spellings = [canonical, ...target.spellings.filter((spelling) => placeKey(spelling) !== placeKey(canonical))];
+  }
+  const exact = new Map<string, CityEntry>();
+  const folded = new Map<string, CityEntry | null>();
+  for (const entry of entries) {
+    for (const spelling of entry.spellings) {
+      if (!exact.has(placeKey(spelling))) exact.set(placeKey(spelling), entry);
+      const key = citySpellingKey(spelling);
+      const seen = folded.get(key);
+      folded.set(key, seen === undefined || seen === entry ? entry : null);
+    }
+  }
+  return { exact, folded };
 }
 
-const cityIndexes = new WeakMap<PlaceGeo["cities"], WeakMap<PlaceGeo["cityAliases"], Map<string, CityEntry>>>();
+const cityIndexes = new WeakMap<PlaceGeo["cities"], WeakMap<PlaceGeo["cityAliases"], CityIndex>>();
 
 function cityEntry(text: string, geo: Pick<PlaceGeo, "cityAliases" | "cities">): CityEntry | null {
   let byAliases = cityIndexes.get(geo.cities);
@@ -94,8 +118,9 @@ function cityEntry(text: string, geo: Pick<PlaceGeo, "cityAliases" | "cities">):
     index = buildCityIndex(geo);
     byAliases.set(geo.cityAliases, index);
   }
-  const key = citySpellingKey(text);
-  return key === "" ? null : (index.get(key) ?? null);
+  const key = placeKey(text);
+  if (key === "") return null;
+  return index.exact.get(key) ?? index.folded.get(citySpellingKey(text)) ?? null;
 }
 
 /** The tables' name of a city ("Munich" -> "München"), else the text as written. */

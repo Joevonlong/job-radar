@@ -62,6 +62,24 @@ required. A list in your `data/config/pipeline.yaml` replaces the shipped `pipel
 The `generic` pack is always loaded: the world country table, the regions `eu`, `eea`, `europe`, `dach`, `nordics`,
 the city table, US state codes and English rules. The market's own pack is added on top.
 
+## How a place name is read
+
+The filter, the ranking, the city groups, the "View posting" link and the handpicked channel all read a place name with
+one lookup. A place can be Worldwide, a region, a country or a city; a name that is both a country and a city
+(Singapore) is read as the country.
+
+- **Any spelling in the market tables counts as the same city.** The `cities` table lists each spelling with its
+  canonical name and country, so `Munich`, `München` and `Muenchen` are one city, whichever of them you put in your
+  locations or a posting uses.
+- **Your `city_aliases` join that city; they do not split it.** Spellings you list for a canonical city are added to the
+  market's spellings of the same city (a `Hanover` alias with `Hannover City` still matches a `Hannover` posting), and
+  your canonical name is the one shown. Keys of `metro_areas` and `metro_regions` are read the same way, so
+  `Koeln: [Hürth]` applies to a `Cologne` preference.
+- **Distinct cities stay distinct.** A spelling exactly as written always wins. Umlaut spellings (`ae`, `oe`, `ue` for
+  `ä`, `ö`, `ü`) and spellings without accents are only a fallback, and only when they lead to one city, so `Au` and `Aue`
+  never match each other when both are in the table.
+- A name no table knows is not an error: it matches only itself.
+
 ## How the effective pipeline config is built
 
 The code reads `pipeline.yaml` together with the packs (`loadPipeline()`):

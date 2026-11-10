@@ -5,6 +5,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- One place lookup for the filter, the ranking, the city groups, the "View posting" link and the handpicked channel. Every spelling in the market's city table now counts as the same city, so `Munich` also matches `München` in markets whose `filter.city_aliases` does not list it, and `Au` and `Aue` stay two cities. Stored filter results are worked out again on the next cycle, because a job's result can change.
+
 ## [2.1.0] - 2026-11-07
 
 Job Radar 2.1.0 adds a career profile with résumé tailoring, an application writer, company research and Gmail reply
@@ -15,10 +17,6 @@ releases now land on a `stable` branch.
 **Upgrading from 2.0.1 takes a few manual steps once.** Read [Upgrade to 2.1.0](docs/upgrade.md#upgrade-to-2-1-0) before
 you deploy; the upgrade notes below list what changes for an existing installation.
 
-- **The project website moved to [jobradar.bid](https://jobradar.bid/).** The READMEs and docs link there now; the old address redirects, so existing links keep working.
-- One place lookup for the filter, the ranking, the city groups, the "View posting" link and the handpicked channel. Every spelling in the market's city table now counts as the same city, so `Munich` also matches `München` in markets whose `filter.city_aliases` does not list it. Stored filter results are worked out again on the next cycle, because a job's result can change.
-- **Watched company lookups on Arbeitsagentur ask for the exact employer first.** The `arbeitgeber` parameter matches the employer name as written (`Siemens AG`: all hits are that employer), so it is tried first; only when it finds nothing (a short form such as `Siemens`) the search falls back to free text, whose results are narrowed to the employer afterwards, as before. Request and detail limits are unchanged. No config change.
-- **Apify remote queries no longer send LinkedIn's `f_WT=2`.** Through this actor it had no effect (same results, same order), so the shipped `remote_input` is now empty and the docs say that remote queries are plain searches at the remote location, with the pipeline judging remote from the posting. Needs no migration: your config files only hold what you changed, and an old whole file that still lists `f_WT` keeps working (the filter did nothing before either).
 ### Highlights
 
 - **Career profile and résumé tailoring (off by default).** Keep a local career profile on `/career`, import it from a

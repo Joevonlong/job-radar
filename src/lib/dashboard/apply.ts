@@ -1,5 +1,5 @@
 import type { JobSourceRef } from "@/lib/db/queries/types";
-import { citySpellings, placeGeo, type PlaceGeo } from "@/lib/market/places";
+import { canonicalCity, citySpellings, placeGeo, type PlaceGeo } from "@/lib/market/places";
 import type { ApplicationStatus } from "@/lib/db/repos/applications";
 import { foldText, wholeWordPattern } from "@/lib/filter/rules";
 
@@ -35,7 +35,8 @@ export function targetPlaceNames(
   for (const location of preferences.locations) {
     const spellings = citySpellings(location, geo);
     for (const n of spellings) names.add(n);
-    for (const [city, towns] of Object.entries(pipeline.filter.metro_areas)) if (spellings.some((n) => foldText(n) === foldText(city))) for (const t of towns) names.add(t);
+    const canonical = foldText(canonicalCity(location, geo));
+    for (const [city, towns] of Object.entries(pipeline.filter.metro_areas)) if (foldText(canonicalCity(city, geo)) === canonical) for (const t of towns) names.add(t);
   }
   return [...names];
 }

@@ -55,6 +55,15 @@ pnpm run doctor --only config.market
 
 `generic` 包总是加载：世界国家表、区域 `eu`、`eea`、`europe`、`dach`、`nordics`、城市表、美国州代码和英文规则。市场自己的包叠加在它上面。
 
+## 地名怎么读
+
+过滤、排序、城市分组、“查看岗位”链接和 handpicked 通道用同一个查找来读地名。一个地名可以是 Worldwide、区域、国家或城市；既是国家又是城市的名字（Singapore）按国家读。
+
+- **市场表里的任何写法都算同一个城市。** `cities` 表为每种写法给出规范名和国家，所以 `Munich`、`München`、`Muenchen` 是同一个城市，不论你在地点里填哪一个、岗位用哪一个。
+- **你的 `city_aliases` 加入这个城市，不会把它拆开。** 你为某个规范名列出的写法，会并入市场表里同一城市的写法（`Hanover` 加别名 `Hannover City`，仍能匹配 `Hannover` 的岗位），显示的是你的规范名。`metro_areas`、`metro_regions` 的键也这样读，所以 `Koeln: [Hürth]` 对 `Cologne` 偏好生效。
+- **不同的城市保持不同。** 原样写法永远优先。变音写法（`ae`、`oe`、`ue` 对应 `ä`、`ö`、`ü`）和去掉重音的写法只是后备，而且只在只指向一个城市时才用，所以表里同时有 `Au` 和 `Aue` 时，两者不会互相匹配。
+- 表里都没有的名字不算错误：它只匹配它自己。
+
 ## 生效的 pipeline 配置怎么合成
 
 代码把 `pipeline.yaml` 和市场包一起读（`loadPipeline()`）：
