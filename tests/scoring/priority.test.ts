@@ -100,6 +100,13 @@ describe("the other components", () => {
     expect(score({ locations: [label("Munich", "US")] }).location).toBe(0.3);
   });
 
+  it("a metro key is read like the filter reads it: letter case does not matter", () => {
+    const pipeline = shippedPipeline();
+    const metro = inputs({ preferences: { ...examplePreferences(), locations: ["testville"] }, pipeline: { ...pipeline, filter: { ...pipeline.filter, metro_areas: { Testville: ["Nearton"] } } } });
+    const nearby = score({ locations: [place("Nearton")] }, metro).location;
+    expect(nearby).toBeGreaterThan(score({ locations: [place("Farton")] }, metro).location);
+  });
+
   it("signals: the stored bonus as a share of the cap, never above 1", () => {
     expect(score({ signalBonus: 0 }).signals).toBe(0);
     expect(score({ signalBonus: 7.5 }).signals).toBe(0.5);

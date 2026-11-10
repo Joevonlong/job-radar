@@ -131,3 +131,10 @@ describe("spellings and distinct cities", () => {
   });
 });
 
+describe("accents", () => {
+  it("are not part of a city's identity: Münster and Munster share one key", () => {
+    const g: PlaceGeo = { ...geo, cityAliases: {}, cities: { "münster": ["Münster", "DE"] } };
+    expect(lookupPlace("Munster", g)).toMatchObject({ kind: "city", name: "Münster" });
+    expect(lookupPlace("MÜNSTER", g)).toMatchObject({ kind: "city", name: "Münster" });
+  });
+});

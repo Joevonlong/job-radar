@@ -75,8 +75,8 @@ one lookup. A place can be Worldwide, a region, a country or a city; a name that
   market's spellings of the same city (a `Hanover` alias with `Hannover City` still matches a `Hannover` posting), and
   your canonical name is the one shown. Keys of `metro_areas` and `metro_regions` are read the same way, so
   `Koeln: [Hürth]` applies to a `Cologne` preference.
-- **Distinct cities stay distinct.** A spelling exactly as written always wins. Umlaut spellings (`ae`, `oe`, `ue` for
-  `ä`, `ö`, `ü`) and spellings without accents are only a fallback, and only when they lead to one city, so `Au` and `Aue`
+- **Distinct cities stay distinct.** A spelling exactly as written always wins. Accents and letter case never tell two cities apart (`Münster` and `Munster` are one key), but the umlaut spellings
+  (`ae`, `oe`, `ue` for `ä`, `ö`, `ü`) are only a fallback, and only when they lead to one city, so `Au` and `Aue`
   never match each other when both are in the table.
 - A name no table knows is not an error: it matches only itself.
 
