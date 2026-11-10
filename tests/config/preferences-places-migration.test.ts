@@ -112,6 +112,22 @@ describe("the upgrade through the config loader", () => {
     expect(load(preferencesFile(3, `home_city: ${long}\nplaces: []`)).home_city).toBe(long);
   });
 
+  it("a version 2 file with more than 50 locations still plans a search for each of them", () => {
+    const cities = Array.from({ length: 52 }, (_, i) => `Town ${i}`);
+    const prefs = load(preferencesFile(2, `locations: [${cities.join(", ")}]\nremote_scope: home_country`));
+    const onsite = buildQueries(shippedSearch(), queryPlaces(prefs, shippedPipeline()), "manual").filter((query) => !query.remote);
+    const groups = Object.keys(shippedSearch().keyword_groups).length;
+    expect(onsite).toHaveLength(52 * groups);
+    expect(new Set(onsite.map((query) => query.location))).toEqual(new Set(cities));
+  });
+
+  it("a version 2 file with a location over 100 characters still plans its search", () => {
+    const long = `Town ${"x".repeat(120)}`;
+    const prefs = load(preferencesFile(2, `locations: [Berlin, ${long}]\nremote_scope: home_country`));
+    const locations = buildQueries(shippedSearch(), queryPlaces(prefs, shippedPipeline()), "manual").filter((query) => !query.remote).map((query) => query.location);
+    expect(new Set(locations)).toEqual(new Set(["Berlin", long]));
+  });
+
   it("a version 2 file with 60 locations and a long remote scope list stays readable", () => {
     const cities = Array.from({ length: 60 }, (_, i) => `Town ${i}`);
     const prefs = load(preferencesFile(2, `locations: [${cities.join(", ")}]\nremote_scope: {region: [eu, CH, AT, NL, PL]}`));
