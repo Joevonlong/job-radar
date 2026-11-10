@@ -25,7 +25,7 @@ const job: ScorePromptJob = {
 };
 
 const build = (extra: { evidence?: boolean; quoteMaxChars?: number } = {}) =>
-  buildScorePrompt({ me: exampleMe(), preferences: examplePreferences(), job, jdMaxChars: 6000, jdHeadShare: 0.7, language: GERMAN, currency: "EUR", ...extra });
+  buildScorePrompt({ me: exampleMe(), preferences: examplePreferences(), job, jdMaxChars: 6000, jdHeadShare: 0.7, language: GERMAN, currency: "EUR", homeCountry: "DE", geo: { cityAliases: {}, cities: {}, countries: [], regions: {} }, ...extra });
 
 describe("reason sources in the prompt", () => {
   it("evidence off (or absent) renders byte-identical system and user texts", () => {

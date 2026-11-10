@@ -613,8 +613,24 @@
         "label": "Target titles",
         "hint": "Type a title and press Enter to add it."
       },
-      "locations": {
-        "label": "Locations"
+      "home_city": {
+        "label": "Home city",
+        "hint": "On-site and hybrid jobs here count as local. It is sent to your AI provider with every job."
+      },
+      "places": {
+        "label": "Locations outside home city",
+        "hint": "A city, country or region, or Worldwide. Click a place to switch between \"I'd move here\" and \"Remote only\".",
+        "add": "Add",
+        "placeholder": "Amsterdam, Finland, EU…",
+        "worldwide": "Worldwide",
+        "relocate": "I'd move here",
+        "remoteOnly": "Remote only",
+        "switch": "{place}: {state}. Click to switch",
+        "fixed": "{place}: always remote only",
+        "remove": "Remove {place}",
+        "unknown": "\"{name}\" isn't in this market's tables, so it's matched as written. Check the spelling if that isn't what you meant.",
+        "ruleMove": "A city you add starts as \"I'd move here\" (solid); a country or region starts as \"Remote only\" (dashed).",
+        "ruleWorldwide": "Worldwide is always remote only."
       },
       "searchCities": {
         "differs": "The cities that are searched (search.yaml) are separate and do not follow this list: {cities}.",
@@ -629,9 +645,6 @@
       },
       "workplace": {
         "label": "Workplace"
-      },
-      "remote_scope": {
-        "label": "Remote scope"
       },
       "seniority": {
         "label": "Seniority"
@@ -6686,12 +6699,9 @@
       "translationHint": "Ads already in this language are not translated (a language code)."
     },
     "market": {
-      "cities": "Cities and metro areas",
-      "citiesHint": "Pick from the market's cities or type your own and press Enter.",
       "suggestions": "Cities of this market",
       "addCity": "Add {city}",
       "noSuggestions": "No city list for this country: type yours.",
-      "remote": "Remote jobs",
       "timezone": "Time zone",
       "timezoneHint": "Cycle times and \"today\" follow this zone.",
       "browserZone": "Your browser is in {zone}.",
@@ -6856,8 +6866,8 @@
         "country": "Home country, ISO code (empty = the pack's)",
         "currency": "Base currency, ISO code (empty = the pack's)",
         "homeLanguage": "Local language, ISO code (empty = the pack's)",
-        "locations": "Cities, comma-separated",
-        "remoteScope": "Remote jobs: none, home_country, worldwide or region:eu,CH",
+        "homeCity": "Home city",
+        "places": "Other places, comma-separated; write remote: before a place you'd only work remotely from (Amsterdam, remote:eu)",
         "timezone": "Time zone (IANA, e.g. Europe/Berlin)",
         "summary": "Short summary for the AI (one line; no name or contact details)",
         "skills": "Skills as name:years, comma-separated (e.g. Python:5, SQL)",

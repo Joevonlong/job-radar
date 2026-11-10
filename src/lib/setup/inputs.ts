@@ -23,9 +23,10 @@ export type LanguageInput = z.infer<typeof languageInputSchema>;
 
 export const marketInputSchema = z.strictObject({
   market: z.strictObject({ pack: text(40), country: text(10), currency: text(10), home_language: text(10) }),
-  locations: list(50),
-  /** The remote scope key of the profile form: `none`, `home_country`, `worldwide` or `region:eu,CH`. */
-  remote_scope: text(500),
+  /** Where a job counts as local. */
+  home_city: text(200),
+  /** Other places a job can be based. */
+  places: z.array(z.strictObject({ place: text(200), relocate: z.boolean() })).max(200),
   /** IANA time zone of the schedule. */
   timezone: text(100),
 });

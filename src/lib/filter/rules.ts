@@ -1,7 +1,7 @@
 import type { PipelineConfig, PreferencesConfig } from "@/lib/config";
 import type { GermanLevel, JobLocation, JobSalary } from "@/lib/domain/types";
 import { scopeCountries, scopeWidePatterns } from "@/lib/market/remote-scope";
-import { canonicalCity, citySpellings, placeGeo } from "@/lib/market/places";
+import { canonicalCity, citySpellings, placeGeo, wantedLocations, wantedRemoteScope } from "@/lib/market/places";
 import type { Market } from "@/lib/market/types";
 import { buildBlacklistedCompanyKeys, buildWatchedCompanyKeys, isCompanyExcluded, isCompanyWatched } from "@/lib/companies/marks";
 import { visaRulesFor } from "@/lib/visa/rules";
@@ -158,6 +158,7 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
   const transliterations = market.transliterations;
 
   const geo = placeGeo(pipeline);
+  const remoteScope = wantedRemoteScope(preferences, geo, market.country);
   const spellings = (name: string): string[] => citySpellings(name, geo);
 
   const metroOf = new Map<string, string[]>();
@@ -173,7 +174,7 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
 
   const allowed = new Set<string>();
   const regions = new Set<string>();
-  for (const location of preferences.locations) {
+  for (const location of wantedLocations(preferences)) {
     const canonical = canonicalCity(location, geo);
     const addAllowed = (name: string): void => {
       allowed.add(foldText(name));
@@ -198,12 +199,12 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
     genericLocation: compilePatterns(cfg.generic_location_patterns),
     homeCountry: market.country,
     baseCurrency: market.currency,
-    scopeCountries: scopeCountries(preferences.remote_scope, market),
-    scopeWide: compilePatterns(scopeWidePatterns(preferences.remote_scope, market)),
+    scopeCountries: scopeCountries(remoteScope, market),
+    scopeWide: compilePatterns(scopeWidePatterns(remoteScope, market)),
     worldwide: compilePatterns(cfg.remote.worldwide_patterns),
     outside: compilePatterns(cfg.remote.outside_patterns),
     titleOutside: compilePatterns(cfg.remote.title_outside_patterns),
-    outsideStateCode: outsideStateCodes(market, scopeCountries(preferences.remote_scope, market)),
+    outsideStateCode: outsideStateCodes(market, scopeCountries(remoteScope, market)),
     descriptionInScope: compilePatterns(cfg.remote.description_in_scope_patterns),
     seniorities,
     blacklistedCompanyKeys,
@@ -297,13 +298,8 @@ function checkLocation(job: FilterJob, filter: CompiledFilter, out: PartialVerdi
   const levelNote = (): string => encodeReason("location_country_level", placeOf((countryLevel ?? regionLevel) as JobLocation));
 
   if (job.workplace === "remote") {
-    const scope = filter.preferences.remote_scope;
-    if (scope === "none") {
-      out.excluded.push(encodeReason("remote_not_wanted"));
-      return;
-    }
     // the title says which region it hires in ("- US", "US East Coast"): that wins over locations and the description
-    const marker = scope === "worldwide" ? null : titleOutsideMarker(job.title, filter);
+    const marker = filter.scopeCountries === null ? null : titleOutsideMarker(job.title, filter);
     if (marker !== null) {
       out.excluded.push(encodeReason("remote_out_of_scope", marker));
       return;

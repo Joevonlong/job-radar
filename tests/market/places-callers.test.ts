@@ -17,19 +17,19 @@ const pipeline = { ...shippedPipeline(market), filter: { ...shippedPipeline(mark
 
 describe("every caller reads Munich and München as one city", () => {
   it.each([["Munich", "München, Germany"], ["München", "Munich, Germany"], ["Muenchen", "München, Germany"]])("the filter: wanted %s, job in %s", (wanted, label) => {
-    const filter = filterWith(prefs((raw) => void (raw.locations = [wanted])), pipeline);
+    const filter = filterWith(prefs((raw) => void (raw.home_city = wanted)), pipeline);
     const verdict = evaluateJob({ title: "Engineer", description: null, companyName: "Acme", companyNameNorm: "acme", companyAliases: [], companyBlacklisted: false, companyWatched: false, locations: [normalizeLocation(label, market)], workplace: "onsite", seniority: "unknown", contract: "unknown", salary: null, germanLevel: "unknown" }, filter);
     expect(verdict.reasons.filter((reason) => reason.startsWith("location_not_allowed"))).toEqual([]);
   });
 
   it("the filter still refuses another city", () => {
-    const filter = filterWith(prefs((raw) => void (raw.locations = ["Munich"])), pipeline);
+    const filter = filterWith(prefs((raw) => void (raw.home_city = "Munich")), pipeline);
     const verdict = evaluateJob({ title: "Engineer", description: null, companyName: "Acme", companyNameNorm: "acme", companyAliases: [], companyBlacklisted: false, companyWatched: false, locations: [normalizeLocation("Hamburg, Germany", market)], workplace: "onsite", seniority: "unknown", contract: "unknown", salary: null, germanLevel: "unknown" }, filter);
     expect(verdict.reasons.some((reason) => reason.startsWith("location_not_allowed"))).toBe(true);
   });
 
   it("the apply target", () => {
-    const names = targetPlaceNames({ locations: ["Munich"] }, pipeline).map((name) => name.toLowerCase());
+    const names = targetPlaceNames({ home_city: "Munich", places: [] }, pipeline).map((name) => name.toLowerCase());
     expect(names).toEqual(expect.arrayContaining(["münchen", "munich"]));
   });
 
@@ -53,13 +53,13 @@ describe("every caller reads Munich and München as one city", () => {
   const withAliases = (cityAliases: Record<string, string[]>) => ({ ...pipeline, market: { ...pipeline.market, cities: { hannover: ["Hannover", "DE"], hanover: ["Hannover", "DE"], au: ["Au", "CH"], aue: ["Aue", "DE"] } as typeof pipeline.market.cities }, filter: { ...pipeline.filter, city_aliases: cityAliases } });
 
   it("the filter: a custom alias for one spelling does not drop the market's other spelling", () => {
-    const filter = filterWith(prefs((raw) => void (raw.locations = ["Hanover"])), withAliases({ Hanover: ["Hannover City"] }));
+    const filter = filterWith(prefs((raw) => void (raw.home_city = "Hanover")), withAliases({ Hanover: ["Hannover City"] }));
     const verdict = evaluateJob(hannoverJob("Hannover, Germany"), filter);
     expect(verdict.reasons.some((reason) => reason.startsWith("location_not_allowed"))).toBe(false);
   });
 
   it("the filter: an Aue preference does not admit a job in Au", () => {
-    const filter = filterWith(prefs((raw) => void (raw.locations = ["Aue"])), withAliases({}));
+    const filter = filterWith(prefs((raw) => void (raw.home_city = "Aue")), withAliases({}));
     expect(evaluateJob(hannoverJob("Aue, Germany"), filter).reasons.some((reason) => reason.startsWith("location_not_allowed"))).toBe(false);
     expect(evaluateJob(hannoverJob("Au, Switzerland"), filter).reasons.some((reason) => reason.startsWith("location_not_allowed"))).toBe(true);
   });

@@ -1,22 +1,22 @@
 /**
- * Setup step 2: the market. Writes preferences.yaml `market`, `locations`, `remote_scope` (through `savePreferencesPatch`, so the
- * profile history gets a snapshot), search.yaml `locations` / `remote_scope` and schedule.yaml `timezone`. Everything is
- * validated before the first write, so a bad time zone never leaves half a market behind. Switching the pack's local
+ * Setup step 2: the market. Writes preferences.yaml `market`, `home_city`, `places` (through `savePreferencesPatch`, so the
+ * profile history gets a snapshot), search.yaml `locations` / `remote_scope` worked out from them, and schedule.yaml `timezone`. Everything is
+ * validated before the first write, so a bad time zone never leaves half a market behind. A search.yaml `remote_scope: none`
+ * (remote collection switched off) stays until the user changes it there: no place in preferences.yaml switches it back on. Switching the pack's local
  * channels on is the sources step's job (it pre-selects the pack's `default_channels`).
  */
 import { isValidTimeZone, mutateConfig, preferencesSchema, scheduleSchema, searchSchema } from "@/lib/config";
-import { marketSettingsProblems } from "@/lib/market";
-import { parseRemoteScopeKey } from "@/lib/market/remote-scope";
+import { loadPipeline, marketSettingsProblems } from "@/lib/market";
+import { normalizePlaces, placeGeo, wantedLocations, wantedRemoteScope } from "@/lib/market/places";
 import { preferencesConfigToDraft, preferencesDraftToCandidate, toFieldErrors, type FieldError, type PreferencesDraft } from "@/lib/profile/draft";
 import { savePreferencesPatch } from "@/lib/profile/service";
 
-import { cleanTitles } from "../keywords";
 import { marketInputSchema } from "../inputs";
 import { stepError, type SetupFieldError, type SetupStepResult } from "../types";
 import { editable, profileFieldErrors, profileSaveProblem, readFresh, zodSetupErrors, setupWriteError, withStepWrite } from "./common";
 
 /** The fields of the market step (the other preferences fields are reported by the targets step). */
-const MARKET_PATHS = /^(market(\.|$)|locations$|remote_scope$)/;
+const MARKET_PATHS = /^(market(\.|$)|home_city$|places$)/;
 
 function marketProblems(draftMarket: unknown): FieldError[] {
   const parsed = preferencesSchema.shape.market.safeParse(draftMarket);
@@ -31,7 +31,6 @@ export async function saveMarketStep(raw: unknown): Promise<SetupStepResult> {
   const parsed = marketInputSchema.safeParse(raw);
   if (!parsed.success) return stepError("market", "invalidPayload");
   const input = parsed.data;
-  const locations = cleanTitles(input.locations);
 
   const preferences = readFresh("preferences");
   if (preferences === null) return stepError("market", "profileUnreadable");
@@ -40,7 +39,7 @@ export async function saveMarketStep(raw: unknown): Promise<SetupStepResult> {
   if (search === null || schedule === null) return stepError("market", "configUnreadable");
 
   const errors: SetupFieldError[] = [];
-  const draft: PreferencesDraft = { ...preferencesConfigToDraft(preferences), market: input.market, locations, remote_scope: input.remote_scope };
+  const draft: PreferencesDraft = { ...preferencesConfigToDraft(preferences), market: input.market, home_city: input.home_city, places: input.places };
   const candidate = preferencesSchema.safeParse(preferencesDraftToCandidate(draft));
   if (!candidate.success) {
     errors.push(...profileFieldErrors(toFieldErrors(candidate.error).filter((e) => MARKET_PATHS.test(e.path))));
@@ -48,8 +47,9 @@ export async function saveMarketStep(raw: unknown): Promise<SetupStepResult> {
     errors.push(...profileFieldErrors(marketProblems(candidate.data.market)));
   }
 
-  const scope = parseRemoteScopeKey(input.remote_scope);
-  const nextSearch = searchSchema.safeParse({ ...editable(search), locations, remote_scope: scope ?? input.remote_scope });
+  const places = candidate.success ? candidate.data : normalizePlaces(input);
+  const locations = wantedLocations(places);
+  const nextSearch = searchSchema.safeParse({ ...editable(search), locations });
   if (!nextSearch.success) {
     const own = zodSetupErrors(nextSearch.error, (path) => String(path[0] ?? ""));
     errors.push(...own.filter((e) => !errors.some((x) => x.path === e.path)));
@@ -62,11 +62,12 @@ export async function saveMarketStep(raw: unknown): Promise<SetupStepResult> {
   if (errors.length > 0 || !nextSearch.success || !nextSchedule.success) return stepError("market", null, errors);
 
   return withStepWrite("market", async () => {
-    const saved = await savePreferencesPatch({ market: input.market, locations, remote_scope: input.remote_scope });
+    const saved = await savePreferencesPatch({ market: input.market, home_city: input.home_city, places: input.places });
     const problem = profileSaveProblem("market", saved);
     if (problem !== null) return problem;
     try {
-      await mutateConfig("search", (current) => ({ ...current, locations, remote_scope: nextSearch.data.remote_scope }));
+      const pipeline = loadPipeline();
+      await mutateConfig("search", (current) => ({ ...current, locations, remote_scope: current.remote_scope === "none" ? "none" : wantedRemoteScope(places, placeGeo(pipeline), pipeline.market.country) }));
       await mutateConfig("schedule", (current) => ({ ...current, timezone: nextSchedule.data.timezone }));
     } catch (error) {
       return stepError("market", setupWriteError(error));

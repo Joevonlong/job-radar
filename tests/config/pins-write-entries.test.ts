@@ -64,7 +64,7 @@ function pin(name: ConfigName, keyPath: readonly string[]): unknown {
 
 const overlayOf = (name: ConfigName): unknown => parseConfigYaml(bytes(name), { unset: "overlay" });
 
-const MARKET = { market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, locations: ["Amsterdam", "Utrecht"], remote_scope: "region:eu", timezone: "Europe/Amsterdam" };
+const MARKET = { market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, home_city: "Amsterdam", places: [{ place: "Utrecht", relocate: true }, { place: "eu", relocate: false }], timezone: "Europe/Amsterdam" };
 const TARGETS = { target_titles: ["Data Engineer", "Analytics Engineer"], seniority: "senior", workplace: ["hybrid", "remote"], salary_floor_year: "60000", contracts: { permanent: "allow", fixed_term: "none", freelance: "none", temp_agency: "exclude" }, exclude_student_roles: true, exclude_companies: ["Example Staffing"], exclude_keywords: ["unpaid"] };
 const BOARD = { name: "Example Co", ats: "greenhouse", token: "exampleco", enabled: true };
 

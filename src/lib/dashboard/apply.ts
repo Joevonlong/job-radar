@@ -1,5 +1,5 @@
 import type { JobSourceRef } from "@/lib/db/queries/types";
-import { canonicalCity, citySpellings, placeGeo, type PlaceGeo } from "@/lib/market/places";
+import { canonicalCity, citySpellings, placeGeo, wantedLocations, type PlaceGeo, type PlacePreferences } from "@/lib/market/places";
 import type { ApplicationStatus } from "@/lib/db/repos/applications";
 import { foldText, wholeWordPattern } from "@/lib/filter/rules";
 
@@ -27,12 +27,12 @@ export function postingLink(source: Pick<JobSourceRef, "applyUrl" | "url" | "fam
 
 /** Names of the wanted cities (every spelling the tables know) and their metro towns, for `pickApplyTarget`. */
 export function targetPlaceNames(
-  preferences: { locations: readonly string[] },
+  preferences: PlacePreferences,
   pipeline: { filter: { city_aliases: PlaceGeo["cityAliases"]; metro_areas: Readonly<Record<string, readonly string[]>> }; market: Pick<PlaceGeo, "cities" | "countries" | "regions"> },
 ): string[] {
   const geo = placeGeo(pipeline);
   const names = new Set<string>();
-  for (const location of preferences.locations) {
+  for (const location of wantedLocations(preferences)) {
     const spellings = citySpellings(location, geo);
     for (const n of spellings) names.add(n);
     const canonical = foldText(canonicalCity(location, geo));

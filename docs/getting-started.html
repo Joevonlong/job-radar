@@ -239,7 +239,7 @@ footer { margin-top: 64px; color: var(--ink-3); font-size: 13px; border-top: 1px
           <div class="q">Of the jobs pulled in, which stay and which are filtered out?</div>
           <ul>
             <li>Target roles (also used for scoring)</li>
-            <li>Location, work mode, remote scope, seniority</li>
+            <li>Home city, other places, work mode, seniority</li>
             <li>Salary floor, contract type</li>
             <li>Exclude student roles, companies, keywords</li>
           </ul>
@@ -328,9 +328,9 @@ pnpm run doctor</code></pre>
           <div class="sec">What I want</div>
           <div class="secd">Target roles, locations, salary floor and exclusions, used for the hard filter and scoring.</div>
           <div class="f"><span class="num">1</span><span class="l">Target roles</span><div class="tags"><span class="tag">AI Engineer</span><span class="tag">LLM Engineer</span><span class="tag">Forward Deployed Engineer</span><span class="tag">AI Solutions Engineer</span><span class="tag in">Type and press Enter to add</span></div><span class="h">Compared with the job title: whole phrase present = 1, all words present but not adjacent = 0.8, more than half matched = 0.5.</span></div>
-          <div class="f"><span class="num">2</span><span class="l">Locations</span><div class="tags"><span class="tag">Berlin</span><span class="tag">München</span><span class="tag in">＋</span></div><span class="h">On-site / hybrid jobs outside these cities are filtered out.</span></div>
+          <div class="f"><span class="num">2</span><span class="l">Home city</span><div class="tags"><span class="tag">Berlin</span></div><span class="h">On-site and hybrid jobs here count as local. It is sent to your AI provider with every job.</span></div>
           <div class="f"><span class="num">3</span><span class="l">Work mode</span><div class="seg"><span class="on">On-site</span><span class="on">Hybrid</span><span class="on">Remote</span></div></div>
-          <div class="f"><span class="num">4</span><span class="l">Remote scope</span><div class="seg"><span>Not accepted</span><span class="on">Within EU, employable in Germany</span><span>Anywhere in EU</span><span>Worldwide</span></div></div>
+          <div class="f"><span class="num">4</span><span class="l">Locations outside home city</span><div class="tags"><span class="tag">✈ München</span><span class="tag">EU · Remote only</span><span class="tag in">＋</span></div><span class="h">✈ I'd move here. Remote only: a remote job may be based there.</span></div>
           <div class="f"><span class="num">5</span><span class="l">Seniority</span><div class="seg"><span class="on">Any</span><span>Entry</span><span>Mid</span><span>Senior</span><span>Lead</span></div></div>
           <div class="f"><span class="num">6</span><span class="l">Salary floor (EUR, gross/yr)</span><span class="input">70000</span><span class="h">Filtered only when a stated salary ceiling is below it; jobs with no stated salary are kept.</span></div>
           <div class="f"><span class="num">7</span><span class="l">Contract type</span><div class="row" style="font-size:12.5px"><span>Permanent <b style="color:var(--ok)">accept</b></span><span>Fixed-term <b style="color:var(--ok)">accept</b></span><span>Freelance <b style="color:var(--ok)">accept</b></span><span>Temp agency <b style="color:var(--bad)">exclude</b></span></div></div>
@@ -342,7 +342,7 @@ pnpm run doctor</code></pre>
       <div class="table-wrap"><table>
         <tr><th>#</th><th>Condition</th><th>When it does not match</th><th>Advice</th></tr>
         <tr><td>1</td><td>Target roles</td><td>No filtering, only affects the score</td><td>List every synonymous title (AI Engineer / Applied AI Engineer…)</td></tr>
-        <tr><td>2–4</td><td>Location, work mode, remote scope</td><td>Filtered, with a reason such as "location outside target area"</td><td>If you only want remote, remove "On-site" and "Hybrid"; if you do not want remote at all, choose "Not accepted"</td></tr>
+        <tr><td>2–4</td><td>Home city, work mode, other places</td><td>Filtered, with a reason such as "location outside target area"</td><td>If you only want remote, remove "On-site" and "Hybrid"; if you do not want remote at all, remove "Remote"</td></tr>
         <tr><td>5</td><td>Seniority</td><td>Filtered, reason "level mismatch"</td><td>If unsure, leave "Any" and let the AI judge</td></tr>
         <tr><td>6</td><td>Salary floor</td><td>Filtered only when a stated ceiling is below the floor</td><td>Most German JDs state no salary, so nothing is wrongly dropped</td></tr>
         <tr><td>7</td><td>Contract type</td><td>"Exclude" is filtered directly; anything not in "accept" is also filtered; JDs that state no contract type are kept</td><td>Choose "exclude" for temp agencies (Zeitarbeit)</td></tr>

@@ -14,7 +14,7 @@ const source = (locationLabel: string | null, priority: number, url = `https://x
 });
 
 const places = targetPlaceNames(
-  { locations: ["Berlin", "München"] },
+  { home_city: "Berlin", places: [{ place: "München", relocate: true }] },
   { filter: { city_aliases: { Berlin: [], München: ["Munich", "Muenchen"] }, metro_areas: { München: ["Garching"] } }, market: { cities: {}, countries: [], regions: {} } },
 );
 
@@ -38,7 +38,7 @@ describe("pickApplyTarget", () => {
 
 describe("the metro towns of a wanted city", () => {
   const hurth = targetPlaceNames(
-    { locations: ["Cologne"] },
+    { home_city: "Cologne", places: [] },
     { filter: { city_aliases: {}, metro_areas: { Koeln: ["Hürth"] } }, market: { cities: { "köln": ["Köln", "DE"], cologne: ["Köln", "DE"] }, countries: [], regions: {} } },
   );
 
@@ -50,7 +50,7 @@ describe("the metro towns of a wanted city", () => {
 
   it("leaves another city's metro towns out", () => {
     const names = targetPlaceNames(
-      { locations: ["Cologne"] },
+      { home_city: "Cologne", places: [] },
       { filter: { city_aliases: {}, metro_areas: { Koeln: ["Hürth"], Munich: ["Garching"] } }, market: { cities: { "köln": ["Köln", "DE"], munich: ["München", "DE"] }, countries: [], regions: {} } },
     );
     expect(names).not.toContain("Garching");

@@ -102,7 +102,7 @@ describe("the other components", () => {
 
   it("a metro key is read like the filter reads it: letter case does not matter", () => {
     const pipeline = shippedPipeline();
-    const metro = inputs({ preferences: { ...examplePreferences(), locations: ["testville"] }, pipeline: { ...pipeline, filter: { ...pipeline.filter, metro_areas: { Testville: ["Nearton"] } } } });
+    const metro = inputs({ preferences: { ...examplePreferences(), home_city: "testville", places: [] }, pipeline: { ...pipeline, filter: { ...pipeline.filter, metro_areas: { Testville: ["Nearton"] } } } });
     const nearby = score({ locations: [place("Nearton")] }, metro).location;
     expect(nearby).toBeGreaterThan(score({ locations: [place("Farton")] }, metro).location);
   });

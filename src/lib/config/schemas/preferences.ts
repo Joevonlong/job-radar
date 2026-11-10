@@ -1,8 +1,9 @@
 import { z } from "zod";
 
+import { normalizePlaces } from "@/lib/market/places";
 import { marketSettingsSchema } from "@/lib/market/schema";
 
-import { nonEmptyString, nonNegativeInt, regexString, remoteScope, slowPatternReason, stringList } from "./common";
+import { nonEmptyString, nonNegativeInt, regexString, slowPatternReason, stringList } from "./common";
 
 const contractKind = z.enum(["permanent", "fixed_term", "freelance", "temp_agency"]);
 const workplace = z.enum(["onsite", "hybrid", "remote"]);
@@ -90,14 +91,26 @@ export const dealBreakersSchema = z
     });
   });
 
+/**
+ * A place a job can be based, in any spelling. A name the market's tables do not know is warned about and matched as written.
+ * No length or count limit: the file format before `places` had none, and its upgrade must stay readable.
+ */
+const placeEntry = z.strictObject({
+  place: nonEmptyString,
+  /** true: I'd move here. false: remote only. */
+  relocate: z.boolean(),
+});
+
 /** data/profile/preferences.yaml — what I want. */
 export const preferencesSchema = z.strictObject({
   /** The market (pack, home country, base currency, local language); omitted values come from the pack. */
   market: marketSettingsSchema,
   target_titles: stringList.min(1),
-  locations: stringList.min(1),
+  /** Where a job counts as local. It is sent to your AI provider with every job. */
+  home_city: nonEmptyString,
+  /** Other places a job can be based; read through `normalizePlaces` (Worldwide remote only, one entry per place). */
+  places: z.array(placeEntry).default([]),
   workplace: uniqueEnumList(workplace).refine((w) => w.length > 0, "needs at least one workplace type"),
-  remote_scope: remoteScope,
   seniority: z.enum(["all", "entry", "mid", "senior", "lead"]),
   /** Annual gross salary floor in the market's base currency (was `salary_floor_eur_year`); postings with a stated maximum below it are filtered out. */
   salary_floor_year: nonNegativeInt,
@@ -115,6 +128,6 @@ export const preferencesSchema = z.strictObject({
   exclude_keywords: z.array(nonEmptyString),
   /** Rules that veto a job before any AI call (the hard filter); optional, absent = none. */
   deal_breakers: dealBreakersSchema.default([]),
-});
+}).overwrite((value) => normalizePlaces(value));
 
 export type PreferencesConfig = z.infer<typeof preferencesSchema>;

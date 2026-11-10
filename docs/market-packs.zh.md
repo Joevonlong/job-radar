@@ -34,7 +34,7 @@ pnpm run doctor --only config.market
 | 方面 | 行为 |
 |---|---|
 | 地点 | 写出国家的地点得到该国代码（`Remote - USA` → US，`Dublin, CA` → US）。本国国名前面的城市（`Gütersloh, Germany`）只在本国市场下读取。 |
-| 远程范围 | preferences.yaml 和 search.yaml 里写 `none`、`home_country`、`worldwide` 或 `{region: [eu, CH, …]}`（命名区域和 ISO 国家）。旧值：`eu_hire_in_de` = `home_country`，`eu_any` = `{region: [eu]}`。`home_country` 保留地点在本国的远程岗、写明包里 `region`（德国包：EU、Europe、EMEA、EEA）或全球的远程岗，显示为“能从德国远程（含面向欧盟 / 欧洲 / EMEA / 全球的远程岗）”；没有 `region` 的市场显示“能从某国远程”。逐行的结果见 [远程岗和关注公司](usage.zh.md#远程岗和关注公司)。 |
+| 远程范围 | search.yaml 里写 `none`、`home_country`、`worldwide` 或 `{region: [eu, CH, …]}`（命名区域和 ISO 国家）；preferences.yaml 里由仅远程的 `places` 得出。旧值：`eu_hire_in_de` = `home_country`，`eu_any` = `{region: [eu]}`。`home_country` 保留地点在本国的远程岗、写明包里 `region`（德国包：EU、Europe、EMEA、EEA）或全球的远程岗，显示为“能从德国远程（含面向欧盟 / 欧洲 / EMEA / 全球的远程岗）”；没有 `region` 的市场显示“能从某国远程”。逐行的结果见 [远程岗和关注公司](usage.zh.md#远程岗和关注公司)。 |
 | 本地语言 | 包里有该语言的要求规则、并且 `home_language` 就是这门语言时，才读岗位要求的等级；高于你在 me.yaml `languages` 里的等级会扣分（ai.yaml `scoring.language_penalty`）。否则这一步关闭：不读等级、不扣分、打分提示词不问这一项，页面也隐藏相关筛选和标签。 |
 | 基准货币 | 薪资底线、"最低年薪"筛选、统计和高薪门槛都用市场的货币。其他货币按 pipeline.yaml 的 `salary.fx_pivot` + `fx_rates` 换算；没有汇率的货币不参与比较。 |
 | 渠道 | sources.yaml 里写了 `markets: [DE]` 的渠道只在这些市场运行；在别的市场下折叠在"其他市场"里，不算失败。国家参数留空（`country`、`country_name`、`country_indeed`）、远程地点不写的键，都跟随市场。 |
@@ -177,6 +177,36 @@ GeoNames 数据采用 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 
 
 `jobs.salary_json` 和 T1 信号里的薪资带 `basePerYear` + `baseCurrency`；基准货币一直是 EUR 时写的旧行按 EUR 读取。
 
+## 地点设置的迁移
+
+`preferences.yaml` 会从版本 2 转换到版本 3，读取时和运行 `pnpm config:migrate --write` 时都会转换。分数不会因此过期：
+
+| 旧 | 新 |
+|---|---|
+| `locations` 的第一项 | `home_city` |
+| `locations` 的其他项 | `relocate: true` 的地点 |
+| `remote_scope: home_country` | 不新增 |
+| `remote_scope: {region: [...]}` | 每个代码按原样成为仅远程地点 |
+| `remote_scope: worldwide` | `Worldwide` 成为仅远程地点 |
+| `remote_scope: none` | 从 `workplace` 去掉 `remote`，除非它是唯一的值 |
+| 同时出现在 `locations` 和 `remote_scope` 里的地点 | 一条 ✈：愿意搬去的地方也包括在那里远程 |
+
+结果有变化的情况：设为 `none` 时，地点在允许城市的远程职位过去会显示，现在会以 `workplace_not_wanted` 隐藏；设为 `none` 且 `workplace: [remote]` 时，远程职位现在会被检查，而不是直接隐藏。如果 `locations` 的第一项是外国城市，它会成为常住城市。
+
+每次读取 `preferences.yaml`，不管是谁写的（表单、设置向导、`pnpm run setup`、答案文件或手改），`places` 都按同一套规则处理：
+
+- Worldwide 一律是仅远程。
+- 和常住城市相同的地点去掉。
+- 同一地点写了两次只算一条，留在第一次出现的位置，其中任一条是 ✈ 就是 ✈。比较时不分大小写、重音和空格；读得到市场地名表的地方，同一地点的两种写法（Munich、München）也算一条。
+
+地点条数和名字长度都没有上限，和原来的 `locations` 一样。
+
+远程范围由地点得出：任一地点是 Worldwide 就是全球；否则是其中的国家和区域，仅远程的和 ✈ 的都算，没有仅远程的国家或区域时再加上本国；一个国家或区域都没有时就是本国。所以 `locations: [Berlin, CH]` 加 `remote_scope: {region: [CH]}` 升级后仍保留瑞士的远程岗，德国的也保留。
+
+设置向导的“市场”一步按地点写 search.yaml 的 `locations` 和 `remote_scope`；但 `remote_scope: none`（关掉远程搜索）会保留，直到你在 `/settings` 里改掉。
+
+旧版本的代码读不了版本 3。要退回旧版本，请放回升级前的版本 2 文件：`pnpm config:migrate --write`（部署时会运行）会把它复制到 `data/config/.backup/<时间>/profile/preferences.yaml`，也可以从你自己的备份里取（[备份与恢复](backup-restore.zh.md)）。用 `/me` 上的画像历史恢复旧版本没有用：保存时又会转换成版本 3。
+
 ## 改名的配置键
 
 配置迁移（`pnpm config:migrate --write`）会改名；改之前旧文件在内存里照常可用。
@@ -184,7 +214,7 @@ GeoNames 数据采用 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 
 | 文件 | 之前 | 现在 |
 |---|---|---|
 | preferences.yaml | `salary_floor_eur_year` | `salary_floor_year`，并新增 `market` |
-| preferences.yaml、search.yaml | `remote_scope: eu_hire_in_de / eu_any` | `home_country` / `{region: [eu]}` |
+| preferences.yaml、search.yaml | `remote_scope: eu_hire_in_de / eu_any` | `home_country` / `{region: [eu]}`，在 preferences.yaml 里再转为地点（见上文） |
 | sources.yaml | `remote_locations.eu_hire_in_de / eu_any` | `home_country` / `region`；德国的招聘网站加 `markets: [DE]` |
 | pipeline.yaml | `language.german_*`、`salary.fx_to_eur` | DE 包的 `requirement`；`salary.fx_pivot: EUR` + `fx_rates` |
 | ai.yaml | `scoring.german_penalty`、`priority.weights.german_gap` | `language_penalty`、`language_gap` |

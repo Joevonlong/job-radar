@@ -27,7 +27,7 @@ beforeEach(async () => {
 });
 afterEach(() => tmp.cleanup());
 
-const market = { market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, locations: ["Amsterdam"], remote_scope: "home_country", timezone: "Europe/Amsterdam" };
+const market = { market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, home_city: "Amsterdam", places: [], timezone: "Europe/Amsterdam" };
 function targets() {
   const { seniority, workplace, salary_floor_year, contracts, exclude_student_roles, exclude_companies, exclude_keywords } = preferencesConfigToDraft(reloadConfig("preferences"));
   return { target_titles: ["Data Engineer"], seniority, workplace, salary_floor_year, contracts, exclude_student_roles, exclude_companies, exclude_keywords };
@@ -73,7 +73,7 @@ it("keeps cities synced by another tab while the targets profile save is waiting
 });
 
 it.each([
-  { name: "preferences" as const, run: () => saveTargetsStep(targets()), key: ["locations"], value: ["Austin"] },
+  { name: "preferences" as const, run: () => saveTargetsStep(targets()), key: ["home_city"], value: "Austin" },
   { name: "preferences" as const, run: () => saveMarketStep(market), key: ["target_titles"], value: ["Platform Engineer"] },
   { name: "search" as const, run: () => saveMarketStep(market), key: ["keyword_groups"], value: { custom: ["Platform Engineer"] } },
   { name: "schedule" as const, run: () => saveMarketStep(market), key: ["manual_triggers", "min_interval_seconds"], value: 77 },

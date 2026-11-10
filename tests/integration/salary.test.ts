@@ -374,7 +374,7 @@ async function lookupBand(jobId: number, min: number, max: number): Promise<void
 
 async function filterJobs(jobIds: number[], floor: number): Promise<number> {
   const preferences = prefs((raw) => Object.assign(raw, {
-    target_titles: ["ML Engineer"], locations: ["Berlin"], workplace: ["onsite", "hybrid", "remote"], remote_scope: "worldwide", seniority: "all",
+    target_titles: ["ML Engineer"], home_city: "Berlin", places: [{ place: "Worldwide", relocate: false }], workplace: ["onsite", "hybrid", "remote"], seniority: "all",
     salary_floor_year: floor, contracts: { allow: [], exclude: [] }, exclude_student_roles: false, exclude_companies: [], exclude_keywords: [], deal_breakers: [],
   }));
   const snapshot = await saveProfileSnapshot(db(), "preferences", stringify(preferences));

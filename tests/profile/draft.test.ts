@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { meSchema } from "@/lib/config/schemas/me";
 import { preferencesSchema } from "@/lib/config/schemas/preferences";
+import { searchSchema } from "@/lib/config/schemas/search";
 import {
   CONTRACT_OPTIONS,
   LANGUAGE_LEVEL_OPTIONS,
@@ -33,9 +34,9 @@ const ME: MeDraft = {
 const PREFS: PreferencesDraft = {
   market: { pack: "de", country: "", currency: "", home_language: "" },
   target_titles: ["AI Engineer"],
-  locations: ["Berlin"],
+  home_city: "Berlin",
+  places: [],
   workplace: ["hybrid", "remote"],
-  remote_scope: "home_country",
   seniority: "all",
   salary_floor_year: "70000",
   contracts: { permanent: "allow", fixed_term: "allow", freelance: "none", temp_agency: "exclude" },
@@ -59,8 +60,8 @@ describe("option lists mirror the config schemas", () => {
     expect([...LANGUAGE_LEVEL_OPTIONS]).toEqual(["A1", "A2", "B1", "B2", "C1", "C2", "native"]);
     const prefs = preferencesSchema.shape;
     expect([...SENIORITY_OPTIONS]).toEqual(prefs.seniority.options);
-    // the kinds of remote scope: the three plain values of the schema plus `region` (a list)
-    const plain = (prefs.remote_scope.options[0] as { options: readonly string[] }).options;
+    // the kinds of remote scope: the three plain values of search.yaml's schema plus `region` (a list)
+    const plain = (searchSchema.shape.remote_scope.options[0] as { options: readonly string[] }).options;
     expect([...REMOTE_SCOPE_KINDS]).toEqual([...plain, "region"]);
     expect([...WORKPLACE_OPTIONS]).toEqual(prefs.workplace.element.options);
     expect([...CONTRACT_OPTIONS]).toEqual(prefs.contracts.shape.allow.element.options);
@@ -126,17 +127,16 @@ describe("preferences draft", () => {
   });
 
   it("attributes list errors to the list, not the item", () => {
-    const errors = prefErrors({ ...PREFS, target_titles: [], locations: ["a", "a"], workplace: [], exclude_companies: [" "] });
+    const errors = prefErrors({ ...PREFS, target_titles: [], home_city: " ", workplace: [], exclude_companies: [" "] });
     const by = Object.fromEntries(errors.map((e) => [e.path, e.key]));
     expect(by["target_titles"]).toBe("atLeastOne");
-    expect(by["locations"]).toBe("duplicates");
+    expect(by["home_city"]).toBe("required");
     expect(by["workplace"]).toBe("atLeastOne");
     expect(by["exclude_companies"]).toBe("required");
   });
 
   it("reports an invalid select value", () => {
-    const by = Object.fromEntries(prefErrors({ ...PREFS, remote_scope: "mars", seniority: "god" }).map((e) => [e.path, e.key]));
-    expect(by["remote_scope"]).toBe("invalidChoice");
+    const by = Object.fromEntries(prefErrors({ ...PREFS, seniority: "god" }).map((e) => [e.path, e.key]));
     expect(by["seniority"]).toBe("invalidChoice");
   });
 });

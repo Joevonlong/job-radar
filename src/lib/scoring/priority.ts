@@ -1,5 +1,5 @@
 import type { AiConfig, PipelineConfig, PreferencesConfig, MeConfig } from "@/lib/config";
-import { canonicalCity, citySpellings, placeGeo, type PlaceGeo } from "@/lib/market/places";
+import { canonicalCity, citySpellings, placeGeo, wantedLocations, type PlaceGeo } from "@/lib/market/places";
 import { foldText, wholeWordPattern } from "@/lib/filter/rules";
 import type { GermanLevel, JobLocation } from "@/lib/domain/types";
 
@@ -47,7 +47,7 @@ export interface PriorityInputs {
   priority: PriorityConfig;
   /** ai.yaml `scoring.language_penalty`, for the local-language gap. */
   languagePenalty: AiConfig["scoring"]["language_penalty"];
-  preferences: Pick<PreferencesConfig, "target_titles" | "locations"> & Partial<Pick<PreferencesConfig, "seniority">>;
+  preferences: Pick<PreferencesConfig, "target_titles" | "home_city" | "places"> & Partial<Pick<PreferencesConfig, "seniority">>;
   /** Terms of search.yaml `keyword_groups`, all groups together. */
   keywordGroupTerms: readonly string[];
   pipeline: Pick<PipelineConfig, "filter" | "market">;
@@ -123,7 +123,7 @@ function buildLocationMatcher(preferences: PriorityInputs["preferences"], filter
 
   const exact = new Set<string>();
   const nearby = new Set<string>();
-  for (const location of preferences.locations) {
+  for (const location of wantedLocations(preferences)) {
     for (const name of spellings(location)) exact.add(foldText(name));
     const canonical = foldText(canonicalCity(location, geo));
     for (const [city, near] of Object.entries(filter.metro_areas)) {

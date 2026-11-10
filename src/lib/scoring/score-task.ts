@@ -1,3 +1,4 @@
+import { placeGeo } from "@/lib/market/places";
 import { scoreTransaction } from "@/lib/db/repos/current-scores";
 import { activityErrorCode, noopSpan } from "@/lib/activity";
 import type { SpanHandle } from "@/lib/activity/types";
@@ -173,6 +174,8 @@ async function scoreCandidate(deps: ScoringDeps, ctx: ScoreContext, candidate: S
     glossary: config.translation.glossary,
     language: ctx.language,
     currency: ctx.pipeline.market.currency,
+    geo: placeGeo(ctx.pipeline),
+    homeCountry: ctx.pipeline.market.country,
     output: ctx.output,
     criteria: config.scoring.criteria,
     evidence: ctx.evidence,
