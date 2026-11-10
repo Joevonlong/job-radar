@@ -154,6 +154,25 @@ it reads the pattern, not what it matches). Leave `prefilter` empty to read ever
 After changing the patterns, `pnpm visa:scan` previews what would change and `pnpm visa:scan --write` stores it; the
 cycle also rechecks every job, because the patterns are part of each result's input.
 
+## Place dictionary
+
+The product ships an offline place dictionary, `config/geo/places.json.gz`: every city with at least 15 000
+inhabitants and every country from [GeoNames](https://www.geonames.org/), with English, German, Chinese and local names
+plus the other spellings in those languages. Any spelling finds the same place (`慕尼黑`, `Múnich`, `München` and `Munich`
+are one entry), ignoring case and accents; places that share a name (Cambridge in England and in Massachusetts) stay
+separate entries, told apart by country and first-level division. Nothing is looked up on the network.
+
+The current file holds 34 210 cities, 252 countries and 2 764 first-level divisions (0.95 MB compressed, 2.8 MB of
+JSON); 11 226 cities have a Chinese name, the others are shown in English. Chinese names come from GeoNames as they are,
+so some are written in Traditional characters.
+
+To regenerate it, `pnpm geo:build` downloads `cities15000.zip`, `countryInfo.txt`, `admin1CodesASCII.txt` and
+`alternateNamesV2.zip` (about 210 MB) into a cache directory outside the repository (`--cache <dir>`, default the
+system temp directory; `--refresh` downloads again) and rewrites the file. The same downloads give the same bytes; the
+file header records when they were fetched.
+
+GeoNames data is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the attribution is in `NOTICE`.
+
 ## Writing a pack
 
 1. Copy `config/packs/de/` to `data/config/packs/<id>/` and set `id`, `name`, `country`, `currency`, `language`,
