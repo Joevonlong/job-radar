@@ -106,6 +106,7 @@ const NOT_LOCKED = new Map<string, string>([
   ["scripts/i18n-catalog.ts#main", "the generated message catalogs in the repository"],
   ["scripts/career-engine-fonts.ts#main", "the generated src/lib/career/engine/fonts.generated.ts in the repository"],
   ["scripts/geo/build-places.ts#fetchFiles", "the GeoNames download cache outside the repository"],
+  ["scripts/geo/build-places.ts#download", "the GeoNames download cache outside the repository"],
   ["scripts/geo/build-places.ts#main", "the generated place dictionary config/geo/places.json.gz in the repository"],
   ["scripts/career-print-baseline.ts#main", "PDFs, text and pages.json in the output directory the operator names (it refuses the baseline directory)"],
   ["scripts/market-regress.ts#main", "the regression report in the repository"],

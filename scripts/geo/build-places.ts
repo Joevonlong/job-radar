@@ -14,7 +14,7 @@
  * Usage: pnpm geo:build [--cache <dir>] [--refresh] [--out <file>]
  * The data is GeoNames (https://www.geonames.org/), licensed CC BY 4.0.
  */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -70,31 +70,82 @@ function parseArgs(argv: string[]): Args {
   return args;
 }
 
-/** Downloads the GeoNames files into the cache unless they are there already (or `--refresh`). */
+/** The member each archive must hold. */
+const ZIP_MEMBERS: Partial<Record<(typeof FILES)[number], string>> = {
+  "cities15000.zip": "cities15000.txt",
+  "alternateNamesV2.zip": "alternateNamesV2.txt",
+};
+
+/**
+ * Minimum row counts of a complete download. A file that parses to fewer rows is truncated or not what GeoNames
+ * publishes, and the build stops instead of writing a dictionary with places missing.
+ */
+const MIN_ROWS = { countries: 240, admin1: 3_000, cities: 30_000, alternateNames: 100_000 } as const;
+
+/** Why a cached file cannot be used, or null when it is a readable file (for an archive: passes `unzip -t`, holds its member). */
+function cacheProblem(cache: string, file: (typeof FILES)[number]): string | null {
+  const target = path.join(cache, file);
+  if (!fs.existsSync(target)) return "missing";
+  if (fs.statSync(target).size === 0) return "empty";
+  const member = ZIP_MEMBERS[file];
+  if (member === undefined) return null;
+  const test = spawnSync("unzip", ["-tqq", target], { stdio: ["ignore", "ignore", "pipe"] });
+  if (test.error !== undefined) throw new Error(`cannot run unzip (needed to read ${file}): ${test.error.message}`);
+  if (test.status !== 0) return "a damaged or truncated archive";
+  const list = spawnSync("unzip", ["-Z1", target], { encoding: "utf8" });
+  return list.status === 0 && list.stdout.split("\n").includes(member) ? null : `an archive without ${member}`;
+}
+
+/** Downloads one file to `<name>.part`, checks its length against Content-Length, and only then renames it into place. */
+async function download(cache: string, file: (typeof FILES)[number]): Promise<string> {
+  console.log(`downloading ${BASE_URL}${file}`);
+  const response = await fetch(`${BASE_URL}${file}`);
+  if (!response.ok || response.body === null) throw new Error(`GeoNames download failed: ${file} (HTTP ${response.status})`);
+  const target = path.join(cache, file);
+  const part = `${target}.part`;
+  await pipeline(async function* () {
+    for await (const chunk of response.body ?? []) yield chunk;
+  }, fs.createWriteStream(part));
+  const expected = Number(response.headers.get("content-length") ?? Number.NaN);
+  const written = fs.statSync(part).size;
+  if (Number.isFinite(expected) && written !== expected) {
+    fs.rmSync(part, { force: true });
+    throw new Error(`GeoNames download of ${file} was cut short (${written} of ${expected} bytes); run again`);
+  }
+  fs.renameSync(part, target);
+  const problem = cacheProblem(cache, file);
+  if (problem !== null) throw new Error(`GeoNames download of ${file} is ${problem}; run again with --refresh`);
+  const modified = response.headers.get("last-modified");
+  return modified === null ? "unknown" : new Date(modified).toISOString().slice(0, 10);
+}
+
+/**
+ * Downloads the GeoNames files into the cache unless they are there already (or `--refresh`). A cached file that is
+ * missing, empty or a damaged archive is downloaded again.
+ */
 async function fetchFiles(cache: string, refresh: boolean): Promise<FetchRecord> {
   fs.mkdirSync(cache, { recursive: true });
   const recordFile = path.join(cache, "fetched.json");
-  const complete = FILES.every((file) => fs.existsSync(path.join(cache, file))) && fs.existsSync(recordFile);
-  if (complete && !refresh) {
+  const stale = FILES.filter((file) => {
+    const problem = cacheProblem(cache, file);
+    if (problem !== null && problem !== "missing") console.log(`cached ${file} is ${problem}: downloading it again`);
+    return problem !== null;
+  });
+  if (stale.length === 0 && fs.existsSync(recordFile) && !refresh) {
     return JSON.parse(fs.readFileSync(recordFile, "utf8")) as FetchRecord;
   }
   const lastModified: Record<string, string> = {};
-  for (const file of FILES) {
-    console.log(`downloading ${BASE_URL}${file}`);
-    const response = await fetch(`${BASE_URL}${file}`);
-    if (!response.ok || response.body === null) throw new Error(`GeoNames download failed: ${file} (HTTP ${response.status})`);
-    const modified = response.headers.get("last-modified");
-    lastModified[file] = modified === null ? "unknown" : new Date(modified).toISOString().slice(0, 10);
-    const target = path.join(cache, file);
-    const out = fs.createWriteStream(`${target}.part`);
-    await pipeline(async function* () {
-      for await (const chunk of response.body ?? []) yield chunk;
-    }, out);
-    fs.renameSync(`${target}.part`, target);
-  }
+  for (const file of FILES) lastModified[file] = await download(cache, file);
   const record: FetchRecord = { fetched: new Date().toISOString().slice(0, 10), lastModified };
   fs.writeFileSync(recordFile, `${JSON.stringify(record, null, 2)}\n`);
   return record;
+}
+
+/** Stops the build when a parsed file has fewer rows than a complete GeoNames download. */
+function requireRows(what: keyof typeof MIN_ROWS, count: number): void {
+  if (count < MIN_ROWS[what]) {
+    throw new Error(`GeoNames ${what}: only ${count} rows (expected at least ${MIN_ROWS[what]}); the cache looks incomplete, run again with --refresh`);
+  }
 }
 
 /** Streams the tab-separated lines of a plain file or of one member of a zip archive (through `unzip -p`). */
@@ -191,6 +242,10 @@ async function main(): Promise<void> {
     cities.push({ id: Number(id), name, ascii: ascii ?? name, country, admin1: a1, population: Number(population ?? 0) });
   }
 
+  requireRows("countries", countries.size);
+  requireRows("admin1", admin1.size);
+  requireRows("cities", cities.length);
+
   const wanted = new Map<number, Set<string>>();
   const want = (id: number, langs: string[]): void => {
     wanted.set(id, new Set([...DISPLAY_LANGS, "zh-hant", ...langs]));
@@ -200,7 +255,9 @@ async function main(): Promise<void> {
   for (const city of cities) want(city.id, countries.get(city.country)?.langs ?? []);
 
   const alt = new Map<number, AltName[]>();
+  let altRows = 0;
   for await (const cols of lines(file("alternateNamesV2.zip"), "alternateNamesV2.txt")) {
+    altRows += 1;
     const [, idText, isoLang, name, preferred, short, colloquial, historic, , to] = cols;
     if (idText === undefined || name === undefined || isoLang === undefined) continue;
     const id = Number(idText);
@@ -213,6 +270,8 @@ async function main(): Promise<void> {
     list.push({ lang, simplified: /^zh-(cn|hans|sg)$/i.test(isoLang), name: name.trim(), preferred: preferred === "1", short: short === "1" });
     alt.set(id, list);
   }
+
+  requireRows("alternateNames", altRows);
 
   const localised = (id: number, fallback: string, localLang: string | null) => {
     const names = alt.get(id) ?? [];
