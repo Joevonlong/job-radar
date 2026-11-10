@@ -1,4 +1,5 @@
 import type { AiConfig, PipelineConfig, PreferencesConfig, MeConfig } from "@/lib/config";
+import { canonicalCity, citySpellings, placeGeo, type PlaceGeo } from "@/lib/market/places";
 import { foldText, wholeWordPattern } from "@/lib/filter/rules";
 import type { GermanLevel, JobLocation } from "@/lib/domain/types";
 
@@ -117,23 +118,16 @@ interface LocationMatcher {
 }
 
 /** Spellings of the wanted cities (and of places near them) from preferences.yaml and pipeline.yaml's city tables. */
-function buildLocationMatcher(preferences: PriorityInputs["preferences"], filter: PriorityInputs["pipeline"]["filter"], homeCountry: string): LocationMatcher {
-  const canonicalOf = new Map<string, string>();
-  const spellingsOf = new Map<string, string[]>();
-  for (const [canonical, aliases] of Object.entries(filter.city_aliases)) {
-    const names = [canonical, ...aliases];
-    spellingsOf.set(canonical, names);
-    for (const name of names) canonicalOf.set(foldText(name), canonical);
-  }
-  const spellings = (name: string): string[] => spellingsOf.get(canonicalOf.get(foldText(name)) ?? "") ?? [name];
+function buildLocationMatcher(preferences: PriorityInputs["preferences"], filter: PriorityInputs["pipeline"]["filter"], homeCountry: string, geo: PlaceGeo): LocationMatcher {
+  const spellings = (name: string): string[] => citySpellings(name, geo);
 
   const exact = new Set<string>();
   const nearby = new Set<string>();
   for (const location of preferences.locations) {
     for (const name of spellings(location)) exact.add(foldText(name));
-    const canonical = canonicalOf.get(foldText(location)) ?? location;
+    const canonical = foldText(canonicalCity(location, geo));
     for (const [city, near] of Object.entries(filter.metro_areas)) {
-      if ((canonicalOf.get(foldText(city)) ?? city) !== canonical) continue;
+      if (foldText(canonicalCity(city, geo)) !== canonical) continue;
       for (const place of near) for (const name of spellings(place)) nearby.add(foldText(name));
     }
   }
@@ -203,7 +197,7 @@ export function createPriorityScorer(inputs: PriorityInputs): PriorityScorer {
     ...inputs.keywordGroupTerms.map((t) => ({ words: words(t), factor: config.keyword_group_factor })),
   ];
   const generic = new Set(config.generic_title_words.map((w) => foldText(w)));
-  const matcher = buildLocationMatcher(inputs.preferences, inputs.pipeline.filter, inputs.pipeline.market.country);
+  const matcher = buildLocationMatcher(inputs.preferences, inputs.pipeline.filter, inputs.pipeline.market.country, placeGeo(inputs.pipeline));
   const { weights } = config;
   const nowMs = inputs.now.getTime();
 

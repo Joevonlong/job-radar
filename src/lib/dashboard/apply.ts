@@ -1,4 +1,5 @@
 import type { JobSourceRef } from "@/lib/db/queries/types";
+import { canonicalCity, citySpellings, placeGeo, type PlaceGeo } from "@/lib/market/places";
 import type { ApplicationStatus } from "@/lib/db/repos/applications";
 import { foldText, wholeWordPattern } from "@/lib/filter/rules";
 
@@ -24,20 +25,18 @@ export function postingLink(source: Pick<JobSourceRef, "applyUrl" | "url" | "fam
   return source.family === "ats" ? (source.url ?? source.applyUrl) : (source.applyUrl ?? source.url);
 }
 
-/** Names of the wanted cities (spellings from `filter.city_aliases`) and their metro towns, for `pickApplyTarget`. */
+/** Names of the wanted cities (every spelling the tables know) and their metro towns, for `pickApplyTarget`. */
 export function targetPlaceNames(
   preferences: { locations: readonly string[] },
-  filter: { city_aliases: Readonly<Record<string, readonly string[]>>; metro_areas: Readonly<Record<string, readonly string[]>> },
+  pipeline: { filter: { city_aliases: PlaceGeo["cityAliases"]; metro_areas: Readonly<Record<string, readonly string[]>> }; market: Pick<PlaceGeo, "cities" | "countries" | "regions"> },
 ): string[] {
-  const group = (name: string): string[] => {
-    const hit = Object.entries(filter.city_aliases).find(([canonical, aliases]) => [canonical, ...aliases].some((n) => foldText(n) === foldText(name)));
-    return hit ? [hit[0], ...hit[1]] : [name];
-  };
+  const geo = placeGeo(pipeline);
   const names = new Set<string>();
   for (const location of preferences.locations) {
-    const spellings = group(location);
+    const spellings = citySpellings(location, geo);
     for (const n of spellings) names.add(n);
-    for (const [city, towns] of Object.entries(filter.metro_areas)) if (spellings.some((n) => foldText(n) === foldText(city))) for (const t of towns) names.add(t);
+    const canonical = foldText(canonicalCity(location, geo));
+    for (const [city, towns] of Object.entries(pipeline.filter.metro_areas)) if (foldText(canonicalCity(city, geo)) === canonical) for (const t of towns) names.add(t);
   }
   return [...names];
 }

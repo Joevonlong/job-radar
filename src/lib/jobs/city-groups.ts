@@ -1,4 +1,5 @@
 import type { PipelineConfig } from "@/lib/config";
+import { canonicalCity, citySpellings, placeGeo } from "@/lib/market/places";
 import { foldText, foldTransliterated, wholeWordPattern } from "@/lib/filter/rules";
 import type { Market } from "@/lib/market/types";
 import { normalizeLocation } from "@/lib/pipeline/geography";
@@ -47,14 +48,9 @@ interface Target {
 const inHomeOrUnstated = (row: Pick<CityRow, "countryCode">, market: Pick<Market, "country">): boolean => row.countryCode === null || row.countryCode === market.country;
 
 function compileTargets(config: CityGroupConfig): Target[] {
-  const canonicalOf = new Map<string, string>();
-  const spellingsOf = new Map<string, string[]>();
-  for (const [canonical, aliases] of Object.entries(config.filter.city_aliases)) {
-    spellingsOf.set(canonical, [canonical, ...aliases]);
-    for (const name of [canonical, ...aliases]) canonicalOf.set(foldText(name), canonical);
-  }
-  const canonical = (name: string): string => canonicalOf.get(foldText(name)) ?? name;
-  const spellings = (name: string): string[] => spellingsOf.get(canonical(name)) ?? [name];
+  const geo = placeGeo(config);
+  const canonical = (name: string): string => canonicalCity(name, geo);
+  const spellings = (name: string): string[] => citySpellings(name, geo);
 
   const targets: Target[] = [];
   for (const location of config.targets) {

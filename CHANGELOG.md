@@ -5,6 +5,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- One place lookup for the filter, the ranking, the city groups, the "View posting" link and the handpicked channel. Every spelling in the market's city table now counts as the same city, so `Munich` also matches `München` in markets whose `filter.city_aliases` does not list it, and `Au` and `Aue` stay two cities. Stored filter results are worked out again on the next cycle, because a job's result can change.
+
 ## [2.1.0] - 2026-11-07
 
 Job Radar 2.1.0 adds a career profile with résumé tailoring, an application writer, company research and Gmail reply
