@@ -4,3 +4,4 @@ pnpm-lock.yaml linguist-generated
 src/i18n/*.generated.ts linguist-generated
 drizzle/meta/** linguist-generated
 tests/fixtures/** linguist-vendored
+src/lib/career/engine/*.generated.ts linguist-generated

@@ -3,12 +3,12 @@
 # code, under the systemd simulator (tests/ops/sim): nothing on the host's launchd / systemd is touched, every checkout is
 # a clone in a mktemp directory, and every compose project, image and volume is this run's own (jrtransition-<id>-*).
 #
-#   tests/transition/run.sh [--scenarios A,B] [<artifact dir>]
+#   tests/transition/run.sh [--scenarios A,B,F] [<artifact dir>]
 #
-#   --scenarios  A, B or A,B (the default). C, D and E are no separate choices: they run inside B, on its project,
-#                after B's upgrade to V4 (in the order D, C, E), so `--scenarios B` runs B, C, D and E.
+#   --scenarios  A, B, F or a comma-separated selection (default A,B,F). C, D and E are no separate choices: they run
+#                inside B, on its project, after B's upgrade to V4 (in the order D, C, E), so `--scenarios B` runs B, C, D and E.
 #
-# Needs: git with the full history of this checkout (62d7ad9 and later), node, pnpm (the store already holds the locked
+# Needs: git with tag v2.0.1 and the full history of this checkout, node, pnpm (the store already holds the locked
 # packages of every version: CI runs `pnpm install` first, the rest is fetched), Docker with compose v2. No database: each
 # project runs its own db container on a free port. The artifact directory receives each step's output, the simulator's
 # call log, the worker logs and, on failure, the compose logs.
@@ -33,6 +33,14 @@
 # Scenario C (project b, at NEXT, after D): install --release LOADER whose tsx loader is broken: rolled back to NEXT with evidence.
 # Scenario E (project b): the emergency restore of the previous release (prepare-release.sh V4 + install --release V4):
 #   the V4 worker runs with evidence and the doctor reports release != HEAD; then the uninstall removes it.
+# Scenario F (project f): v2.0.1 -> V4, the documented first upgrade from the release tag, 24 commits before V0:
+#   install with the tag's own deploy.sh; uninstall its checkout worker, check that it stopped, stop web and runner,
+#   check out V4 and run V4's deploy.sh --skip-pull. The tag's deploy / install / uninstall scripts are identical to V0's:
+#   the same flags, project-local .env, data/config and systemd unit template apply; config/ is still bind-mounted into
+#   web and runner, and config.shipped is not available yet. Its own lockfile and Dockerfile supply its dependencies
+#   (including Playwright 1.63.0). The systemd override and, off Linux, the uninstall's uname shim are the same as for V0.
+#   F runs independently with --scenarios F; CI adds it to B, which has three successful image deploys plus one failed
+#   build, versus A's five successful image deploys. B's job and wait-step names stay the same.
 #
 # After every step: the compose containers' /app/config equals config/ of the deployed commit (sha256 of every file, in
 #   web and runner); the worker's MainPID runs from the expected directory (the checkout, or the release); V4's
@@ -43,14 +51,14 @@
 # Not covered here (see docs/ci.md): launchd (the integration tests run every case against the launchd simulator; real
 # launchd is the manual drill), deploy.sh's own git pull (every hop uses --skip-pull after a checkout, the documented
 # path for release tags). The doctor matches the worker's report against systemd only on Linux: off Linux that part of
-# the check is skipped, and V0's uninstall script, which picks its service manager from `uname`, gets a uname that says
-# Linux.
+# the check is skipped, and the v2.0.1 / V0 uninstall scripts, which pick their service manager from `uname`, get a uname
+# that says Linux.
 #
 # Safety:
 #   - environment: before anything runs, every compose, docker, database and job-radar variable of the caller's shell is
 #     unset (clean-env.sh: COMPOSE_*, DOCKER_HOST / DOCKER_CONTEXT / DOCKER_TLS*, JOBRADAR_*, JOB_RADAR_*, POSTGRES_*,
-#     PG*, DATABASE_URL and every name the compose files of V0 to V4 interpolate); each project's .env sets its own
-#     project name, volume name, ports, bind address, uid / gid and database password
+#     PG*, DATABASE_URL and every name the compose files of v2.0.1 and V0 to V4 interpolate); each project's .env sets
+#     its own project name, volume name, ports, bind address, uid / gid and database password
 #   - docker: a guard first on PATH (docker-guard.sh) lets through read-only commands; compose commands that change
 #     something run only for a project named jrtransition-<id>-* whose ports this run registered, and only after
 #     `docker compose config` of that very command (same options, same environment) passed compose-check.mjs: every
@@ -65,6 +73,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 SIM_BIN="$REPO/tests/ops/sim"
 UNIT=job-radar-ai-worker.service
+RELEASE=v2.0.1
 V0=62d7ad9d93a08cf726958483673e01173e92aa9d
 V1=4dd8d03d30ea5a8a8bfc75c5926c96ee95e5751e
 V2=2656364ccf62aceca508cf05d214cc25e745cf47
@@ -80,7 +89,7 @@ FONT_RETRY_BACKOFF=30
 # the cache costs build time, which the run's deadline counts.
 DISK_PRUNE_THRESHOLD=80
 
-SCENARIOS="A,B"
+SCENARIOS="A,B,F"
 ARTIFACTS=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -93,9 +102,9 @@ while [[ $# -gt 0 ]]; do
 done
 for s in ${SCENARIOS//,/ }; do
   case "$s" in
-    A|B) ;;
+    A|B|F) ;;
     C|D|E) echo "--scenarios: $s runs inside B (--scenarios B)" >&2; exit 1 ;;
-    *) echo "--scenarios: unknown scenario '$s' (A, B)" >&2; exit 1 ;;
+    *) echo "--scenarios: unknown scenario '$s' (A, B, F)" >&2; exit 1 ;;
   esac
 done
 
@@ -106,13 +115,17 @@ CI_RECLAIM_DISK=0
 # under test (each project gets its own values in its .env; see clean-env.sh).
 # shellcheck source=tests/transition/clean-env.sh
 source "$REPO/tests/transition/clean-env.sh"
-transition_clean_env < <(cat "$REPO"/compose*.yaml 2>/dev/null; for c in "$V0" "$V1" "$V2" "$V3"; do git -C "$REPO" show "$c:compose.yaml" 2>/dev/null; done)
+transition_clean_env < <(cat "$REPO"/compose*.yaml 2>/dev/null; for c in "refs/tags/$RELEASE" "$V0" "$V1" "$V2" "$V3"; do git -C "$REPO" show "$c:compose.yaml" 2>/dev/null; done)
 
 say() { printf '\n==> %s\n' "$*"; }
 die() { echo "transition: FAILED: $*" >&2; exit 1; }
 want() { [[ ",$SCENARIOS," == *",$1,"* ]]; }
 
 for tool in git node pnpm docker; do command -v "$tool" >/dev/null 2>&1 || die "$tool is not installed"; done
+if want F; then
+  git -C "$REPO" rev-parse --verify "refs/tags/$RELEASE^{commit}" >/dev/null 2>&1 \
+    || die "tag $RELEASE is missing: run git fetch --tags (CI needs actions/checkout with fetch-depth: 0)"
+fi
 REAL_DOCKER="$(command -v docker)"
 "$REAL_DOCKER" compose version >/dev/null 2>&1 || die "docker compose (v2) is not available"
 for c in "$V0" "$V1" "$V2" "$V3"; do
@@ -223,7 +236,7 @@ export PATH="$root/bin:$SIM_BIN:$PATH"
 ON_LINUX=1
 if [[ "$(uname -s)" != Linux ]]; then
   ON_LINUX=0
-  echo "note: not on Linux: the doctor's check of the worker's report is skipped, and V0's uninstall gets a uname that says Linux"
+  echo "note: not on Linux: the doctor's check of the worker's report is skipped, and the v2.0.1 / V0 uninstall gets a uname that says Linux"
 fi
 
 # ---- commits -----------------------------------------------------------------------------------------------------------
@@ -246,7 +259,7 @@ BROKEN="$(git -C "$src" rev-parse HEAD)"
 git -C "$src" branch -q -f next "$NEXT"
 git -C "$src" branch -q -f loader "$LOADER"
 git -C "$src" checkout -q main
-echo "V0 $V0  V1 $V1  V2 $V2  V3 $V3  V4 $V4"
+echo "RELEASE $RELEASE  V0 $V0  V1 $V1  V2 $V2  V3 $V3  V4 $V4"
 echo "NEXT $NEXT  LOADER $LOADER  BROKEN $BROKEN"
 
 short() { printf '%s' "${1:0:12}"; }
@@ -566,6 +579,23 @@ if want B; then
   ! kill -0 "$pid" 2>/dev/null || die "the worker (pid $pid) still runs after the uninstall"
   rc=0; bash "$DIR/scripts/ops/install-ai-worker.sh" --print-release --root "$DIR" >/dev/null 2>&1 || rc=$?
   [[ "$rc" == 3 ]] || die "--print-release after the uninstall exited $rc, expected 3"
+  teardown_project "$P" "$DIR" || die "scenario B's project could not be removed safely"
+fi
+
+# ==== scenario F ============================================================================================================
+if want F; then
+  say "F: $RELEASE -> V4, the documented first upgrade from the release tag"
+  project_new f "$RELEASE"
+  deploy f-release
+  check_all "$RELEASE" "$DIR" checkout 0
+
+  strict_stop "$DIR/scripts/ops/uninstall-ai-worker.sh"
+  stop_web_runner; checkout "$V4"; deploy f-v4 60
+  log_has "confirmed: lock, heartbeat and config report"
+  check_all "$V4" "$(release_of "$V4")" release 4
+
+  logged f-uninstall 0 in_project bash scripts/ops/uninstall-ai-worker.sh
+  [[ -z "$(workers_left)" ]] || die "scenario F's worker still runs after the uninstall"
 fi
 
 say "all transition scenarios passed ($SCENARIOS)"

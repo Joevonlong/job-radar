@@ -15,6 +15,7 @@ import { configRegistry, LAYERED_CONFIG_NAMES, resetConfigCache, USER_CONFIG_NAM
  * The delivery-audit.yaml fixture freezes the initial ledger configuration independently of the shipped file.
  * writer.yaml and profile.example/stories.yaml freeze the experience library's first shipped versions.
  * research.yaml freezes the company background's first shipped version.
+ * career.yaml freezes the manual career profile configuration.
  * replies.yaml freezes the Gmail replies' first shipped version.
  */
 export const FIXTURE_DEFAULTS_DIR = path.resolve(import.meta.dirname, "../fixtures/config/defaults");

@@ -22,8 +22,9 @@ description, not legal advice.
 | AI results (scores with reasons, translations, breakdowns, signals, trap marks, weekly suggestions with quotes) and AI usage records (model, tokens, duration) | database | until you delete the database |
 | Company background results (each field with its source link, the provider and the model) | database table `company_research` | until you delete the database; turning the feature off keeps them |
 | Application fit notes (points with their quotes from the company background and your stories, the provider and the model) | database table `application_fit_notes` | one per job, replaced by the next; removed with the job |
-| Telegram messages that were sent (payload and message id), control requests and their results | database | until you delete the database; the material of a writing request (`writer_job`, `writer_fit`) and the text of a story extraction (`story_extract`) are removed from the request once it is done, failed or expired (`writer.yaml: queue_timeout_seconds` while queued, `timeout_seconds` + `expiry_grace_seconds` while running). A backup taken while a request is open keeps that material, and this includes the pre-migration backup at deploy: about 8 weeks for daily and weekly backups, longer for system and manual backups. Postgres heap and WAL can also keep it until vacuum and checkpoint. |
+| Telegram messages that were sent (payload and message id), control requests and their results | database | until you delete the database; the material of a writing request (`writer_job`, `writer_fit`) and the text of story extraction (`story_extract`) and career extraction (`career_extract`) are removed from the request once it is done, failed or expired (`queue_timeout_seconds` while queued, `timeout_seconds` + `expiry_grace_seconds` while running, in `career.yaml` for career extraction and `writer.yaml` for writing and story extraction). A backup taken while a request is open keeps that material, and this includes the pre-migration backup at deploy: about 8 weeks for daily and weekly backups, longer for system and manual backups. Postgres heap and WAL can also keep it until vacuum and checkpoint. |
 | Application questions and answer versions, with the evidence check of every sentence | database tables `application_questions`, `application_answer_versions` | until you delete the question (or the database); beyond `questions.max_versions_per_question` the oldest version goes |
+| Career extraction drafts, with suggested fields and source quotes | `data/profile/career/drafts/` and configuration archives | until adopted, discarded, or expired under `career.yaml: import.draft_ttl_days`; backups can retain them |
 | Story drafts extracted from your profile, a text or a résumé, with the passages they quote | database table `profile_story_drafts` | the text is cleared when you adopt or discard a draft; the row goes after `writer.yaml: import.draft_ttl_days`. See [Story extraction](#story-extraction) |
 | Runner heartbeats | database | 24 hours |
 | Database backups | `data/backups/` | automatic: 14 daily and 8 weekly dumps; manual backups are never removed. A deleted record stays in older backups until those are removed. |
@@ -49,6 +50,8 @@ Any future retention period would be off by default.
 | Who | What | When | How to stop it |
 |---|---|---|---|
 | The AI provider you use: OpenAI (`codex` CLI or API), Anthropic (`claude` CLI or API), OpenRouter and the upstream provider it routes to (API), DeepSeek or Xiaomi MiMo (API, **off by default**). An API provider sends nothing until its key is in `.env` | **Scoring:** your profile summary, skills and years, language levels, **target titles, home city and other places, work modes, remote scope, seniority, salary floor, contract preferences, excluded companies, excluded keywords, your own scoring criteria** and the job description. **Weekly suggestions:** the jobs you marked (interested, preparing, applied, interviewing, offer, ignored) **with their status**, plus your preferences. **Translation, breakdown, signals, trap check:** only the job text. **Company background** (off by default): only the company name and a website domain you confirmed, sent when you press the button; the provider then searches the web. Never the title, the location, the JD, your profile or a domain inferred from postings ([details](research.md)). **Application writer** (off by default): only the material listed in the box above **Write**: the question and its settings, job title and company, the JD points you ticked or a JD excerpt, your profile summary, skills and languages, the stories you ticked and your emphasis note, sent when you press **Write**. **Improve my own draft** sends the text you pasted (with the same material, or with none of it for "language only"), and **Review** sends the version's text and that material. Your home city and visa status (`me.yaml`), your notes and your application notes are not sent. | every cycle; the writer only on your click | switch a provider off (`enabled: false` in `ai.yaml`, or Settings → AI), do not install its CLI or fill its key; switch the weekly suggestions off in `schedule.yaml` (`suggest.enabled`); leave `writer.yaml: enabled` and `research.yaml: enabled` at `false` |
+| Career extraction AI provider | The confirmed preview text; see [Career extraction](#career-extraction) | when you confirm an extraction with the feature enabled | do not send the preview, or disable the career profile |
+| Résumé tailoring AI provider | The blocks and the JD shown in the preview; see [Résumé tailoring](#résumé-tailoring) | when you confirm a tailoring preview with the feature enabled | do not confirm the preview, or disable the career profile |
 | Automatic research ([research.md](research.md#automatic-research)): the AI provider of the task, which searches the web | the company name and a domain you confirmed; for a salary lookup the title, city, country and seniority; the JD to the breakdown provider. The timing reflects what you save and apply to | when you save a job, optionally when its status changes or for new high-score jobs, only with research on | `auto.trigger: manual` or `enabled: false` in `research.yaml` |
 | Job sites and APIs: Arbeitsagentur, Indeed, LinkedIn, StepStone, XING, Google Jobs via JSearch, company career boards, Bright Data, Apify, Monid | your search keywords, search cities or home-country name, watched company names, and requests from your IP address (LinkedIn session: requests as your logged-in account) | every cycle; company queries only use supported, enabled channels | switch the channel off on Sources; stop all company queries with `search.yaml: watched_company_queries.enabled: false`, or opt a channel out with `sources.yaml: company_queries: false` in its block |
 | Arbeitnow (free board API), Berlin Startup Jobs (public listing API), Handpicked Berlin (public job index, off by default), Berlin Design Network (one job-list page a day, off by default) | requests from your IP address, nothing else (they take no keywords or places) | every cycle | switch the channel off on the Sources page |
@@ -60,12 +63,25 @@ Any future retention period would be off by default.
 
 Nothing is sent to the project's maintainers or to any analytics service.
 
+### Career extraction
+
+With the career profile enabled, you can send a reviewed preview of a résumé or self-description to the `career_extract` provider in `ai.yaml`. Uploads are read in memory; the file and filename are not retained. The contact file itself is not sent. The preview replaces detected contact values and links, but detection can miss details: check highlighted and other text before sending. Project links are not extracted. See [Career profile](career-profile.md#extract-a-draft).
+
+The confirmed text stays in a control request while queued or running and is cleared when it ends or is cancelled; database backups, old Postgres row versions, WAL and database logs can retain it, as described for story extraction below. Draft files contain extracted fields and quotes until adoption, discard or expiry, and configuration archives can retain them longer. Adopted content remains in the profile and its history. Deleting all career data cancels active requests and removes local drafts; an already-started provider call may continue, but not backups or provider copies. Provider retention depends on the provider and your settings.
+
+Importing a resume-kit master résumé makes no AI call: the file is parsed in memory and not stored, contact values are
+shown for confirmation and saved only to the contact file, and the rest becomes a local draft retained like an extracted
+one until adoption, discard or expiry. Adding a story to the profile is local too and leaves `stories.yaml` unchanged.
+
+### Résumé tailoring
+
+With the career profile enabled, **Confirm and generate** on `/career/tailor` sends the `career_tailor` provider in `ai.yaml` exactly the blocks and the JD that the preview showed: the document's entries and texts, your profile facts as evidence, your emphasis and tone, the separate requirements, the job title and company and the cleaned JD, cut to `tailor.jd_max_chars`. Contact details, links, photos and signatures are not sent; contact values detected in other text are replaced, but detection can miss details. If the content changes after you confirmed, nothing is sent and you confirm again. The control request carries only ids and a checksum of the preview; the material is read from the local files when the request runs. Proposals are stored beside the document (`career/documents/<id>.proposals.yaml`) until reviewed or until the document is deleted, and backups can retain them. See [Résumé tailoring](resume-tailoring.md#what-is-sent).
+
 ### Story extraction
 
-The buttons in the stories card on `/me` send your profile summary and skills, a text you paste or the text of your résumé to
-the providers of the `story_extract` task in `ai.yaml`, only when you press them and only while `writer.yaml: enabled` is true.
-No web search. An uploaded file is read in memory and never written to disk, not even to a temporary folder; its name is not
-kept. Its text goes into one `story_extract` control request, where it stays until the request ends: every way it ends (done,
+With `writer.yaml: enabled`, the stories card on `/me` prepares an editable preview of your profile summary and skills, pasted text or résumé. Only the preview text you confirm is sent to the `story_extract` providers in `ai.yaml`; there is no web search. Detected contact details and links are replaced, but detection can miss details, so review all the text. Story extraction does not use stored contact values for replacement, regardless of the career profile switch. You can enter a name and address in the preview for removal. When the career profile is off, it does not read that profile folder.
+
+An uploaded file is read in memory and never written to disk, not even to a temporary folder; its name is not kept. The confirmed text goes into one `story_extract` control request, where it stays until the request ends: every way it ends (done,
 failed, expired, cut off by a restart) clears the text in the same statement and leaves only the SHA-256 and the length. A
 request is not retried after a restart.
 
@@ -130,3 +146,27 @@ Do this when you stop using Job Radar or want to erase your job-search traces. I
 There is no function to delete a single job or application from the web interface in this version. Deleting the database
 volume (step 2) is the supported way to erase stored jobs and notes; start again with an empty one if you want to keep using
 Job Radar.
+
+## Optional career profile
+
+`career.yaml: enabled` is false by default. When enabled, manual career facts, alternative wordings and profile history
+are stored as local files under `data/profile/career/`. Contact fields live separately in `contact.yaml`, are never sent
+to an outbound service, and are overwritten without history. The local file can include an optional unused photo name.
+Extraction sends the confirmed preview to an AI provider. A contact location or other personal detail remaining in that preview can also be sent. An email or phone written into profile text is allowed
+with an advisory warning; it remains in profile history until you remove that history.
+
+Résumé documents, their history, layout preferences and the shared photo and signature are local files in the same
+directory. Contact details are added only when a preview or PDF is rendered in memory and are never written to document
+files. The optional `career-pdf` service (compose profile `career-pdf`) receives that HTML, contact details included,
+over an internal Docker network: it has no data volume, no environment file and no internet access, keeps nothing after
+printing and logs only status, size and duration. The PDF goes straight to your browser and is not stored by the app.
+
+The files are readable and writable by the local web process, have mode `0600` when written by the app and enter the
+configuration archive. They are not stored in long-lived database tables and are not exposed over MCP. They change matching only when you
+confirm **Apply to matching**: that copies languages, skills, years of experience and optionally the summary into `me.yaml`,
+and one story per experience into `stories.yaml`, never contact details or entry locations. Those saves are ordinary
+profile saves, so earlier versions stay in the database's profile snapshots and in database backups, and deleting career
+data does not remove them. Disabling retains the data and performs no cleanup. Delete controls remove local career
+files only: backups, before-restore copies and content already sent to an AI provider remain. An older backup can
+restore data deleted later. Retention differs for scheduled, manual and system backups; see
+[Backup and restore](backup-restore.md#career-profile-copies) and [Career profile](career-profile.md).

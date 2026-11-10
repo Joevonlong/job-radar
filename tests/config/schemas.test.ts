@@ -32,6 +32,7 @@ const FILES: Record<ConfigName, string> = {
   mcp: "mcp.yaml",
   language: "language.yaml",
   writer: "writer.yaml",
+  career: "career.yaml",
   research: "research.yaml",
   me: "profile.example/me.yaml",
   preferences: "profile.example/preferences.yaml",

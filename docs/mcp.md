@@ -27,12 +27,14 @@ that provider's terms. Turning the server on adds this exit to the ones listed i
 | The JD after AI-trap cleaning (see below) | `.env` and `.auth/` values, keys, AI usage, notifications, run records, config file contents |
 | Your applications: status, when it last changed, days in that status, next step and its date, interview rounds, the status history | |
 
+The career profile itself (its files, documents, contact details and drafts) is never given; no MCP tool reads it.
+
 The list is fixed in code (`src/lib/mcp/dto.ts`); each answer is built field by field, so a new database column never shows up
 by itself.
 
 **Switching on `get_application_context` adds your own writing material to what leaves:** the job's breakdown points, its
 application questions and settings, the saved answer versions with their sentence statuses and evidence quotes, and for each
-question what you chose for it: your profile summary, skills and languages, the chosen stories, the emphasis note. Stories you did
+question what you chose for it: your profile summary, skills and languages, the chosen stories, the emphasis note. Stories that **Apply to matching** wrote from the [career profile](career-profile.md) count like any other story: sent only when chosen. Stories you did
 not choose, the rest of your profile files, coach reviews and saved snapshots stay out. It also gives the company background (AI web search,
 unverified) and the fit note, with a notice that they are quoted data; the note keeps short quotes of the stories chosen when it was
 made, even if they are no longer chosen.

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
@@ -6,6 +7,11 @@ import path from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 
+import { POST as prepare } from "@/app/api/me/story-extract/prepare/route";
+import { preparedTextSchema } from "@/lib/outbound/preview";
+import { createActivityRecorder } from "@/lib/activity/recorder";
+import { createLogger, type LogRecord } from "@/lib/channels/logger";
+import { integrationActivitySettings } from "./activity-helpers";
 import { POST } from "@/app/api/me/story-extract/route";
 import { AiProviderError, createAiRouter } from "@/lib/ai";
 import type { AiRouter } from "@/lib/ai/router";
@@ -13,10 +19,11 @@ import { readProfileText, reloadConfig, resetConfigCache, writerSchema, type Wri
 import { processNextControlRequest, registerControlHandler, resetControlHandlers } from "@/lib/control";
 import { expireScrubbedRequests } from "@/lib/control/expire";
 import { createStoryExtractHandler } from "@/lib/control/story-extract";
-import { readOpenStoryExtract, readStoryExtractRequest, requestStoryExtract } from "@/lib/control/story-extract-request";
+import { readLatestStoryExtract, readStoryExtractRequest, requestStoryExtract } from "@/lib/control/story-extract-request";
+import { loadProfilePage } from "@/lib/profile/view";
 import { closeDb, getDb, hashProfileYaml, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
-import { claimNextControlRequest, requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
+import { claimNextControlRequest, insertControlRequest, requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
 import { deleteExpiredStoryDrafts, discardStoryDraft, insertStoryDrafts, listPendingStoryDrafts } from "@/lib/db/repos/story-drafts";
 import { adoptStoryDraft, loadPendingStoryDrafts } from "@/lib/stories/adopt";
 import { enterUpload } from "@/lib/stories/upload-gate";
@@ -62,7 +69,7 @@ async function requestRow(id: number) {
 
 /** What may remain of a request's payload once it ended: the origin, the hash and the length. */
 function expectScrubbed(payload: unknown): void {
-  expect(payload).toEqual({ origin: "resume", sourceHash: expect.stringMatching(/^[0-9a-f]{64}$/), sourceChars: SOURCE.length, truncated: false, scrubbed: true });
+  expect(payload).toEqual({ origin: "resume", sourceHash: expect.stringMatching(/^[0-9a-f]{64}$/), sourceChars: SOURCE.length, truncated: false, confirmed: true, scrubbed: true });
 }
 
 /** The source in any row of any table, whatever the column. */
@@ -103,10 +110,22 @@ function filesHolding(root: string, marker: string, since: number): string[] {
   return found;
 }
 
+function jsonRequest(body: unknown): Request {
+  return new Request("http://127.0.0.1/api/me/story-extract", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+
 function upload(fields: Record<string, string | File>): Request {
-  const form = new FormData();
-  for (const [key, value] of Object.entries(fields)) form.set(key, value);
-  return new Request("http://127.0.0.1/api/me/story-extract", { method: "POST", body: form });
+  if (fields.file instanceof File) {
+    const form = new FormData();
+    form.set("file", fields.file);
+    return new Request("http://127.0.0.1/api/me/story-extract/prepare", { method: "POST", body: form });
+  }
+  return jsonRequest(fields.origin === "profile" ? { origin: "profile" } : fields.origin === "self_description" ? { text: fields.text } : fields);
+}
+
+async function prepareAndQueue(fields: Record<string, string | File>): Promise<Response> {
+  const preview = preparedTextSchema.parse(await (await prepare(upload(fields))).json());
+  return POST(jsonRequest({ origin: fields.origin, text: preview.text }));
 }
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "job-radar-story-extract-"));
@@ -140,6 +159,11 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  const career = path.join(profileDir, "career");
+  if (fs.existsSync(career)) {
+    fs.chmodSync(career, 0o700);
+    fs.rmSync(career, { recursive: true, force: true });
+  }
   vi.restoreAllMocks();
   syncBuiltinESMExports();
 });
@@ -221,15 +245,14 @@ describe("queueing", () => {
     const id = await queue();
     expect(await requestStoryExtract(db(), { origin: "resume", text: SOURCE, writer: writerOn() })).toMatchObject({ state: "queued", requestId: id, existing: true });
     expect(await requestStoryExtract(db(), { origin: "resume", text: `${SOURCE} More.`, writer: writerOn() })).toEqual({ state: "error", error: "busy" });
-    expect(await readOpenStoryExtract(db())).toMatchObject({ requestId: id, stage: "pending" });
+    expect(await readLatestStoryExtract(db())).toMatchObject({ requestId: id, state: "waiting", stage: "pending" });
   });
 
-  it("cuts a long text, says so, and hashes what is sent", async () => {
+  it("rejects a long confirmed text without queueing or truncating it", async () => {
     const writer = writerSchema.parse({ enabled: true, import: { max_chars: 1000 } });
     const outcome = await requestStoryExtract(db(), { origin: "self_description", text: "x".repeat(1500), writer });
-    expect(outcome).toMatchObject({ state: "queued", truncated: true });
-    if (outcome.state !== "queued") throw new Error("not queued");
-    expect((await requestRow(outcome.requestId)).payload).toMatchObject({ sourceChars: 1000, truncated: true });
+    expect(outcome).toEqual({ state: "error", error: "too_long" });
+    expect(await db().select().from(schema.controlRequests)).toEqual([]);
   });
 
   it("refuses with the writer off, without leaving a request", async () => {
@@ -248,19 +271,37 @@ describe("queueing", () => {
 });
 
 describe("the upload route", () => {
+  it("returns scrubbed final text for review without queueing confirmed text containing an email", async () => {
+    const response = await POST(jsonRequest({ origin: "self_description", text: `${SOURCE}\nEmail: private@example.invalid` }));
+    expect(response.status).toBe(409);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({ ok: false, error: "review_again", text: `${SOURCE}\nEmail: [email]`, highlights: [] });
+    expect(await db().select().from(schema.controlRequests)).toEqual([]);
+  });
+
+  it("refuses confirmed text over the configured limit without queueing a truncated request", async () => {
+    writerFile("enabled: true\nimport:\n  min_chars: 5\n  max_chars: 1000\n");
+    const text = "x".repeat(1001);
+    const response = await POST(jsonRequest({ origin: "self_description", text }));
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ ok: false, error: "too_long" });
+    expect(await db().select().from(schema.controlRequests)).toEqual([]);
+  });
+
   it("takes a PDF, writes no file and puts its text in the request only", async () => {
     const started = Date.now() - 1000;
     const writes = [vi.spyOn(fs, "writeFileSync"), vi.spyOn(fs, "writeFile"), vi.spyOn(fs.promises, "writeFile"), vi.spyOn(fs, "createWriteStream"), vi.spyOn(fs, "appendFileSync"), vi.spyOn(fs.promises, "appendFile")];
     syncBuiltinESMExports();
     const pdf = minimalPdf([`${MARKER} Moved the billing service.`]);
-    const response = await POST(upload({ origin: "resume", file: new File([pdf.slice()], "my-cv.pdf", { type: "application/pdf" }) }));
+    const response = await prepare(upload({ origin: "resume", file: new File([pdf.slice()], "my-cv.pdf", { type: "application/pdf" }) }));
     for (const write of writes) expect(write).not.toHaveBeenCalled();
     vi.restoreAllMocks();
     syncBuiltinESMExports();
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    const body = (await response.json()) as { ok: boolean; requestId: number; truncated: boolean };
-    expect(body).toMatchObject({ ok: true, truncated: false });
+    const preview = preparedTextSchema.parse(await response.json());
+    expect(await db().select().from(schema.controlRequests)).toEqual([]);
+    const body = await (await POST(jsonRequest({ origin: "resume", text: preview.text }))).json() as { requestId: number };
     const row = await requestRow(body.requestId);
     expect(row.kind).toBe("story_extract");
     expect((row.payload as { text: string }).text).toContain(MARKER);
@@ -271,13 +312,13 @@ describe("the upload route", () => {
   });
 
   it("takes pasted text and Markdown, and assembles the profile on the server", async () => {
-    const pasted = await POST(upload({ origin: "self_description", text: SOURCE }));
+    const pasted = await prepareAndQueue({ origin: "self_description", text: SOURCE });
     expect(pasted.status).toBe(200);
     await db().delete(schema.controlRequests);
-    const markdown = await POST(upload({ origin: "resume", file: new File([`# CV\n${SOURCE}`], "cv.md") }));
+    const markdown = await prepareAndQueue({ origin: "resume", file: new File([`# CV\n${SOURCE}`], "cv.md") });
     expect(markdown.status).toBe(200);
     await db().delete(schema.controlRequests);
-    const profile = await POST(upload({ origin: "profile", text: "ignored: the server builds this" }));
+    const profile = await prepareAndQueue({ origin: "profile", text: "ignored: the server builds this" });
     const body = (await profile.json()) as { requestId: number };
     const row = await requestRow(body.requestId);
     expect((row.payload as { text: string }).text).toBe("Backend engineer who moved billing systems to new platforms.\n\nSkills: Go");
@@ -290,15 +331,15 @@ describe("the upload route", () => {
     // the slot is held explicitly, so nothing depends on how fast a PDF is read
     const held = enterUpload(1);
     expect(held).not.toBeNull();
-    const refused = await POST(file());
+    const refused = await prepare(file());
     expect(refused.status).toBe(429);
     expect(await refused.json()).toEqual({ ok: false, error: "too_many" });
     // pasted text has no file and needs no slot
-    expect((await POST(upload({ origin: "self_description", text: SOURCE }))).status).toBe(200);
+    expect((await prepare(upload({ origin: "self_description", text: SOURCE }))).status).toBe(200);
     await db().delete(schema.controlRequests);
     held?.();
     // the slot is back once the first is done, also after a refusal
-    expect((await POST(file())).status).toBe(200);
+    expect((await prepare(file())).status).toBe(200);
     writerFile("enabled: true\n");
     await db().delete(schema.controlRequests);
   });
@@ -306,7 +347,7 @@ describe("the upload route", () => {
   it("refuses too large, wrong types, scans and damaged files, without leaving a request", async () => {
     writerFile("enabled: true\nimport:\n  max_file_bytes: 10000\n");
     const refused = async (fields: Record<string, string | File>) => {
-      const response = await POST(upload(fields));
+      const response = await prepare(upload(fields));
       return [response.status, ((await response.json()) as { error: string }).error];
     };
     expect(await refused({ origin: "resume", file: new File(["x".repeat(10_001)], "cv.txt") })).toEqual([413, "too_large"]);
@@ -322,13 +363,13 @@ describe("the upload route", () => {
 
   it("honours the formats of writer.yaml", async () => {
     writerFile("enabled: true\nimport:\n  formats: [txt]\n");
-    const response = await POST(upload({ origin: "resume", file: new File(["# Moved the billing service."], "cv.md") }));
+    const response = await prepare(upload({ origin: "resume", file: new File(["# Moved the billing service."], "cv.md") }));
     expect(response.status).toBe(415);
   });
 
   it("sends nothing with the writer off", async () => {
     writerFile("enabled: false\n");
-    const response = await POST(upload({ origin: "self_description", text: SOURCE }));
+    const response = await prepare(upload({ origin: "self_description", text: SOURCE }));
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ ok: false, error: "disabled" });
     expect(await db().select().from(schema.controlRequests)).toEqual([]);
@@ -390,5 +431,89 @@ describe("the review", () => {
     expect(await deleteExpiredStoryDrafts(db(), 14)).toBe(1);
     expect(await deleteExpiredStoryDrafts(db(), 14)).toBe(0);
     expect(await db().select().from(schema.profileStoryDrafts)).toHaveLength(1);
+  });
+});
+
+
+describe("confirmed extraction privacy", () => {
+  it("loads the upgrade failure after the worker ends an old request, until a newer extraction exists", async () => {
+    const old = await insertControlRequest(db(), { kind: "story_extract", payload: { origin: "resume", sourceHash: createHash("sha256").update(SOURCE).digest("hex"), sourceChars: SOURCE.length, truncated: false, text: SOURCE } });
+    const createRouter = vi.fn();
+    registerControlHandler("story_extract", createStoryExtractHandler({ createRouter, loadSettings: writerOn }));
+    expect(await poll()).toMatchObject({ id: old.id, status: "failed" });
+    const initial = await loadProfilePage();
+    expect(initial.dbAvailable).toBe(true);
+    expect(initial.storyImport).toMatchObject({ open: null, error: "preview_required" });
+    expect(JSON.stringify(initial.storyImport)).not.toContain(SOURCE);
+    expect(createRouter).not.toHaveBeenCalled();
+    const newer = await queue();
+    expect((await loadProfilePage()).storyImport).toMatchObject({ open: { requestId: newer, stage: "pending" }, error: null });
+    handlerWith([reply()]);
+    expect(await poll()).toMatchObject({ id: newer, status: "done" });
+    expect((await loadProfilePage()).storyImport).toMatchObject({ open: null, error: null });
+  });
+
+  it("removes sentinels through real preparation, the queue, router, drafts, activity and logs with career off", async () => {
+    const sentinels = ["Fictional Person", "99 Imaginary Lane", "private@example.invalid", "+49 30 1234-5678", "+49 (0)30 2015-2019", "https://private.example.invalid/path"];
+    const storedOnly = "Stored Value Sentinel";
+    const career = path.join(profileDir, "career");
+    fs.mkdirSync(career, { recursive: true });
+    fs.writeFileSync(path.join(career, "contact.yaml"), `name: ${storedOnly}\n`);
+    fs.chmodSync(career, 0o000);
+    fs.writeFileSync(path.join(configDir, "career.yaml"), "enabled: false\n");
+    resetConfigCache();
+    const accesses = [vi.spyOn(fs, "readFileSync"), vi.spyOn(fs.promises, "readFile"), vi.spyOn(fs.promises, "readdir"), vi.spyOn(fs.promises, "mkdir"), vi.spyOn(fs.promises, "stat"), vi.spyOn(fs.promises, "access")];
+    syncBuiltinESMExports();
+    const consoleLogs: unknown[][] = [];
+    for (const method of ["log", "warn", "error"] as const) vi.spyOn(console, method).mockImplementation((...args: unknown[]) => { consoleLogs.push(args); });
+    const records: LogRecord[] = [];
+    const logger = createLogger({ sink: (record) => records.push(record) });
+    const form = new FormData();
+    form.set("file", new File([`Resume\n${sentinels.join("\n")}\n${SOURCE}\n${storedOnly}`], "resume.txt"));
+    const first = await prepare(new Request("http://127.0.0.1/prepare", { method: "POST", body: form }));
+    expect(first.headers.get("cache-control")).toBe("no-store");
+    const initial = preparedTextSchema.parse(await first.json());
+    const corrected = preparedTextSchema.parse(await (await prepare(jsonRequest({ text: initial.text, mode: "values", name: sentinels[0], address: sentinels[1] }))).json());
+    expect(corrected.text).toContain(storedOnly);
+    const confirmed = `  ${corrected.text}\n`;
+    const response = await POST(jsonRequest({ origin: "resume", text: confirmed }));
+    expect(response.status).toBe(200);
+    const queued = await response.json() as { requestId: number };
+    const pending = await requestRow(queued.requestId);
+    expect(pending.payload).toMatchObject({ text: confirmed, confirmed: true });
+    const { provider, transport } = scriptedProvider("codex-cli", [reply()]);
+    registerControlHandler("story_extract", createStoryExtractHandler({ createRouter: () => createAiRouter({ config: pinnedAi(), providers: [provider], usage: null, logger }), loadSettings: writerOn }));
+    const activity = createActivityRecorder({ db: db(), process: "ai-worker", autoFlush: false, loadSettings: integrationActivitySettings });
+    try {
+      expect(await processNextControlRequest({ db: db(), logger, activity, signal: new AbortController().signal, kinds: () => ["story_extract"] })).toMatchObject({ id: queued.requestId, status: "done" });
+      await activity.flush();
+      expect(transport.calls).toHaveLength(1);
+      const user = transport.calls[0]!.user.slice("<story_source>\n".length, -"\n</story_source>".length);
+      const hash = (text: string) => createHash("sha256").update(text).digest("hex");
+      expect(hash(user)).toBe(hash(confirmed));
+      expect(transport.calls[0]!.user).toContain(storedOnly);
+      const surfaces = JSON.stringify([transport.calls, pending, await requestRow(queued.requestId), await db().select().from(schema.profileStoryDrafts), await db().select().from(schema.activityEvents), await db().select().from(schema.activitySpans), records, consoleLogs]);
+      for (const sentinel of sentinels) expect(surfaces).not.toContain(sentinel);
+      for (const phone of sentinels.slice(3, 5)) expect(surfaces.replace(/\D/g, "")).not.toContain(phone.replace(/\D/g, ""));
+      for (const access of accesses) {
+        expect(access.mock.calls.filter((args) => String(args[0]).startsWith(career))).toEqual([]);
+      }
+    } finally { await activity.close(); }
+  });
+
+  it.each([[false, SOURCE, "preview_required"], [true, "Contact: private@example.invalid", "scrub_mismatch"]] as const)("fails unsafe queued text with %s before constructing a router, clearing payload and retaining drafts", async (confirmed, text, code) => {
+    await insertStoryDrafts(db(), { origin: "resume", sourceHash: "existing", drafts: [{}] });
+    const existing = await db().select().from(schema.profileStoryDrafts);
+    const request = await insertControlRequest(db(), { kind: "story_extract", payload: { origin: "resume", sourceHash: createHash("sha256").update(text).digest("hex"), sourceChars: text.length, truncated: false, text, ...(confirmed ? { confirmed: true } : {}) } });
+    const createRouter = vi.fn();
+    registerControlHandler("story_extract", createStoryExtractHandler({ createRouter, loadSettings: writerOn }));
+    expect(await poll()).toMatchObject({ id: request.id, status: "failed" });
+    const ended = await requestRow(request.id);
+    expect(ended.result).toMatchObject({ error: code });
+    expect(ended.payload).not.toHaveProperty("text");
+    expect(ended.payload).toMatchObject({ scrubbed: true });
+    expect(createRouter).not.toHaveBeenCalled();
+    expect(await db().select().from(schema.profileStoryDrafts)).toEqual(existing);
+    expect(await readStoryExtractRequest(db(), request.id)).toMatchObject({ state: "failed", error: code });
   });
 });

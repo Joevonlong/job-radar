@@ -10,6 +10,7 @@ import { formatInteger } from "@/lib/format/numbers";
 import { cn } from "@/lib/utils";
 
 import { groupNavItems, isNavActive, type NavKey } from "./nav";
+import { useNavItems } from "./shell-nav-provider";
 import { useSharedShellStatus } from "./shell-status-provider";
 
 interface NavListProps {
@@ -32,11 +33,12 @@ export function NavList({ onNavigate, counts: countsProp, alerts: alertsProp }: 
   const t = useTranslations("nav");
   const tShell = useTranslations("shell");
   const labelId = useId();
+  const items = useNavItems();
   const locale = resolveLocale(useLocale());
 
   return (
     <nav aria-label={tShell("mainNavigation")} className="flex flex-col gap-0.5 font-mono text-body-sm">
-      {groupNavItems().map(({ group, items }) => (
+      {groupNavItems(items).map(({ group, items }) => (
         <div
           key={group}
           role="group"

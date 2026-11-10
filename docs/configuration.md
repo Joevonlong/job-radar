@@ -814,3 +814,88 @@ larger sets use the job-scoped CTE (1–100000 jobs). All keys are required. Thi
 Supported channel blocks in `sources.yaml` have `company_queries: true` by default: `linkedin.session`, `linkedin.guest`, `linkedin.brightdata`, `linkedin.apify`, `sources.arbeitsagentur`, `sources.indeed`, `sources.jobspy_google`, `sources.jsearch`, `sources.stepstone` and `sources.xing`. Change them on Sources → Registry → Details, or Settings → Channels. These switches authorize sending watched company names to the provider; see [Privacy](privacy.md) and [query behavior and capacity](sources.md#watched-company-queries). Settings → Search edits the global switch, cap, interval and result limit.
 
 **Rollback:** to stop queries, set `watched_company_queries.enabled: false`. Before starting older code, remove the entire `watched_company_queries` block from `data/config/search.yaml` and every `company_queries` key from user `data/config/sources.yaml` (including any unsupported blocks written by a settings save). Run the older build's `pnpm config:check`; its strict schemas reject the new keys. Keep database history and raw postings.
+
+## Career profile (`career.yaml`)
+
+Off by default and independent of `writer.enabled`. Enable it under **Settings → Workflow**, then use the card on
+My profile. See [Career profile](career-profile.md) for editing, extraction, history and deletion. Turning it off keeps the files.
+
+`profile.max_entries`, `profile.max_bullets_per_entry`, `profile.max_wordings_per_text` and `profile.text_max_chars`
+limit saves. `history.keep_versions` limits profile history; contact details have none. The schema supplies defaults for
+every key and rejects unknown keys. `config_version: 2` uses the standard layered overlay format; the initial whole-file
+format is version 1 and can be converted with `pnpm config:migrate --write --convert-overlays`.
+
+`document.max_documents` limits saved résumé copies (1–1000). `document.image_max_bytes` limits each local JPEG or PNG
+photo or signature (up to 20 MB), and `document.max_request_bytes` configures only the preview request body limit
+(up to 50 MB). A document save request can carry at most 1 MB, like a profile save. A very large document can reach
+that before the entry and wording limits; the save then fails with an error and your edits stay in the form.
+`document.defaults` supplies `lang` (en/de), `theme` (minimal/band/classic/compact/split), `accent`, `pages` (1–10),
+`paper` (a4/letter) and `density` (compact/normal/relaxed) for missing preferences. `preview.debounce_ms` configures the
+preview delay (50–10000 ms). Open the editor at `/career/documents`; see
+[Résumé documents](career-profile.md#résumé-documents) for editing and live preview.
+
+`preview.page_count_debounce_ms` supplies the page-count refresh delay (default 3000 ms).
+`pdf.url` defaults to `http://career-pdf:8090` and is protected: change it by hand, never through settings or the
+advanced editor. The `pdf` block is hidden from the settings form. `pdf.timeout_seconds` (default 60, maximum 300)
+bounds the web request, including any wait for the service. The service prints one document at a time; while it is
+busy (for example printing a page count) the web retries every `pdf.busy_retry_ms` (default 250, maximum 10000)
+until that limit. `pdf.max_html_bytes` (default 8000000, maximum 50000000) bounds UTF-8 HTML before sending.
+
+The optional PDF service starts with `COMPOSE_PROFILES=career-pdf docker compose up -d --build career-pdf`.
+It reads no config files or data volumes. Its environment settings are `CAREER_PDF_PORT` (default 8090),
+`CAREER_PDF_TIMEOUT_SECONDS` (default 60) and `CAREER_PDF_MAX_HTML_BYTES` (default 8000000). Compose fixes the port to
+8090 and passes the latter two settings from the host environment. When changing the web limits, match the service
+limits with those environment overrides. The JSON body is limited to six times the HTML limit plus 1024 bytes to
+allow JSON escapes; decoded HTML has the separate byte limit. Only one render runs at a time; busy requests return 429,
+and timeouts return 504. Health reflects the browser connection; a disconnected browser is relaunched on the next render.
+
+`POST /api/career/documents/preview` accepts `{ document, doc }` and returns HTML, active-document `findings` and
+`uncovered` characters, plus `exportHints: { findings, uncovered }` covering both renderable export documents.
+Findings contain only `{ code, params, severity, path? }`.
+`POST /api/career/documents/pages` accepts the same JSON and returns `{ ok: true, pages, budget, findings }`, where
+`budget` is `{ pages, exceeded }`. When PDF rendering is unavailable it returns
+`{ ok: true, pages: null, budget: null, findings: [], code }`. If PDF text checking fails, `pages` and `budget` stay
+available with empty findings and `code: pdf_checks_failed`. `POST /api/career/documents/<id>/pdf?doc=resume`
+(or `doc=letter`) exports the saved document. Save edits first. These endpoints return `Cache-Control: no-store` and
+write no HTML or PDF files. A letter needs a nonempty included body. The filename uses the engine's résumé template
+(`layout.filename`); letters use the separate language-specific letter name. With no PDF service, editing and HTML
+preview continue to work; the response codes have localized messages including the startup command.
+
+Documents live in `career/documents/` under the profile directory and retain source references while being edited
+independently. `history.keep_versions` applies separately to each document under `career/history/documents/` as well
+as the profile. Contact is merged only for rendering; it is absent from document and history files. Preferences and
+local images have no history. Deleting all career data removes documents, preferences, images and history together.
+
+Extraction settings are `timeout_seconds`, `expiry_grace_seconds`, `queue_timeout_seconds`,
+`import.formats`, `max_file_bytes`, `upload_timeout_seconds`, `max_chars`, `min_chars`, `pdf_timeout_seconds`,
+`pdf_max_memory_mb`, `max_concurrent_uploads`, `draft_ttl_days`, `max_pending_drafts`, `output_truncated_share`,
+`stored_value_min_chars`, `title_words`, `sensitive_labels` (all under `import` after `formats`), and
+`evidence.min_quote_chars`, `quote_max_chars`, `figure_units` (all under `evidence`). Figure units share the writer's
+scale and multiple defaults. The three top-level time settings limit running time, the expiry grace period and queue wait. Import settings control file types and size, upload and PDF processing time and memory, text length, concurrent uploads, draft expiry and count, suspected output truncation, and preview removal and highlighting rules. Evidence settings control quote length and figure verification. The `career_extract` task in `ai.yaml` selects the provider and model for extraction. `import.max_file_bytes`, `upload_timeout_seconds` and `max_concurrent_uploads` also limit the resume-kit import on `/career`.
+
+`writer.yaml: import.title_words` lists résumé title lines skipped when guessing a name.
+`writer.yaml: import.sensitive_labels` lists labels highlighted for review in the outbound preview.
+Résumé tailoring settings live under `tailor`: `max_requirements` (separate requirements per document), `requirement_max_chars`, `duty_min_coverage` (the share of a rewritten duty's content words that the quotes must cover), `max_proposals` (kept from one request), `jd_max_chars` and `jd_head_share` (how much JD is sent and how much of it comes from the beginning), and the word lists of the check: `first_person`, `names` and `stopwords` by language. `duty_min_coverage: 0.7` is a starting value measured on fictional samples and will be recalibrated with real model output. Tailoring uses the same three time settings as extraction, and the `career_tailor` task in `ai.yaml` selects its provider, model and `max_output_tokens` per call. See [Résumé tailoring](resume-tailoring.md).
+
+### Résumé checks and page counts
+
+`career.yaml: check.limits` supplies every engine check threshold, including bullet length, page budget for letters,
+word counts and PDF text matching. `check.lexicon.en` and `.de` contain the check word lists and keyword dictionaries.
+The configuration schema stays independent of the rendering engine. These settings are available in YAML, outside the
+settings form. Dictionary entries under `check.lexicon.*.*` merge independently: adding a keyword leaves other shipped
+keywords following product updates. A list explicitly overridden by the user replaces that list as a whole.
+`check.uncovered_max_chars` caps the deduplicated list of characters outside the bundled font faces' Unicode ranges.
+
+The editor runs text and placeholder checks with the HTML preview. Page counts refresh separately after
+`preview.page_count_debounce_ms`; responses for older edits are ignored. An unavailable PDF service leaves the count
+unknown. If PDF text parsing fails, the service page count stays visible with a check-unavailable hint.
+PDF checks add page budget, reading order and parser findings. All findings are advisory, including placeholders
+and excess pages, and never block PDF export. Only English and German document layouts are supported; other content
+can be edited and previewed with a font coverage hint.
+
+PDF export saves unsaved edits first; a stale save stops the download and keeps the edits on screen. Résumé and letter
+buttons download separate PDFs without a page reload. Export warnings cover both available documents, independent of
+which preview is selected. A letter needs included body text before its button appears.
+After a successful export, the page-count endpoint refreshes the full checks with another transient print; the export
+response remains PDF bytes with its existing filename headers. Busy and unavailable service states appear beside the
+buttons, including the `COMPOSE_PROFILES=career-pdf` start hint. No PDF or HTML is saved by these operations.

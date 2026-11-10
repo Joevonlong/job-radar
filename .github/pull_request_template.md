@@ -1,6 +1,8 @@
+<!-- Base must be main. Starting with 2.1.0, GitHub may preselect stable; change it to main. -->
+
 ## Summary
 
-<!-- What changes and why. Link the issue if there is one ("Closes #123"). -->
+<!-- What changes and why. Link the issue if there is one ("Refs #123"); the maintainer closes the issue on release. -->
 
 ## How to try it
 

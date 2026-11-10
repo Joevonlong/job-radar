@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The product's own checks: shell syntax of the operations scripts, the i18n catalog (messages files), lint, typecheck, unit tests, configuration check
+# The product's own checks: shell syntax of the operations scripts, the i18n catalog (messages files), resume font table, lint, typecheck, unit tests, configuration check
 # (shipped defaults), documentation link check, CI documentation check (docs/ci.md vs the workflows), planning-id check. Used by contributors and by CI. Integration and e2e tests are separate
 # (`pnpm test:integration`, `pnpm test:e2e`).
 set -euo pipefail
@@ -13,6 +13,8 @@ for f in scripts/*.sh scripts/ops/*.sh scripts/ops/lib/*.sh tests/ops/*.sh tests
 
 echo "== i18n catalog"
 pnpm i18n:check
+echo "== resume fonts"
+pnpm career:fonts --check
 echo "== lint"
 pnpm lint
 echo "== typecheck"

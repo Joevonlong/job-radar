@@ -125,9 +125,9 @@ function buildLocationMatcher(preferences: PriorityInputs["preferences"], filter
   const nearby = new Set<string>();
   for (const location of wantedLocations(preferences)) {
     for (const name of spellings(location)) exact.add(foldText(name));
-    const canonical = canonicalCity(location, geo);
+    const canonical = foldText(canonicalCity(location, geo));
     for (const [city, near] of Object.entries(filter.metro_areas)) {
-      if (canonicalCity(city, geo) !== canonical) continue;
+      if (foldText(canonicalCity(city, geo)) !== canonical) continue;
       for (const place of near) for (const name of spellings(place)) nearby.add(foldText(name));
     }
   }

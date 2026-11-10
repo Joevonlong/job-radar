@@ -1,6 +1,9 @@
 /** Docker, the compose services, the web app and the database. */
 import fs from "node:fs";
 
+import { z } from "zod";
+import { readCareerGate } from "@/lib/config/career-gate";
+
 import { isLoopbackBind, WEB_BIND_ENV } from "@/lib/security/local-request";
 import { readPasswordSetting } from "@/lib/security/password";
 
@@ -106,7 +109,15 @@ export const composeServicesCheck: DoctorCheck = {
   async run(ctx) {
     const compose = await loadCompose(ctx);
     const results: CheckOutcome[] = [];
-    for (const service of ctx.settings.compose_services) {
+    const services = ctx.settings.compose_services.filter((service) => service !== "career-pdf");
+    if ((await readCareerGate()).enabled) {
+      const active = await ctx.probes.run("docker", ["compose", "-p", ctx.settings.compose_project, "config", "--services"]);
+      if (active.kind === "ran" && active.exitCode === 0) {
+        const names = z.array(z.string().regex(/^[a-zA-Z0-9_-]+$/)).safeParse(active.stdout.trim().split(/\s+/));
+        if (names.success && names.data.includes("career-pdf")) services.push("career-pdf");
+      }
+    }
+    for (const service of services) {
       const containers = compose.available ? compose.containers : [];
       const isRunning = containers.some((c) => c.service === service && c.state === "running");
       const evidence = isRunning ? null : await hostEvidence(ctx, service);

@@ -37,3 +37,14 @@ The Telegram 📄 button goes through the same export function: it exports the J
 ## Docker
 
 `compose.yaml` mounts `./data/exports` into web and runner. The command has to be pasted into a terminal on the host, so set `jd_export_host_dir` to the absolute path of this directory on the host. `pdf_dir` must also be visible to the web container: mount its directory into the web container at the **same absolute path** (compose override), otherwise attaching a resume only works under `pnpm dev` / when running on the host.
+
+## With the career profile
+
+The [career profile](career-profile.md) covers the same ground inside the app: résumé documents with live preview and
+PDF export, and per-job tailoring with proposals you review. To move over, import your master YAML under **Import a
+resume-kit résumé** on `/career` ([details](career-profile.md#import-a-resume-kit-master-résumé)); the master file and
+`resume.yaml` are not changed.
+
+Both can stay. While the career profile is on, the job detail page shows the career profile's **Tailored résumés** panel, and this panel is
+folded under **External resume-kit** inside it (only when `resume_kit_path` is set). With the career profile off,
+everything on this page works as before.

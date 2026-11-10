@@ -11,8 +11,17 @@ import { runMigrations } from "@/lib/db/migrate";
 import { BackupError, listBackups, runBackup, type RunBackupOptions } from "@/lib/ops/backup";
 import { createBackupScheduler } from "@/lib/ops/backup-job";
 import { createLogger } from "@/lib/channels/logger";
+import { createDocument, listDocumentVersions } from "@/lib/career/store/documents";
+import {
+  careerDocumentHistoryDir, careerDocumentPath, careerImagePath, careerPreferencesPath,
+} from "@/lib/career/store/paths";
+import { saveImage } from "@/lib/career/store/images";
+import { loadPreferences, savePreferences } from "@/lib/career/store/preferences";
 
 import { resolvePgTools, type PgTools } from "./pg-tools";
+import { tempCareer } from "../career/fixtures";
+import { document } from "../career/document-fixtures";
+import { imagePng, imageJpeg } from "../career/engine/helpers/images";
 
 const url = inject("testDatabaseUrl");
 // pg_dump through `docker exec` can be slow when other stacks share the machine.
@@ -84,6 +93,48 @@ function options(overrides: Partial<RunBackupOptions> = {}): RunBackupOptions {
 }
 
 describe("scheduled backup and restore (real pg_dump)", () => {
+  it("backs up and restores documents, their history, preferences, photo and signature", async (ctx) => {
+    if (tools === null) return ctx.skip();
+    const temp = tempCareer();
+    try {
+      const created = await createDocument(document());
+      const versions = await listDocumentVersions(created.document.id);
+      expect(versions).toHaveLength(1);
+      const preferences = await savePreferences((await loadPreferences()).preferences, { baseHash: null });
+      expect(preferences.ok).toBe(true);
+      await saveImage("photo", imagePng());
+      await saveImage("signature", imageJpeg());
+      const files = [
+        careerDocumentPath(created.document.id),
+        path.join(careerDocumentHistoryDir(created.document.id), versions[0]!.id),
+        careerPreferencesPath(), careerImagePath("photo", "png"), careerImagePath("signature", "jpg"),
+      ].map((file) => ({ name: path.relative(temp.profileDir, file), bytes: fs.readFileSync(file) }));
+      const result = await runBackup(options({
+        directory: path.join(temp.root, "backups"),
+        configArchive: { dirs: { config: temp.configDir, profile: temp.profileDir } },
+      }));
+      expect(result.configWarning).toBeNull();
+      expect(result.configFile).not.toBeNull();
+      expect((await listBackups(path.join(temp.root, "backups")))[0]?.hasConfig).toBe(true);
+      const archive = path.join(temp.root, "backups", result.configFile!);
+      const listed = spawnSync("tar", ["-tzf", archive], { encoding: "utf8" });
+      expect(listed.status, listed.stderr).toBe(0);
+      const members = files.map(({ name }) => `data/profile/${name}`);
+      expect(listed.stdout.split("\n")).toEqual(expect.arrayContaining(members));
+      const target = path.join(temp.root, "restored");
+      fs.mkdirSync(target);
+      const restored = spawnSync("tar", ["-xzf", archive, "-C", target], { encoding: "utf8" });
+      expect(restored.status, restored.stderr).toBe(0);
+      for (const { name, bytes } of files) {
+        const file = path.join(target, "data/profile", name);
+        expect(fs.readFileSync(file), name).toEqual(bytes);
+        expect(fs.statSync(file).mode & 0o777, name).toBe(0o600);
+      }
+    } finally {
+      temp.cleanup();
+    }
+  }, SLOW_TEST_MS);
+
   it("dumps the database, and restoring into a temporary database gives the same tables and row counts", async (ctx) => {
     if (tools === null) return ctx.skip();
     const result = await runBackup(options({ now: () => new Date("2026-10-07T01:30:00Z") }));

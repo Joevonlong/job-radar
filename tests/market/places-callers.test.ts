@@ -48,4 +48,19 @@ describe("every caller reads Munich and München as one city", () => {
     expect(target).toHaveLength(1);
     expect(target[0]?.key).toBe("München");
   });
+
+  const hannoverJob = (label: string) => ({ title: "Engineer", description: null, companyName: "Acme", companyNameNorm: "acme", companyAliases: [], companyBlacklisted: false, companyWatched: false, locations: [normalizeLocation(label, market)], workplace: "onsite" as const, seniority: "unknown" as const, contract: "unknown" as const, salary: null, germanLevel: "unknown" as const });
+  const withAliases = (cityAliases: Record<string, string[]>) => ({ ...pipeline, market: { ...pipeline.market, cities: { hannover: ["Hannover", "DE"], hanover: ["Hannover", "DE"], au: ["Au", "CH"], aue: ["Aue", "DE"] } as typeof pipeline.market.cities }, filter: { ...pipeline.filter, city_aliases: cityAliases } });
+
+  it("the filter: a custom alias for one spelling does not drop the market's other spelling", () => {
+    const filter = filterWith(prefs((raw) => void (raw.home_city = "Hanover")), withAliases({ Hanover: ["Hannover City"] }));
+    const verdict = evaluateJob(hannoverJob("Hannover, Germany"), filter);
+    expect(verdict.reasons.some((reason) => reason.startsWith("location_not_allowed"))).toBe(false);
+  });
+
+  it("the filter: an Aue preference does not admit a job in Au", () => {
+    const filter = filterWith(prefs((raw) => void (raw.home_city = "Aue")), withAliases({}));
+    expect(evaluateJob(hannoverJob("Aue, Germany"), filter).reasons.some((reason) => reason.startsWith("location_not_allowed"))).toBe(false);
+    expect(evaluateJob(hannoverJob("Au, Switzerland"), filter).reasons.some((reason) => reason.startsWith("location_not_allowed"))).toBe(true);
+  });
 });

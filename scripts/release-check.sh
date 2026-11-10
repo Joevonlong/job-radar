@@ -55,7 +55,7 @@ else
   echo "release-check: no local patterns file (.release-check.local or RELEASE_CHECK_PATTERNS_FILE); personal-string check limited to generic paths"
 fi
 # Generic machine paths are allowed when the name is one of these placeholders (tests and docs use them).
-ALLOWED_PATH_NAMES='me|test|x|SSD|Other|Data|example|you|user|name|path|work|Library|System|<[^>]*>|\$[A-Za-z_]+'
+ALLOWED_PATH_NAMES='sentinel|someone|me|test|x|SSD|Other|Data|example|you|user|name|path|work|Library|System|<[^>]*>|\$[A-Za-z_]+'
 
 # Check 4, also run alone by --planning-ids-only. Works on the staged copy of the files in scope.
 check_planning_ids() {
