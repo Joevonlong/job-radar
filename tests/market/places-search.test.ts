@@ -180,7 +180,7 @@ describe("Worldwide marked as a place to move to", () => {
   it("is read as remote only by the searches, the texts and the prompt's scope", () => {
     expect(plannedSearches(preferences, geo, home).filter((search) => !search.remote).map((search) => search.location)).toEqual(["Berlin"]);
     expect(wantedLocations(preferences)).toEqual(["Berlin"]);
-    expect(wantedRemoteScope(preferences, geo)).toBe("worldwide");
+    expect(wantedRemoteScope(preferences, geo, home.country)).toBe("worldwide");
   });
 });
 

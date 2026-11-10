@@ -48,6 +48,7 @@ services:
       start_period: 10s
 
   web:
+    networks: [default, career-pdf]
     build:
       # JOB_RADAR_BUILD_CONTEXT is set only by scripts/ops/deploy.sh: it builds from an unpacked `git archive` of the
       # target commit (data/build/<commit>-<pid>), so nothing from the working tree reaches the image. Unset (pnpm
@@ -211,6 +212,42 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+
+  career-pdf:
+    profiles: ["career-pdf"]
+    build:
+      context: ${JOB_RADAR_BUILD_CONTEXT:-.}
+      target: runner
+    command: ["node", "dist/career-pdf.mjs"]
+    networks: [career-pdf]
+    restart: unless-stopped
+    <<: *hardening
+    read_only: true
+    init: true
+    tmpfs:
+      - /tmp
+      - /home/pwuser:mode=1777
+    environment:
+      HOME: /home/pwuser
+      CAREER_PDF_PORT: "8090"
+      CAREER_PDF_MAX_HTML_BYTES: ${CAREER_PDF_MAX_HTML_BYTES:-8000000}
+      CAREER_PDF_TIMEOUT_SECONDS: ${CAREER_PDF_TIMEOUT_SECONDS:-60}
+    mem_limit: ${CAREER_PDF_MEM_LIMIT:-1g}
+    logging: *default-logging
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8090/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+networks:
+  career-pdf:
+    internal: true
 
 volumes:
   jobradar-pg:

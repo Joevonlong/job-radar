@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { DisclosureSection } from "@/components/settings/ai/disclosure-section";
 import { aiDisclosure, type AiDisclosureRow } from "@/lib/ai/disclosure";
+import { AI_TASKS } from "@/lib/ai/types";
 
 import { pinnedAi } from "../ai/helpers";
 import en from "../../messages/en.json";
@@ -33,7 +34,10 @@ describe("DisclosureSection", () => {
       "deepseek",
       "mimo",
     ]);
-    expect(screen.getAllByTestId(/^disclosure-row-/)).toHaveLength(11);
+    expect(screen.getAllByTestId(/^disclosure-row-/).map((row) => row.getAttribute("data-testid"))).toEqual(
+      AI_TASKS.map((task) => `disclosure-row-${task}`),
+    );
+    expect(screen.getByTestId("disclosure-row-career_extract")).toBeVisible();
   });
 
   it("says so when a task has no provider switched on", () => {

@@ -55,6 +55,15 @@ pnpm run doctor --only config.market
 
 `generic` 包总是加载：世界国家表、区域 `eu`、`eea`、`europe`、`dach`、`nordics`、城市表、美国州代码和英文规则。市场自己的包叠加在它上面。
 
+## 地名怎么读
+
+过滤、排序、城市分组、“查看岗位”链接和 handpicked 通道用同一个查找来读地名。一个地名可以是 Worldwide、区域、国家或城市；既是国家又是城市的名字（Singapore），地名查找本身按国家读，而过滤、排序、城市分组、“查看岗位”链接和 handpicked 通道先读城市表，把它当城市。
+
+- **市场表里的任何写法都算同一个城市。** `cities` 表为每种写法给出规范名和国家，所以 `Munich`、`München`、`Muenchen` 是同一个城市，不论你在地点里填哪一个、岗位用哪一个。
+- **你的 `city_aliases` 加入这个城市，不会把它拆开。** 你为某个规范名列出的写法，会并入市场表里同一城市的写法（`Hanover` 加别名 `Hannover City`，仍能匹配 `Hannover` 的岗位），显示的是你的规范名。`metro_areas`、`metro_regions` 的键也这样读，所以 `Koeln: [Hürth]` 对 `Cologne` 偏好生效。
+- **不同的城市保持不同。** 原样写法永远优先。重音和大小写不用来区分城市（`Münster` 与 `Munster` 是同一个键），只有变音写法（`ae`、`oe`、`ue` 对应 `ä`、`ö`、`ü`）是后备，而且只在只指向一个城市时才用，所以表里同时有 `Au` 和 `Aue` 时，两者不会互相匹配。
+- 表里都没有的名字不算错误：它只匹配它自己。
+
 ## 生效的 pipeline 配置怎么合成
 
 代码把 `pipeline.yaml` 和市场包一起读（`loadPipeline()`）：
@@ -164,6 +173,7 @@ pnpm run doctor --only config.market
 | `remote_scope: {region: [...]}` | 每个代码按原样成为仅远程地点 |
 | `remote_scope: worldwide` | `Worldwide` 成为仅远程地点 |
 | `remote_scope: none` | 从 `workplace` 去掉 `remote`，除非它是唯一的值 |
+| 同时出现在 `locations` 和 `remote_scope` 里的地点 | 一条 ✈：愿意搬去的地方也包括在那里远程 |
 
 结果有变化的情况：设为 `none` 时，地点在允许城市的远程职位过去会显示，现在会以 `workplace_not_wanted` 隐藏；设为 `none` 且 `workplace: [remote]` 时，远程职位现在会被检查，不再被隐藏；`{region: [...]}` 没有包含本国时，本国的远程职位现在会显示；`locations` 里的国外城市变成 ✈ 地点并开始匹配。如果 `locations` 的第一项是国外城市，它会成为常住城市，那里的职位按本国比较。
 
@@ -177,7 +187,19 @@ pnpm run doctor --only config.market
 | `locations` 里的国外城市 | 增加它的远程搜索 |
 | `workplace` 没有 `remote`，范围不是 `none` | 去掉远程搜索，因为这和迁移后的 `none` 无法区分 |
 
-旧版本的代码读不了版本 3。要退回旧版本，请先用升级前的备份或 `/me` 上的画像历史恢复这个文件。
+每次读取 `preferences.yaml`，不管是谁写的（表单、设置向导、`pnpm run setup`、答案文件或手改），`places` 都按同一套规则处理：
+
+- Worldwide 一律是仅远程。
+- 和常住城市相同的地点去掉。
+- 同一地点写了两次只算一条，留在第一次出现的位置，其中任一条是 ✈ 就是 ✈。比较时不分大小写、重音和空格；读得到市场地名表的地方，同一地点的两种写法（Munich、München）也算一条。
+
+地点条数和名字长度都没有上限，和原来的 `locations` 一样。
+
+远程范围由地点得出：任一地点是 Worldwide 就是全球；否则是其中的国家和区域，仅远程的和 ✈ 的都算，没有仅远程的国家或区域时再加上本国；一个国家或区域都没有时就是本国。所以 `locations: [Berlin, CH]` 加 `remote_scope: {region: [CH]}` 升级后仍保留瑞士的远程岗，德国的也保留。
+
+设置向导的“市场”一步按地点写 search.yaml 的 `locations` 和 `remote_scope`；但 `remote_scope: none`（关掉远程搜索）会保留，直到你在 `/settings` 里改掉。
+
+旧版本的代码读不了版本 3。要退回旧版本，请放回升级前的版本 2 文件：`pnpm config:migrate --write`（部署时会运行）会把它复制到 `data/config/.backup/<时间>/profile/preferences.yaml`，也可以从你自己的备份里取（[备份与恢复](backup-restore.zh.md)）。用 `/me` 上的画像历史恢复旧版本没有用：保存时又会转换成版本 3。
 
 ## 改名的配置键
 

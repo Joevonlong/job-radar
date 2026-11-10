@@ -11,10 +11,12 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { Document } from "yaml";
 import { z } from "zod";
 
 import { buildScorePrompt, scoreOutputSchema } from "@/lib/ai/prompts/score";
 import type { PipelineConfig, PreferencesConfig } from "@/lib/config";
+import { preferences003 } from "@/lib/config/migrations/preferences/003-places";
 import type { GermanLevel, JobLocation } from "@/lib/domain/types";
 import { GERMAN_LEVELS } from "@/lib/domain/types";
 import { compileFilter, evaluateJob, type FilterJob } from "@/lib/filter";
@@ -53,7 +55,7 @@ export function readGoldenInputs(): GoldenInputs {
 }
 
 /** The legacy remote scopes and what they are called today (keys of the golden). */
-export const LEGACY_SCOPES = ["eu_hire_in_de", "eu_any", "worldwide"] as const;
+export const LEGACY_SCOPES = ["none", "eu_hire_in_de", "eu_any", "worldwide"] as const;
 export type LegacyScope = (typeof LEGACY_SCOPES)[number];
 
 /** Everything the golden records, computed under one configuration. */
@@ -63,18 +65,21 @@ export interface GoldenContext {
   preferences: (scope: LegacyScope) => PreferencesConfig;
 }
 
-/** What the migration makes of a scope: its tokens, or Worldwide, as remote-only places. */
-function scopeAsPlaces(scope: unknown): Array<{ place: string; relocate: boolean }> {
-  if (scope === "worldwide") return [{ place: "Worldwide", relocate: false }];
-  if (typeof scope !== "object" || scope === null) return [];
-  return (scope as { region: string[] }).region.map((place) => ({ place, relocate: false }));
+/** The example preferences as they were written before `places` (`locations`, this `remote_scope`), upgraded by the real migration step. */
+function upgradeWithScope(raw: Record<string, unknown>, scope: LegacyScope): void {
+  const { home_city: home, places, ...rest } = raw;
+  const moving = (places as Array<{ place: string; relocate: boolean }>).filter((entry) => entry.relocate).map((entry) => entry.place);
+  const doc = new Document({ ...rest, locations: [home, ...moving], remote_scope: migrateRemoteScope(scope) });
+  preferences003.migrate(doc);
+  for (const key of Object.keys(raw)) delete raw[key];
+  Object.assign(raw, doc.toJS());
 }
 
 export function deContext(): GoldenContext {
   return {
     pipeline: shippedPipeline(),
-    // the legacy scope names map to the new values (market migration); the golden keys keep the old names
-    preferences: (scope) => examplePreferences((raw) => void (raw.places = [...(raw.places as unknown[]), ...scopeAsPlaces(migrateRemoteScope(scope))])),
+    // the legacy scope names map to the new values (market migration), then to places (places migration); the golden keys keep the old names
+    preferences: (scope) => examplePreferences((raw) => upgradeWithScope(raw, scope)),
   };
 }
 
@@ -262,6 +267,7 @@ export function computeGolden(inputs: GoldenInputs, ctx: GoldenContext, legacyCo
     me,
     preferences: ctx.preferences("eu_hire_in_de"),
     geo: placeGeo(ctx.pipeline),
+    homeCountry: ctx.pipeline.market.country,
     job: {
       title: "Senior AI Engineer (m/w/d)",
       company: "Northwind Labs",

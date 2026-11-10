@@ -300,8 +300,10 @@ export interface ScorePromptInput {
   language: ScoreLanguage | null;
   /** The market's base currency (the salary floor is in it). */
   currency: string;
-  /** The market's place tables, to read the remote-only places. */
+  /** The market's place tables, to read the places. */
   geo: PlaceGeo;
+  /** The market's home country (ISO code). */
+  homeCountry: string;
   /** The languages the AI writes in (default: the reference rendering, Chinese with an English summary). */
   output?: ScoreOutputLanguages;
   /** `ai.yaml: scoring.criteria`. */
@@ -376,7 +378,7 @@ export function buildScorePrompt(input: ScorePromptInput): AiPrompt {
   const wants = [
     `Target titles: ${listOrNone(preferences.target_titles)}`,
     `Locations: ${listOrNone(wantedLocations(preferences))}`,
-    `Workplace: ${listOrNone(preferences.workplace)}; remote scope: ${remoteScopeKey(wantedRemoteScope(preferences, input.geo))}`,
+    `Workplace: ${listOrNone(preferences.workplace)}; remote scope: ${remoteScopeKey(wantedRemoteScope(preferences, input.geo, input.homeCountry))}`,
     `Seniority: ${preferences.seniority}`,
     `Salary floor (${input.currency} per year, gross): ${preferences.salary_floor_year}`,
     `Contracts allowed: ${listOrNone(preferences.contracts.allow)}; excluded: ${listOrNone(preferences.contracts.exclude)}`,

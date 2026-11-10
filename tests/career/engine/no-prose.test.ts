@@ -21,6 +21,8 @@ const CHECK_ARGUMENT = new Map([
 ]);
 
 function scan(file: string, source: ts.SourceFile, types?: ts.TypeChecker): string[] {
+  // Generated font metadata contains family names, not diagnostic or interface prose.
+  if (file === "fonts.generated.ts") return [];
   const out: string[] = [];
   const literal = (node: ts.Node): node is ts.StringLiteralLike => ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node);
   const isCode = (node: ts.Node) => (literal(node) && /^career\.[a-z]+\.[a-z0-9_]+$/.test(node.text)) || !!(types && codeType(types.getTypeAtLocation(node)));
@@ -105,6 +107,8 @@ test.each([
 
 test("exceptions are narrow: literal types, document labels, theme templates, schema assertion", () => {
   expect(inline('type Family = "IBM Plex Sans"')).toEqual([]);
+  expect(inline('const family = "IBM Plex Sans"', "fonts.generated.ts")).toEqual([]);
+  expect(inline('const family = "IBM Plex Sans"', "other.generated.ts")).not.toEqual([]);
   expect(inline('const x = "some prose"', "i18n.ts")).toEqual([]);
   expect(inline('const x = "some prose"', "themes/minimal/template.ts")).toEqual([]);
   expect(inline('throw new Error("unreachable")', "schema.ts")).toEqual([]);

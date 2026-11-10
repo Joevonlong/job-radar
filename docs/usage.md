@@ -207,7 +207,7 @@ On the form, "Locations outside home city" shows each place as "✈ I'd move her
 | a title such as "AI Engineer - US" or "(Americas)" | excluded; the description cannot rescue it. A title that also names EMEA or Europe is not excluded |
 | "Remote" without a place, or no location | kept, noted that it does not say where it hires |
 
-Worldwide keeps all of them. Listed places add to home and never replace it. To stop seeing remote jobs, take Remote out of Workplace.
+Worldwide keeps all of them. Listed places add to home and never replace it. To stop seeing remote jobs, take Remote out of Workplace. A place named twice counts once, and ✈ wins ([details](market-packs.md#the-location-settings-migration)).
 
 **Searches.** The same settings decide what is searched, once for each keyword group. There is one on-site search for the home city (the country's name without one) and one for each ✈ place. With Remote in Workplace, there is also one remote search for home and one for each listed place:
 

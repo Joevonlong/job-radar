@@ -15,7 +15,7 @@ import { newFileFormat } from "./new-file-format";
 import { configLayer, getDefaultConfigPath, getProfileExampleDir, getUserConfigPath, readOverlayText, readShippedText, type ConfigLayer } from "./paths";
 import { applyEditsToDocument, overlayFullEdits, overlaySaveEdits, pruneRedundantKeys } from "./overlay";
 import { replaceRule } from "./overlay-rules";
-import { notifyProfileSaved } from "./profile";
+import { notifyProfileSaved, type ProfileSavedResult } from "./profile";
 import { assertProtectedUnchanged } from "./protected-check";
 import { readUserText } from "./read-user-file";
 import { configRegistry, isProfileName, type ConfigName, type ConfigValue } from "./registry";
@@ -371,9 +371,10 @@ function backupsKeep(): number {
  *
  * `baseHash` (the forms: `layeredConfigFingerprint` of what they were opened on): checked again right before the rename, under
  * the file's in-process lock, so a save over a file that changed in the meantime is refused (ConfigError `stale`) even
- * when two saves race. Without it (the setup wizard) the save always goes through.
+ * when two saves race. Without it (the setup wizard) the save always goes through. `onProfileSaved` receives what the profile
+ * hook reported (the scores it marked stale) once it has run.
  */
-export async function writeConfig<N extends ConfigName>(name: N, value: ConfigValue<N>, options: { baseHash?: string } = {}): Promise<ConfigValue<N>> {
+export async function writeConfig<N extends ConfigName>(name: N, value: ConfigValue<N>, options: { baseHash?: string; onProfileSaved?: (result: ProfileSavedResult) => void } = {}): Promise<ConfigValue<N>> {
   const filePath = getUserConfigPath(name);
   const result = configRegistry[name].schema.safeParse(value);
   if (!result.success) {
@@ -386,7 +387,10 @@ export async function writeConfig<N extends ConfigName>(name: N, value: ConfigVa
       return writeValidated(name, filePath, parsed, options.baseHash);
     }, filePath);
     // Keep same-file notifications ordered in this process, but never hold the write lock over DB/network work.
-    if (isProfileName(name)) await notifyProfileSaved(name, text);
+    if (isProfileName(name)) {
+      const saved = await notifyProfileSaved(name, text);
+      options.onProfileSaved?.(saved);
+    }
     return parsed;
   });
 }

@@ -1,5 +1,8 @@
 # Documentation
 
+- [Career profile](career-profile.md): optional local manual editing, wordings and history.
+- [Résumé tailoring](resume-tailoring.md): AI proposals that fit a résumé document to one job, reviewed one by one.
+
 [English](README.md) | [中文](README.zh.md)
 
 File names such as `ai.yaml` or `data/config/ai.yaml` mean your own copy in `data/config/`; the shipped defaults in
@@ -44,6 +47,7 @@ mock-ups.
 | [insights.md](insights.md) | The /insights page: how every card is computed, `insights.yaml` |
 | [interest-suggestions.md](interest-suggestions.md) | Weekly AI suggestions: evidence rules, approve / reject, `suggest` settings |
 | [resume-kit.md](resume-kit.md) | Resume tailoring hand-off: `resume.yaml`, exporting a JD, the `/tailor` command |
+| [resume-tailoring.md](resume-tailoring.md) | Tailoring a résumé document to a job: preview of what is sent, proposal review, the "not in your profile" marks and how reliable they are, shortening, saving back, `career.yaml: tailor` |
 | [application-writer.md](application-writer.md) | Your experience library on `/me` (`stories.yaml`): what a story holds, ids, history and rollback, limits in `writer.yaml`, what is sent where; the workbench `/jobs/<id>/apply` (answers and cover letters with a per-sentence evidence check) |
 | [mcp.md](mcp.md) | Asking Claude Desktop, Claude Code or another MCP client about your jobs and applications: the optional MCP server (`pnpm mcp:serve`, `mcp.yaml`), its tools, what it gives and never gives, and the two application writer tools that are off by default |
 | [telegram.md](telegram.md) | Creating a bot, finding your chat id |

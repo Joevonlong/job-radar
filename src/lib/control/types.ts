@@ -82,6 +82,7 @@ export type WriterJobPayload = z.infer<typeof writerJobPayloadSchema>;
  * value here also means the interactive lane: only `"auto"` means batch.
  */
 export const storyExtractPayloadSchema = z.strictObject({
+  confirmed: z.literal(true).optional(),
   origin: z.enum(STORY_EXTRACT_ORIGINS),
   sourceHash: z.string().regex(/^[0-9a-f]{64}$/),
   sourceChars: z.number().int().min(0),
@@ -89,6 +90,25 @@ export const storyExtractPayloadSchema = z.strictObject({
   text: z.string().min(1).max(STORY_EXTRACT_MAX_CHARS),
 });
 export type StoryExtractPayload = z.infer<typeof storyExtractPayloadSchema>;
+
+export const careerExtractPayloadSchema = z.strictObject({
+  origin: z.enum(["resume", "self_description"]),
+  sourceHash: z.string().regex(/^[0-9a-f]{64}$/),
+  sourceChars: z.number().int().min(0).max(200000),
+  text: z.string().min(1).max(200000),
+});
+export type CareerExtractPayload = z.infer<typeof careerExtractPayloadSchema>;
+
+
+export const careerTailorPayloadSchema = z.strictObject({
+  mode: z.enum(["tailor", "shrink"]),
+  doc_id: z.string().regex(/^doc_[a-z2-7]{10}$/),
+  jobId: z.number().int().positive().nullable().default(null),
+  with_letter: z.boolean().default(false),
+  over_pages: z.number().int().positive().max(100).nullable().default(null),
+  outbound_hash: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export type CareerTailorPayload = z.infer<typeof careerTailorPayloadSchema>;
 
 /**
  * Payload of a `writer_fit` request (the "what this means for your application" button). `materials` holds the ticked company

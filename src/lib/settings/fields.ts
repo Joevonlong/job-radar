@@ -223,6 +223,7 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
   ui: ["applications", "filters", "companies", "config_editor", "web_access", "job_checks"],
   insights: [],
   resume: [],
+  career: ["import", "evidence", "document", "preview", "pdf", "check"],
   // The library limits, the story import, question limits, variants, tones and the evidence check are lists / tables: the advanced editor
   writer: ["stories", "import", "questions", "variants", "tones", "emphasis_max_chars", "jd_max_chars", "evidence"],
   language: [],
@@ -1086,6 +1087,23 @@ export const SETTINGS_SECTIONS: Record<SettingsForm, SectionDef[]> = {
   insights: withLocks("insights", insightsSections),
   resume: withLocks("resume", resumeSections),
   writer: withLocks("writer", writerSections),
+  career: withLocks("career", [
+    {
+      id: "career_general",
+      title: { section: "career_general" },
+      fields: [
+        bool("enabled", "career_enabled"),
+        int("timeout_seconds", "career_timeout"),
+        int("expiry_grace_seconds", "career_grace"),
+        int("queue_timeout_seconds", "career_queue"),
+        int("profile.max_entries", "career_entries"),
+        int("profile.max_bullets_per_entry", "career_bullets"),
+        int("profile.max_wordings_per_text", "career_wordings"),
+        int("profile.text_max_chars", "career_chars"),
+        int("history.keep_versions", "career_versions"),
+      ],
+    },
+  ]),
 };
 
 export function fieldsOf(tab: SettingsForm): FieldDef[] {

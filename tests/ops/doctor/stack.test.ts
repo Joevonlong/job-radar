@@ -1,4 +1,5 @@
 // @vitest-environment node
+import * as careerGate from "@/lib/config/career-gate";
 import { describe, expect, it, vi } from "vitest";
 
 import { createIndeedChannel, createJobspyGoogleChannel, createLinkedinGuestChannel, JOBSPY_CHANNEL_IDS } from "@/lib/channels/jobspy";
@@ -277,4 +278,17 @@ describe("runner.heartbeat", () => {
     const r = await only(runnerHeartbeatCheck, makeContext({ probes: { sources: async () => sourcesView({ lastHeartbeatAt: null }) } }));
     expect(r).toMatchObject({ status: "fail", detail: "runner 从来没有写过心跳" });
   });
+});
+
+it.each([false, true])("expects PDF only with both the feature and active profile (enabled=%s)", async (enabled) => {
+  const gate = vi.spyOn(careerGate, "readCareerGate").mockResolvedValue({ enabled });
+  try {
+    for (const active of [false, true]) {
+      const ctx = makeContext({ commands: {
+        "docker compose -p job-radar config --services": ran(`db\nweb\nrunner\njobspy${active ? "\ncareer-pdf" : ""}`),
+      } });
+      const outcomes = await results(composeServicesCheck, ctx);
+      expect(outcomes.some((item) => item.id === "compose.career-pdf")).toBe(enabled && active);
+    }
+  } finally { gate.mockRestore(); }
 });

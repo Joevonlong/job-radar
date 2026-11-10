@@ -204,6 +204,25 @@ describe("writes", () => {
 
   const userText = (file: string) => fs.readFileSync(path.join(tmp.configDir, file), "utf8");
 
+  it("blocks PDF endpoint changes through both settings and the advanced editor", async () => {
+    const career = loadConfig("career");
+    expect(await saveSettings({ tab: "career", draft: { "pdf.url": "http://other.invalid" },
+      baseHash: layeredConfigFingerprint("career") })).toMatchObject({ status: "saved" });
+    expect(reloadConfig("career").pdf.url).toBe(career.pdf.url);
+    const write = await writeConfig("career", { ...career, pdf: { ...career.pdf, url: "http://other.invalid" } })
+      .catch((error: unknown) => error);
+    expect(write).toMatchObject({ kind: "protected", issues: [{ path: "pdf.url" }] });
+    const loaded = loadAdvancedFile("career");
+    if (!loaded.ok) throw new Error("not loadable");
+    const text = loaded.data.text.replace(career.pdf.url, "http://other.invalid");
+    expect(text).not.toBe(loaded.data.text);
+    const validation = await validateAdvanced({ file: "career", text });
+    expect(validation.issues).toContainEqual(expect.objectContaining({ path: "pdf.url", source: "protected" }));
+    expect(await saveAdvanced({ file: "career", text, baseHash: loaded.data.hash,
+      baseLayer: loaded.data.layer, confirmOverride: false })).toMatchObject({ status: "invalid" });
+    expect(reloadConfig("career").pdf.url).toBe(career.pdf.url);
+  });
+
   it("writeConfig refuses a changed protected key and leaves the file untouched", async () => {
     const before = userText("ai.yaml");
     const ai = structuredClone(loadConfig("ai"));

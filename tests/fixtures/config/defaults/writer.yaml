@@ -18,3 +18,7 @@ stories:
   text_max_chars: 1500
   # How many stories a new application question starts with selected (best skill overlap with the job first)
   preselect_count: 4
+
+import:
+  title_words: [Biography]
+  sensitive_labels: [Birthplace, Address]

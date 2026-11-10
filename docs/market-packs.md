@@ -62,6 +62,24 @@ required. A list in your `data/config/pipeline.yaml` replaces the shipped `pipel
 The `generic` pack is always loaded: the world country table, the regions `eu`, `eea`, `europe`, `dach`, `nordics`,
 the city table, US state codes and English rules. The market's own pack is added on top.
 
+## How a place name is read
+
+The filter, the ranking, the city groups, the "View posting" link and the handpicked channel all read a place name with
+one lookup. A place can be Worldwide, a region, a country or a city; a name that is both a country and a city
+(Singapore) is read as the country.
+
+- **Any spelling in the market tables counts as the same city.** The `cities` table lists each spelling with its
+  canonical name and country, so `Munich`, `München` and `Muenchen` are one city, whichever of them you put in your
+  locations or a posting uses.
+- **Your `city_aliases` join that city; they do not split it.** Spellings you list for a canonical city are added to the
+  market's spellings of the same city (a `Hanover` alias with `Hannover City` still matches a `Hannover` posting), and
+  your canonical name is the one shown. Keys of `metro_areas` and `metro_regions` are read the same way, so
+  `Koeln: [Hürth]` applies to a `Cologne` preference.
+- **Distinct cities stay distinct.** A spelling exactly as written always wins. Accents and letter case never tell two cities apart (`Münster` and `Munster` are one key), but the umlaut spellings
+  (`ae`, `oe`, `ue` for `ä`, `ö`, `ü`) are only a fallback, and only when they lead to one city, so `Au` and `Aue`
+  never match each other when both are in the table.
+- A name no table knows is not an error: it matches only itself.
+
 ## How the effective pipeline config is built
 
 The code reads `pipeline.yaml` together with the packs (`loadPipeline()`):
@@ -197,6 +215,7 @@ EUR are read as EUR.
 | `remote_scope: {region: [...]}` | Each token as written, as a remote-only place |
 | `remote_scope: worldwide` | `Worldwide` as a remote-only place |
 | `remote_scope: none` | `remote` removed from `workplace`, unless it's the only value |
+| A place in both `locations` and `remote_scope` | One ✈ entry: moving there includes working remotely there |
 
 Results that change: with `none`, a remote job in an allowed city was shown and is now hidden as `workplace_not_wanted`; with `none` and `workplace: [remote]`, remote jobs are now checked instead of hidden; with `{region: [...]}` that leaves out home, home-country remote jobs now show; a foreign city in `locations` becomes a ✈ place and starts matching. If the first of `locations` was a foreign city, it becomes the home city, and a job there is compared with the home country.
 
@@ -210,7 +229,19 @@ Results that change: with `none`, a remote job in an allowed city was shown and 
 | A foreign city in `locations` | Its remote search is added |
 | `workplace` without `remote`, and a scope other than `none` | The remote search is dropped, because this can't be told apart from a migrated `none` |
 
-Older code can't read version 3. Before going back to it, restore the file from a backup taken before the upgrade or from the profile history on `/me`.
+Every read of `preferences.yaml`, whoever wrote it (the forms, the setup wizard, `pnpm run setup`, an answers file or an edit by hand), applies the same rules to `places`:
+
+- Worldwide is remote only.
+- A place that is the home city is dropped.
+- A place named twice is one entry, at its first position, and it is ✈ if any of them is. Names compare with case, accents and spaces ignored; where the market's tables are read, two spellings of one place (Munich, München) count as one too.
+
+There is no limit on the number of places or the length of a name, as there was none on `locations`.
+
+The remote scope follows from the places: Worldwide anywhere means worldwide; otherwise the countries and regions among them, remote-only and ✈ alike, with the home country added when none of them is remote-only; with no country or region it is the home country. So `locations: [Berlin, CH]` with `remote_scope: {region: [CH]}` still keeps Swiss remote jobs after the upgrade, and German ones too.
+
+The setup wizard's Market step writes search.yaml's `locations` and `remote_scope` from the places, except that `remote_scope: none` (remote searches switched off) stays until you change it in `/settings`.
+
+Older code can't read version 3. Before going back to it, put back the version 2 file saved before the upgrade: `pnpm config:migrate --write`, which a deploy runs, copies it to `data/config/.backup/<timestamp>/profile/preferences.yaml`, or take it from your own backup ([Backup and restore](backup-restore.md)). Restoring an older version from the profile history on `/me` doesn't help: the save converts it to version 3 again.
 
 ## Renamed configuration keys
 

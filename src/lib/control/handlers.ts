@@ -83,6 +83,8 @@ const DEFAULT_HANDLERS: Record<ControlRequestKind, ControlHandler> = {
   company_research: noHandler,
   writer_job: noHandler,
   story_extract: noHandler,
+  career_extract: noHandler,
+  career_tailor: noHandler,
   writer_fit: noHandler,
   models_sync: noHandler,
 };
