@@ -103,7 +103,7 @@ export { applyToFull, planToFull, restoreConfigBackup, type AppliedToFull, type 
 export { newFileFormat, type NewFileFormat } from "./new-file-format";
 export { pruneConfigBackups } from "./migrations/backups";
 export { DEPLOY_WRITE_PLAN, planConfigWrites, type ConfigWritesPlan, type PlannedConfigWrite } from "./migrations/plan-writes";
-export { ensureProfileFiles, ensureProfileFilesPlan, setOnProfileSaved, type EnsureProfileResult, type ProfileSavedHook } from "./profile";
+export { ensureProfileFiles, ensureProfileFilesPlan, setOnProfileSaved, type EnsureProfileResult, type ProfileSavedHook, type ProfileSavedResult } from "./profile";
 export {
   CONFIG_NAMES,
   configRegistry,

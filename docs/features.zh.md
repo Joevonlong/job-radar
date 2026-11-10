@@ -1,5 +1,8 @@
 # 功能和截图
 
+- [职业档案](career-profile.zh.md)：可选的本机手动编辑、多写法和历史版本。
+- [简历定制](resume-tailoring.zh.md)：AI 提议怎么让一份简历文档贴合一个岗位，由你逐条审核。
+
 [English](features.md) | [中文](features.zh.md)
 
 ## 这是什么

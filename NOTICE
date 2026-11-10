@@ -24,3 +24,7 @@ Fonts. The web serves Archivo, Archivo Black, IBM Plex Mono and Noto Sans SC, ea
 (reserved font names include "Plex" and "Source"). The files come unmodified from pinned npm packages (Fontsource, which
 republishes the Google Fonts files). The licence texts, with each copyright notice taken from upstream, are in
 licenses/fonts/ in the repository and in /app/licenses/fonts/ in the web image.
+
+Generated resume PDFs embed Inter, IBM Plex Sans, Newsreader and IBM Plex Mono, under the same SIL Open Font License 1.1.
+The web does not serve Inter, IBM Plex Sans or Newsreader. Their licence texts and copyright notices are also in
+licenses/fonts/.

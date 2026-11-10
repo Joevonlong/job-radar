@@ -18,6 +18,30 @@ const REPO = path.resolve(import.meta.dirname, "../..");
 
 /** Writes that are under the lock: what the second check below proves. */
 const LOCKED = new Map<string, string>([
+  ["src/lib/career/tailor/proposals.ts#writeProposals", "guarded publication and rollback under file and config locks"],
+  ["src/lib/career/tailor/proposals.ts#removeProposal", "removes reviewed proposals under file and config locks"],
+  ["src/lib/career/store/documents.ts#createDocument", "counts and creates documents under the config write lock"],
+  ["src/lib/career/store/documents.ts#persistDocument", "commits edits and restores under document and config write locks"],
+  ["src/lib/career/store/documents.ts#deleteDocument", "fenced removal of document, proposals and history"],
+  ["src/lib/career/store/preferences.ts#savePreferences", "private preferences with stale detection under both locks"],
+  ["src/lib/career/store/apply-state.ts#saveApplyState", "the profile version last applied to matching, under both locks"],
+  ["src/lib/career/store/images.ts#saveImage", "publishes image bytes and removes the alternate extension under both locks"],
+  ["src/lib/career/store/images.ts#deleteImage", "fenced image removal under both locks"],
+  ["src/lib/career/store/profile.ts#persistProfile", "profile commits under the config write lock"],
+  ["src/lib/career/contact/store.ts#saveContact", "contact commits under the config write lock"],
+  ["src/lib/career/store/history.ts#writeVersion", "profile or document versions under their history config lock"],
+  ["src/lib/config/write.ts#atomicWrite", "atomic commits require all callers to hold the config lock"],
+  ["src/lib/config/write.ts#commitUserText", "validated user config commits under the config lock"],
+  ["src/lib/config/write.ts#writeConfigText", "raw config commits under the config lock"],
+  ["src/lib/config/private-file.ts#copyPrivateIfMissing", "private initial file under the config lock"],
+  ["src/lib/config/init.ts#writeIfMissing", "initial config file under the config lock"],
+  ["src/lib/setup/state.ts#ensurePendingSetupFile", "initial setup state under the config lock"],
+  ["src/lib/career/extract/draft-store.ts#pruneCareerDrafts", "expired career drafts under the config write lock"],
+  ["src/lib/career/extract/draft-store.ts#discardCareerDraft", "reviewed career drafts under their file and config write locks"],
+  ["src/lib/career/extract/draft-store.ts#writeCareerDraft", "rolls back publication before releasing the file and config write locks"],
+  ["src/lib/career/store/history.ts#prune", "profile history retention under its config write lock"],
+  ["src/lib/career/store/delete.ts#clearCareerHistory", "removes history under the profile and config write locks"],
+  ["src/lib/career/store/delete.ts#deleteCareerData", "removes career data under the profile, contact and config write locks"],
   ["src/lib/config/atomic.ts#commitConfigFile", "the commit of a config or profile file (it also refuses at run time outside the lock)"],
   ["src/lib/config/atomic.ts#publishNoReplace", "the last step of commitConfigFile"],
   ["src/lib/config/editor-backup.ts#backupConfigText", "the copy of the old text in .backup/editor/"],
@@ -80,6 +104,8 @@ const NOT_LOCKED = new Map<string, string>([
   ["src/lib/ai/providers/process.ts#makeScratchDir", "the provider process's scratch directory"],
   ["scripts/simhash-analyze.ts#exportSnapshot", "the snapshot file the operator names"],
   ["scripts/i18n-catalog.ts#main", "the generated message catalogs in the repository"],
+  ["scripts/career-engine-fonts.ts#main", "the generated src/lib/career/engine/fonts.generated.ts in the repository"],
+  ["scripts/career-print-baseline.ts#main", "PDFs, text and pages.json in the output directory the operator names (it refuses the baseline directory)"],
   ["scripts/market-regress.ts#main", "the regression report in the repository"],
   ["scripts/demo-finish.ts#makeGif", "the rendered pictures in the repository"],
   ["scripts/demo-finish.ts#<module>", "the rendered pictures in the repository"],
@@ -157,10 +183,14 @@ function directWrites(): Map<string, ts.CallExpression[]> {
   const writes = new Map<string, ts.CallExpression[]>();
   for (const { file, source } of scanned) {
     const { namespaces, named } = fsBindings(source);
-    if (namespaces.size === 0 && named.size === 0) continue;
     visit(source, (node) => {
       if (!ts.isCallExpression(node)) return;
       const callee = node.expression;
+      if (ts.isIdentifier(callee) && callee.text === "commitConfigFile") {
+        const key = `${file}#${enclosingFunction(node)}`;
+        writes.set(key, [...(writes.get(key) ?? []), node]);
+        return;
+      }
       let name: string | null = null;
       if (ts.isPropertyAccessExpression(callee) && rootIdentifier(callee.expression) !== null && namespaces.has(rootIdentifier(callee.expression) ?? "")) name = callee.name.text;
       else if (ts.isIdentifier(callee) && named.has(callee.text)) name = callee.text;

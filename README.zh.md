@@ -57,7 +57,7 @@
 ```bash
 git clone https://github.com/Joevonlong/job-radar.git
 cd job-radar
-git checkout v2.0.1                  # 最新发布版；main 是开发分支
+git checkout "$(git tag --list 'v*' --sort=-v:refname | head -1)"  # 最新发布版；main 是开发分支
 cp .env.example .env                 # 每个值都有能用的默认值；密钥以后填在这里
 ```
 

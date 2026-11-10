@@ -7,6 +7,8 @@ import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useId, useRef, useState, useTransition } from "react";
 
 import { adoptStoryDraftAction, discardStoryDraftAction, storyExtractStatusAction } from "@/app/me/actions";
+import { SendPreview } from "@/components/outbound/send-preview";
+import { preparedTextSchema, type PreparedText } from "@/lib/outbound/preview";
 import { QueueHint } from "@/components/control/queue-hint";
 import { useControlRequest, type ControlRequestStage } from "@/components/control/use-control-request";
 import { nodeLabels } from "@/components/settings/field-control";
@@ -63,7 +65,10 @@ export function StoryImport({ view, baseHash, dirty }: StoryImportProps) {
   const [sending, setSending] = useState(false);
   const [waiting, setWaiting] = useState<{ requestId: number; stage?: ControlRequestStage; queue?: ControlQueueView | null } | null>(view.open);
   const [failure, setFailure] = useState<Failure | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [dismissedInitialError, setDismissedInitialError] = useState(false);
+  const [preview, setPreview] = useState<PreparedText | null>(null);
+  const [previewOrigin, setPreviewOrigin] = useState<StoryExtractOrigin>("resume");
+  const [previewRevision, setPreviewRevision] = useState(0);
 
   const errorText = (next: Failure): string => t(`error.${next.error}`, { time: next.resumeAt ? formatClock(format, next.resumeAt) : "none", maxMb: (view.maxFileBytes / 1_000_000).toFixed(1), formats: view.formats.join(", ") });
 
@@ -98,40 +103,60 @@ export function StoryImport({ view, baseHash, dirty }: StoryImportProps) {
   });
 
   const busy = sending || waiting !== null;
+  const visibleFailure = failure ?? (!dismissedInitialError && view.error ? { error: view.error, resumeAt: null } : null);
 
-  async function send(origin: StoryExtractOrigin) {
+  async function prepare(origin: StoryExtractOrigin, input?: { text: string; name: string; address: string; mode: "values" }): Promise<boolean> {
     setFailure(null);
-    setNotice(null);
-    const form = new FormData();
-    form.set("origin", origin);
-    if (origin === "self_description") form.set("text", text);
-    if (origin === "resume") {
-      if (!file) return;
+    setDismissedInitialError(true);
+    let body: FormData | string;
+    if (input) body = JSON.stringify(input);
+    else if (origin === "profile") body = JSON.stringify({ origin });
+    else if (origin === "self_description") body = JSON.stringify({ text });
+    else {
+      if (!file) return false;
       // the server checks this too; refused here, the file does not leave the browser
-      if (file.size > view.maxFileBytes) {
-        fail({ error: "too_large", resumeAt: null });
-        return;
-      }
-      form.set("file", file);
+      if (file.size > view.maxFileBytes) { fail({ error: "too_large", resumeAt: null }); return false; }
+      body = new FormData();
+      body.set("file", file);
     }
     setSending(true);
     try {
-      const response = await fetch(ROUTE, { method: "POST", body: form });
-      const parsed = storyExtractResponseSchema.safeParse(await response.json().catch(() => null));
-      if (!parsed.success) {
-        fail({ error: "unavailable", resumeAt: null });
-      } else if (parsed.data.ok) {
-        setWaiting({ requestId: parsed.data.requestId });
-        if (parsed.data.truncated) setNotice(t("truncated", { max: format.number(view.maxChars) }));
-      } else {
-        const error: StoryExtractRouteError = parsed.data.error;
-        fail({ error, resumeAt: null });
+      const response = await fetch(`${ROUTE}/prepare`, { method: "POST", ...(typeof body === "string" ? { headers: { "Content-Type": "application/json" } } : {}), body });
+      const raw: unknown = await response.json();
+      const parsed = preparedTextSchema.safeParse(raw);
+      if (parsed.success) {
+        setPreview((old) => ({ ...parsed.data, removed: parsed.data.removed + (input ? old?.removed ?? 0 : 0), truncated: parsed.data.truncated || !!(input && old?.truncated) }));
+        setPreviewOrigin(origin);
+        if (!input) setPreviewRevision((value) => value + 1);
+        return true;
       }
-    } catch {
-      fail({ error: "unavailable", resumeAt: null });
-    } finally {
-      setSending(false);
-    }
+      const error = storyExtractResponseSchema.safeParse(raw);
+      fail({ error: error.success && !error.data.ok ? error.data.error : "unavailable", resumeAt: null });
+    } catch { fail({ error: "unavailable", resumeAt: null }); }
+    finally { setSending(false); }
+    return false;
+  }
+
+  async function send(confirmedText: string) {
+    setFailure(null);
+    setSending(true);
+    try {
+      const response = await fetch(ROUTE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ origin: previewOrigin, text: confirmedText }) });
+      const parsed = storyExtractResponseSchema.safeParse(await response.json().catch(() => null));
+      if (!parsed.success) fail({ error: "unavailable", resumeAt: null });
+      else if (parsed.data.ok) {
+        setWaiting({ requestId: parsed.data.requestId });
+        setPreview(null);
+      } else {
+        const result = parsed.data;
+        if (result.error === "review_again" && result.text !== undefined) {
+          setPreview((old) => old && ({ ...old, text: result.text!, chars: result.text!.length, highlights: result.highlights ?? [] }));
+          setPreviewRevision((value) => value + 1);
+        }
+        fail({ error: result.error, resumeAt: null });
+      }
+    } catch { fail({ error: "unavailable", resumeAt: null }); }
+    finally { setSending(false); }
   }
 
   const providers = view.providers.length > 0 ? ((labels) => view.providers.map((id) => labels[id] ?? id).join(" → "))(nodeLabels(tSettings, view.providers)) : t("noProvider");
@@ -147,6 +172,14 @@ export function StoryImport({ view, baseHash, dirty }: StoryImportProps) {
       <CardContent className="flex flex-col gap-4 px-4 md:px-5">
         {view.enabled ? (
           <>
+            {view.careerEnabled ? (
+              <p className="text-body-sm" data-testid="story-import-career">
+                {t("useCareer")}{" "}
+                <Link href="/career" className={INK_LINK}>
+                  {t("useCareerLink")}
+                </Link>
+              </p>
+            ) : <>
             <div className="bg-soft rounded-card flex flex-col gap-1 px-3 py-2.5" data-testid="story-import-disclosure">
               <p className="text-body-sm" data-testid="story-import-providers">
                 <span className="font-semibold">{t("sendsTo")}</span> {providers}
@@ -158,8 +191,9 @@ export function StoryImport({ view, baseHash, dirty }: StoryImportProps) {
                 </a>
               </p>
             </div>
+            {preview ? <SendPreview key={previewRevision} preview={preview} busy={busy} onChange={setPreview} onPrepare={(input) => prepare(previewOrigin, input)} onSend={(value) => void send(value)} onCancel={() => { setPreview(null); setFile(null); }} /> : <>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void send("profile")} data-testid="story-import-profile">
+              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void prepare("profile")} data-testid="story-import-profile">
                 <Sparkles aria-hidden />
                 {t("fromProfile")}
               </Button>
@@ -177,8 +211,8 @@ export function StoryImport({ view, baseHash, dirty }: StoryImportProps) {
                 <Field id={pasteId} label={t("pasteLabel")} hint={t("pasteHint", { max: format.number(view.maxChars) })} error={undefined}>
                   <Textarea id={pasteId} rows={6} value={text} onChange={(event) => setText(event.target.value)} disabled={busy} autoComplete="off" data-testid="story-import-text" />
                 </Field>
-                <Button type="button" variant="primary" size="sm" disabled={busy || text.trim() === ""} onClick={() => void send("self_description")} data-testid="story-import-send-text">
-                  {t("send")}
+                <Button type="button" variant="primary" size="sm" disabled={busy || text.trim() === ""} onClick={() => void prepare("self_description")} data-testid="story-import-send-text">
+                  {t("preview")}
                 </Button>
               </div>
             ) : null}
@@ -201,11 +235,13 @@ export function StoryImport({ view, baseHash, dirty }: StoryImportProps) {
                 <p id={`${fileId}-hint`} className="text-ink-3 text-body-sm">
                   {t("fileHint", { formats: view.formats.join(", "), maxMb: (view.maxFileBytes / 1_000_000).toFixed(1) })}
                 </p>
-                <Button type="button" variant="primary" size="sm" disabled={busy || file === null} onClick={() => void send("resume")} data-testid="story-import-send-file">
-                  {t("send")}
+                <Button type="button" variant="primary" size="sm" disabled={busy || file === null} onClick={() => void prepare("resume")} data-testid="story-import-send-file">
+                  {t("preview")}
                 </Button>
               </div>
             ) : null}
+            </>}
+            </>}
             {busy ? (
               <div className="flex flex-col gap-1" role="status" data-testid="story-import-waiting">
                 <p className="text-body-sm flex items-center gap-2">
@@ -215,11 +251,13 @@ export function StoryImport({ view, baseHash, dirty }: StoryImportProps) {
                 <QueueHint queue={wait.queue} stage={wait.stage} live={false} />
               </div>
             ) : null}
-            {notice ? <p className="text-warning-text text-body-sm" role="status" data-testid="story-import-truncated">{notice}</p> : null}
-            {failure && !busy ? (
-              <p role="alert" className="text-bad text-body-sm font-semibold [overflow-wrap:anywhere]" data-testid="story-import-error" data-error={failure.error}>
-                {errorText(failure)}
-              </p>
+            {visibleFailure && !busy ? (
+              <div className="flex items-center gap-2">
+                <p role="alert" className="text-bad text-body-sm font-semibold [overflow-wrap:anywhere]" data-testid="story-import-error" data-error={visibleFailure.error}>
+                  {errorText(visibleFailure)}
+                </p>
+                {visibleFailure.error === "preview_required" ? <Button type="button" variant="ghost" size="sm" onClick={() => { setFailure(null); setDismissedInitialError(true); }}>{t("dismissError")}</Button> : null}
+              </div>
             ) : null}
           </>
         ) : (

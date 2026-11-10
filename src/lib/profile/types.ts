@@ -25,7 +25,14 @@ export type FormErrorKey =
 /** State of a profile Server Action as seen by `useActionState`. */
 export type ProfileActionState =
   | { status: "idle" }
-  | { status: "saved"; kind: ProfileName; /** Distinguishes two consecutive saves. */ nonce: number }
+  | {
+      status: "saved";
+      kind: ProfileName;
+      /** Distinguishes two consecutive saves. */
+      nonce: number;
+      /** Scores this save newly marked stale (me.yaml and preferences.yaml saves through `writeConfig`); absent when unknown. */
+      staleMarked?: number;
+    }
   | {
       status: "error";
       kind: ProfileName;

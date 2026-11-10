@@ -229,7 +229,7 @@ const QUOTED = /"([^"\n]{2,80})"|“([^”\n]{2,80})”|„([^“”\n]{2,80})[�
  * capitals; capitalised words that do not open the sentence (runs of them as one name; with `multi`, only runs of two or
  * more). Stopwords and the language's first-person words never count. Lower-case names are not found.
  */
-export function nameCandidates(text: string, language: string, config: WriterEvidenceConfig): string[] {
+export function nameCandidates(text: string, language: string, config: Pick<WriterEvidenceConfig, "names" | "first_person">): string[] {
   const rules = config.names;
   const out: string[] = [];
   const stop = new Set(rules.stopwords);

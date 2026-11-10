@@ -7,7 +7,7 @@ import type { SourcesView } from "@/lib/sources/view";
 import { formatUsd } from "./format";
 
 // `probe`: the "test" button of the AI health card
-const TASKS = ["score", "signals", "translate", "summarize", "suggest", "breakdown", "traps", "salary_lookup", "company_research", "write", "story_extract", "probe"] as const;
+const TASKS = ["score", "signals", "translate", "summarize", "suggest", "breakdown", "traps", "salary_lookup", "company_research", "write", "story_extract", "career_extract", "career_tailor", "probe"] as const;
 const SUBSCRIPTION_PROVIDERS = new Set(["claude-cli", "codex-cli"]);
 
 /** `ai_usage` of this month per provider and task: calls, tokens and the estimated cost. */

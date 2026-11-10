@@ -57,7 +57,7 @@ You need Docker with Compose 2.24 or newer, Node 22.23.4 or a later 22.x with th
 ```bash
 git clone https://github.com/Joevonlong/job-radar.git
 cd job-radar
-git checkout v2.0.1                  # the latest release; main is the development branch
+git checkout "$(git tag --list 'v*' --sort=-v:refname | head -1)"  # newest release; main is the development branch
 cp .env.example .env                 # every value has a working default; secrets go here later
 ```
 

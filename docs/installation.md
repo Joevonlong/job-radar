@@ -63,11 +63,13 @@ Optional, for later:
 ```bash
 git clone https://github.com/Joevonlong/job-radar.git
 cd job-radar
-git checkout v2.0.1          # recommended: stay on a release (newest first: git tag --list 'v*' --sort=-v:refname)
+git tag --list 'v*' --sort=-v:refname | head -1  # newest release tag
+git checkout <tag>                            # replace <tag> with that tag
 ```
 
-`main` is the development branch and can change between releases. Staying on a release tag makes updating
-predictable (see [Updating](#updating)). Git reports a "detached HEAD" after checking out a tag; that is expected.
+From 2.1.0 on, a plain clone already lands on the newest release (`stable`); checking out a tag is optional.
+`main` is the development branch and can change between releases. Release tags stay available for a specific version
+(see [Updating](#updating)). Git reports a "detached HEAD" after checking out a tag; that is expected.
 
 ## 2. Optional: create `.env`
 
@@ -320,10 +322,13 @@ need to do anything.
 
 ```bash
 git status                                     # must be clean (data/ and .env are ignored, that's fine)
-git fetch --tags && git tag --list 'v*' --sort=-v:refname
-scripts/ops/deploy.sh --ref v2.0.1 --dry-run   # shows every step, changes nothing
-scripts/ops/deploy.sh --ref v2.0.1
+git fetch --tags && git tag --list 'v*' --sort=-v:refname | head -1
+scripts/ops/deploy.sh --ref <tag> --dry-run   # shows every step, changes nothing
+scripts/ops/deploy.sh --ref <tag>
 ```
+
+Replace `<tag>` with the tag listed above. From 2.1.0 on, users on `stable` can instead run
+`git pull --ff-only && scripts/ops/deploy.sh`; see the [release channels](upgrade.md#upgrade-to-a-release).
 
 The deploy script checks the tools, checks out the tag, installs dependencies, migrates your config files (originals
 kept in `data/config/.backup/`), takes a database backup, rebuilds the images, waits for a running cycle to finish,

@@ -1,0 +1,143 @@
+language: de
+experience:
+  - company:
+      value: Funkelwald Forschung GmbH
+      quote: Funkelwald Forschung GmbH
+    role:
+      value: Forscher
+      quote: Forscher
+    start:
+      value: 2021-01
+      quote: 01/2021
+    end:
+      value: present
+      quote: seit 01/2021
+    bullets:
+      - value: Entwickelte drei reproduzierbare Experimente zur Ablaufplanung.
+        quote: Entwickelte drei reproduzierbare Experimente zur Ablaufplanung.
+      - value: Verglich Messergebnisse unter wechselnden Lastbedingungen.
+        quote: Verglich Messergebnisse unter wechselnden Lastbedingungen.
+      - value: Stellte Ergebnisse in internen Forschungsrunden vor.
+        quote: Stellte Ergebnisse in internen Forschungsrunden vor.
+      - value: Erfasste Rückmeldungen aus regelmäßigen Gesprächen und übersetzte sie in überprüfbare nächste Schritte für das Team.
+        quote: Erfasste Rückmeldungen aus regelmäßigen Gesprächen und übersetzte sie in überprüfbare nächste Schritte für das Team.
+      - value: Stimmte Prioritäten mit angrenzenden Bereichen ab und hielt Entscheidungen mit Gründen und offenen Fragen schriftlich fest.
+        quote: Stimmte Prioritäten mit angrenzenden Bereichen ab und hielt Entscheidungen mit Gründen und offenen Fragen schriftlich fest.
+      - value: Prüfte Ergebnisse anhand vereinbarter Beispiele und besprach Abweichungen frühzeitig mit den beteiligten Kolleginnen und Kollegen.
+        quote: Prüfte Ergebnisse anhand vereinbarter Beispiele und besprach Abweichungen frühzeitig mit den beteiligten Kolleginnen und Kollegen.
+  - company:
+      value: Sternmoos Institut
+      quote: Sternmoos Institut
+    role:
+      value: Wissenschaftlicher Mitarbeiter
+      quote: Wissenschaftlicher Mitarbeiter
+    start:
+      value: 2017-02
+      quote: 02/2017
+    end:
+      value: 2020-12
+      quote: 12/2020
+    bullets:
+      - value: Erstellte Modelle für simulierte Warteschlangen.
+        quote: Erstellte Modelle für simulierte Warteschlangen.
+      - value: Betreute studentische Projekte zur Datenauswertung.
+        quote: Betreute studentische Projekte zur Datenauswertung.
+      - value: Dokumentierte Versuchsaufbau und Grenzen der Ergebnisse.
+        quote: Dokumentierte Versuchsaufbau und Grenzen der Ergebnisse.
+      - value: Bereitete Übergaben für neue Mitarbeitende vor und ergänzte die Unterlagen um häufige Fragen und nachvollziehbare Beispiele.
+        quote: Bereitete Übergaben für neue Mitarbeitende vor und ergänzte die Unterlagen um häufige Fragen und nachvollziehbare Beispiele.
+      - value: Verglich unterschiedliche Lösungswege hinsichtlich Aufwand und Nutzen und stellte die Ergebnisse in kurzen Besprechungen vor.
+        quote: Verglich unterschiedliche Lösungswege hinsichtlich Aufwand und Nutzen und stellte die Ergebnisse in kurzen Besprechungen vor.
+      - value: Verfolgte Rückmeldungen nach der Einführung und plante gemeinsam mit dem Team gezielte Verbesserungen für den nächsten Arbeitszyklus.
+        quote: Verfolgte Rückmeldungen nach der Einführung und plante gemeinsam mit dem Team gezielte Verbesserungen für den nächsten Arbeitszyklus.
+  - company:
+      value: Farnkiesel Labor GmbH
+      quote: Farnkiesel Labor GmbH
+    role:
+      value: Forschungsassistenz
+      quote: Forschungsassistenz
+    start:
+      value: 2014-01
+      quote: 01/2014
+    end:
+      value: 2017-01
+      quote: 01/2017
+    bullets:
+      - value: Bereitete Messreihen für vergleichbare Versuche zur Modellierung von Abläufen vor.
+        quote: Bereitete Messreihen für vergleichbare Versuche zur Modellierung von Abläufen vor.
+      - value: Prüfte Eingabedaten anhand vereinbarter Qualitätsregeln und hielt Fehlerquellen fest.
+        quote: Prüfte Eingabedaten anhand vereinbarter Qualitätsregeln und hielt Fehlerquellen fest.
+      - value: Unterstützte die Auswertung der Ergebnisse und erstellte übersichtliche Tabellen.
+        quote: Unterstützte die Auswertung der Ergebnisse und erstellte übersichtliche Tabellen.
+      - value: Dokumentierte die Durchführung und übergab die Unterlagen an das Forschungsteam.
+        quote: Dokumentierte die Durchführung und übergab die Unterlagen an das Forschungsteam.
+education:
+  - school:
+      value: Universität Morgenkiesel
+      quote: Universität Morgenkiesel
+    degree:
+      value: Dr Informatik
+      quote: Dr Informatik
+    start:
+      value: "2015"
+      quote: "2015"
+    end:
+      value: "2019"
+      quote: "2019"
+    summary:
+      value: "Schwerpunkt: Angewandte Methoden und Teamarbeit"
+      quote: "Schwerpunkt: Angewandte Methoden und Teamarbeit"
+skills:
+  - group: Programmierung
+    items:
+      - value: Rust
+        quote: Rust
+      - value: Python
+        quote: Python
+  - group: Forschung
+    items:
+      - value: Simulation
+        quote: Simulation
+      - value: Versuchsplanung
+        quote: Versuchsplanung
+languages:
+  - name:
+      value: Deutsch
+      quote: Deutsch
+    level:
+      value: Muttersprache
+      quote: Muttersprache
+  - name:
+      value: Englisch
+      quote: Englisch
+    level:
+      value: B2
+      quote: B2
+custom_sections:
+  - title:
+      value: Publikationen
+      quote: Publikationen
+    items:
+      - kind: entry
+        heading:
+          value: Warteschlangen im Nebel
+          quote: Warteschlangen im Nebel
+        date:
+          value: "2021"
+          quote: "2021"
+        bullets: []
+  - title:
+      value: Auszeichnungen
+      quote: Auszeichnungen
+    items:
+      - kind: entry
+        heading:
+          value: Kieselpreis für offene Methoden
+          quote: Kieselpreis für offene Methoden
+        date:
+          value: "2022"
+          quote: "2022"
+        bullets: []
+summary:
+  value: Erfahrene Fachkraft mit Freude an Zusammenarbeit und sorgfältiger Analyse. Ich verbinde praktische Umsetzung mit verständlicher Kommunikation und begleite Aufgaben von der ersten Klärung bis zur Übergabe. Besonders wichtig sind mir nachvollziehbare Entscheidungen, gute Dokumentation und Lösungen, die im Alltag zuverlässig funktionieren. Ich arbeite strukturiert, teile Wissen offen und berücksichtige unterschiedliche Perspektiven. Auch bei wechselnden Anforderungen achte ich auf klare Verantwortlichkeiten und regelmäßige Rückmeldungen.
+  quote: Erfahrene Fachkraft mit Freude an Zusammenarbeit und sorgfältiger Analyse. Ich verbinde praktische Umsetzung mit verständlicher Kommunikation und begleite Aufgaben von der ersten Klärung bis zur Übergabe. Besonders wichtig sind mir nachvollziehbare Entscheidungen, gute Dokumentation und Lösungen, die im Alltag zuverlässig funktionieren. Ich arbeite strukturiert, teile Wissen offen und berücksichtige unterschiedliche Perspektiven. Auch bei wechselnden Anforderungen achte ich auf klare Verantwortlichkeiten und regelmäßige Rückmeldungen.

@@ -69,8 +69,27 @@ function snapshot(dir: string): Record<string, string> {
 describe("the registry", () => {
   it("marks activity log, delivery audit, job archive, job search, models, pipeline, pipeline board, signal presets and traps as shipped, the rest of the config files as user files", () => {
     expect([...SHIPPED_CONFIG_NAMES].sort()).toEqual(["activityLog", "currentScores", "deliveryAudit", "jobArchive", "jobSearch", "models", "pipeline", "pipelineBoard", "signalPresets", "traps"]);
-    expect(USER_CONFIG_NAMES).toEqual(expect.arrayContaining(["schedule", "search", "channels", "ai", "notify", "interests", "ui", "breakdown", "resume", "insights", "language", "setup", "salary", "mcp", "writer", "research", "replies"]));
-    expect(USER_CONFIG_NAMES).toHaveLength(17);
+    expect(USER_CONFIG_NAMES).toEqual(expect.arrayContaining([
+      "schedule",
+      "search",
+      "channels",
+      "ai",
+      "notify",
+      "interests",
+      "ui",
+      "breakdown",
+      "resume",
+      "insights",
+      "language",
+      "setup",
+      "salary",
+      "mcp",
+      "writer",
+      "research",
+      "replies",
+      "career",
+    ]));
+    expect(USER_CONFIG_NAMES).toHaveLength(18);
   });
 });
 

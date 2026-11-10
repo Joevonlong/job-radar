@@ -11,6 +11,7 @@ import { z } from "zod";
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const ENGINE = "src/lib/career/engine";
 const CAREER = ["src/lib/career", "src/components/career", "src/app/career", "src/app/api/career", "src/career-pdf"];
+const PREPARE_ROUTES = ["src/app/api/career/extract/prepare/route.ts", "src/app/api/me/story-extract/prepare/route.ts"];
 const PACKAGES = new Set(["yaml", "zod", "unpdf"]);
 const CORE_ALIASES = [
   "@/lib/career/engine",
@@ -89,6 +90,7 @@ function dependencies(source: ts.SourceFile): Dependency[] {
     else out.push({ source: "<computed>", kind });
   }
   function visit(node: ts.Node) {
+
     if (ts.isImportDeclaration(node) || (ts.isExportDeclaration(node) && node.moduleSpecifier)) {
       add(node.moduleSpecifier, "static");
     }
@@ -106,7 +108,16 @@ function dependencies(source: ts.SourceFile): Dependency[] {
   return out;
 }
 
+const targetCache = new Map<string, string | undefined>();
 function target(file: string, specifier: string): string | undefined {
+  const key = `${file}:${specifier}`;
+  if (targetCache.has(key)) return targetCache.get(key);
+  const value = resolveTarget(file, specifier);
+  targetCache.set(key, value);
+  return value;
+}
+
+function resolveTarget(file: string, specifier: string): string | undefined {
   const resolved = ts.resolveModuleName(
     specifier, path.join(ROOT, file), options, ts.sys, cache,
   ).resolvedModule?.resolvedFileName;
@@ -116,10 +127,15 @@ function target(file: string, specifier: string): string | undefined {
   return undefined;
 }
 
+const sourceCache = new Map<string, { text: string; source: ts.SourceFile }>();
 function sourceFile(file: string, text: string): ts.SourceFile {
+  const cached = sourceCache.get(file);
+  if (cached?.text === text) return cached.source;
   const isJavaScript = /\.(?:mjs|js)$/.test(file);
   const kind = file.endsWith(".tsx") ? ts.ScriptKind.TSX : isJavaScript ? ts.ScriptKind.JS : ts.ScriptKind.TS;
-  return ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, kind);
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, kind);
+  sourceCache.set(file, { text, source });
+  return source;
 }
 
 function sourceFiles(directory: string): string[] {
@@ -133,7 +149,7 @@ type CoreImports = Record<string, string[]>;
 function coreCareerImports(sources: { file: string; text: string }[]): CoreImports {
   const actual: CoreImports = {};
   for (const { file, text } of sources) {
-    if (isCareer(file)) continue;
+    if (!within(file, "src") || isCareer(file)) continue;
     const targets = dependencies(sourceFile(file, text))
       .map((dependency) => target(file, dependency.source))
       .filter((to): to is string => to !== undefined && isCareer(to));
@@ -161,14 +177,32 @@ function violations(file: string, text: string): string[] {
         out.push(`${file}: impure ${dependency.kind} ${dependency.source}`);
       }
     }
-    if (!isCareer(file) && to && isCareer(to) && !CORE_IMPORTING_CAREER[file]?.includes(to)) {
+    if (within(file, "src") && !isCareer(file) && to && isCareer(to) && !CORE_IMPORTING_CAREER[file]?.includes(to)) {
       out.push(`${file}: core imports ${to}`);
     }
+    const engineConsumer = [ENGINE, "src/lib/career/render", "src/lib/career/print", "src/lib/career/import", "src/app/career", "src/app/api/career"]
+      .some((directory) => within(file, directory));
+    if (within(file, "src") && to && within(to, ENGINE) && !engineConsumer) out.push(`${file}: imports engine outside rendering boundary`);
+    const isStorage = ["schema", "store", "contact", "ai", "extract", "tailor", "document"].some((part) => within(file, `src/lib/career/${part}`));
+    const importsRendering = to && (within(to, ENGINE) || within(to, "src/lib/career/print") || to.includes("/fonts/"));
+    if (isStorage && (importsRendering || /@fontsource/.test(dependency.source))) {
+      out.push(`${file}: storage imports rendering dependency`);
+    }
+    const isAi = ["ai", "extract", "tailor"].some((part) => within(file, `src/lib/career/${part}`));
+    if (isAi && to === "src/lib/career/contact/store.ts") out.push(`${file}: reads contact storage directly`);
+    if ((within(file, "src/lib/outbound") || within(file, "src/components/outbound")) && to && isCareer(to)) out.push(`${file}: outbound imports career`);
+    if (["src/lib/outbound/scrub.ts", "src/lib/outbound/outbound.ts"].includes(file) && /^(?:node:)?fs(?:\/|$)/.test(dependency.source)) out.push(`${file}: pure outbound reads files`);
     const isPrintTarget = to !== undefined && within(to, "src/lib/career/print");
-    const isPrintConsumer = within(file, "src/career-pdf") || within(file, "src/lib/career/print");
+    const isPrintConsumer = within(file, "src/career-pdf") || within(file, "src/lib/career/print") || within(file, "tests") || within(file, "e2e") || within(file, "scripts");
     if (isPrintTarget && !isPrintConsumer) out.push(`${file}: imports printing outside the PDF entry point`);
   }
   function visit(node: ts.Node) {
+    if (within(file, "src") && ts.isIdentifier(node)) {
+      if (node.text === "prepareScrub" && !["src/lib/outbound/scrub.ts", "src/lib/career/contact/scrub.ts", ...PREPARE_ROUTES].includes(file)) out.push(`${file}: reads preview candidates outside prepare`);
+      if (node.text === "prepareCareerScrub" && !["src/lib/career/contact/scrub.ts", ...PREPARE_ROUTES].includes(file)) out.push(`${file}: reads local candidates outside prepare`);
+      if (node.text === "readPrepareInput" && !["src/lib/outbound/prepare.ts", ...PREPARE_ROUTES].includes(file)) out.push(`${file}: reads uploads outside prepare`);
+    }
+    if (isCareer(file) && ts.isIdentifier(node) && node.text === "NO_STORED_VALUES") out.push(`${file}: bypasses stored contact values`);
     const isRuntimeGlobal = ts.isIdentifier(node) && ENGINE_FORBIDDEN_GLOBALS.includes(node.text);
     if (within(file, ENGINE) && (ts.isMetaProperty(node) || isRuntimeGlobal)) {
       out.push(`${file}: runtime dependency ${node.getText(source)}`);
@@ -230,7 +264,7 @@ async function restricted(file: string, code: string): Promise<number> {
 }
 
 test("all source dependencies respect the career and engine boundaries", () => {
-  const sources = sourceFiles(path.join(ROOT, "src")).map((full) => ({
+  const sources = ["src", "scripts", "tests", "e2e"].flatMap((dir) => sourceFiles(path.join(ROOT, dir))).map((full) => ({
     file: path.relative(ROOT, full).replaceAll(path.sep, "/"),
     text: fs.readFileSync(full, "utf8"),
   }));
@@ -239,8 +273,8 @@ test("all source dependencies respect the career and engine boundaries", () => {
   expect(coreCareerImports(sources)).toEqual(CORE_IMPORTING_CAREER);
 });
 
-test("the core career import whitelist stays empty", () => {
-  expect(CORE_IMPORTING_CAREER).toEqual({});
+test("the core career import whitelist contains only the card, the job page entry and career handler registration", () => {
+  expect(CORE_IMPORTING_CAREER).toEqual({ "src/app/jobs/[id]/page.tsx": ["src/components/career/job-entry.tsx"], "src/app/me/page.tsx": ["src/components/career/career-card.tsx"], "src/lib/control/ai-handlers.ts": ["src/lib/career/extract/handler.ts", "src/lib/career/tailor/handler.ts"] });
 });
 
 test("core career import comparison rejects unlisted imports and unused whitelist entries", () => {
@@ -290,7 +324,7 @@ describe("boundary scanner negative controls", () => {
 
   test("module consumers and unrelated career-named schemas are allowed", () => {
     for (const code of allImportForms("@/lib/career/engine")) {
-      expect(violations("src/components/career/Card.tsx", code)).toEqual([]);
+      expect(violations("src/lib/career/render/probe.ts", code)).toEqual([]);
     }
     for (const code of allImportForms("@/lib/config")) {
       expect(violations("src/lib/career/store.ts", code)).toEqual([]);
@@ -316,7 +350,13 @@ describe("boundary scanner negative controls", () => {
     expect(violations(`${ENGINE}/probe.ts`, code), code).not.toEqual([]);
   });
 
-  test("printing is confined to the PDF entry point", () => {
+  test("printing is confined to PDF entry points, tests, e2e and scripts", () => {
+    for (const file of ["src/lib/core.ts", "src/lib/career/render/probe.ts", "src/app/career/page.tsx"]) {
+      for (const code of allImportForms("@/lib/career/print/print-pdf")) expect(violations(file, code)).not.toEqual([]);
+    }
+    for (const file of ["e2e/career-print.spec.ts", "scripts/probe.ts", "tests/career/probe.ts"]) {
+      for (const code of allImportForms("@/lib/career/print/print-pdf")) expect(violations(file, code)).toEqual([]);
+    }
     expect(violations("src/lib/career/preview.ts", 'import "./print/print-pdf";')).not.toEqual([]);
     expect(violations("src/career-pdf/main.ts", 'import "@/lib/career/print/print-pdf";')).toEqual([]);
     expect(violations("src/lib/career/print/print-pdf.ts", 'import "./x";')).toEqual([]);
@@ -333,7 +373,7 @@ describe("ESLint boundary negative controls", () => {
   });
 
   test.each(MODULE_FILES)("module imports are allowed in %s without weakening database restrictions", async (file) => {
-    expect(await restricted(file, 'export * from "@/lib/career/engine";')).toBe(0);
+    expect(await restricted(file, 'export * from "@/lib/career/schema/profile";')).toBe(0);
     for (const specifier of DATABASE_SPECIFIERS) {
       for (const code of eslintImportForms(specifier)) {
         expect(await restricted(file, code), code).toBeGreaterThan(0);
@@ -397,4 +437,128 @@ test("date parsing is allowed by both purity layers", async () => {
   const code = 'new Date("2026-01-01")';
   expect(violations(`${ENGINE}/probe.ts`, code)).toEqual([]);
   expect(await restricted(`${ENGINE}/probe.ts`, code)).toBe(0);
+});
+
+test("preview candidates and stored-value bypasses stay at their permitted boundaries", async () => {
+  expect(violations("src/lib/career/ai/probe.ts", 'import { NO_STORED_VALUES } from "@/lib/outbound/outbound";')).not.toEqual([]);
+  expect(violations("src/lib/career/ai/probe.ts", 'import { prepareCareerScrub } from "../contact/scrub";')).not.toEqual([]);
+  expect(violations("src/lib/career/extract/probe.ts", 'import { prepareScrub } from "@/lib/outbound/scrub";')).not.toEqual([]);
+  expect(violations(PREPARE_ROUTES[0]!, 'import { prepareCareerScrub } from "@/lib/career/contact/scrub";')).toEqual([]);
+  for (const specifier of ["@/lib/career/contact/store", "../contact/store"]) {
+    for (const code of allImportForms(specifier)) expect(violations("src/lib/career/ai/probe.ts", code)).not.toEqual([]);
+    for (const code of eslintImportForms(specifier)) expect(await restricted("src/lib/career/ai/probe.ts", code)).toBeGreaterThan(0);
+  }
+});
+
+test("storage dependencies reject rendering imports by every syntax and relative path", async () => {
+  for (const directory of ["schema", "store", "contact", "ai", "extract", "tailor", "document"]) {
+    const file = `src/lib/career/${directory}/probe.ts`;
+    for (const specifier of [
+      "@/lib/career/engine",
+      "../engine",
+      "@/lib/career/print/print-pdf",
+      "../print/print-pdf",
+      "@fontsource/archivo",
+    ]) {
+      for (const code of allImportForms(specifier)) expect(violations(file, code)).not.toEqual([]);
+    }
+    for (const specifier of ["@/lib/career/engine", "../engine/schema", "../print/print-pdf", "@fontsource/archivo", ...DATABASE_SPECIFIERS]) {
+      for (const code of eslintImportForms(specifier)) expect(await restricted(file, code)).toBeGreaterThan(0);
+    }
+  }
+});
+
+test("the core profile page may import only the card and retains database restrictions", async () => {
+  const file = "src/app/me/page.tsx";
+  for (const code of allImportForms("@/components/career/career-card")) expect(violations(file, code)).toEqual([]);
+  for (const specifier of ["@/lib/career/store/profile", "@/components/career/career-editor", ...DATABASE_SPECIFIERS]) {
+    for (const code of importForms(specifier).declarations) expect(await restricted(file, code)).toBeGreaterThan(0);
+  }
+  expect(await restricted(file, 'import { CareerCard } from "@/components/career/career-card";')).toBe(0);
+});
+
+
+test("engine consumers and printer restrictions are enforced across rendering boundaries", async () => {
+  for (const file of ["src/lib/career/document/probe.ts", "src/components/career/probe.tsx", "src/lib/career/preview.ts", "src/career-pdf/probe.ts"]) {
+    for (const specifier of ["@/lib/career/engine/render", `./${path.posix.relative(path.posix.dirname(file), `${ENGINE}/render`)}`]) {
+      for (const code of allImportForms(specifier)) expect(violations(file, code)).not.toEqual([]);
+      for (const code of eslintImportForms(specifier)) expect(await restricted(file, code)).toBeGreaterThan(0);
+    }
+  }
+  for (const file of ["src/lib/career/render/probe.ts", "src/lib/career/import/probe.ts", "src/app/career/page.tsx", "src/app/api/career/route.ts"]) {
+    expect(violations(file, 'import "@/lib/career/engine/render";')).toEqual([]);
+    expect(await restricted(file, 'import "@/lib/career/engine/render";')).toBe(0);
+    for (const specifier of ["@/lib/career/print/print-pdf", `./${path.posix.relative(path.posix.dirname(file), "src/lib/career/print/print-pdf")}`]) {
+      for (const code of allImportForms(specifier)) expect(violations(file, code)).not.toEqual([]);
+      for (const code of eslintImportForms(specifier)) expect(await restricted(file, code)).toBeGreaterThan(0);
+    }
+    for (const specifier of DATABASE_SPECIFIERS) expect(await restricted(file, `import "${specifier}";`)).toBeGreaterThan(0);
+  }
+});
+
+
+test("every app area rejects print imports without allowing core career or database imports", async () => {
+  for (const file of ["src/app/jobs/page.tsx", "src/app/me/page.tsx", "src/app/api/jobs/route.ts"]) {
+    const relative = `./${path.posix.relative(path.posix.dirname(file), "src/lib/career/print/print-pdf")}`;
+    for (const specifier of ["@/lib/career/print/print-pdf", relative, ...DATABASE_SPECIFIERS]) {
+      for (const code of eslintImportForms(specifier)) expect(await restricted(file, code), `${file}: ${code}`).toBeGreaterThan(0);
+    }
+    for (const specifier of ["@/lib/career/engine/render", `./${path.posix.relative(path.posix.dirname(file), `${ENGINE}/render`)}`]) {
+      for (const code of eslintImportForms(specifier)) expect(await restricted(file, code)).toBeGreaterThan(0);
+    }
+  }
+});
+
+
+test("print modules may import the engine and retain database restrictions", async () => {
+  const file = "src/lib/career/print/probe.ts";
+  for (const specifier of ["@/lib/career/engine", "@/lib/career/engine/render", "../engine", "../engine/render"]) {
+    for (const code of allImportForms(specifier)) expect(violations(file, code), code).toEqual([]);
+    for (const code of eslintImportForms(specifier)) expect(await restricted(file, code), code).toBe(0);
+  }
+  for (const specifier of DATABASE_SPECIFIERS) {
+    for (const code of eslintImportForms(specifier)) expect(await restricted(file, code), code).toBeGreaterThan(0);
+  }
+});
+
+test("every whitelisted core file retains its permitted career imports", async () => {
+  for (const [file, targets] of Object.entries(CORE_IMPORTING_CAREER)) {
+    for (const target of targets) {
+      const specifier = target.replace(/^src\//, "@/").replace(/\.tsx?$/, "");
+      for (const code of eslintImportForms(specifier)) expect(await restricted(file, code), `${file}: ${code}`).toBe(0);
+    }
+    for (const specifier of DATABASE_SPECIFIERS) {
+      for (const code of eslintImportForms(specifier)) expect(await restricted(file, code), `${file}: ${code}`).toBeGreaterThan(0);
+    }
+  }
+});
+
+function importedTargets(directory: string): { file: string; to: string }[] {
+  if (!fs.existsSync(path.join(ROOT, directory))) return [];
+  return sourceFiles(path.join(ROOT, directory)).flatMap((full) => {
+    const file = path.relative(ROOT, full).replaceAll(path.sep, "/");
+    const { importedFiles } = ts.preProcessFile(fs.readFileSync(full, "utf8"), true, true);
+    return importedFiles.flatMap(({ fileName }) => {
+      const to = target(file, fileName);
+      return to ? [{ file, to }] : [];
+    });
+  });
+}
+
+test("the resume-kit import is reachable only from web routes and pages, never from AI, extraction, apply or the runner", () => {
+  const forbidden = ["src/lib/career/ai", "src/lib/career/extract", "src/lib/career/apply", "src/lib/career/tailor", "src/runner"]
+    .flatMap(importedTargets)
+    .filter(({ to }) => to.startsWith("src/lib/career/import/"));
+  expect(forbidden).toEqual([]);
+  const users = ["src"].flatMap(importedTargets)
+    .filter(({ file, to }) => to.startsWith("src/lib/career/import/") && !file.startsWith("src/lib/career/import/"))
+    .map(({ file }) => file);
+  expect([...new Set(users)].sort()).toEqual(["src/app/api/career/import/route.ts", "src/components/career/kit-import.tsx"]);
+});
+
+test("MCP modules never import career modules and the tool list is unchanged", async () => {
+  const career = importedTargets("src/lib/mcp").filter(({ to }) => CAREER.some((directory) => to.startsWith(`${directory}/`)));
+  expect(career).toEqual([]);
+  const { MCP_TOOL_NAMES } = await import("@/lib/config/schemas/mcp");
+  expect(MCP_TOOL_NAMES).toEqual(["search_jobs", "get_job", "list_applications", "get_application_context", "save_application_answer"]);
 });

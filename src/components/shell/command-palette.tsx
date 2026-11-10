@@ -21,7 +21,8 @@ import { Kbd } from "@/components/ui/kbd";
 import { requestLeave } from "@/lib/shell/unsaved";
 import { cn } from "@/lib/utils";
 
-import { NAV_ITEMS, PALETTE_SUBPAGES } from "./nav";
+import { PALETTE_SUBPAGES } from "./nav";
+import { useNavItems } from "./shell-nav-provider";
 import { useModifierKey } from "./use-modifier-key";
 
 const searchResponseSchema = z.object({
@@ -84,6 +85,7 @@ export function CommandPalette({ minChars }: { minChars: number }) {
   }, []);
   const t = useTranslations("commandPalette");
   const tNav = useTranslations("nav");
+  const navItems = useNavItems();
   const tSub = useTranslations("sources.subnav");
   const tShell = useTranslations("shell");
   const modifier = useModifierKey();
@@ -125,7 +127,7 @@ export function CommandPalette({ minChars }: { minChars: number }) {
   const canSearchJobs = text.length >= minChars;
   const resultsArrived = canSearchJobs && result.query === text;
   const shownJobs = resultsArrived ? result.jobs : [];
-  const pages = NAV_ITEMS.filter(({ key, href }) => !text || defaultFilter(`${tNav(key)} ${href}`, text) > 0);
+  const pages = navItems.filter(({ key, href }) => !text || defaultFilter(`${tNav(key)} ${href}`, text) > 0);
   const subpages = PALETTE_SUBPAGES.filter(({ key, href }) => !text || defaultFilter(`${tSub(key)} ${href} ${key === "logs" ? tSub("logsKeywords") : ""}`, text) > 0);
 
   const go = useCallback(

@@ -4,11 +4,12 @@ import type { AiProviderId } from "@/lib/ai/types";
 import { diffYaml, reloadConfig, readProfileText, type ProfileName, type WriterConfig } from "@/lib/config";
 import { WRITER_STORIES_DEFAULTS, writerSchema, type StoryImportFormat, type WriterStoriesLimits } from "@/lib/config/schemas/writer";
 import type { ControlQueueView } from "@/lib/control/request-view-schema";
-import { readOpenStoryExtract } from "@/lib/control/story-extract-request";
+import { readLatestStoryExtract, type StoryExtractErrorCode } from "@/lib/control/story-extract-request";
 import { deleteExpiredStoryDrafts } from "@/lib/db/repos/story-drafts";
 import { loadPendingStoryDrafts } from "@/lib/stories/adopt";
 import type { PendingStoryDraft } from "@/lib/stories/extract";
 import { storiesConfigToDraft, type StoriesDraft } from "@/lib/stories/draft";
+import { readCareerGate } from "@/lib/config/career-gate";
 import { countStaleScores, getDb, hashProfileYaml, listProfileSnapshots, type ProfileSnapshot } from "@/lib/db";
 
 import {
@@ -37,6 +38,9 @@ export interface StoryImportView {
   drafts: PendingStoryDraft[];
   /** The extraction still running, to follow after a reload. */
   open: { requestId: number; stage: "pending" | "running"; queue: ControlQueueView | null } | null;
+  error: StoryExtractErrorCode | null;
+  /** The career profile is on: extraction moved to the career page, this card only finishes what is already here. */
+  careerEnabled: boolean;
 }
 
 async function loadStoryImport(dbAvailable: boolean): Promise<StoryImportView> {
@@ -55,16 +59,21 @@ async function loadStoryImport(dbAvailable: boolean): Promise<StoryImportView> {
   }
   let drafts: PendingStoryDraft[] = [];
   let open: StoryImportView["open"] = null;
+  let error: StoryImportView["error"] = null;
   if (dbAvailable) {
     try {
       const db = getDb();
       await deleteExpiredStoryDrafts(db, limits.draft_ttl_days);
-      [drafts, open] = await Promise.all([loadPendingStoryDrafts(db), readOpenStoryExtract(db)]);
+      const [pending, latest] = await Promise.all([loadPendingStoryDrafts(db), readLatestStoryExtract(db)]);
+      drafts = pending;
+      if (latest?.state === "waiting") open = { requestId: latest.requestId, stage: latest.stage, queue: latest.queue };
+      if (latest?.state === "failed" && latest.error === "preview_required") error = latest.error;
     } catch {
       // not migrated yet, or gone since the first read: the card shows no drafts
     }
   }
-  return { enabled: writer?.enabled ?? false, maxFileBytes: limits.max_file_bytes, maxChars: limits.max_chars, formats: limits.formats, ttlDays: limits.draft_ttl_days, providers, drafts, open };
+  const careerEnabled = (await readCareerGate()).enabled;
+  return { careerEnabled, enabled: writer?.enabled ?? false, maxFileBytes: limits.max_file_bytes, maxChars: limits.max_chars, formats: limits.formats, ttlDays: limits.draft_ttl_days, providers, drafts, open, error };
 }
 
 export interface ProfilePageData {
