@@ -1,5 +1,7 @@
 import type { Document } from "yaml";
 
+import { normalizePlaces } from "@/lib/market/places";
+
 import type { ConfigMigration } from "../types";
 import { deleteKey, insertAfter, renameKey, setValue, valueAt } from "../edit";
 
@@ -20,6 +22,7 @@ function scopePlaces(scope: unknown): string[] {
  * - The first of `locations` is `home_city`; the others are places with `relocate: true`.
  * - `remote_scope`: `home_country` adds nothing, its tokens and `worldwide` become remote-only places, `none` takes `remote`
  *   out of `workplace` unless it is the only value.
+ * - The list goes through `normalizePlaces`, as every load does: a place in both keys is one ✈ entry.
  *
  * Reads nothing but the file: which country a place lies in is worked out when the place is read.
  */
@@ -30,14 +33,8 @@ export const preferences003: ConfigMigration = {
   migrate(doc: Document) {
     const scope = valueAt(doc, ["remote_scope"]);
     const [homeCity = null, ...others] = strings(valueAt(doc, ["locations"]));
-    const seen = new Set(homeCity === null ? [] : [homeCity.toLocaleLowerCase("en")]);
     const entries = [...others.map((place) => ({ place, relocate: true })), ...scopePlaces(scope).map((place) => ({ place, relocate: false }))];
-    const places = entries.filter(({ place }) => {
-      const key = place.toLocaleLowerCase("en");
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    const { places } = normalizePlaces({ home_city: homeCity ?? "", places: entries });
 
     if (scope === "none") {
       const workplace = strings(valueAt(doc, ["workplace"]));

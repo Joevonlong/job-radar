@@ -1,12 +1,13 @@
 /**
  * Setup step 2: the market. Writes preferences.yaml `market`, `home_city`, `places` (through `savePreferencesPatch`, so the
  * profile history gets a snapshot), search.yaml `locations` / `remote_scope` worked out from them, and schedule.yaml `timezone`. Everything is
- * validated before the first write, so a bad time zone never leaves half a market behind. Switching the pack's local
+ * validated before the first write, so a bad time zone never leaves half a market behind. A search.yaml `remote_scope: none`
+ * (remote collection switched off) stays until the user changes it there: no place in preferences.yaml switches it back on. Switching the pack's local
  * channels on is the sources step's job (it pre-selects the pack's `default_channels`).
  */
 import { isValidTimeZone, mutateConfig, preferencesSchema, scheduleSchema, searchSchema } from "@/lib/config";
 import { loadPipeline, marketSettingsProblems } from "@/lib/market";
-import { placeGeo, wantedLocations, wantedRemoteScope } from "@/lib/market/places";
+import { normalizePlaces, placeGeo, wantedLocations, wantedRemoteScope } from "@/lib/market/places";
 import { preferencesConfigToDraft, preferencesDraftToCandidate, toFieldErrors, type FieldError, type PreferencesDraft } from "@/lib/profile/draft";
 import { savePreferencesPatch } from "@/lib/profile/service";
 
@@ -46,7 +47,8 @@ export async function saveMarketStep(raw: unknown): Promise<SetupStepResult> {
     errors.push(...profileFieldErrors(marketProblems(candidate.data.market)));
   }
 
-  const locations = wantedLocations(input);
+  const places = candidate.success ? candidate.data : normalizePlaces(input);
+  const locations = wantedLocations(places);
   const nextSearch = searchSchema.safeParse({ ...editable(search), locations });
   if (!nextSearch.success) {
     const own = zodSetupErrors(nextSearch.error, (path) => String(path[0] ?? ""));
@@ -64,7 +66,8 @@ export async function saveMarketStep(raw: unknown): Promise<SetupStepResult> {
     const problem = profileSaveProblem("market", saved);
     if (problem !== null) return problem;
     try {
-      await mutateConfig("search", (current) => ({ ...current, locations, remote_scope: wantedRemoteScope(input, placeGeo(loadPipeline())) }));
+      const pipeline = loadPipeline();
+      await mutateConfig("search", (current) => ({ ...current, locations, remote_scope: current.remote_scope === "none" ? "none" : wantedRemoteScope(places, placeGeo(pipeline), pipeline.market.country) }));
       await mutateConfig("schedule", (current) => ({ ...current, timezone: nextSchedule.data.timezone }));
     } catch (error) {
       return stepError("market", setupWriteError(error));

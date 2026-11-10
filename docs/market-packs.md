@@ -215,10 +215,23 @@ EUR are read as EUR.
 | `remote_scope: {region: [...]}` | Each token as written, as a remote-only place |
 | `remote_scope: worldwide` | `Worldwide` as a remote-only place |
 | `remote_scope: none` | `remote` removed from `workplace`, unless it's the only value |
+| A place in both `locations` and `remote_scope` | One ✈ entry: moving there includes working remotely there |
 
 Results that change: with `none`, a remote job in an allowed city was shown and is now hidden as `workplace_not_wanted`; with `none` and `workplace: [remote]`, remote jobs are now checked instead of hidden. If the first of `locations` was a foreign city, it becomes the home city.
 
-Older code can't read version 3. Before going back to it, restore the file from a backup taken before the upgrade or from the profile history on `/me`.
+Every read of `preferences.yaml`, whoever wrote it (the forms, the setup wizard, `pnpm run setup`, an answers file or an edit by hand), applies the same rules to `places`:
+
+- Worldwide is remote only.
+- A place that is the home city is dropped.
+- A place named twice is one entry, at its first position, and it is ✈ if any of them is. Names compare with case, accents and spaces ignored; where the market's tables are read, two spellings of one place (Munich, München) count as one too.
+
+There is no limit on the number of places or the length of a name, as there was none on `locations`.
+
+The remote scope follows from the places: Worldwide anywhere means worldwide; otherwise the countries and regions among them, remote-only and ✈ alike, with the home country added when none of them is remote-only; with no country or region it is the home country. So `locations: [Berlin, CH]` with `remote_scope: {region: [CH]}` still keeps Swiss remote jobs after the upgrade, and German ones too.
+
+The setup wizard's Market step writes search.yaml's `locations` and `remote_scope` from the places, except that `remote_scope: none` (remote searches switched off) stays until you change it in `/settings`.
+
+Older code can't read version 3. Before going back to it, put back the version 2 file saved before the upgrade: `pnpm config:migrate --write`, which a deploy runs, copies it to `data/config/.backup/<timestamp>/profile/preferences.yaml`, or take it from your own backup ([Backup and restore](backup-restore.md)). Restoring an older version from the profile history on `/me` doesn't help: the save converts it to version 3 again.
 
 ## Renamed configuration keys
 

@@ -184,12 +184,40 @@ export interface PlacePreferences {
   places: readonly { place: string; relocate: boolean }[];
 }
 
-/** The wanted cities as the filter's location rules read them: the home city, then the places I'd move to. */
-export function wantedLocations(preferences: PlacePreferences): string[] {
-  return [preferences.home_city, ...preferences.places.filter((entry) => entry.relocate).map((entry) => entry.place)];
+/**
+ * `home_city` and `places` as every reader takes them, whatever wrote them (the forms, the wizard, the CLI, an answers file,
+ * the file edited by hand). The preferences schema runs it on every load and save; a reader with the market's tables runs it
+ * again with them.
+ * - Worldwide is remote only: nobody moves to "anywhere".
+ * - A place that is the home city is dropped.
+ * - A place named twice is one entry, at its first position. It is ✈ when any of them is, since moving there includes
+ *   working remotely there.
+ *
+ * "Named twice" is `lookupPlace`'s reading with tables (Munich, München), else the text with case, accents and spaces ignored.
+ * Unchanged input comes back as the same object.
+ */
+export function normalizePlaces<T extends PlacePreferences>(preferences: T, geo: PlaceGeo | null = null): T {
+  const keyOf = (text: string): string => (geo === null ? placeKey(text) : samePlaceKey(text, geo));
+  const home = keyOf(preferences.home_city);
+  const byKey = new Map<string, { place: string; relocate: boolean }>();
+  for (const entry of preferences.places) {
+    const key = keyOf(entry.place);
+    if (key === "" || key === home) continue;
+    const relocate = entry.relocate && placeKey(entry.place) !== WORLDWIDE;
+    const seen = byKey.get(key);
+    byKey.set(key, seen === undefined ? { place: entry.place, relocate } : { ...seen, relocate: seen.relocate || relocate });
+  }
+  const places = [...byKey.values()];
+  const same = places.length === preferences.places.length && places.every((entry, i) => entry.place === preferences.places[i]?.place && entry.relocate === preferences.places[i]?.relocate);
+  return same ? preferences : { ...preferences, places };
 }
 
-/** The scope token of a remote-only place: a region's id or a country's code. A city or an unknown name has none. */
+/** The wanted cities as the filter's location rules read them: the home city, then the places I'd move to. */
+export function wantedLocations(preferences: PlacePreferences): string[] {
+  return [preferences.home_city, ...normalizePlaces(preferences).places.filter((entry) => entry.relocate).map((entry) => entry.place)];
+}
+
+/** The scope token of a country or region: a region's id or a country's code. A city or an unknown name has none. */
 function scopeToken(text: string, geo: PlaceGeo): string | null {
   const place = lookupPlace(text, geo);
   if (place === null) return /^[A-Z]{2}$/.test(text) ? text : null;
@@ -199,10 +227,19 @@ function scopeToken(text: string, geo: PlaceGeo): string | null {
   return null;
 }
 
-/** The remote scope the remote-only places add up to: Worldwide, their tokens, else the home country. Never `none`. */
-export function wantedRemoteScope(preferences: PlacePreferences, geo: PlaceGeo): Exclude<RemoteScopeValue, "none"> {
-  const remoteOnly = preferences.places.filter((entry) => !entry.relocate).map((entry) => entry.place);
-  if (remoteOnly.some((text) => lookupPlace(text, geo)?.kind === "worldwide")) return "worldwide";
-  const tokens = [...new Set(remoteOnly.flatMap((text) => scopeToken(text, geo) ?? []))];
-  return tokens.length > 0 ? { region: tokens } : "home_country";
+/**
+ * The remote scope the places add up to. Never `none`.
+ * - Worldwide: `worldwide`.
+ * - Countries and regions, remote-only and ✈ alike (moving there includes working remotely there): their tokens. With no
+ *   remote-only one, the home country stays in, as it is the scope when no place names one.
+ * - None of them: `home_country`.
+ */
+export function wantedRemoteScope(preferences: PlacePreferences, geo: PlaceGeo, homeCountry: string): Exclude<RemoteScopeValue, "none"> {
+  const { places } = normalizePlaces(preferences, geo);
+  if (places.some((entry) => lookupPlace(entry.place, geo)?.kind === "worldwide")) return "worldwide";
+  const tokens = (relocate: boolean): string[] => places.filter((entry) => entry.relocate === relocate).flatMap((entry) => scopeToken(entry.place, geo) ?? []);
+  const remoteOnly = tokens(false);
+  if (remoteOnly.length > 0) return { region: [...new Set([...remoteOnly, ...tokens(true)])] };
+  const moving = tokens(true).filter((token) => token !== homeCountry);
+  return moving.length > 0 ? { region: [...new Set([homeCountry, ...moving])] } : "home_country";
 }

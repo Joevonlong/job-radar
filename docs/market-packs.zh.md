@@ -173,10 +173,23 @@ pnpm run doctor --only config.market
 | `remote_scope: {region: [...]}` | 每个代码按原样成为仅远程地点 |
 | `remote_scope: worldwide` | `Worldwide` 成为仅远程地点 |
 | `remote_scope: none` | 从 `workplace` 去掉 `remote`，除非它是唯一的值 |
+| 同时出现在 `locations` 和 `remote_scope` 里的地点 | 一条 ✈：愿意搬去的地方也包括在那里远程 |
 
 结果有变化的情况：设为 `none` 时，地点在允许城市的远程职位过去会显示，现在会以 `workplace_not_wanted` 隐藏；设为 `none` 且 `workplace: [remote]` 时，远程职位现在会被检查，而不是直接隐藏。如果 `locations` 的第一项是外国城市，它会成为常住城市。
 
-旧版本的代码读不了版本 3。要退回旧版本，请先用升级前的备份或 `/me` 上的画像历史恢复这个文件。
+每次读取 `preferences.yaml`，不管是谁写的（表单、设置向导、`pnpm run setup`、答案文件或手改），`places` 都按同一套规则处理：
+
+- Worldwide 一律是仅远程。
+- 和常住城市相同的地点去掉。
+- 同一地点写了两次只算一条，留在第一次出现的位置，其中任一条是 ✈ 就是 ✈。比较时不分大小写、重音和空格；读得到市场地名表的地方，同一地点的两种写法（Munich、München）也算一条。
+
+地点条数和名字长度都没有上限，和原来的 `locations` 一样。
+
+远程范围由地点得出：任一地点是 Worldwide 就是全球；否则是其中的国家和区域，仅远程的和 ✈ 的都算，没有仅远程的国家或区域时再加上本国；一个国家或区域都没有时就是本国。所以 `locations: [Berlin, CH]` 加 `remote_scope: {region: [CH]}` 升级后仍保留瑞士的远程岗，德国的也保留。
+
+设置向导的“市场”一步按地点写 search.yaml 的 `locations` 和 `remote_scope`；但 `remote_scope: none`（关掉远程搜索）会保留，直到你在 `/settings` 里改掉。
+
+旧版本的代码读不了版本 3。要退回旧版本，请放回升级前的版本 2 文件：`pnpm config:migrate --write`（部署时会运行）会把它复制到 `data/config/.backup/<时间>/profile/preferences.yaml`，也可以从你自己的备份里取（[备份与恢复](backup-restore.zh.md)）。用 `/me` 上的画像历史恢复旧版本没有用：保存时又会转换成版本 3。
 
 ## 改名的配置键
 

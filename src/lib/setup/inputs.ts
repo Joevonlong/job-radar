@@ -26,7 +26,7 @@ export const marketInputSchema = z.strictObject({
   /** Where a job counts as local. */
   home_city: text(200),
   /** Other places a job can be based. */
-  places: z.array(z.strictObject({ place: text(200), relocate: z.boolean() })).max(50),
+  places: z.array(z.strictObject({ place: text(200), relocate: z.boolean() })).max(200),
   /** IANA time zone of the schedule. */
   timezone: text(100),
 });

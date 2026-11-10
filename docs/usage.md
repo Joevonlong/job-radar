@@ -193,7 +193,7 @@ On the form, "Locations outside home city" shows each place as "✈ I'd move her
 
 For now, a ✈ place outside the home country doesn't bring in on-site jobs there: the filter still requires the home country.
 
-**Remote jobs.** Remote-only regions and countries, and Worldwide, set where remote jobs may be based; with none of them it is the home country. For the Germany pack that reads as remote from Germany, including EU, Europe, EMEA and worldwide remote:
+**Remote jobs.** The regions and countries among your places, ✈ or remote only, and Worldwide, set where remote jobs may be based; the home country stays in unless one of them is remote only, and with none of them it is the home country alone. For the Germany pack that reads as remote from Germany, including EU, Europe, EMEA and worldwide remote:
 
 | Remote job | Result |
 |---|---|
@@ -207,7 +207,7 @@ For now, a ✈ place outside the home country doesn't bring in on-site jobs ther
 | a title such as "AI Engineer - US" or "(Americas)" | excluded; the description cannot rescue it. A title that also names EMEA or Europe is not excluded |
 | "Remote" without a place, or no location | kept, noted that it does not say where it hires |
 
-Worldwide keeps all of them, and remote-only regions and countries keep their own places (plus worldwide). To stop seeing remote jobs, take Remote out of Workplace. A remote-only city does nothing yet. The remote scope in `/settings` still decides where the remote searches look; the filter uses your places.
+Worldwide keeps all of them, and regions and countries keep their own places (plus worldwide). To stop seeing remote jobs, take Remote out of Workplace. A remote-only city does nothing yet. The remote scope in `/settings` still decides where the remote searches look, and `none` there only stops remote searches; the filter uses your places. A place named twice counts once, and ✈ wins ([details](market-packs.md#the-location-settings-migration)).
 
 **Watched companies keep their on-site and hybrid jobs in any city of your country.** For a company on the watch list (`/interests`, **Watch** on `/companies`, or the database flag), a job that is not remote passes the location check when at least one of its places is in your home country, whatever the city; the job is noted "Watched company: Hamburg is not one of your cities but is in your home country, so the job is kept". Only the location check is relaxed:
 

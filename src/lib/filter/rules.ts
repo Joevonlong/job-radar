@@ -158,7 +158,7 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
   const transliterations = market.transliterations;
 
   const geo = placeGeo(pipeline);
-  const remoteScope = wantedRemoteScope(preferences, geo);
+  const remoteScope = wantedRemoteScope(preferences, geo, market.country);
   const spellings = (name: string): string[] => citySpellings(name, geo);
 
   const metroOf = new Map<string, string[]>();

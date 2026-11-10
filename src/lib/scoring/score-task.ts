@@ -175,6 +175,7 @@ async function scoreCandidate(deps: ScoringDeps, ctx: ScoreContext, candidate: S
     language: ctx.language,
     currency: ctx.pipeline.market.currency,
     geo: placeGeo(ctx.pipeline),
+    homeCountry: ctx.pipeline.market.country,
     output: ctx.output,
     criteria: config.scoring.criteria,
     evidence: ctx.evidence,

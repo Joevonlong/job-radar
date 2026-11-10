@@ -16,7 +16,7 @@ import { fixedMe, fixedPreferences } from "../traps/helpers";
 const GERMAN = scoreLanguageOf(shippedPipeline());
 const job = { title: "ML Engineer", company: "Acme", locations: ["Berlin"], workplace: "hybrid", seniority: "senior", contract: "permanent", salary: null, description: "Build RAG systems." };
 const score = (extra: Partial<Parameters<typeof buildScorePrompt>[0]> = {}) =>
-  buildScorePrompt({ me: fixedMe(), preferences: fixedPreferences(), job, jdMaxChars: 4000, jdHeadShare: 0.7, glossary: { RAG: "RAG" }, language: GERMAN, currency: "EUR", geo: { cityAliases: {}, cities: {}, countries: [], regions: {} }, ...extra });
+  buildScorePrompt({ me: fixedMe(), preferences: fixedPreferences(), job, jdMaxChars: 4000, jdHeadShare: 0.7, glossary: { RAG: "RAG" }, language: GERMAN, currency: "EUR", homeCountry: "DE", geo: { cityAliases: {}, cities: {}, countries: [], regions: {} }, ...extra });
 const keys = (schema: z.ZodType) => Object.keys((z.toJSONSchema(schema) as { properties: Record<string, unknown> }).properties);
 
 describe("score prompt in the AI output language", () => {
