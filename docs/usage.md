@@ -220,7 +220,9 @@ Worldwide keeps all of them. Listed places add to home and never replace it. To 
 | A city in the home country, or a ✈ name the tables don't know | None |
 | A remote-only name the tables don't know | That name, with no country |
 
-The form shows how many searches each place adds per cycle. A search abroad goes to the board with that place's own country. Boards that can't send a place on a remote search (JSearch, Arbeitsagentur, StepStone, XING) skip these searches and keep the others, and Sources shows how many they skipped. Discovery of company boards uses the on-site searches only.
+The form shows how many searches each place adds per cycle. A search abroad goes to the board with that place's own country. Boards that can't send a place on a remote search (JSearch, Arbeitsagentur, StepStone, XING) skip these searches and keep the others, and Sources shows how many they skipped. Two searches a board would send the same way, such as two remote places Apify sends to the same `remote_locations`, run once. Arbeitsagentur reads only German place names, so a place abroad finds nothing there. A ✈ city searches the country the tables give it: ✈ `Cambridge` searches the UK ([known limits](market-packs.md#the-location-settings-migration)). Discovery of company boards uses the on-site searches only.
+
+A home city outside the home country (the first of old `locations` could be one) gets a warning on `/me` and from `pnpm config:check`: jobs there are compared with the home country. Set a home city at home and list the other city as ✈.
 
 The old `locations` and `remote_scope` keys in `search.yaml` are ignored. When they name something your places don't list, `/me` and `pnpm config:check` tell you, and you can add it to your places.
 

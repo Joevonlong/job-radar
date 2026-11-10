@@ -34,7 +34,7 @@ pnpm run doctor --only config.market
 | 方面 | 行为 |
 |---|---|
 | 地点 | 写出国家的地点得到该国代码（`Remote - USA` → US，`Dublin, CA` → US）。本国国名前面的城市（`Gütersloh, Germany`）只在本国市场下读取。 |
-| 远程范围 | 由 preferences.yaml 的 `places` 得出：没有时是 `home_country`，也可以是 `worldwide`，或列出代码时的 `{region: [eu, CH, …]}`（命名区域和 ISO 国家）。旧值：`eu_hire_in_de` = `home_country`，`eu_any` = `{region: [eu]}`。`home_country` 保留地点在本国的远程岗、写明包里 `region`（德国包：EU、Europe、EMEA、EEA）或全球的远程岗，显示为“能从德国远程（含面向欧盟 / 欧洲 / EMEA / 全球的远程岗）”；没有 `region` 的市场显示“能从某国远程”。逐行的结果见 [远程岗和关注公司](usage.zh.md#远程岗和关注公司)。 |
+| 远程范围 | 由 preferences.yaml 的 `places` 得出：远程岗可以在本国，以及每个列出的国家、区域或城市（✈ 和仅远程都算）；列了“全球”就在哪里都行。写明包里 `region`（德国包：EU、Europe、EMEA、EEA）的标签也算，不管还列了什么，所以 `[DE, CH]` 仍保留 `Remote - EU`。评分提示词把它写成 `home_country`、`worldwide` 或 `{region: [eu, CH, …]}`，显示为“能从德国远程（含面向欧盟 / 欧洲 / EMEA / 全球的远程岗）”；没有 `region` 的市场显示“能从某国远程”。旧值：`eu_hire_in_de` = `home_country`，`eu_any` = `{region: [eu]}`。逐行的结果见 [远程岗和关注公司](usage.zh.md#远程岗和关注公司)。 |
 | 本地语言 | 包里有该语言的要求规则、并且 `home_language` 就是这门语言时，才读岗位要求的等级；高于你在 me.yaml `languages` 里的等级会扣分（ai.yaml `scoring.language_penalty`）。否则这一步关闭：不读等级、不扣分、打分提示词不问这一项，页面也隐藏相关筛选和标签。 |
 | 基准货币 | 薪资底线、"最低年薪"筛选、统计和高薪门槛都用市场的货币。其他货币按 pipeline.yaml 的 `salary.fx_pivot` + `fx_rates` 换算；没有汇率的货币不参与比较。 |
 | 渠道 | sources.yaml 里写了 `markets: [DE]` 的渠道只在这些市场运行；在别的市场下折叠在"其他市场"里，不算失败。国家参数留空（`country`、`country_name`、`country_indeed`）、远程地点不写的键，都跟随市场。 |
@@ -175,7 +175,7 @@ pnpm run doctor --only config.market
 | `remote_scope: none` | 从 `workplace` 去掉 `remote`，除非它是唯一的值 |
 | 同时出现在 `locations` 和 `remote_scope` 里的地点 | 一条 ✈：愿意搬去的地方也包括在那里远程 |
 
-结果有变化的情况：设为 `none` 时，地点在允许城市的远程职位过去会显示，现在会以 `workplace_not_wanted` 隐藏；设为 `none` 且 `workplace: [remote]` 时，远程职位现在会被检查，不再被隐藏；`{region: [...]}` 没有包含本国时，本国的远程职位现在会显示；`locations` 里的国外城市变成 ✈ 地点并开始匹配。如果 `locations` 的第一项是国外城市，它会成为常住城市，那里的职位按本国比较。
+结果有变化的情况：设为 `none` 时，地点在允许城市的远程职位过去会显示，现在会以 `workplace_not_wanted` 隐藏；设为 `none` 且 `workplace: [remote]` 时，远程职位现在会被检查，不再被隐藏；`{region: [...]}` 没有包含本国时，本国的远程职位现在会显示；`locations` 里的国外城市变成 ✈ 地点并开始匹配。`locations: [Berlin, CH]` 加 `remote_scope: {region: [CH]}` 现在除了瑞士的远程岗，也保留德国的。如果 `locations` 的第一项是国外城市（德国市场的 `[Amsterdam, Berlin]`），它会成为常住城市，那里的职位按本国比较；`config:check` 和 `/me` 会提醒常住城市不在本国，你可以改设本国的城市，把另一个列为 ✈。
 
 `search.yaml` 的 `locations` 和 `remote_scope` 仍可接受但不再生效，也没有迁移步骤：搜索来自 `places`，`config:check` 和 `/me` 会提醒 `places` 里没有的内容，以及 `places` 新增、而这两个键没列出的搜索。两个文件一致时，升级后查询和查询 id 不变，轮转历史得以延续。这些配置会增加或改变搜索：
 
@@ -187,6 +187,12 @@ pnpm run doctor --only config.market
 | `locations` 里的国外城市 | 增加它的远程搜索 |
 | `workplace` 没有 `remote`，范围不是 `none` | 去掉远程搜索，因为这和迁移后的 `none` 无法区分 |
 
+旧 `locations` 里的现场搜索只有是常住城市或 ✈ 地点时才算列出了，因为只有它们有现场搜索；范围代码是本国或任何列出的地点就算。所以仅远程的 `CH` 不会盖住旧的现场搜索 `Switzerland` 的提醒。
+
+同一个网站会以同样方式发出的搜索，每轮只跑一次。在去掉网站发送不了的搜索的那一步里，如果一个单元里每个已启用、已配置的通道发出的请求都相同，两条查询就合并：Apify 设了 `remote_locations.region: Europe` 时，`{region: [eu]}` 和 `{region: [CH]}` 发往同一个地点，只算一次付费运行；Arbeitsagentur、StepStone、XING 和 JSearch 的远程搜索不带地点，每个关键词组只跑一次远程搜索。判断不了的通道（LinkedIn 会话、Monid、jobspy）把每条查询分开，所以启用了其中之一的级联不合并。
+
+已知限制：✈ 城市按数据表给它的国家搜索，所以即使旧配置指的是马萨诸塞州的 Cambridge，✈ `Cambridge` 也搜英国（过滤仍在本国保留 Cambridge）；常住美国时 ✈ `Paris` 也保留 `Paris, TX`。Arbeitsagentur 只认德语地名（`München`、`Deutschland`，以及 `sources.arbeitsagentur.location_names` 里的城市），国外的地点在那里搜不到结果；它是免费网站，所以不跳过。
+
 每次读取 `preferences.yaml`，不管是谁写的（表单、设置向导、`pnpm run setup`、答案文件或手改），`places` 都按同一套规则处理：
 
 - Worldwide 一律是仅远程。
@@ -195,9 +201,9 @@ pnpm run doctor --only config.market
 
 地点条数和名字长度都没有上限，和原来的 `locations` 一样。
 
-远程范围由地点得出：任一地点是 Worldwide 就是全球；否则是其中的国家和区域，仅远程的和 ✈ 的都算，没有仅远程的国家或区域时再加上本国；一个国家或区域都没有时就是本国。所以 `locations: [Berlin, CH]` 加 `remote_scope: {region: [CH]}` 升级后仍保留瑞士的远程岗，德国的也保留。
+评分提示词里的远程范围由地点得出：任一地点是 Worldwide 就是全球；否则是其中的国家和区域，仅远程的和 ✈ 的都算，没有仅远程的国家或区域时再加上本国；一个国家或区域都没有时就是本国。过滤直接读地点（见上），本国总在其中。
 
-设置向导的“市场”一步按地点写 search.yaml 的 `locations` 和 `remote_scope`；但 `remote_scope: none`（关掉远程搜索）会保留，直到你在 `/settings` 里改掉。
+设置向导只写 preferences.yaml：search.yaml 的旧键保持原样，不再生效。要停掉远程搜索，就从办公方式里去掉“远程”。
 
 旧版本的代码读不了版本 3。要退回旧版本，请放回升级前的版本 2 文件：`pnpm config:migrate --write`（部署时会运行）会把它复制到 `data/config/.backup/<时间>/profile/preferences.yaml`，也可以从你自己的备份里取（[备份与恢复](backup-restore.zh.md)）。用 `/me` 上的画像历史恢复旧版本没有用：保存时又会转换成版本 3。
 
