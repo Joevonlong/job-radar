@@ -300,6 +300,12 @@ export interface Channel {
   /** false for a board that sends no place on a remote query: it keeps the remote searches of a scope and skips those that name a place. */
   readonly supportsRemotePlaces?: boolean;
   /**
+   * What the board is sent for a query, as a key: two queries with the same key are the same request, and a cycle runs the first only
+   * (two remote scopes the channel's `remote_locations` sends as one text, or a board that sends no scope at all). Must be pure: read only
+   * the query, the given settings and the market. Absent, or when it throws: every query is its own request.
+   */
+  requestKey?(query: SearchQuery, settings: ChannelRuntimeSettings): string;
+  /**
    * Fetch postings for one query. Must return every posting verbatim. Throw `ChannelError`
    * (or let `ctx.http` throw) for failures; other thrown values are classified as `unknown`.
    */

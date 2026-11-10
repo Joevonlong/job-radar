@@ -67,6 +67,8 @@ export function createApifyChannel(options: ApifyChannelOptions): Channel {
     // Return true only after newest-first results under current settings have been measured.
     supportsCatchUp: () => false,
     estimateCost: (paidRecords) => (paidRecords * options.pricePer1kUsd()) / 1000,
+    // a run per distinct actor input: two remote scopes `remote_locations` sends as one location are one paid run
+    requestKey: (query, settings) => JSON.stringify([buildActorInputs(query, apifySettingsSchema.parse(settings.extra), 1, marketForChannel()), query.maxResults]),
     isConfigured: () => tokenOf() !== undefined && (options.actorId === undefined || options.actorId().trim() !== ""),
 
     async collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPostingInput[]> {

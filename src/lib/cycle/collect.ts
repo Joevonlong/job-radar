@@ -4,7 +4,7 @@ import { remoteScopeKey } from "@/lib/market/remote-scope";
 import { CascadeController, type CascadeSpec, type UnavailableReason } from "@/lib/channels/cascade";
 import { createChannelContext, createThrottle, httpSettingsFromConfig } from "@/lib/channels/context";
 import { ChannelError, InfrastructureError, isAbortError, PartialCollectError, toChannelError } from "@/lib/channels/errors";
-import { buildCompanyQueries, buildQueries, buildSweepQuery, capQuery, queriesForChannels } from "@/lib/channels/query";
+import { buildCompanyQueries, buildQueries, buildSweepQuery, capQuery, isRemotePlaceQuery, queriesForChannels } from "@/lib/channels/query";
 import { employerMatcher, keepCompanyMatches } from "@/lib/channels/company-match";
 import { catchUpWindow, familyHistory, orderQueries, rotationSummary, selectCompanyQueries, turnsOf, type QueryHistory, type RotationUnitSummary } from "@/lib/channels/rotation";
 import {
@@ -209,7 +209,9 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
   const units: Unit[] = [];
   const queriesFor = (order: readonly string[]): SearchQuery[] => {
     const channels = order.map((id) => registry.get(id)).filter((c): c is Channel => c !== undefined);
-    return channels[0] && !channels[0].usesQueries ? [sweepQuery] : queriesForChannels(keywordQueries, channels);
+    if (channels[0] && !channels[0].usesQueries) return [sweepQuery];
+    const active = (channel: Channel) => (registry.isEnabled(channel.id, config.channels) && (channel.isConfigured?.() ?? true) ? (registry.settingsFor(channel.id, config.channels) ?? null) : null);
+    return queriesForChannels(keywordQueries, channels.map((channel) => ({ channel, settings: active(channel) })));
   };
   for (const spec of services.cascades) {
     const order = spec.order.filter(isSelected);
@@ -603,7 +605,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     } finally {
       for (const [id, code] of controller.unusableChannels()) unusable[id] = code;
     }
-    const summary = rotationSummary({ queries: selectedQueries, remotePlacesSkipped: unit.queries[0] === sweepQuery ? 0 : keywordQueries.length - unit.queries.length, sortChannel, turns, reached, stretched: stretched.size, capped: capped.size, maxWindowHours, historyUnavailable: historyReason !== null, now });
+    const summary = rotationSummary({ queries: selectedQueries, remotePlacesSkipped: unit.queries[0] === sweepQuery || unit.queries.some(isRemotePlaceQuery) ? 0 : keywordQueries.filter(isRemotePlaceQuery).length, sortChannel, turns, reached, stretched: stretched.size, capped: capped.size, maxWindowHours, historyUnavailable: historyReason !== null, now });
     rotation[unit.name] = summary;
     step.note("info", "queries_not_reached", { unit: shortIdSchema.safeParse(unit.name).success ? unit.name : "other", count: summary.queries - reached });
     ctx.logger.info("query rotation", { unit: unit.name, ...summary, companyQueries: { candidates: unit.companyCandidates.length, due: company.due, selected: company.selected.length }, notReached: summary.queries - reached, reason: historyReason ?? (sortChannel === null ? "no_start_channel" : null) });

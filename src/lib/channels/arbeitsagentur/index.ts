@@ -4,7 +4,7 @@ import { detailLayoutError } from "../details";
 import { ChannelError, settlePostings } from "../errors";
 import { loadKnownDetails, storedDetailOf } from "../known";
 import { marketForChannel } from "../market";
-import { searchKind } from "../query";
+import { placeFreeRequestKey, searchKind } from "../query";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
 import { COMPANY_PARAMS, fetchDetail, fetchSearchPage, germanLocation, type CompanyParam } from "./client";
 import { JOB_PAGE_URL, parseArbeitsagenturPayload, toDate } from "./parse";
@@ -167,6 +167,7 @@ export const arbeitsagenturChannel: Channel = {
   usesQueries: true,
   supportsCompanyQueries: true,
   supportsRemotePlaces: false,
+  requestKey: placeFreeRequestKey,
   // the ghost job check: the Referenznummer is stable and the detail's full text is stored
   stableExternalIds: true,
   fullDescription: true,
