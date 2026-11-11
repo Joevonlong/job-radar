@@ -7375,6 +7375,10 @@
       "truncated": "The JD was cut at {limit} of {total} characters."
     },
     "errors": {
+      "settingsUnreadable": "mcp.yaml cannot be read ({problem}), so no call is allowed until it is fixed. Run pnpm config:check to see which setting.",
+      "serverOff": "The Job Radar MCP server is switched off (mcp.yaml enabled), so this call was refused.",
+      "notPermitted": "The owner has not granted {permission} to this connection (mcp.yaml), so this call was refused.",
+      "toolSwitchedOff": "{tool} is switched off in mcp.yaml (tools), so this call was refused.",
       "notFound": "No job with id {id}.",
       "searchTimeout": "Searching job descriptions took too long and was stopped (search_timeout). Narrow the query or the filters, or search without search_in: \"all\".",
       "failed": "The query failed ({category}). Your MCP client's log for this server has the line of this call.",

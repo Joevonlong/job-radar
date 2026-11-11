@@ -7,20 +7,23 @@
  *
  * Off by default: with mcp.yaml `enabled: false` (or every tool switched off, or an unreadable mcp.yaml) it says why on stderr and
  * exits with 1, which the client shows in its log. stdout carries protocol messages only; every other line goes to stderr.
+ * Settings are re-read on every call: switching mcp.yaml off (or a tool, or breaking the file) refuses the next call without a restart.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
+import { authorize, liveMcpSettings } from "../src/lib/agent-access/authorize";
+import { CAPABILITIES, visibleCapabilities } from "../src/lib/capabilities/registry";
 import { createConnection } from "../src/lib/db/client";
 import { createReadOnlyDb } from "../src/lib/db/read-only-client";
 import { loadDatabaseEnv } from "../src/lib/env";
 import { stderrLine } from "../src/lib/mcp/call-log";
 import { buildServer, defaultContext } from "../src/lib/mcp/server";
-import { configProblem, offeredTools, readMcpSettings } from "../src/lib/mcp/settings";
+import { configProblem, readMcpSettings } from "../src/lib/mcp/settings";
 import { mcpTranslator } from "../src/lib/mcp/text";
-import { readWriterEnabled } from "../src/lib/writer/settings";
+import { readWriterEnabled, readWriterInputs } from "../src/lib/writer/settings";
 
 // stdout belongs to the protocol: anything a library logs goes to stderr instead
 console.log = console.error;
@@ -36,6 +39,10 @@ function packageVersion(): string {
   }
 }
 
+/**
+ * The write connection is decided before the offered list, because the writing tool is offered only when it has one: it is opened
+ * when a writing capability is permitted at startup and writer.yaml is on. Switching it on later needs a restart.
+ */
 function main(): void {
   const text = mcpTranslator();
   let settings;
@@ -49,15 +56,17 @@ function main(): void {
     stderrLine(text("serve.disabled"));
     process.exit(1);
   }
-  const tools = offeredTools(settings, readWriterEnabled());
+  const writes = readWriterEnabled() && CAPABILITIES.some((capability) => capability.kind === "write" && authorize(capability, liveMcpSettings).allowed);
+  const writable = writes ? createConnection(loadDatabaseEnv().DATABASE_URL, { max: 1 }) : null;
+  const tools = visibleCapabilities(CAPABILITIES, { readSettings: liveMcpSettings, writer: { inputs: readWriterInputs, writeDb: writable?.db ?? null } }).map(
+    (capability) => capability.id,
+  );
   if (tools.length === 0) {
     stderrLine(text("serve.noTools"));
     process.exit(1);
   }
 
   const database = createReadOnlyDb();
-  // the one connection that can write, and only for the tool that adds answer versions
-  const writable = tools.includes("save_application_answer") ? createConnection(loadDatabaseEnv().DATABASE_URL, { max: 1 }) : null;
   const context = defaultContext(database.db, settings, { text, writeDb: writable?.db ?? null });
   const version = packageVersion();
   const handle = serveStdio(() => buildServer(context, { version }), {
@@ -76,7 +85,6 @@ function main(): void {
   };
   process.on("SIGINT", () => stop(0));
   process.on("SIGTERM", () => stop(0));
-  // the client closed its end of the pipe: the session is over
   process.stdin.on("end", () => stop(0));
   process.stdin.on("close", () => stop(0));
   process.on("uncaughtException", (error) => {

@@ -39,7 +39,7 @@ let close: (() => Promise<void>) | null = null;
 
 async function connect(options: { writer?: WriterConfig; writable?: boolean; traps?: () => TrapsConfig } = {}): Promise<Client> {
   const mcp = mcpSchema.parse({ enabled: true, tools: { get_application_context: true, save_application_answer: true } });
-  const ctx = defaultContext(readOnly.db, mcp, { text: mcpTranslator("en"), log: () => undefined });
+  const ctx = defaultContext(readOnly.db, mcp, { text: mcpTranslator("en"), log: () => undefined, readSettings: () => mcp });
   const writer = options.writer ?? writerOn();
   ctx.writer = { inputs: () => ({ writer, me, stories, storiesUnreadable: false, breakdownEnabled: true }), writeDb: options.writable === false ? null : getDb() };
   if (options.traps) ctx.traps = options.traps;
@@ -183,7 +183,7 @@ describe("get_application_context", () => {
     const question = await addQuestion(job.id);
     for (const n of [1, 2, 3]) await addVersion(question.id, `Answer number ${n}.`);
     const mcp = mcpSchema.parse({ enabled: true, limits: { max_results: 2 }, tools: { get_application_context: true } });
-    const ctx = defaultContext(readOnly.db, mcp, { text: mcpTranslator("en"), log: () => undefined });
+    const ctx = defaultContext(readOnly.db, mcp, { text: mcpTranslator("en"), log: () => undefined, readSettings: () => mcp });
     ctx.writer = { inputs: () => ({ writer: writerOn(), me, stories, storiesUnreadable: false, breakdownEnabled: true }), writeDb: null };
     const server = buildServer(ctx);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

@@ -7375,6 +7375,10 @@
       "truncated": "JD 在第 {limit} 个字符处截断（全文 {total} 个字符）。"
     },
     "errors": {
+      "settingsUnreadable": "mcp.yaml 读不出来（{problem}），修好之前不接受任何调用。用 pnpm config:check 看是哪一项。",
+      "serverOff": "Job Radar 的 MCP 服务已关闭（mcp.yaml 的 enabled），这次调用被拒绝。",
+      "notPermitted": "所有者没有给这个连接授权 {permission}（mcp.yaml），这次调用被拒绝。",
+      "toolSwitchedOff": "{tool} 在 mcp.yaml（tools）里关掉了，这次调用被拒绝。",
       "notFound": "没有 id 为 {id} 的岗位。",
       "searchTimeout": "搜索职位描述耗时过长，已停止（search_timeout）。请缩小查询或筛选条件，或不带 search_in: \"all\" 再搜。",
       "failed": "查询失败（{category}）。MCP 客户端里这个服务的日志有这次调用的记录。",

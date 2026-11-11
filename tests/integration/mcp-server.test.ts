@@ -34,7 +34,7 @@ function settings(edit: Partial<McpConfig> = {}): McpConfig {
 }
 
 async function connect(options: { mcp?: McpConfig; traps?: () => TrapsConfig; searchTimeoutMs?: number } = {}): Promise<Client> {
-  const ctx = defaultContext(readOnly.db, options.mcp ?? settings(), { text: mcpTranslator("en"), log: (line) => lines.push(line) });
+  const ctx = defaultContext(readOnly.db, options.mcp ?? settings(), { text: mcpTranslator("en"), log: (line) => lines.push(line), readSettings: () => options.mcp ?? settings() });
   ctx.now = () => NOW;
   ctx.timezone = () => TZ;
   if (options.traps) ctx.traps = options.traps;
