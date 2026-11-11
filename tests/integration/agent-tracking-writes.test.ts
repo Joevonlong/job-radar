@@ -49,7 +49,11 @@ beforeAll(() => {
   readOnly = createReadOnlyDb({ url });
   audit = createAuditRecorder(() => ({ db: getDb(), end: async () => undefined }), { text, log: () => undefined, writeTimeoutMs: 3000 });
 });
-beforeEach(() => { cap = 100; });
+beforeEach(async () => {
+  cap = 100;
+  // agent_calls.token_id references agent_tokens: the callers 12 and 13 used below are real token rows (the tables are emptied before each test)
+  for (const id of [12, 13]) await getDb().execute(sql`insert into agent_tokens (id, name, token_hash, token_prefix, permissions) overriding system value values (${id}, ${`token ${id}`}, ${`hash-${id}`}, ${`jrt_${id}`}, array['tracking:write'])`);
+});
 afterAll(async () => {
   await Promise.all(pending);
   await audit.close();
@@ -71,7 +75,7 @@ async function fixture(status: "new" | "interested" | "offer" | null = "new") {
 
 async function call(name: string, args: unknown, caller: AgentCaller = "stdio", permissions: Permission[] = ["tracking:write"]) {
   const capability = CAPABILITIES.find((item) => item.id === name)!;
-  const ctx = defaultContext(readOnly.db, settings(), { trackingWriteDb: getDb(), readSettings: settings, text, log: () => undefined, audit, caller: { caller, tokenId: typeof caller === "number" ? caller : null, transport: caller === "stdio" ? "stdio" : "http" } });
+  const ctx = defaultContext(readOnly.db, settings(), { trackingWriteDb: getDb(), readSettings: settings, text, log: () => undefined, audit, caller: { caller: typeof caller === "number" ? "token" : "stdio", tokenId: typeof caller === "number" ? caller : null, transport: caller === "stdio" ? "stdio" : "http" } });
   const input = capability.input(ctx).parse(args);
   return runLogged(ctx, name, async (current) => ({ result: await capability.handler({ ...current, permissions: new Set(permissions) }, input), count: 1 }), capability.target?.(input) ?? null);
 }
