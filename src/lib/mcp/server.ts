@@ -7,7 +7,7 @@
 import { McpServer, type StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 
 import { authorize, liveMcpSettings, type AccessDecision } from "@/lib/agent-access/authorize";
-import { CAPABILITIES, visibleCapabilities } from "@/lib/capabilities/registry";
+import { CAPABILITIES, listedCapabilities } from "@/lib/capabilities/registry";
 import type { Capability } from "@/lib/capabilities/types";
 import { loadConfig } from "@/lib/config";
 import type { McpConfig } from "@/lib/config/schemas/mcp";
@@ -100,17 +100,18 @@ export function buildServer(ctx: McpContext, options: { version?: string; capabi
           const decision = authorize(cap, ctx.readSettings);
           if (!decision.allowed) throw accessFailure(decision, t);
           if (cap.availability && !cap.availability.available(ctx)) throw new ToolFailure(cap.availability.category, t(cap.availability.message));
-          const output = await cap.handler({ ...callCtx, settings: decision.settings }, args);
-          return { result: toolResult(output), count: cap.count(output) };
+          const output = await cap.handler({ ...callCtx, settings: decision.settings, permissions: decision.permissions }, args);
+          const parsed = (cap.outputFor?.(decision.permissions) ?? cap.output).parse(output);
+          return { result: toolResult(parsed), count: cap.count(parsed) };
         }, cap.target?.(args) ?? null),
     );
   }
 
   server.server.removeRequestHandler("tools/list");
   server.server.setRequestHandler("tools/list", () => ({
-    tools: visibleCapabilities(capabilities, ctx).map((cap) => {
+    tools: listedCapabilities(capabilities, ctx).map(({ capability: cap, permissions }) => {
       const inputSchema = cap.input(ctx)["~standard"].jsonSchema.input({ target: "draft-2020-12" });
-      const outputSchema = cap.output["~standard"].jsonSchema.output({ target: "draft-2020-12" });
+      const outputSchema = (cap.outputFor?.(permissions) ?? cap.output)["~standard"].jsonSchema.output({ target: "draft-2020-12" });
       return {
         name: cap.id,
         title: t(cap.text.title),

@@ -1,10 +1,14 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 
-const floor = vi.hoisted(() => ({ currency: "CHF" as string | null }));
+const floor = vi.hoisted(() => ({ currency: "CHF" as string | null, unreadable: false, reads: 0 }));
 vi.mock("@/lib/signals/floor", () => ({
   loadBaseCurrency: () => floor.currency,
-  loadHighValuePolicy: () => ({ categories: [], salaryFloor: null, baseCurrency: floor.currency }),
+  loadHighValuePolicy: () => {
+    floor.reads += 1;
+    if (floor.unreadable) throw new Error("interests.yaml unreadable");
+    return { amountHighValue: false, amountId: null, otherIds: ["cert"] };
+  },
 }));
 
 import type { Db } from "@/lib/db";
@@ -91,3 +95,18 @@ describe("jobsListFilters: date condition", () => {
   });
 });
 
+describe("jobsListFilters: high-value policy", () => {
+  const known = { cities: [], visa: false, ghost: false };
+  const filters = (query: string) => jobsListFilters({} as Db, loadJobsSearchParams(new URLSearchParams(query)), known);
+
+  it("reads interests.yaml only for the high-value filter, so an unreadable file leaves other lists working", async () => {
+    floor.unreadable = true;
+    floor.reads = 0;
+    expect(await filters("fav=true&unseen=true")).toMatchObject({ highValue: null, favoritesOnly: true, unseenOnly: true });
+    expect(floor.reads).toBe(0);
+    await expect(filters("high=true")).rejects.toThrow("interests.yaml unreadable");
+    floor.unreadable = false;
+    expect((await filters("high=true")).highValue).toEqual({ amountHighValue: false, amountId: null, otherIds: ["cert"] });
+    expect(floor.reads).toBe(2);
+  });
+});

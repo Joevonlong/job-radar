@@ -19,7 +19,7 @@ import type { CheckedSentence } from "@/lib/writer/types";
 
 import { ToolFailure, type McpContext } from "../context";
 import { getApplicationContextOutput, toLinkDto, toLocationDto, type CleanText, type DescriptionDto, type GetApplicationContextOutput, type WriterVersionDto } from "../dto";
-import { availableDescription, jdQuoteGuard, shortFieldCleaner, unavailableDescription, visibleText } from "../guard";
+import { availableDescription, jdQuoteGuard, safeSourceUrl, shortFieldCleaner, unavailableDescription } from "../guard";
 import { readTraps, resultLimit, truncationNotice } from "./shared";
 import { readWriterForTool } from "./writer-shared";
 
@@ -44,7 +44,7 @@ function sentenceDto(sentence: CheckedSentence, clean: CleanText): WriterVersion
 
 /**
  * Everything to write one job's application answers from: the job's facts, its breakdown points, its questions, for each question
- * the material the user chose for it, and the saved versions. The result is built field by field (`dto.ts`).
+ * the material the user chose for it, and the saved versions. The result is built field by field (`src/lib/mcp/dto/index.ts`).
  *
  * The reader is an AI, so nothing here is handed over as written. The JD follows the rule of `get_job`: only after the trap findings
  * were removed, and withheld (with the breakdown points, which quote it) when the trap check cannot vouch for it; a point whose
@@ -89,25 +89,12 @@ export async function getApplicationContext(ctx: McpContext, args: GetApplicatio
   };
   const pointsOf = (list: readonly Parameters<typeof pointDto>[0][]) => list.flatMap((point) => pointDto(point) ?? []);
 
-  // a field the rules take for an instruction becomes the cleaner's marker; the notice covers what no rule can recognise
-  // an address is given as written, unless it spells an instruction (in the path or the query, plain or percent-encoded)
-  const safeUrl = (url: string | null): string | null => {
-    if (url === null) return null;
-    let decoded = url;
-    try {
-      decoded = decodeURIComponent(url);
-    } catch {
-      // not valid percent-encoding: the address as written is what is checked
-    }
-    const spaced = decoded.replace(/[-_+/?&=.]+/g, " ");
-    return [url, decoded, spaced].every((form) => clean(form) === visibleText(form)) ? url : null;
-  };
   const companyFields =
     research === null
       ? []
       : COMPANY_RESEARCH_FIELDS.flatMap((field) => {
           const entry = research.fields[field];
-          return entry ? [{ field, text: clean(companyFieldText(entry.text)), source_url: safeUrl(httpsUrlOrNull(entry.sourceUrl)) }] : [];
+          return entry ? [{ field, text: clean(companyFieldText(entry.text)), source_url: safeSourceUrl(httpsUrlOrNull(entry.sourceUrl), clean) }] : [];
         });
   if (research !== null || fitRow !== null) notices.push(ctx.text("notice.companyBackground"));
 

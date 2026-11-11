@@ -1,11 +1,17 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import type { JobDetail } from "@/lib/db/queries/job-detail";
 import type { JobCard } from "@/lib/db/queries/types";
 import type { Application } from "@/lib/db/repos/applications";
-import { applicationItemDto, jobCardDto, jobDetailDto, toApplicationItemDto, toJobCardDto, toJobDetailDto } from "@/lib/mcp/dto";
+import { cardMatchBlockDto, cardTrackingBlockDto, applicationItemDto, jobCardDto, jobDetailDto, toApplicationItemDto, toJobCardDto, toJobDetailDto } from "@/lib/mcp/dto";
 import { availableDescription } from "@/lib/mcp/guard";
+import { breakdownBlockDto, companyBlockDto, ghostBlockDto, lifecycleBlockDto, matchBlockDto, notesBlockDto, salaryBlockDto, trackingBlockDto, translationBlockDto } from "@/lib/mcp/dto";
+import { toBreakdownContent, toGhostReason } from "@/lib/mcp/job-blocks/analysis";
+import type { JobBlockSource } from "@/lib/mcp/job-blocks/source";
+
+import { blockBreakdown } from "./job-block-fixtures";
 
 /** Values that must never leave through the MCP server; each is put where the queries return it. */
 const SENTINEL = {
@@ -174,6 +180,328 @@ describe("the output field sets (a change here is a change of what docs/privacy.
   it("application item", () => {
     expect(Object.keys(applicationItemDto.shape).sort()).toEqual(["company", "days_in_status", "history", "interview_rounds", "job_id", "job_status", "links", "next_action", "next_action_at", "rank_value", "status", "status_changed_at", "title"]);
   });
+});
+
+function fieldSet(schema: z.core.$ZodType, prefix = ""): string[] {
+  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) return fieldSet(schema.unwrap(), prefix);
+  if (schema instanceof z.ZodArray) return fieldSet(schema.element, prefix);
+  if (schema instanceof z.ZodDiscriminatedUnion) return [...new Set(schema.options.flatMap((option) => fieldSet(option, prefix)))].sort();
+  if (!(schema instanceof z.ZodObject)) return [];
+  return Object.entries(schema.shape).flatMap(([key, value]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    return value instanceof z.ZodType ? [path, ...fieldSet(value, path)] : [path];
+  }).sort();
+}
+
+describe("get_job block field sets", () => {
+  it("translation", () => { expect(fieldSet(translationBlockDto)).toMatchInlineSnapshot(`
+    [
+      "available",
+      "items",
+      "items.created_at",
+      "items.language",
+      "items.stale",
+      "items.text",
+      "items.total_chars",
+      "items.truncated",
+      "reason",
+    ]
+  `); });
+  it("breakdown", () => { expect(fieldSet(breakdownBlockDto)).toMatchInlineSnapshot(`
+    [
+      "analyzed_at",
+      "available",
+      "content",
+      "content.experience",
+      "content.experience.items",
+      "content.experience.items.offset",
+      "content.experience.items.quote",
+      "content.experience.items.requirement",
+      "content.experience.items.text",
+      "content.experience.years_min",
+      "content.experience.years_quote",
+      "content.experience.years_quote.offset",
+      "content.experience.years_quote.quote",
+      "content.languages",
+      "content.languages.language",
+      "content.languages.level",
+      "content.languages.offset",
+      "content.languages.quote",
+      "content.languages.requirement",
+      "content.other",
+      "content.other.offset",
+      "content.other.quote",
+      "content.other.requirement",
+      "content.other.text",
+      "content.projects",
+      "content.projects.offset",
+      "content.projects.quote",
+      "content.projects.requirement",
+      "content.projects.text",
+      "content.responsibilities",
+      "content.responsibilities.offset",
+      "content.responsibilities.quote",
+      "content.responsibilities.text",
+      "content.soft_skills",
+      "content.soft_skills.offset",
+      "content.soft_skills.quote",
+      "content.soft_skills.requirement",
+      "content.soft_skills.text",
+      "content.tech_stack",
+      "content.tech_stack.category",
+      "content.tech_stack.name",
+      "content.tech_stack.offset",
+      "content.tech_stack.quote",
+      "content.tech_stack.requirement",
+      "reason",
+    ]
+  `); });
+  it("salary", () => { expect(fieldSet(salaryBlockDto)).toMatchInlineSnapshot(`
+    [
+      "benchmark",
+      "benchmark.level",
+      "benchmark.median",
+      "benchmark.n",
+      "benchmark.place",
+      "benchmark.quantiles",
+      "benchmark.seniority",
+      "company_figures",
+      "company_figures.count",
+      "company_figures.median",
+      "currency",
+      "family",
+      "figure",
+      "lookup",
+      "lookup.available",
+      "lookup.company_level",
+      "lookup.company_level.level",
+      "lookup.company_level.median",
+      "lookup.company_level.summary",
+      "lookup.confidence",
+      "lookup.expired",
+      "lookup.fetched_at",
+      "lookup.notes",
+      "lookup.reason",
+      "lookup.related_roles",
+      "lookup.related_roles.basis",
+      "lookup.related_roles.location",
+      "lookup.related_roles.max",
+      "lookup.related_roles.median",
+      "lookup.related_roles.min",
+      "lookup.related_roles.seniority",
+      "lookup.related_roles.title",
+      "lookup.role_band",
+      "lookup.role_band.basis",
+      "lookup.role_band.location",
+      "lookup.role_band.max",
+      "lookup.role_band.median",
+      "lookup.role_band.min",
+      "lookup.role_band.seniority",
+      "lookup.role_band.title",
+      "lookup.sources",
+      "lookup.sources.excerpt",
+      "lookup.sources.host",
+      "lookup.sources.site",
+      "lookup.sources.title",
+      "lookup.sources.trusted",
+      "lookup.sources.url",
+      "position",
+      "position.clamp",
+      "position.value",
+    ]
+  `); });
+  it("company", () => { expect(fieldSet(companyBlockDto)).toMatchInlineSnapshot(`
+    [
+      "available",
+      "expired",
+      "fetched_at",
+      "fields",
+      "fields.field",
+      "fields.source_url",
+      "fields.text",
+      "reason",
+    ]
+  `); });
+  it("ghost", () => { expect(fieldSet(ghostBlockDto)).toMatchInlineSnapshot(`
+    [
+      "checked_at",
+      "dismissed",
+      "level",
+      "reasons",
+      "reasons.channel_id",
+      "reasons.code",
+      "reasons.days",
+      "reasons.events",
+      "reasons.events.gap_days",
+      "reasons.events.new_seen",
+      "reasons.events.old_seen",
+      "reasons.field",
+      "reasons.from",
+      "reasons.has_responsibilities",
+      "reasons.label",
+      "reasons.min_words",
+      "reasons.offset",
+      "reasons.pattern_id",
+      "reasons.points",
+      "reasons.quote",
+      "reasons.responsibilities_from",
+      "reasons.since",
+      "reasons.words",
+      "score",
+      "state",
+    ]
+  `); });
+  it("lifecycle", () => { expect(fieldSet(lifecycleBlockDto)).toMatchInlineSnapshot(`
+    [
+      "auto_status",
+      "closed_reason",
+      "dormant",
+      "last_listed_at",
+      "last_seen_at",
+      "relist_count",
+      "relisted_at",
+    ]
+  `); });
+  it("match", () => { expect(fieldSet(matchBlockDto)).toMatchInlineSnapshot(`
+    [
+      "ai_score",
+      "available",
+      "checks",
+      "checks.german",
+      "checks.german.required",
+      "checks.german.state",
+      "checks.salary_floor",
+      "checks.salary_floor.approx",
+      "checks.salary_floor.currency",
+      "checks.salary_floor.figure",
+      "checks.salary_floor.state",
+      "checks.skills",
+      "checks.skills.have",
+      "checks.skills.name",
+      "deal_breakers",
+      "deal_breakers.field",
+      "deal_breakers.id",
+      "deal_breakers.offset",
+      "deal_breakers.quote",
+      "deal_breakers.required",
+      "deal_breakers.type",
+      "deal_breakers.visa_kind",
+      "filter",
+      "filter.reasons",
+      "filter.result",
+      "fit_reasons",
+      "fit_reasons.basis",
+      "fit_reasons.offset",
+      "fit_reasons.quote",
+      "fit_reasons.text",
+      "gaps",
+      "gaps.basis",
+      "gaps.offset",
+      "gaps.quote",
+      "gaps.text",
+      "german_penalty",
+      "output_lang",
+      "reason",
+      "scored_at",
+      "stale",
+      "summaries",
+      "visa",
+      "visa.checked_at",
+      "visa.evidence",
+      "visa.evidence.kind",
+      "visa.evidence.offset",
+      "visa.evidence.quote",
+      "visa.evidence.status",
+      "visa.kind",
+      "visa.match",
+      "visa.state",
+    ]
+  `); });
+  it("tracking", () => { expect(fieldSet(trackingBlockDto)).toMatchInlineSnapshot(`
+    [
+      "application",
+      "application.created_at",
+      "application.history",
+      "application.history.at",
+      "application.history.from",
+      "application.history.to",
+      "application.interview_rounds",
+      "application.next_action",
+      "application.next_action_at",
+      "application.status",
+      "application.status_changed_at",
+      "closure",
+      "closure.auto_status",
+      "closure.link_check",
+      "closure.link_check.checked_at",
+      "closure.link_check.outcome",
+      "closure.override",
+      "closure.override.action",
+      "closure.override.at",
+      "closure.reason",
+      "favorite",
+      "favorite.since",
+      "filter_override",
+      "seen",
+    ]
+  `); });
+  it("notes", () => { expect(fieldSet(notesBlockDto)).toMatchInlineSnapshot(`
+    [
+      "application_notes",
+      "event_notes",
+      "event_notes.at",
+      "event_notes.from",
+      "event_notes.note",
+      "event_notes.to",
+      "favorite_note",
+    ]
+  `); });
+
+  it("the breakdown mapper drops unrelated row fields, cleans text and guards every quote", () => {
+    const source: JobBlockSource = { detail: detail(), strict: { ok: false, reason: "not_scanned" }, clean: (text) => `clean:${text}`, quote: () => "[marker]" };
+    const content = { ...blockBreakdown(), provider: SENTINEL.model, profile: SENTINEL.notes };
+    const mapped = toBreakdownContent(content, source);
+    expect(breakdownBlockDto.parse({ available: true, reason: null, content: mapped, analyzed_at: NOW.toISOString() }).content).toEqual(mapped);
+    expect(mapped.responsibilities[0]).toEqual({ text: "clean:[marker]", quote: "[marker]", offset: 15 });
+    expect(mapped.tech_stack[0]?.name).toBe("clean:[marker]");
+    expect(mapped.languages[0]?.language).toBe("clean:[marker]");
+    expectNoSentinel(mapped);
+  });
+
+  it("every ghost reason is an explicit whitelist, without source ids in repost events", () => {
+    const source: JobBlockSource = { detail: detail(), strict: { ok: false, reason: "not_scanned" }, clean: (text) => `clean:${text}`, quote: () => null };
+    const reasons = [
+      toGhostReason({ code: "long_open", points: 2, days: 30, since: "2026-09-01", from: "posted", channelId: "fixture" }, source),
+      toGhostReason({ code: "repost_label", points: 1, channelId: "fixture", label: "Reposted" }, source),
+      toGhostReason({ code: "reposted", points: 3, channelId: "fixture", events: [{ oldId: SENTINEL.model, newId: SENTINEL.resumePath, oldSeen: "2026-09-01", newSeen: "2026-10-01", gapDays: 30 }] }, source),
+      toGhostReason({ code: "evergreen_wording", points: 2, patternId: "pool", quote: "talent pool", offset: 0 }, source),
+      toGhostReason({ code: "evergreen_wording", points: 2, patternId: "pool", quote: "talent pool", offset: 0, field: "title" }, source),
+      toGhostReason({ code: "thin_description", points: 1, words: 20, minWords: 80, hasResponsibilities: false, responsibilitiesFrom: "headings", channelId: "fixture" }, source),
+    ];
+    expect(ghostBlockDto.safeParse({ state: "likely", level: "likely", score: 9, checked_at: NOW.toISOString(), dismissed: false, reasons }).success).toBe(true);
+    expect(reasons).toContainEqual({ code: "evergreen_wording", points: 2, pattern_id: "clean:pool", quote: null, offset: 0 });
+    expect(reasons).toContainEqual({ code: "evergreen_wording", points: 2, pattern_id: "clean:pool", quote: "clean:talent pool", offset: 0, field: "title" });
+    expectNoSentinel(reasons);
+  });
+});
+
+describe("card block field sets", () => {
+  it("match", () => { expect(fieldSet(cardMatchBlockDto)).toMatchInlineSnapshot(`
+    [
+      "filter_reasons",
+      "filter_result",
+      "summary",
+      "summary_lang",
+      "summary_withheld",
+    ]
+  `); });
+  it("tracking", () => { expect(fieldSet(cardTrackingBlockDto)).toMatchInlineSnapshot(`
+    [
+      "favorite",
+      "seen",
+      "status",
+    ]
+  `); });
 });
 
 describe("mapping", () => {
