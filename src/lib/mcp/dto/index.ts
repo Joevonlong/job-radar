@@ -27,7 +27,7 @@
  * instructions. Only their combined length is capped; metadata including parse_error is cleaned independently.
  */
 export { linkDto, locationDto, salaryDto, rankDto, toLinkDto, toLocationDto, toSalaryDto, type CleanText } from "./shared";
-export { jobCardDto, amountDto, signalDto, descriptionDto, jobDetailDto, searchJobsOutput, searchJobsOutputFor, getJobOutput, getJobOutputFor, toJobCardDto, toSignalDto, toJobDetailDto, type JobCardDto, type DescriptionDto, type JobDetailDto, type SearchJobsOutput, type GetJobOutput, type QuoteGuard } from "./jobs";
+export { jobCardDto, amountDto, signalDto, descriptionDto, jobDetailDto, searchJobsOutput, searchJobsOutputFor, getJobOutput, getJobOutputFor, releasedJobCard, releasedJobDetail, toJobCardDto, toSignalDto, toJobDetailDto, type JobCardDto, type DescriptionDto, type JobDetailDto, type SearchJobsOutput, type GetJobOutput, type QuoteGuard } from "./jobs";
 export { translationBlockDto, breakdownBlockDto, salaryBlockDto, companyBlockDto, ghostBlockDto, ghostReasonDto, lifecycleBlockDto } from "./job-analysis";
 export { cardMatchBlockDto, cardTrackingBlockDto } from "./job-card-blocks";
 export { matchBlockDto } from "./job-match";

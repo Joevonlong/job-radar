@@ -6382,7 +6382,11 @@
           "none": "none",
           "off": "Off (mcp.yaml enabled: false, the default)",
           "configError": "mcp.yaml cannot be read: {problem}",
-          "configHint": "pnpm config:check shows which setting"
+          "configHint": "pnpm config:check shows which setting",
+          "http": "HTTP enabled: {enabled}. Active tokens: {count}; nearest expiry: {expiry}.",
+          "unknown": "unknown",
+          "passwordRequired": "HTTP answers 503 until a usable web password is set.",
+          "passwordHint": "Run pnpm web:password and configure the web password, then restart the web process."
         },
         "replies": {
           "title": "Gmail replies",
@@ -7416,7 +7420,6 @@
       "notPermitted": "The owner has not granted {permission} to this connection (mcp.yaml), so this call was refused.",
       "tokenInactive": "This agent token has been revoked or has expired, so this call was refused.",
       "notFound": "No job with id {id}.",
-      "trackingFilter": "favorites_only and unseen_only filter by your stars and the jobs you have looked at, which need tracking:read; the owner has not granted it to this connection (mcp.yaml). Leave them out.",
       "searchTimeout": "Searching job descriptions took too long and was stopped (search_timeout). Narrow the query or the filters, or search without search_in: \"all\".",
       "failed": "The query failed ({category}). Your MCP client's log for this server has the line of this call.",
       "writerDisabled": "The application writer is switched off (writer.yaml enabled), or this tool has no writable database connection.",

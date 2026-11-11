@@ -75,6 +75,15 @@ describe("MCP saved view permissions", () => {
     expect(queries.countTodayJobs).not.toHaveBeenCalled();
   });
 
+  it("refuses the following view without tracking permission before any queries, and counts it only with that permission", async () => {
+    await expect(getToday(readContext(["jobs:read"]), { quick: "following" })).rejects.toMatchObject({ category: "not_permitted", message: expect.stringContaining("tracking:read") });
+    for (const query of Object.values(queries)) expect(query).not.toHaveBeenCalled();
+    queries.listTodayJobs.mockResolvedValueOnce([]);
+    expect((await getToday(readContext(["jobs:read"]), {})).quick_counts).toEqual({ all: 3, high: 2, salary: 1 });
+    queries.listTodayJobs.mockResolvedValueOnce([]);
+    expect((await getToday(readContext(), {})).quick_counts).toEqual({ all: 3, high: 2, salary: 1, following: 1 });
+  });
+
   it.each([{}, { view: "private-status" }])("refuses application filters before any queries: %j", async (args) => {
     vi.mocked(loadSavedViews).mockReturnValue([{ id: "private-status", name: "Private status", default: true, filters: { app: ["interviewing"] } }]);
     await expect(getToday(readContext(["jobs:read", "profile:read"]), args)).rejects.toMatchObject({ category: "not_permitted", message: expect.stringContaining("tracking:read") });

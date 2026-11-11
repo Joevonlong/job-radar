@@ -60,6 +60,11 @@ export interface McpContext {
   /** Re-reads a token grant before each call; a token grant without it is refused. */
   readGrant?: GrantReader;
   auditCall?: { success: (count: number) => AuditEntry; committed: boolean };
+  /**
+   * Runs one tool call. The HTTP route keeps the request's concurrency slot until every call it runs has settled, even
+   * after the client disconnects. Absent (stdio): the call just runs.
+   */
+  track?: <T>(call: () => Promise<T>) => Promise<T>;
 }
 
 type ErrorResult = ReturnType<typeof errorResult>;

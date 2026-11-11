@@ -4,7 +4,7 @@ import { companyOverviewDependencies, loadCompanyOverviewParams } from "@/lib/co
 import { listCompanyOverview } from "@/lib/db/queries/companies";
 import { MAX_FILTER_VALUE_CHARS } from "@/lib/jobs/constants";
 import type { McpContext } from "../context";
-import { listCompaniesOutput } from "../dto/companies";
+import { listCompaniesOutputFor } from "../dto/companies";
 import { readTextCleaner } from "../read-guard";
 import { readTraps, resultLimit } from "./shared";
 import { readNotices } from "./read-shared";
@@ -16,6 +16,7 @@ export async function listCompanies(ctx: McpContext, args: z.infer<ReturnType<ty
   const limit = resultLimit(ctx, args.limit);
   const data = await loadCompanyOverviewParams({ q: args.query ?? "", sort: args.sort ?? "jobs", dir: "desc", page: 1 }, { loadSettings: () => ({ ...companyOverviewDependencies.loadSettings(), pageSize: limit, timezone: ctx.timezone() }), list: (options) => listCompanyOverview(ctx.db, options) });
   const clean = readTextCleaner(readTraps(ctx), ctx.text("notice.redacted"));
-  const companies = data.rows.map((row) => ({ id: row.id, name: clean(row.name), watched: row.watched, blacklisted: row.excluded, job_count: row.jobCount, top_rank: row.topRank, last_first_seen_at: row.lastFirstSeenAt.toISOString(), text_withheld: null }));
-  return listCompaniesOutput.parse({ notices: readNotices(ctx, companies.length, data.total, limit, companies.some((row) => row.text_withheld !== null)), total: data.total, returned: companies.length, truncated: data.total > companies.length, companies });
+  const marks = ctx.permissions?.has("profile:read") ?? false;
+  const companies = data.rows.map((row) => ({ id: row.id, name: clean(row.name), ...(marks ? { watched: row.watched, blacklisted: row.excluded } : {}), job_count: row.jobCount, top_rank: row.topRank, last_first_seen_at: row.lastFirstSeenAt.toISOString(), text_withheld: null }));
+  return listCompaniesOutputFor(ctx.permissions ?? new Set()).parse({ notices: readNotices(ctx, companies.length, data.total, limit, companies.some((row) => row.text_withheld !== null)), total: data.total, returned: companies.length, truncated: data.total > companies.length, companies });
 }

@@ -118,15 +118,17 @@ export function buildServer(ctx: McpContext, options: { version?: string; capabi
         outputSchema: cap.output,
         annotations: cap.annotations,
       },
-      async (args) =>
-        runLogged(ctx, cap.id, async (callCtx) => {
+      async (args) => {
+        const call = () => runLogged(ctx, cap.id, async (callCtx) => {
           const decision = await authorizeCall(cap, ctx.readSettings, ctx.grant, ctx.readGrant);
           if (!decision.allowed) throw accessFailure(decision, t);
           if (cap.availability && !cap.availability.available(ctx)) throw new ToolFailure(cap.availability.category, t(cap.availability.message));
           const output = await cap.handler({ ...callCtx, settings: decision.settings, permissions: decision.permissions }, args);
           const parsed = (cap.outputFor?.(decision.permissions) ?? cap.output).parse(output);
           return { result: toolResult(parsed), count: cap.count(parsed) };
-        }, cap.target?.(args) ?? null),
+        }, cap.target?.(args) ?? null);
+        return ctx.track ? ctx.track(call) : call();
+      },
     );
   }
 

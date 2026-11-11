@@ -22,7 +22,8 @@ Job Radar 的所有设置都是 YAML，分两层：
 - 一个文件的值是**出厂文件上面叠你的文件**，按键合并。你的文件只放不同的部分：没写的键跟随产品，包括以后的更新。完全没有这个文件时，用的就是出厂文件。见[你的文件是一个叠加层](#你的文件是一个叠加层)。
 - 网页保存永远写用户目录，而且只写有变化的部分：改过的值写进去，改回出厂值的键移出去，其余部分的注释不动。还不存在的文件从一个很短的存根开始。默认目录从不被写。只由 schema 补上的值也不写进去，所以这个默认值以后变了，你仍然能拿到。
 - 热加载同时盯两层：用户文件新出现、被删除（退回默认）、默认文件变了（你的文件没写的键）都在约 5 秒内生效。容器里的默认配置在镜像里，只随新镜像（部署）改变；Docker 之外（`pnpm dev`、宿主机的 ai-worker）`config/` 里的文件改了会这样生效。runner 和 ai-worker 盯所有配置文件（包括 `me.yaml`、`preferences.yaml`），并在每轮周期和每个请求开始时再读一遍，所以改动（比如在设置向导或 `/me` 里保存的市场）在下一轮周期就生效，即使它紧接着就开始，也不用重启。
-- web 和 MCP server 没有 watcher，所以自己检查文件：读取某个配置时，如果距上次检查已超过 5 秒，会先把它已加载的所有配置重新读一遍，所以手工改的文件（或别的进程改的）下一次打开页面就能看到，不用重启。文件无效时被忽略（保留上一份有效值），日志里只报告一次。`JOB_RADAR_CONFIG_POLL_MS`（默认 `5000`，单位毫秒，设在该进程的环境变量里）就是这个间隔，也是 watcher 的轮询间隔；设为 `0` 会关闭这项检查和 watcher 的轮询（watcher 仍会响应文件事件）。
+- web 和 MCP server 的通用配置读取没有 watcher，所以自己检查文件：读取某个配置时，如果距上次检查已超过 5 秒，会先把它已加载的所有配置重新读一遍，所以手工改的文件（或别的进程改的）下一次打开页面就能看到，不用重启。文件无效时被忽略（保留上一份有效值），日志里只报告一次。`JOB_RADAR_CONFIG_POLL_MS`（默认 `5000`，单位毫秒，设在该进程的环境变量里）就是这个间隔，也是 watcher 的轮询间隔；设为 `0` 会关闭这项检查和 watcher 的轮询（watcher 仍会响应文件事件）。
+- MCP 授权检查更严格：两种传输每次工具调用都重新读取 `mcp.yaml`，HTTP 还会在每个请求开始时重读。文件无法读取会立即拒绝访问，不沿用缓存中的授权。
 - `pnpm config:check` 逐个文件写出读的是哪一层：`(user changes on the shipped file)`、还没转换的 `(user, whole file)`、`(default)`。
 
 ## 你的文件是一个叠加层
@@ -333,7 +334,7 @@ docker compose up -d web     # 创建容器时 web 读取 .env
 
 设了口令之后：
 
-- 没有会话的访客打开页面会跳到 `/login`，登录后回到原页面。在此之前其他请求（API、表单、后台请求）一律返回 `401`。`/api/health` 始终开放，供健康检查使用。
+- 没有会话的访客打开页面会跳到 `/login`，登录后回到原页面。在此之前其他请求（API、表单、后台请求）一律返回 `401`。`/api/health` 始终开放，供健康检查使用。精确的 `POST /api/mcp` 不带 `Next-Action` 时改为自己验证 agent token；它仍需要可用 Web 密码和两个 MCP 开关。见 [MCP HTTP](mcp.zh.md#从其他设备访问http)。
 - 会话有效期为 `ui.yaml: web_access.session_days`（30 天）；cookie 为 `HttpOnly`、`SameSite=Lax`。经 https 到达时（`tailscale serve` 就是 https）cookie 名为 `__Host-jr_session` 并带 `Secure`（浏览器只经 https 把它发给这一个主机）；明文 http 下名为 `jr_session`。这个 cookie 名出现之前经 https 建立的会话不会沿用：升级到那个版本后，经 https 访问的每台设备都要再登录一次。退出登录按钮在侧栏底部（手机上在菜单里）。
 - 结束所有会话（手机丢了、用过别人的浏览器）：**设置 → 已登录的浏览器 → 退出所有设备**会一次让所有浏览器退出登录，包括当前这个。它把 `data/config/.web-session-generation` 里的计数加一；之前发出的会话从此都被拒绝，其他不变。改口令也会让所有会话失效；删掉 `data/config/.web-session-secret`（或改 `JOB_RADAR_SESSION_SECRET`）再 `docker compose up -d web` 也一样。
 - 失败的登录在校验口令之前就会被限制：同一来源在 `login_window_minutes`（15）分钟内失败 `web_access.login_max_failures`（5）次，锁定 `login_lockout_minutes`（15）分钟。来源取 `X-Forwarded-For` 的最后一个地址，即最近一跳看到的地址（`tailscale serve` 会把它设成设备的 tailnet 地址）。窗口内所有来源合计失败达到 `global_max_failures`（30）次后，之后每失败一次，所有登录都要等待：先等 `global_delay_seconds`（2）秒，每次翻倍，最多 `login_lockout_minutes`。仍持有有效会话的浏览器不受这个等待影响。同时最多进行 `max_concurrent_logins`（4）次校验（每次会短暂占用约 128 MB 内存）。web 日志会记下每次锁定和每次开始等待，但从不记录口令或地址。`min_password_length`（10）是 `pnpm web:password` 接受的最短口令。这些键受保护：在 `data/config/ui.yaml` 里手动改。
