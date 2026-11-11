@@ -201,10 +201,10 @@ while MCP is off; without a running runner, they remain. Old database backups ca
 | `lock_timeout_ms` | 200 ms | 1–60000 |
 | `write_timeout_ms` | 2000 ms | 100–10000 |
 
-The idle-in-transaction timeout uses `statement_timeout_ms` too. The first three are enforced by the database;
-`write_timeout_ms` is the server's own deadline, so it also holds when the database stops replying. When the client goes
+The idle-in-transaction timeout uses `statement_timeout_ms` too. `statement_timeout_ms` and `lock_timeout_ms` are enforced by the database,
+`connect_timeout_seconds` by the server's client, and `write_timeout_ms` is the server's own deadline, so it also holds when the database stops replying. When the client goes
 away, the server waits at most `write_timeout_ms` for running calls and their rows, then closes its database connections,
-giving a query that is still running at most 5 more seconds. Connection timeouts take effect on server restart;
+giving a query that is still running at most 5 more seconds. The `audit` timeouts, including `write_timeout_ms`, take effect on server restart;
 retention is read afresh by the runner. Existing config files get these defaults without a version change. `pnpm run
 doctor` reports the audit retention days in `data.mcp` when MCP is on.
 
@@ -251,6 +251,6 @@ GRANT USAGE ON SEQUENCE agent_calls_id_seq TO job_radar_ro;
 | "already holds … versions" | See [Writing answers from your client](#writing-answers-from-your-client). |
 | `command not found` / `spawn pnpm ENOENT` | The client does not find `pnpm` or `node`: use absolute paths and set `PATH` in `env` (see Claude Desktop above). |
 | "The query failed (database)" | The stack is not running, or the database address in `.env` is not reachable from the host. `pnpm run doctor` checks both. |
-| "The MCP audit row could not be written (…)" in the client's log | The call itself answered; only its audit row is missing. `database`: the server runs with a SELECT-only role (grant `INSERT` on `agent_calls`, see [above](#optional-a-database-role-that-can-only-read)), or the database has not been migrated to this version yet (deploy the update with `scripts/ops/deploy.sh`, see [upgrade.md](upgrade.md)); until then `save_application_answer` fails as a whole with "The query failed (database)", because the answer and its row are saved together. `timeout`: the `agent_calls` table was locked or the database was slow for longer than `audit.write_timeout_ms`, for example during a migration; later calls write their rows again once it is free. |
+| "The MCP audit row could not be written (…)" in the client's log | The call itself answered; only its audit row is missing. `database`: the server runs with a SELECT-only role (grant `INSERT` on `agent_calls`, see [above](#optional-a-database-role-that-can-only-read)), or the database has not been migrated to this version yet (deploy the update with `scripts/ops/deploy.sh`, see [upgrade.md](upgrade.md)); until then `save_application_answer` fails as a whole with "The query failed (database)", because the answer and its row are saved together. `database` also covers a locked `agent_calls` table (for example during a migration) or a slow statement, because `audit.lock_timeout_ms` and `audit.statement_timeout_ms` fire before `audit.write_timeout_ms` with the defaults. `timeout`: the database or network did not answer within `audit.write_timeout_ms`, or the write queue was too long. Later calls write their rows again once the cause is gone. |
 | `search_timeout` | A `search_in: "all"` search ran past `job-search.yaml: query.all_scope_timeout_ms`. Narrow the query or filters, or search without `search_in: "all"`. |
 | "JD not available" | See [AI traps and the JD](#ai-traps-and-the-jd). |

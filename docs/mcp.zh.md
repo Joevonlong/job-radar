@@ -154,8 +154,8 @@ runner 没运行就会继续保留。旧数据库备份仍可能含已删的行�
 | `lock_timeout_ms` | 200 毫秒 | 1–60000 |
 | `write_timeout_ms` | 2000 毫秒 | 100–10000 |
 
-事务闲置超时也用 `statement_timeout_ms`。前三项由数据库执行；`write_timeout_ms` 是服务自己的期限，数据库不回话时也有效。
-客户端断开后，服务最多等 `write_timeout_ms` 让进行中的调用和它们的审计行结束，然后关闭数据库连接，仍在跑的查询最多再给 5 秒。连接超时设置重启服务后生效，保留天数由 runner 每次重新读。
+事务闲置超时也用 `statement_timeout_ms`。`statement_timeout_ms` 和 `lock_timeout_ms` 由数据库执行，`connect_timeout_seconds` 由服务的客户端执行，`write_timeout_ms` 是服务自己的期限，数据库不回话时也有效。
+客户端断开后，服务最多等 `write_timeout_ms` 让进行中的调用和它们的审计行结束，然后关闭数据库连接，仍在跑的查询最多再给 5 秒。包括 `write_timeout_ms` 在内的 `audit` 超时设置重启服务后生效，保留天数由 runner 每次重新读。
 旧配置直接使用这些默认值，不改版本号。MCP 打开时，`pnpm run doctor` 的 `data.mcp` 也显示保留天数。
 
 ## 可选：只能读的数据库角色
@@ -199,6 +199,6 @@ GRANT USAGE ON SEQUENCE agent_calls_id_seq TO job_radar_ro;
 | "已有 … 个版本" | 见[从客户端写答案](#从客户端写答案)。 |
 | `command not found` / `spawn pnpm ENOENT` | 客户端找不到 `pnpm` 或 `node`：用绝对路径，并在 `env` 里设 `PATH`（见上面 Claude Desktop 一节）。 |
 | "查询失败（database）" | 整套服务没在运行，或 `.env` 里的数据库地址从宿主机连不上。`pnpm run doctor` 两项都会查。 |
-| 客户端日志里有"MCP 调用记录写不进去（…）" | 调用本身已经回答，只是少了审计行。`database`：服务用的是只有 SELECT 权限的角色（给 `agent_calls` 授 `INSERT`，见[上文](#可选只能读的数据库角色)），或数据库还没迁移到这个版本（用 `scripts/ops/deploy.sh` 部署这次更新，见 [upgrade.zh.md](upgrade.zh.md)）；迁移之前 `save_application_answer` 会整个失败，报"查询失败（database）"，因为答案和它的审计行一起保存。`timeout`：`agent_calls` 表被锁住，或数据库慢到超过 `audit.write_timeout_ms`，比如正在迁移；表空出来后，之后的调用会照常写入。 |
+| 客户端日志里有"MCP 调用记录写不进去（…）" | 调用本身已经回答，只是少了审计行。`database`：服务用的是只有 SELECT 权限的角色（给 `agent_calls` 授 `INSERT`，见[上文](#可选只能读的数据库角色)），或数据库还没迁移到这个版本（用 `scripts/ops/deploy.sh` 部署这次更新，见 [upgrade.zh.md](upgrade.zh.md)）；迁移之前 `save_application_answer` 会整个失败，报"查询失败（database）"，因为答案和它的审计行一起保存。`agent_calls` 表被锁住（比如正在迁移）或语句太慢，默认设置下也报 `database`，因为 `audit.lock_timeout_ms` 和 `audit.statement_timeout_ms` 比 `audit.write_timeout_ms` 先到。`timeout`：数据库或网络在 `audit.write_timeout_ms` 内没有回应，或写入队列太长。原因消除后，之后的调用会照常写入。 |
 | `search_timeout` | `search_in: "all"` 的搜索超过了 `job-search.yaml: query.all_scope_timeout_ms`。缩小查询或筛选条件，或不带 `search_in: "all"` 再搜。 |
 | "JD 暂不可用" | 见 [AI 陷阱与 JD](#ai-陷阱与-jd)。 |
