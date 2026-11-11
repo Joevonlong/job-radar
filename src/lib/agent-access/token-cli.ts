@@ -19,6 +19,7 @@ export const EXIT_FAILED = 1;
 export const EXIT_USAGE = 2;
 
 const NAME_MAX = 64;
+const TOKEN_SHAPED_PATTERN = /jrat_[A-Za-z0-9_-]{20,}/;
 const PRESET_NAMES = Object.keys(PERMISSION_PRESETS) as (keyof typeof PERMISSION_PRESETS)[];
 
 export interface AgentTokenCliInput {
@@ -33,7 +34,7 @@ export interface AgentTokenCliInput {
   generate?: typeof generateAgentToken;
 }
 
-const nameSchema = z.string().trim().min(1).max(NAME_MAX).regex(/^[^\p{C}]+$/u);
+const nameSchema = z.string().trim().min(1).max(NAME_MAX).regex(/^[^\p{C}]+$/u).refine((value) => !TOKEN_SHAPED_PATTERN.test(value));
 const daySchema = z.iso.date();
 
 function isPreset(value: string): value is keyof typeof PERMISSION_PRESETS {
@@ -75,7 +76,11 @@ function shownTime(at: Date | null, timeZone: string, never: string): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at);
 }
 
-const oneLine = (text: string): string => text.replace(/[\p{C}\s]+/gu, " ").trim();
+export function redact(text: string): string {
+  return text.replace(new RegExp(TOKEN_SHAPED_PATTERN.source, "g"), "<redacted>");
+}
+
+const oneLine = (text: string): string => redact(text).replace(/[\p{C}\s]+/gu, " ").trim();
 
 async function create(input: AgentTokenCliInput, args: string[]): Promise<number> {
   const { t } = input;
@@ -100,34 +105,32 @@ async function create(input: AgentTokenCliInput, args: string[]): Promise<number
     input.err(t("permissionsValid", { presets: PRESET_NAMES.join(", "), permissions: PERMISSIONS.join(", ") }));
     return EXIT_USAGE;
   }
-  let expiresAt: Date | null = null;
-  if (values.expires !== undefined) {
-    const day = daySchema.safeParse(values.expires);
-    if (!day.success) {
-      input.err(t("expiresInvalid"));
-      return EXIT_USAGE;
-    }
-    expiresAt = endOfDayInZone(day.data, input.timezone());
-    if (expiresAt.getTime() <= input.now().getTime()) {
-      input.err(t("expiresPast"));
-      return EXIT_USAGE;
-    }
+  const day = values.expires === undefined ? undefined : daySchema.safeParse(values.expires);
+  if (day && !day.success) {
+    input.err(t("expiresInvalid"));
+    return EXIT_USAGE;
+  }
+  const zone = input.timezone();
+  const expiresAt = day ? endOfDayInZone(day.data, zone) : null;
+  if (expiresAt !== null && expiresAt.getTime() <= input.now().getTime()) {
+    input.err(t("expiresPast"));
+    return EXIT_USAGE;
   }
   const token = (input.generate ?? generateAgentToken)();
   const row = await insertAgentToken(input.db, { name: name.data, tokenHash: token.hash, tokenPrefix: token.prefix, permissions: permissions.permissions, expiresAt });
   if (!row) {
-    input.err(t("nameTaken", { name: name.data }));
+    input.err(t("nameTaken", { name: oneLine(name.data) }));
     return EXIT_FAILED;
   }
-  input.err(t("created", {
-    name: row.name,
-    prefix: row.tokenPrefix,
-    permissions: row.permissions.join(", "),
-    expires: shownTime(row.expiresAt, input.timezone(), t("never")),
-    zone: input.timezone(),
+  input.err(t(row.expiresAt === null ? "createdNoExpiry" : "created", {
+    name: oneLine(row.name),
+    prefix: oneLine(row.tokenPrefix),
+    permissions: oneLine(row.permissions.join(", ")),
+    expires: shownTime(row.expiresAt, zone, t("never")),
+    zone: oneLine(zone),
   }));
   input.out(token.secret);
-  input.err(t("shownOnce", { prefix: row.tokenPrefix }));
+  input.err(t("shownOnce", { prefix: oneLine(row.tokenPrefix) }));
   return EXIT_OK;
 }
 
@@ -135,11 +138,11 @@ function describe(input: AgentTokenCliInput, token: AgentTokenSummary, now: Date
   const { t } = input;
   const zone = input.timezone();
   return t("row", {
-    prefix: token.tokenPrefix,
+    prefix: oneLine(token.tokenPrefix),
     name: oneLine(token.name),
     state: t(`state.${agentTokenState(token, now)}`),
     created: shownTime(token.createdAt, zone, t("never")),
-    used: shownTime(token.lastUsedAt, zone, t("never")),
+    used: shownTime(token.lastUsedAt, zone, t("neverUsed")),
     expires: shownTime(token.expiresAt, zone, t("never")),
     permissions: storedPermissions(token.permissions).join(", ") || t("none"),
   });
@@ -153,7 +156,7 @@ async function list(input: AgentTokenCliInput, args: string[]): Promise<number> 
     return EXIT_OK;
   }
   const now = input.now();
-  input.err(input.t("listHeader", { zone: input.timezone() }));
+  input.err(input.t("listHeader", { zone: oneLine(input.timezone()) }));
   for (const token of tokens) input.out(describe(input, token, now));
   return EXIT_OK;
 }
@@ -166,6 +169,10 @@ async function revoke(input: AgentTokenCliInput, args: string[]): Promise<number
     input.err(t("usage"));
     return EXIT_USAGE;
   }
+  if (TOKEN_SHAPED_PATTERN.test(key)) {
+    input.err(t("revokeTokenInvalid"));
+    return EXIT_USAGE;
+  }
   const matches = await findUnrevokedAgentTokens(input.db, key.trim());
   const [only] = matches;
   if (!only) {
@@ -173,11 +180,11 @@ async function revoke(input: AgentTokenCliInput, args: string[]): Promise<number
     return EXIT_FAILED;
   }
   if (matches.length > 1) {
-    input.err(t("revokeAmbiguous", { key: oneLine(key), prefixes: matches.map((token) => token.tokenPrefix).join(", ") }));
+    input.err(t("revokeAmbiguous", { key: oneLine(key), prefixes: matches.map((token) => oneLine(token.tokenPrefix)).join(", ") }));
     return EXIT_FAILED;
   }
   const revoked = await revokeAgentToken(input.db, only.id, input.now());
-  input.err(revoked ? t("revoked", { name: oneLine(only.name), prefix: only.tokenPrefix }) : t("revokeNone", { key: oneLine(key) }));
+  input.err(revoked ? t("revoked", { name: oneLine(only.name), prefix: oneLine(only.tokenPrefix) }) : t("revokeNone", { key: oneLine(key) }));
   return revoked ? EXIT_OK : EXIT_FAILED;
 }
 

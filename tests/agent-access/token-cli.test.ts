@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PERMISSION_PRESETS, PERMISSIONS } from "@/lib/agent-access/permissions";
-import { endOfDayInZone, EXIT_FAILED, EXIT_OK, EXIT_USAGE, parsePermissionList, runAgentToken } from "@/lib/agent-access/token-cli";
+import { endOfDayInZone, EXIT_FAILED, EXIT_OK, EXIT_USAGE, parsePermissionList, redact, runAgentToken, type AgentTokenCliInput } from "@/lib/agent-access/token-cli";
 import { generateAgentToken } from "@/lib/agent-access/tokens";
 import type { Executor } from "@/lib/db/executor";
 import type { AgentTokenSummary, NewAgentToken } from "@/lib/db/repos/agent-tokens";
@@ -27,19 +27,94 @@ function summary(overrides: Partial<AgentTokenSummary> = {}): AgentTokenSummary 
   };
 }
 
-async function run(...argv: string[]) {
+async function runWith(argv: string[], overrides: Partial<Pick<AgentTokenCliInput, "timezone" | "t" | "generate">> = {}) {
   const out: string[] = [];
   const err: string[] = [];
   const code = await runAgentToken({
     db: {} as Executor, argv, now: () => NOW, timezone: () => "Europe/Berlin", t,
-    out: (line) => out.push(line), err: (line) => err.push(line), generate: () => SENTINEL,
+    out: (line) => out.push(line), err: (line) => err.push(line), generate: () => SENTINEL, ...overrides,
   });
   return { code, out, err };
 }
 
+const run = (...argv: string[]) => runWith(argv);
+
+function expectNoSecret(lines: string[]) {
+  const text = lines.join("\n");
+  expect(text).not.toContain(SENTINEL.secret);
+  expect(text).not.toContain(SENTINEL.secret.slice("jrat_".length));
+  expect(text).not.toContain(SENTINEL.secret.slice(SENTINEL.prefix.length));
+}
+
 beforeEach(() => {
   for (const fn of Object.values(repo)) fn.mockReset();
+  repo.findUnrevokedAgentTokens.mockResolvedValue([]);
   repo.insertAgentToken.mockImplementation(async (_db, token) => summary({ name: token.name, tokenPrefix: token.tokenPrefix, permissions: [...(token.permissions ?? [])], expiresAt: token.expiresAt ?? null }));
+});
+
+describe("redact", () => {
+  it("removes every token-shaped substring, including embedded tokens and long partial copies", () => {
+    const partial = `jrat_${"A_-9".repeat(5)}`;
+    expect(redact(`before (${SENTINEL.secret}) / ${partial} / ${SENTINEL.secret} after`)).toBe("before (<redacted>) / <redacted> / <redacted> after");
+    expect(redact(SENTINEL.secret)).toBe("<redacted>");
+  });
+
+  it("preserves display prefixes and text below the token-shaped threshold", () => {
+    const text = `laptop ${SENTINEL.prefix} jrat_${"a".repeat(19)}`;
+    expect(redact(text)).toBe(text);
+  });
+});
+
+describe("sensitive arguments", () => {
+  it.each([
+    ["revoke token", ["revoke", SENTINEL.secret]],
+    ["revoke embedded token", ["revoke", `device (${SENTINEL.secret})`]],
+    ["token name", ["create", "--name", SENTINEL.secret, "--permissions", "jobs:read"]],
+    ["embedded token name", ["create", "--name", `old (${SENTINEL.secret})`, "--permissions", "jobs:read"]],
+    ["token permission", ["create", "--name", "laptop", "--permissions", SENTINEL.secret]],
+    ["mixed invalid permissions", ["create", "--name", "laptop", "--permissions", `foo,${SENTINEL.secret}`]],
+    ["token expiry", ["create", "--name", "laptop", "--permissions", "jobs:read", "--expires", SENTINEL.secret]],
+  ])("rejects %s without exposing it or accessing the repository", async (_label, argv) => {
+    const { code, out, err } = await run(...argv);
+    expectNoSecret([...out, ...err]);
+    expect(code).toBe(EXIT_USAGE);
+    expect(out).toEqual([]);
+    for (const fn of Object.values(repo)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["create", "--name", `jrat_${"a".repeat(20)}`, "--permissions", "jobs:read"],
+    ["revoke", `device jrat_${"a".repeat(20)}`],
+  ])("rejects long partial copies in %s before accessing the repository", async (...argv) => {
+    const { code, out, err } = await run(...argv);
+    expect(code).toBe(EXIT_USAGE);
+    expect([...out, ...err].join("\n")).not.toContain(`jrat_${"a".repeat(20)}`);
+    for (const fn of Object.values(repo)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["create", `--${SENTINEL.secret}`],
+    ["create", `--unknown=${SENTINEL.secret}`],
+    ["create", "--name", `--${SENTINEL.secret}`],
+    ["create", SENTINEL.secret],
+    ["list", SENTINEL.secret],
+    ["list", `--${SENTINEL.secret}`],
+    ["revoke", `--${SENTINEL.secret}`],
+    ["revoke", "laptop", SENTINEL.secret],
+    [SENTINEL.secret],
+  ])("prints only usage for malformed %s arguments", async (...argv) => {
+    const result = await run(...argv);
+    expectNoSecret([...result.out, ...result.err]);
+    expect(result).toEqual({ code: EXIT_USAGE, out: [], err: [t("usage")] });
+    for (const fn of Object.values(repo)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("redacts invalid permission items while preserving useful error context on one line", async () => {
+    const { code, out, err } = await run("create", "--name", "laptop", "--permissions", `foo,\n(${SENTINEL.secret})`);
+    expect(code).toBe(EXIT_USAGE);
+    expectNoSecret([...out, ...err]);
+    expect(err[0]).toBe(t("permissionsInvalid", { invalid: "foo, (<redacted>)" }));
+  });
 });
 
 describe("parsePermissionList", () => {
@@ -84,9 +159,55 @@ describe("create", () => {
   });
 
   it("stores the end of the expiry day in the installation's time zone", async () => {
-    const { code } = await run("create", "--name", "phone", "--permissions", "read_only", "--expires", "2026-12-31");
+    const { code, err } = await run("create", "--name", "phone", "--permissions", "read_only", "--expires", "2026-12-31");
     expect(code).toBe(EXIT_OK);
     expect(repo.insertAgentToken.mock.calls[0]?.[1].expiresAt).toEqual(new Date("2026-12-31T23:00:00Z"));
+    expect(err[0]).toBe(t("created", { name: "phone", prefix: SENTINEL.prefix, permissions: PERMISSION_PRESETS.read_only.join(", "), expires: "2027-01-01 00:00", zone: "Europe/Berlin" }));
+  });
+
+  it.each(["en", "zh"] as const)("omits the timezone when a token never expires in %s", async (locale) => {
+    const localT = translatorFor(locale, "cli.agentToken");
+    const { code, err } = await runWith(["create", "--name", "laptop", "--permissions", "jobs:read"], { t: localT });
+    expect(code).toBe(EXIT_OK);
+    expect(err[0]).toBe(localT("createdNoExpiry", { name: "laptop", prefix: SENTINEL.prefix, permissions: "jobs:read" }));
+    expect(err.join("\n")).not.toContain("Europe/Berlin");
+  });
+
+  it.each([{ expiryArgs: [] }, { expiryArgs: ["--expires", "2026-12-31"] }])("resolves the timezone once before generating or inserting with $expiryArgs", async ({ expiryArgs }) => {
+    const timezone = vi.fn(() => "Europe/Berlin");
+    const generate = vi.fn(() => {
+      expect(timezone).toHaveBeenCalledExactlyOnceWith();
+      expect(repo.insertAgentToken).not.toHaveBeenCalled();
+      return SENTINEL;
+    });
+    const { code } = await runWith(["create", "--name", "laptop", "--permissions", "jobs:read", ...expiryArgs], { timezone, generate });
+    expect(code).toBe(EXIT_OK);
+    expect(timezone).toHaveBeenCalledExactlyOnceWith();
+    expect(generate).toHaveBeenCalledExactlyOnceWith();
+    expect(repo.insertAgentToken).toHaveBeenCalledTimes(1);
+  });
+
+  it("propagates a timezone failure before generating, inserting or printing a token", async () => {
+    const failure = new Error("timezone unavailable");
+    const generate = vi.fn(() => SENTINEL);
+    const out = vi.fn();
+    const err = vi.fn();
+    await expect(runAgentToken({
+      db: {} as Executor, argv: ["create", "--name", "laptop", "--permissions", "jobs:read"], now: () => NOW, t,
+      timezone: () => { throw failure; }, generate, out, err,
+    })).rejects.toBe(failure);
+    expect(generate).not.toHaveBeenCalled();
+    for (const fn of Object.values(repo)) expect(fn).not.toHaveBeenCalled();
+    expect(out).not.toHaveBeenCalled();
+    expect(err).not.toHaveBeenCalled();
+  });
+
+  it("redacts and flattens the name returned by the repository in the creation message", async () => {
+    repo.insertAgentToken.mockResolvedValue(summary({ name: `old\n(${SENTINEL.secret})` }));
+    const { code, err } = await run("create", "--name", "laptop", "--permissions", "jobs:read");
+    expect(code).toBe(EXIT_OK);
+    expectNoSecret(err);
+    expect(err[0]).toBe(t("createdNoExpiry", { name: "old (<redacted>)", prefix: "jrat_AAAAAAAA", permissions: "jobs:read" }));
   });
 
   it("lists the valid permissions and presets for an unknown one, creating nothing", async () => {
@@ -128,6 +249,18 @@ describe("create", () => {
 });
 
 describe("list", () => {
+  it.each(["en", "zh"] as const)("redacts stored names and distinguishes unused, no expiry and no permissions in %s", async (locale) => {
+    const localT = translatorFor(locale, "cli.agentToken");
+    repo.listAgentTokens.mockResolvedValue([summary({ name: `old\n(${SENTINEL.secret})`, permissions: [] })]);
+    const { code, out, err } = await runWith(["list"], { t: localT });
+    expect(code).toBe(EXIT_OK);
+    expectNoSecret([...out, ...err]);
+    expect(out).toEqual([localT("row", {
+      prefix: "jrat_AAAAAAAA", name: "old (<redacted>)", state: localT("state.active"), created: "2026-11-11 13:00",
+      used: locale === "zh" ? "从未" : "never", expires: locale === "zh" ? "永不" : "never", permissions: locale === "zh" ? "没有" : "none",
+    })]);
+  });
+
   it("shows prefix, name, state, times and permissions, never a hash", async () => {
     repo.listAgentTokens.mockResolvedValue([
       summary(),
@@ -151,6 +284,17 @@ describe("list", () => {
 });
 
 describe("revoke", () => {
+  it("accepts the display prefix while redacting a previously stored token-shaped name", async () => {
+    repo.findUnrevokedAgentTokens.mockResolvedValue([summary({ name: `old\n(${SENTINEL.secret})`, tokenPrefix: SENTINEL.prefix })]);
+    repo.revokeAgentToken.mockResolvedValue(true);
+    const { code, out, err } = await run("revoke", SENTINEL.prefix);
+    expect(code).toBe(EXIT_OK);
+    expect(repo.findUnrevokedAgentTokens).toHaveBeenCalledWith(expect.anything(), SENTINEL.prefix);
+    expect(repo.revokeAgentToken).toHaveBeenCalledWith(expect.anything(), 1, NOW);
+    expectNoSecret([...out, ...err]);
+    expect(err).toEqual([t("revoked", { name: "old (<redacted>)", prefix: SENTINEL.prefix })]);
+  });
+
   it("revokes the one token not yet revoked with that name or prefix", async () => {
     repo.findUnrevokedAgentTokens.mockResolvedValue([summary({ id: 4 })]);
     repo.revokeAgentToken.mockResolvedValue(true);

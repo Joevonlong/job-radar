@@ -6554,7 +6554,7 @@
     },
     "agentToken": {
       "usage": "Usage: pnpm agent:token create --name NAME --permissions LIST [--expires YYYY-MM-DD] | list | revoke NAME_OR_PREFIX",
-      "nameInvalid": "--name needs a name of 1 to {max} characters, without control characters.",
+      "nameInvalid": "--name needs a name of 1 to {max} characters, without control characters or token values.",
       "permissionsMissing": "--permissions needs at least one permission or preset name.",
       "permissionsInvalid": "Unknown permission or preset: {invalid}.",
       "permissionsValid": "Presets: {presets}. Permissions: {permissions}. Separate several with commas or repeat --permissions.",
@@ -6562,8 +6562,10 @@
       "expiresPast": "--expires is a day that is already over; the token would never be valid.",
       "nameTaken": "A token named \"{name}\" exists and is not revoked. Choose another name, or revoke that token first. Nothing was created.",
       "created": "Created token \"{name}\" ({prefix}). Permissions: {permissions}. Expires: {expires} ({zone}).",
+      "createdNoExpiry": "Created token \"{name}\" ({prefix}). Permissions: {permissions}. Does not expire.",
       "shownOnce": "The line above is the token. Copy it now: it is not shown again, and only its hash is stored. Revoke it with pnpm agent:token revoke {prefix}.",
       "never": "never",
+      "neverUsed": "never",
       "none": "none",
       "empty": "No agent tokens.",
       "listHeader": "Times in {zone}. The tokens themselves cannot be shown.",
@@ -6573,6 +6575,7 @@
         "revoked": "revoked",
         "expired": "expired"
       },
+      "revokeTokenInvalid": "Use a token name or display prefix to revoke it. Do not pass the token value.",
       "revokeNone": "No token that is not revoked has the name or prefix \"{key}\". pnpm agent:token list shows them.",
       "revokeAmbiguous": "More than one token matches \"{key}\" ({prefixes}). Revoke by prefix instead.",
       "revoked": "Revoked token \"{name}\" ({prefix}). The next request with it is refused.",
