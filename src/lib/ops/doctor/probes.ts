@@ -34,6 +34,8 @@ import { resolveHostDatabaseUrl } from "./database-url";
 import { probeDeliveries } from "./deliveries";
 import { effectivePermissions } from "@/lib/agent-access/permissions";
 import { readMcpSettings } from "@/lib/mcp/settings";
+import { activeAgentTokenStats } from "@/lib/db/repos/agent-tokens";
+import { readPasswordSetting } from "@/lib/security/password";
 import { countStalePendingReplies, countPendingReplies } from "@/lib/db/repos/replies";
 import { getRuntimeState } from "@/lib/db/repos/runtime-state";
 import { mailboxCredentials, REPLIES_LAST_READ_KEY } from "@/lib/replies/step";
@@ -236,7 +238,7 @@ export function createRealProbes(options: RealProbeOptions): DoctorProbes {
     registry: () => loadRegistryPage({ syncMirror: false }),
     unscoredJobs: () => countUnscoredJobs(getDb()),
     traps: (now) => probeTraps(now),
-    mcp: async () => probeMcp(),
+    mcp: async () => probeMcp(options.now()),
     replies: (now) => probeReplies(now),
     deliveries: () => probeDeliveries(),
     currentScores: () => currentScoresHealth(getDb()),
@@ -314,11 +316,19 @@ export async function createRealContext(env: Readonly<Record<string, string | un
   };
 }
 
-/** `data.mcp`: the switch, global matrix and effective stdio permissions of mcp.yaml (a file missing from both layers means the defaults: off). */
-function probeMcp(): McpProbe {
+/** `data.mcp` never throws; token counts are aggregate metadata and a database failure leaves them unknown. */
+async function probeMcp(now: Date): Promise<McpProbe> {
   try {
     const settings = readMcpSettings();
-    return { state: "ok", enabled: settings.enabled, permissions: settings.permissions, effective: [...effectivePermissions(settings.stdio.permissions, settings.permissions)], auditRetentionDays: settings.audit.retention_days };
+    const password = readPasswordSetting(process.env);
+    let stats: { activeTokens: number | null; nearestExpiry: Date | null } = { activeTokens: null, nearestExpiry: null };
+    try { stats = await activeAgentTokenStats(getDb(), now); } catch {}
+    return {
+      state: "ok", enabled: settings.enabled, permissions: settings.permissions,
+      effective: [...effectivePermissions(settings.stdio.permissions, settings.permissions)], auditRetentionDays: settings.audit.retention_days,
+      httpEnabled: settings.http.enabled, webPasswordUsable: password !== null && (password.kind !== "hash" || password.parsed !== null),
+      ...stats,
+    };
   } catch (error) {
     return { state: "config_error", problem: error instanceof ConfigError ? firstConfigProblem(error) : "unreadable" };
   }

@@ -36,6 +36,8 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 
 操作日志只存在本机 Postgres，保存 ID、代码、数字和时间，不保存消息正文、错误正文、URL、职位描述或 Telegram 消息，也不会增加对外连接。保留和删除方式见[操作日志](sources.zh.md#操作日志)。
 
+MCP stdio 仍在本机运行；可选 HTTP 使用已有 Web 端口，本机请求也必须带 bearer agent token。HTTP 工具审计行记录 token id 和传输方式 `http`，认证成功后更新 `last_used_at`。URL 或 cookie 中的 token 不被接受。见 [MCP HTTP](mcp.zh.md#从其他设备访问http)。
+
 交付账本留在本机，不通过 MCP 或网页公开。保留期可在 [delivery-audit.yaml](configuration.zh.md#付费交付账本delivery-audityaml) 中配置。
 
 上面其他数据库表目前没有自动保留期：原始岗位、未解析邮件、通知、控制请求和画像快照会一直留到你删除数据库。`data/` 包含上面的全部内容，

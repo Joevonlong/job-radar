@@ -4,6 +4,7 @@
  *
  * - No password configured: everything passes (the behaviour without the feature).
  * - Always open: the health check, the login page (GET) and the login endpoint (POST).
+ * - Exact /api/mcp without Next-Action passes for POST (agent-token verification) and GET / DELETE (static refusal).
  * - A local request (see `local-request.ts`) passes; so does a valid session cookie.
  * - Otherwise a page navigation (GET / HEAD accepting HTML) is sent to `/login?next=<path>` (303), and everything else
  *   (Server Actions, API calls, client-side navigations, files) gets 401 with `{"error":"login_required"}`.
@@ -40,6 +41,8 @@ export interface AuthInput {
   configured: boolean;
   /** The request carries a valid session cookie. */
   sessionValid: boolean;
+  /** A Next-Action header is present, including an empty one. */
+  serverAction: boolean;
 }
 
 /** Whether a request (path and method) is reachable without a session. */
@@ -55,6 +58,7 @@ function isHtmlNavigation(method: string, accept: string | null): boolean {
 
 export function authDecision(input: AuthInput): AuthDecision {
   if (!input.configured) return "pass";
+  if (input.pathname === "/api/mcp" && ["POST", "GET", "DELETE"].includes(input.method) && !input.serverAction) return "pass";
   if (isPublicRoute(input.pathname, input.method)) return "pass";
   if (input.local || input.sessionValid) return "pass";
   return isHtmlNavigation(input.method, input.accept) ? "login_redirect" : "unauthorized";

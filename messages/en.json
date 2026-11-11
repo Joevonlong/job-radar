@@ -6382,7 +6382,11 @@
           "none": "none",
           "off": "Off (mcp.yaml enabled: false, the default)",
           "configError": "mcp.yaml cannot be read: {problem}",
-          "configHint": "pnpm config:check shows which setting"
+          "configHint": "pnpm config:check shows which setting",
+          "http": "HTTP enabled: {enabled}. Active tokens: {count}; nearest expiry: {expiry}.",
+          "unknown": "unknown",
+          "passwordRequired": "HTTP answers 503 until a usable web password is set.",
+          "passwordHint": "Run pnpm web:password and configure the web password, then restart the web process."
         },
         "replies": {
           "title": "Gmail replies",
