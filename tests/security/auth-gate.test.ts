@@ -77,13 +77,16 @@ describe("safeNextPath", () => {
 
 
 describe("exact MCP gate exemption", () => {
-  it("passes only exact uppercase POST without a Server Action header", () => {
-    expect(decide({ pathname: "/api/mcp", method: "POST" })).toBe("pass");
+  it("passes only exact POST, GET and DELETE without a Server Action header", () => {
+    for (const method of ["POST", "GET", "DELETE"]) {
+      expect(decide({ pathname: "/api/mcp", method })).toBe("pass");
+      expect(decide({ pathname: "/api/mcp", method, accept: "application/json", serverAction: true })).toBe("unauthorized");
+    }
     for (const pathname of ["/api/mcp/", "/api/mcp/x", "/api/mcpx", "/API/mcp", "/api/mcp%2F"]) {
-      expect(decide({ pathname, method: "POST" })).toBe("unauthorized");
+      for (const method of ["POST", "GET", "DELETE"]) expect(decide({ pathname, method, accept: "application/json" })).toBe("unauthorized");
       expect(decide({ pathname, method: "GET" })).toBe("login_redirect");
     }
-    for (const method of ["GET", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH", "post"]) {
+    for (const method of ["PUT", "OPTIONS", "HEAD", "PATCH", "post", "get", "delete"]) {
       expect(decide({ pathname: "/api/mcp", method, accept: "application/json" })).toBe("unauthorized");
     }
     expect(decide({ pathname: "/api/mcp", method: "POST", serverAction: true })).toBe("unauthorized");
@@ -109,7 +112,7 @@ describe("exact MCP gate exemption", () => {
       const verbs = exports.filter((name) => methods.has(name));
       expect(verbs.length, file).toBeGreaterThan(0);
       for (const method of verbs) {
-        const isOpen = (pathname === "/api/health" && ["GET", "HEAD"].includes(method)) || (pathname === "/api/auth/login" && method === "POST") || (pathname === "/api/mcp" && method === "POST");
+        const isOpen = (pathname === "/api/health" && ["GET", "HEAD"].includes(method)) || (pathname === "/api/auth/login" && method === "POST") || (pathname === "/api/mcp" && ["POST", "GET", "DELETE"].includes(method));
         expect(decide({ pathname, method, accept: "application/json" }), `${pathname} ${method}`).toBe(isOpen ? "pass" : "unauthorized");
         expect(decide({ pathname, method, accept: "application/json", sessionValid: true, serverAction: true })).toBe("pass");
       }

@@ -7,7 +7,7 @@ are worth a look today?", "which applications have had no answer for two weeks?"
 client can start `pnpm mcp:serve` locally over stdin / stdout, or connect to the optional token-protected HTTP endpoint.
 
 - **Off by default.** Nothing happens until you set `enabled: true` in `mcp.yaml`.
-- **Local stdio or optional HTTP.** Stdio opens no port and needs no token. HTTP uses the web port and requires an agent token on every request.
+- **Local stdio or optional HTTP.** Stdio opens no port and needs no token. HTTP uses the web port and requires an agent token on every POST request.
 - **Read-only, with one permission-controlled exception.** The tools read over read-only database sessions. The only tool that can write,
   `save_application_answer`, requires `writer:write`, and all it can do is add an answer version. The server never starts a
   collection or an AI call.
@@ -141,8 +141,18 @@ Other MCP clients work the same way: a stdio server, command `pnpm`, arguments `
 Persistent change-notification subscriptions are not supported; refresh `tools/list` to see changed permissions.
 All three preconditions must hold: `mcp.yaml` has `enabled: true` and `http.enabled: true`, and the web process has a usable
 web password configured with `pnpm web:password`. A malformed password hash does not qualify. The host allowlist and Origin
-check still run first; the exact POST path without a `Next-Action` header bypasses the browser session gate and checks its
-own agent token. Other spellings and methods do not bypass that gate. Even requests from localhost need an agent token.
+check still run first. Only `POST`, `GET` and `DELETE` on the exact `/api/mcp` path without a `Next-Action` header bypass the
+browser session gate. POST checks its own agent token, including from localhost. GET and DELETE allow clients to probe
+unsupported session operations without triggering browser login or OAuth discovery.
+
+| Method on exact `/api/mcp` | Browser session gate | Route response after the three preconditions |
+|---|---|---|
+| `POST` | Exempt without `Next-Action` | Agent-token verification, then MCP serving |
+| `GET`, `DELETE` | Exempt without `Next-Action` | Static 405 `{"error":"method_not_allowed"}`, `Allow: POST`; no token, throttle or database work |
+| `HEAD`, `OPTIONS`, `PUT`, `PATCH` | Normal session rules | The same 405 when the gate permits the request |
+
+Other path spellings and requests with `Next-Action` keep the normal session rules. Every method reaching the route first
+returns 404 if either switch is off or settings are unreadable, or 503 if the web password is unusable.
 
 Create one token for each client on the host:
 
@@ -215,8 +225,11 @@ curl -i 'https://<machine>.<tailnet>.ts.net/api/mcp' \
 ```
 
 A valid token gets a JSON-RPC answer (inside SSE for the 2025 protocol); a wrong token gets 401. If both get 401, check the
-forwarded header and the token's state. A 421 is the host/Origin check, before authentication. Prefer HTTPS; avoid printing
-request headers with verbose curl or proxy access logs.
+forwarded header and the token's state. A 421 is the host/Origin check, before authentication.
+
+This endpoint is meant for **localhost or Tailscale only**. Tailscale encrypts the link even with an HTTP URL;
+`tailscale serve` adds HTTPS. Exposing the endpoint over plain HTTP on a LAN or Internet address sends the reusable bearer
+token in clear text. Avoid printing request headers with verbose curl or proxy access logs.
 
 ### HTTP limits and database connections
 
@@ -239,7 +252,13 @@ Advanced. Restart the web process for **pool sizes and audit connection timeouts
 The source is the last `X-Forwarded-For` entry, or `direct`. The process-wide failure counters are separate from web login;
 restart clears them. Successful authentication clears that source's failures, not the global history. A throttled request
 never reads credentials or the database. Authentication failures create no `agent_calls` row; refusal logs contain only a
-short SHA-256 source tag, never the address or credentials.
+short keyed hash that changes on restart, never the address or credentials. The tag is the first eight hex characters of
+HMAC-SHA256 with a random per-process key, generated on first use and never logged or persisted.
+
+A concurrency slot stays occupied until verification, last-use metadata and handler work settle, then until the response
+body ends or is cancelled. Disconnecting stops body reads but does not free a slot while awaited work is still running.
+Each request gets its own server and token context; only the transport handler is cached by body-size limit. Modern replies
+use JSON unless a mid-call notification requires SSE; legacy replies use SSE. Persistent subscriptions remain disabled.
 
 HTTP adds up to `read_max + write_max + 1` database sessions (six by default), separate from the web shared pool and any
 stdio process. Pools and the dedicated audit connection open lazily. `agent_tokens.last_used_at` is updated after successful
@@ -433,9 +452,10 @@ GRANT USAGE ON SEQUENCE agent_calls_id_seq TO job_radar_ro;
 | HTTP 401 `unauthorized` | Missing, malformed, unknown, revoked or expired token; all return the same body and `WWW-Authenticate: Bearer`. Send Authorization, not a query parameter or cookie. |
 | HTTP 429 `too_many_attempts` | Authentication throttle; wait the `Retry-After` seconds before retrying. |
 | HTTP 413 `payload_too_large` | Declared or streamed body exceeds `http.max_body_bytes`; reduce the request. |
-| HTTP 503 `busy` | All `http.pool.max_concurrent` slots are occupied; consume or cancel response bodies, then retry after 1 second. |
+| HTTP 503 `busy` | All `http.pool.max_concurrent` slots are occupied; consume or cancel response bodies, then retry after 1 second. Disconnected requests keep their slots until awaited work settles. |
 | HTTP 503 `unavailable` | Token verification could not reach the database; no authentication failure is counted. |
-| HTTP 405 | Use exact `POST /api/mcp`; other methods are refused without CORS. |
+| HTTP 405 `method_not_allowed` | Exact GET/DELETE probes return 405 with `Allow: POST` after preconditions, without token lookup. Send MCP calls by POST. Other methods still pass through the browser session gate; no CORS is returned. |
+| HTTP 401 `login_required` | The browser session gate refused a path spelling, non-exempt method or `Next-Action` request. Use exact `/api/mcp` without `Next-Action`; only POST/GET/DELETE are exempt. |
 | HTTP 500 `internal` | Unexpected failure; logs show only the category, never exception contents. |
 | The client says the server exited; its log shows "The Job Radar MCP server is switched off" | `mcp.yaml: enabled` is `false`. Set it to `true` and restart the client. |
 | "mcp.yaml cannot be read" | `pnpm config:check` names the setting. |

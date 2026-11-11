@@ -82,19 +82,24 @@ describe("MCP proxy boundary", () => {
   });
   const remote = { host: "127.0.0.1:3000", "x-forwarded-for": "192.0.2.1", accept: "application/json" };
 
-  it("keeps Host and Origin checks ahead of token routing", () => {
-    expect(proxy(request("http://evil.example/api/mcp", { ...remote, host: "evil.example" }, "POST")).status).toBe(421);
-    expect(proxy(request("http://127.0.0.1:3000/api/mcp", { ...remote, origin: "https://evil.example" }, "POST")).status).toBe(421);
-    expect(proxy(request("http://127.0.0.1:3000/api/mcp", remote, "POST")).status).toBe(200);
+  it.each(["POST", "GET", "DELETE"])("keeps Host and Origin checks ahead of %s routing", (method) => {
+    expect(proxy(request("http://evil.example/api/mcp", { ...remote, host: "evil.example" }, method)).status).toBe(421);
+    expect(proxy(request("http://127.0.0.1:3000/api/mcp", { ...remote, origin: "https://evil.example" }, method)).status).toBe(421);
+    expect(proxy(request("http://127.0.0.1:3000/api/mcp", remote, method)).status).toBe(200);
   });
 
-  it("requires a session for every spelling, method and Server Action variant", () => {
+  it("requires a session outside the exact method exemption and for every Server Action variant", () => {
     for (const pathname of ["/api/mcp/", "/api/mcp/x", "/api/mcpx", "/API/mcp", "/api/mcp%2F"]) {
-      expect(proxy(request(`http://127.0.0.1:3000${pathname}`, remote, "POST")).status, pathname).toBe(401);
+      for (const method of ["POST", "GET", "DELETE"]) expect(proxy(request(`http://127.0.0.1:3000${pathname}`, remote, method)).status, pathname).toBe(401);
       expect(proxy(request(`http://127.0.0.1:3000${pathname}`, { ...remote, accept: "text/html" })).status).toBe(303);
     }
-    for (const method of ["GET", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"]) expect(proxy(request("http://127.0.0.1:3000/api/mcp", remote, method)).status).toBe(401);
-    for (const pathname of ["/api/mcp", "/settings"]) expect(proxy(request(`http://127.0.0.1:3000${pathname}`, { ...remote, "next-action": "" }, "POST")).status).toBe(401);
+    for (const method of ["PUT", "OPTIONS", "HEAD", "PATCH"]) expect(proxy(request("http://127.0.0.1:3000/api/mcp", remote, method)).status).toBe(401);
+    for (const method of ["POST", "GET", "DELETE"]) {
+      for (const value of ["", "action"]) {
+        expect(proxy(request("http://127.0.0.1:3000/api/mcp", { ...remote, "next-action": value }, method)).status).toBe(401);
+      }
+    }
+    expect(proxy(request("http://127.0.0.1:3000/settings", { ...remote, "next-action": "" }, "POST")).status).toBe(401);
   });
 
   it("still accepts the owner's signed session on protected requests", () => {

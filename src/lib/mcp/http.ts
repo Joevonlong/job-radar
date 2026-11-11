@@ -1,7 +1,7 @@
 /** Token-authenticated, stateless HTTP serving. Preconditions run before credentials or pools are touched. */
-import { createHash } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 
-import { createMcpHandler } from "@modelcontextprotocol/server";
+import { createMcpHandler, type AuthInfo, type McpHttpHandler } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
 import { authorize, liveMcpSettings } from "@/lib/agent-access/authorize";
@@ -16,7 +16,7 @@ import { readWriterEnabled } from "@/lib/writer/settings";
 
 import { version } from "../../../package.json";
 import { stderrLine } from "./call-log";
-import { errorCategory } from "./context";
+import { errorCategory, type McpContext } from "./context";
 import { buildServer, defaultContext } from "./server";
 
 export interface McpHttpDependencies {
@@ -43,7 +43,7 @@ export function realDeps(): McpHttpDependencies {
   };
 }
 
-interface HttpState { throttle: LoginThrottle; inFlight: number }
+interface HttpState { throttle: LoginThrottle; inFlight: number; logKey?: Buffer }
 const globalForHttp = globalThis as typeof globalThis & { __jobRadarMcpHttp?: HttpState };
 const state = (): HttpState => globalForHttp.__jobRadarMcpHttp ??= { throttle: new LoginThrottle(), inFlight: 0 };
 
@@ -75,40 +75,53 @@ export function mcpMethodNotAllowed(): Response {
   return refusal(405, "method_not_allowed", { Allow: "POST" });
 }
 
-/** The slot belongs to the response consumer, including the legacy SSE path; no prefetch may release it early. */
-function releaseWithBody(response: Response, release: () => void, log: McpHttpDependencies["log"]): Response {
-  if (!response.body) { release(); return response; }
-  const reader = response.body.getReader();
+/** Owns the reader so disconnects can cancel it even while the consumer has locked the exposed stream. */
+function managedBody(source: ReadableStream<Uint8Array>, finish: () => void, log: McpHttpDependencies["log"]) {
+  const reader = source.getReader();
+  let stopped = false;
+  let controller: ReadableStreamDefaultController<Uint8Array>;
+  const cancel = async (close = true) => {
+    if (stopped) return;
+    stopped = true;
+    if (close) controller.close();
+    try { await reader.cancel(); }
+    catch (error) { log(`[mcp] http stream error: ${errorCategory(error)}`); }
+    finally { finish(); }
+  };
   const body = new ReadableStream<Uint8Array>({
-    async pull(controller) {
+    start(output) { controller = output; },
+    async pull() {
       try {
         const next = await reader.read();
-        if (next.done) { release(); controller.close(); }
+        if (stopped) return;
+        if (next.done) { stopped = true; finish(); controller.close(); }
         else controller.enqueue(next.value);
       } catch (error) {
-        release();
+        if (stopped) return;
+        stopped = true;
+        finish();
         log(`[mcp] http stream error: ${errorCategory(error)}`);
         controller.error(new Error("internal"));
       }
     },
-    async cancel() {
-      release();
-      try { await reader.cancel(); } catch (error) { log(`[mcp] http stream error: ${errorCategory(error)}`); }
-    },
+    cancel() { return cancel(false); },
   }, { highWaterMark: 0 });
-  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+  return { body, cancel };
 }
 
 const contentLength = z.string().regex(/^\d+$/).transform(BigInt);
 
 export async function handleMcpHttpRequest(request: Request, deps: McpHttpDependencies = realDeps()): Promise<Response> {
   let release: (() => void) | undefined;
+  let responseOwnsSlot = false;
+  let input: ReturnType<typeof managedBody> | undefined;
   try {
     let settings: McpConfig;
     try { settings = deps.readSettings(); } catch { return refusal(404, "not_found"); }
     if (!settings.enabled || !settings.http.enabled) return refusal(404, "not_found");
     const password = deps.password();
     if (password === null || (password.kind === "hash" && password.parsed === null)) return refusal(503, "web_password_required");
+    if (request.method !== "POST") return mcpMethodNotAllowed();
     const key = throttleKey(request.headers.get("x-forwarded-for"));
     const current = state();
     const check = current.throttle.check(key);
@@ -116,10 +129,10 @@ export async function handleMcpHttpRequest(request: Request, deps: McpHttpDepend
     if (current.inFlight >= settings.http.pool.max_concurrent) return refusal(503, "busy", { "Retry-After": "1" });
     current.inFlight++;
     let released = false;
-    let response: Response | undefined;
+    let output: ReturnType<typeof managedBody> | null = null;
     const abort = () => {
-      release?.();
-      void response?.body?.cancel().catch(() => undefined);
+      void input?.cancel();
+      void output?.cancel();
     };
     release = () => {
       if (!released) {
@@ -128,20 +141,53 @@ export async function handleMcpHttpRequest(request: Request, deps: McpHttpDepend
         request.signal.removeEventListener("abort", abort);
       }
     };
+    if (request.body) input = managedBody(request.body, () => {}, deps.log);
     request.signal.addEventListener("abort", abort, { once: true });
     request.signal.throwIfAborted();
-    response = await authenticatedResponse(request, deps, settings, key, current.throttle);
+    const forwarded = input ? new Request(request, { body: input.body, ...{ duplex: "half" } }) : request;
+    const response = hygiene(await authenticatedResponse(forwarded, deps, settings, key, current.throttle));
     if (request.signal.aborted) {
-      abort();
+      await response.body?.cancel();
       request.signal.throwIfAborted();
     }
-    response = releaseWithBody(hygiene(response), release, deps.log);
-    return response;
+    if (!response.body) return response;
+    output = managedBody(response.body, release, deps.log);
+    const result = new Response(output.body, { status: response.status, statusText: response.statusText, headers: response.headers });
+    responseOwnsSlot = true;
+    return result;
   } catch (error) {
-    release?.();
     deps.log(`[mcp] http error: ${errorCategory(error)}`);
     return refusal(500, "internal");
+  } finally {
+    void input?.cancel();
+    if (!responseOwnsSlot) release?.();
   }
+}
+
+const requestContexts = new WeakMap<AuthInfo, McpContext>();
+const handlerCache = new WeakMap<McpHttpDependencies["createHandler"], WeakMap<McpHttpDependencies["log"], Map<number, McpHttpHandler>>>();
+
+/** Only the transport is cached; the SDK passes AuthInfo by identity to a factory that builds a fresh server. */
+function httpHandler(deps: McpHttpDependencies, maxBodyBytes: number): McpHttpHandler {
+  let byLog = handlerCache.get(deps.createHandler);
+  if (!byLog) { byLog = new WeakMap(); handlerCache.set(deps.createHandler, byLog); }
+  let byLimit = byLog.get(deps.log);
+  if (!byLimit) { byLimit = new Map(); byLog.set(deps.log, byLimit); }
+  let handler = byLimit.get(maxBodyBytes);
+  if (!handler) {
+    handler = deps.createHandler(({ authInfo }) => {
+      const context = authInfo && requestContexts.get(authInfo);
+      if (!context) throw new Error("Missing MCP request context");
+      const server = buildServer(context, { version });
+      server.server.registerCapabilities({ tools: { listChanged: false } });
+      return server;
+    }, {
+      responseMode: "auto", maxRequestBodySize: maxBodyBytes, maxSubscriptions: 0,
+      onerror: (error) => deps.log(`[mcp] http transport error: ${errorCategory(error)}`),
+    });
+    byLimit.set(maxBodyBytes, handler);
+  }
+  return handler;
 }
 
 async function authenticatedResponse(request: Request, deps: McpHttpDependencies, settings: McpConfig, key: string, throttle: LoginThrottle): Promise<Response> {
@@ -159,7 +205,8 @@ async function authenticatedResponse(request: Request, deps: McpHttpDependencies
   }
   if (!verified.ok || !readDb) {
     throttle.recordFailure(key, limitsOf(settings.http.throttle));
-    deps.log(`[mcp] http request refused (401) source ${createHash("sha256").update(key, "utf8").digest("hex").slice(0, 8)}`);
+    const logKey = state().logKey ??= randomBytes(32);
+    deps.log(`[mcp] http request refused (401) source ${createHmac("sha256", logKey).update(key, "utf8").digest("hex").slice(0, 8)}`);
     return refusal(401, "unauthorized", { "WWW-Authenticate": "Bearer" });
   }
   throttle.recordSuccess(key);
@@ -177,27 +224,17 @@ async function authenticatedResponse(request: Request, deps: McpHttpDependencies
     grant, readGrant: deps.readGrant(readDb, deps.now), writeDb: writes ? deps.writeDb(settings) : null,
   });
   context.now = deps.now;
-  const handler = deps.createHandler(() => {
-    const server = buildServer(context, { version });
-    server.server.registerCapabilities({ tools: { listChanged: false } });
-    return server;
-  }, {
-    responseMode: "json", maxRequestBodySize: settings.http.max_body_bytes, maxSubscriptions: 0,
-    onerror: (error) => deps.log(`[mcp] http transport error: ${errorCategory(error)}`),
-  });
-  const close = () => { void handler.close().catch((error: unknown) => deps.log(`[mcp] http close error: ${errorCategory(error)}`)); };
+  const handler = httpHandler(deps, settings.http.max_body_bytes);
+  const authInfo: AuthInfo = { token: "", clientId: String(grant.tokenId), scopes: [...grant.permissions], expiresAt: 253402300799 };
+  requestContexts.set(authInfo, context);
   try {
-    const response = await handler.fetch(request, {
-      authInfo: { token: "", clientId: String(grant.tokenId), scopes: [...grant.permissions], expiresAt: 253402300799 },
-    });
+    const response = await handler.fetch(request, { authInfo });
     if (response.status === 413 || response.status >= 500) {
       void response.body?.cancel().catch(() => undefined);
-      close();
       return response.status === 413 ? refusal(413, "payload_too_large") : refusal(500, "internal");
     }
-    return releaseWithBody(response, close, deps.log);
-  } catch (error) {
-    close();
-    throw error;
+    return response;
+  } finally {
+    requestContexts.delete(authInfo);
   }
 }

@@ -1,8 +1,9 @@
 // @vitest-environment node
 import { Client, StreamableHTTPClientTransport, PROTOCOL_VERSION_META_KEY, CLIENT_INFO_META_KEY, CLIENT_CAPABILITIES_META_KEY } from "@modelcontextprotocol/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { AuthInfo, McpRequestContext } from "@modelcontextprotocol/server";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { handleMcpHttpRequest, mcpMethodNotAllowed, resetMcpThrottle } from "@/lib/mcp/http";
+import { handleMcpHttpRequest, resetMcpThrottle, type McpHttpDependencies } from "@/lib/mcp/http";
 
 import { fakeDeps, rpcRequest, SECRET, settings, snapshot } from "./http-helpers";
 
@@ -11,6 +12,76 @@ beforeEach(() => resetMcpThrottle());
 afterEach(async () => { await Promise.all(clients.splice(0).map((client) => client.close())); });
 
 describe("installed MCP SDK HTTP protocols", () => {
+  it.each(["2025-06-18", "2026-07-28"])("reuses a silent handler with isolated concurrent token contexts in %s", async (protocol) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const deps = fakeDeps();
+      const otherSecret = `jrat_${"b".repeat(43)}`;
+      deps.verify.mockImplementation(async (_db, secret) => ({ ok: true, grant: {
+        kind: "token", tokenId: secret === SECRET ? 42 : 43, permissions: [secret === SECRET ? "jobs:read" : "tracking:read"],
+      } }));
+      const passed = new Set<AuthInfo>();
+      const contexts: McpRequestContext[] = [];
+      const servers = new Set<object>();
+      const bothEntered = Promise.withResolvers<void>();
+      const createHandler = vi.fn<McpHttpDependencies["createHandler"]>((factory, options) => {
+        const real = deps.createHandler((context) => {
+          expect(passed.has(context.authInfo!)).toBe(true);
+          contexts.push(context);
+          const server = factory(context);
+          servers.add(server);
+          return server;
+        }, options);
+        return { ...real, fetch: async (request, input) => {
+          passed.add(input!.authInfo!);
+          if (passed.size === 2) bothEntered.resolve();
+          await bothEntered.promise;
+          return real.fetch(request, input);
+        } };
+      });
+      const dependencies = { ...deps, createHandler };
+      const modern = protocol === "2026-07-28";
+      const request = (token: string) => rpcRequest({ token,
+        headers: modern ? { "mcp-protocol-version": protocol, "mcp-method": "tools/list" } : { "mcp-protocol-version": protocol },
+        body: JSON.stringify({ jsonrpc: "2.0", id: token === SECRET ? 1 : 2, method: "tools/list", params: modern ? {
+          _meta: { [PROTOCOL_VERSION_META_KEY]: protocol, [CLIENT_INFO_META_KEY]: { name: "test", version: "1" }, [CLIENT_CAPABILITIES_META_KEY]: {} },
+        } : {} }),
+      });
+      const results = await Promise.all([SECRET, otherSecret].map(async (token) => {
+        const result = await snapshot(await handleMcpHttpRequest(request(token), dependencies));
+        expect(result.status).toBe(200);
+        const json = result.headers["content-type"]?.includes("text/event-stream")
+          ? result.body.split("\n").find((line) => line.startsWith("data: "))!.slice(6) : result.body;
+        return JSON.parse(json).result.tools.map((tool: { name: string }) => tool.name) as string[];
+      }));
+      expect(results[0]).toContain("get_job");
+      expect(results[0]).not.toContain("list_applications");
+      expect(results[1]).toContain("list_applications");
+      expect(results[1]).not.toContain("get_job");
+      expect(createHandler).toHaveBeenCalledTimes(1);
+      expect(servers.size).toBe(2);
+      expect(contexts[0]!.authInfo).not.toBe(contexts[1]!.authInfo);
+      const factory = createHandler.mock.calls[0]![0];
+      for (const context of contexts) expect(() => factory(context)).toThrow("Missing MCP request context");
+      expect(warn).not.toHaveBeenCalled();
+    } finally { warn.mockRestore(); }
+  });
+
+  it("caches handlers by the current request body limit without warning on subsequent requests", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const deps = fakeDeps();
+      const createHandler = vi.fn(deps.createHandler);
+      const dependencies = { ...deps, createHandler };
+      for (const max_body_bytes of [1024, 1024, 2048, 1024]) {
+        deps.readSettings.mockReturnValue(settings({ max_body_bytes }));
+        expect((await snapshot(await handleMcpHttpRequest(rpcRequest(), dependencies))).status).toBe(200);
+        expect(warn).not.toHaveBeenCalled();
+      }
+      expect(createHandler.mock.calls.map((call) => call[1]?.maxRequestBodySize)).toEqual([1024, 2048]);
+    } finally { warn.mockRestore(); }
+  });
+
   it("negotiates the modern protocol with the real client and lists only effective tools", async () => {
     const deps = fakeDeps();
     const responses: Awaited<ReturnType<typeof snapshot>>[] = [];
@@ -18,7 +89,7 @@ describe("installed MCP SDK HTTP protocols", () => {
       requestInit: { headers: { authorization: `Bearer ${SECRET}` } },
       fetch: async (input, init) => {
         const request = new Request(input, init);
-        const response = request.method === "POST" ? await handleMcpHttpRequest(request, deps) : mcpMethodNotAllowed();
+        const response = await handleMcpHttpRequest(request, deps);
         const result = await snapshot(response);
         responses.push(result);
         return new Response(result.body, { status: result.status, headers: result.headers });

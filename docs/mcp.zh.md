@@ -6,7 +6,7 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 本机模式下，客户端把 `pnpm mcp:serve` 当作本机子进程启动，经 stdin / stdout 和它通信。
 
 - **默认关闭。** 在 `mcp.yaml` 里设 `enabled: true` 之前什么都不会发生。
-- **本机 stdio 或可选 HTTP。** stdio 不开端口、不需要 token；HTTP 使用 Web 端口，每个请求都必须验证 agent token。
+- **本机 stdio 或可选 HTTP。** stdio 不开端口、不需要 token；HTTP 使用 Web 端口，每个 POST 请求都必须验证 agent token。
 - **只读，有一个由权限控制的例外。** 工具都通过只读的数据库会话读取。唯一能写的工具 `save_application_answer` 需要 `writer:write` 权限，也只能新增答案版本。服务从不触发采集或 AI 调用。
 
 服务还会通过单独的审计连接，把调用元数据存在本机的 `agent_calls` 表里（见[调用审计](#调用审计)）。
@@ -116,8 +116,18 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 
 `POST /api/mcp` 在 Web 进程中提供相同的工具，可选、无会话，不增加监听端口。不支持长连接变更订阅；重新请求 `tools/list` 查看权限变化。必须同时满足三个条件：
 `mcp.yaml` 的 `enabled: true`、`http.enabled: true`，以及通过 `pnpm web:password` 配置了可用的 Web 密码。
-无法解析的密码哈希不算可用。主机名和 Origin 检查仍然先执行；只有不带 `Next-Action` 请求头的精确路径 POST
-可以跳过浏览器会话检查，由路由自己检查 agent token。其他拼写和方法没有这项豁免。**本机请求也必须带 token。**
+无法解析的密码哈希不算可用。主机名和 Origin 检查仍然先执行；只有精确路径 `/api/mcp` 上不带 `Next-Action`
+请求头的 `POST`、`GET` 和 `DELETE` 可以跳过浏览器会话检查。POST 由路由自己验证 agent token，**本机 POST 请求也必须带 token。**
+GET 和 DELETE 让客户端探测不支持的会话操作，不触发浏览器登录或 OAuth 发现。
+
+| 精确路径 `/api/mcp` 的方法 | 浏览器会话检查 | 三个前提满足后的路由响应 |
+|---|---|---|
+| `POST` | 不带 `Next-Action` 时豁免 | 验证 agent token，再处理 MCP 请求 |
+| `GET`、`DELETE` | 不带 `Next-Action` 时豁免 | 固定 405 `{"error":"method_not_allowed"}`，`Allow: POST`；不验证 token、不查限流、不访问数据库 |
+| `HEAD`、`OPTIONS`、`PUT`、`PATCH` | 正常会话规则 | 会话检查放行后返回同样的 405 |
+
+其他路径拼写及带 `Next-Action` 的请求保留正常会话规则。所有到达路由的方法都先检查前提：任一开关关闭或配置不可读返回 404，
+Web 密码不可用返回 503。
 
 在宿主机为每个客户端单独创建 token：
 
@@ -188,7 +198,9 @@ curl -i 'https://<machine>.<tailnet>.ts.net/api/mcp' \
 
 有效 token 应得到 JSON-RPC 回复（2025 协议放在 SSE 中），错误 token 应得到 401。
 两者都是 401 时检查转发的认证头和 token 状态。421 表示认证之前的主机名或 Origin 检查未通过。
-使用 HTTPS，避免 verbose curl 或代理访问日志打印认证请求头。
+此端点仅面向 **localhost 或 Tailscale**。Tailscale 会加密链路，即使 URL 使用 HTTP；`tailscale serve` 则增加 HTTPS。
+如果通过普通局域网或互联网地址暴露明文 HTTP，可重复使用的 bearer token 会以明文传输。
+避免 verbose curl 或代理访问日志打印认证请求头。
 
 ### HTTP 限额和数据库连接
 
@@ -210,7 +222,13 @@ curl -i 'https://<machine>.<tailnet>.ts.net/api/mcp' \
 
 来源取 `X-Forwarded-For` 最后一个地址，没有则用 `direct`。进程内计数与 Web 登录独立，重启清空。
 认证成功清除该来源的失败记录，不清除全局历史。被限流的请求不会读取凭据或数据库。
-认证失败不写 `agent_calls`；拒绝日志只有来源的 SHA-256 短标签，不含地址或凭据。
+认证失败不写 `agent_calls`；拒绝日志只有重启后会变化的来源短密钥哈希，不含地址或凭据。
+标签使用 HMAC-SHA256 的前八个十六进制字符；进程密钥在首次使用时随机生成，从不写入日志或持久化。
+
+并发名额会保留到 token 验证、最后使用时间更新及 handler 工作完成，再等响应体读完或被取消后释放。
+断开连接会停止读取请求体或响应体，但等待中的工作未完成时不会释放名额。
+每次请求都有独立的 server 和 token 上下文，只有传输 handler 按请求体上限缓存。
+现代协议通常返回 JSON，中途通知需要时转为 SSE；旧协议使用 SSE。长连接订阅仍被禁用。
 
 HTTP 额外使用最多 `read_max + write_max + 1` 个数据库连接（默认六个），与 Web 共享池及各 stdio 进程独立，
 连接池和审计连接都延迟打开。认证通过且声明大小未超限后更新 `agent_tokens.last_used_at`；更新失败只记错误类别，
@@ -373,9 +391,10 @@ GRANT USAGE ON SEQUENCE agent_calls_id_seq TO job_radar_ro;
 | HTTP 401 `unauthorized` | token 缺失、格式错误、未知、吊销或过期都返回相同响应及 `WWW-Authenticate: Bearer`。使用 Authorization 请求头，不能用查询参数或 cookie。 |
 | HTTP 429 `too_many_attempts` | 认证限流；等待 `Retry-After` 指定的秒数。 |
 | HTTP 413 `payload_too_large` | 声明或流式读取的请求体超过 `http.max_body_bytes`，缩小请求。 |
-| HTTP 503 `busy` | `http.pool.max_concurrent` 已满；读完或取消响应流，1 秒后重试。 |
+| HTTP 503 `busy` | `http.pool.max_concurrent` 已满；读完或取消响应流，1 秒后重试。断开的请求仍占用名额，直到等待中的工作结束。 |
 | HTTP 503 `unavailable` | token 验证无法访问数据库，不计入认证失败。 |
-| HTTP 405 | 使用精确的 `POST /api/mcp`；其他方法拒绝且不返回 CORS。 |
+| HTTP 405 `method_not_allowed` | 精确路径的 GET/DELETE 探测在前提检查后返回 405 和 `Allow: POST`，不验证 token。MCP 调用使用 POST；其他方法仍经过浏览器会话检查，所有响应均无 CORS。 |
+| HTTP 401 `login_required` | 浏览器会话检查拒绝了其他路径拼写、未豁免的方法或带 `Next-Action` 的请求。使用精确 `/api/mcp` 且不带 `Next-Action`；只有 POST/GET/DELETE 豁免。 |
 | HTTP 500 `internal` | 意外错误；日志只记录类别，不包含异常内容。 |
 | 客户端说服务退出了，日志里是"Job Radar 的 MCP 服务没有打开" | `mcp.yaml: enabled` 是 `false`。改成 `true` 再重启客户端。 |
 | "mcp.yaml 读不出来" | `pnpm config:check` 会指出是哪一项。 |

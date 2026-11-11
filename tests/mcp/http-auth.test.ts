@@ -1,9 +1,10 @@
 // @vitest-environment node
+import { createHash } from "node:crypto";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handleMcpHttpRequest, resetMcpThrottle, type McpHttpDependencies } from "@/lib/mcp/http";
 import { readPasswordSetting } from "@/lib/security/password";
-import * as route from "@/app/api/mcp/route";
 
 import { fakeDeps, grant, rpcRequest, SECRET, settings, snapshot } from "./http-helpers";
 
@@ -26,13 +27,27 @@ describe("HTTP preconditions", () => {
     expect(response).toMatchObject({ status: 503, body: '{"error":"web_password_required"}' });
     for (const spy of [deps.readDb, deps.writeDb, deps.verify, deps.markUsed, deps.audit]) expect(spy).not.toHaveBeenCalled();
   });
-  it.each(["GET", "HEAD", "PUT", "PATCH", "DELETE", "OPTIONS"] as const)("%s is an explicit 405 without CORS", async (method) => {
-    const response = route[method]();
-    expect(await snapshot(response)).toMatchObject({ status: 405, headers: { allow: "POST" } });
-  });
+
 });
 
 describe("HTTP bearer verification", () => {
+  it("logs a stable keyed source tag within the process without exposing the source or credentials", async () => {
+    const deps = fakeDeps();
+    const sources = ["192.0.2.1", "192.0.2.1", "192.0.2.2"];
+    for (const source of sources) {
+      await snapshot(await handleMcpHttpRequest(rpcRequest({ token: null, headers: { "x-forwarded-for": source } }), deps));
+    }
+    const lines = deps.log.mock.calls.map(([line]) => line);
+    expect(lines[0]).toBe(lines[1]);
+    expect(lines[0]).not.toBe(lines[2]);
+    for (const [index, source] of sources.entries()) {
+      expect(lines[index]).toMatch(/^\[mcp\] http request refused \(401\) source [a-f0-9]{8}$/);
+      expect(lines[index]).not.toContain(source);
+      expect(lines[index]).not.toContain(createHash("sha256").update(source).digest("hex").slice(0, 8));
+      expect(lines[index]).not.toContain(SECRET);
+    }
+  });
+
   it("gives byte-identical refusals for every credential failure and ignores query strings and cookies", async () => {
     let reference: Awaited<ReturnType<typeof snapshot>> | undefined;
     for (const mode of ["absent", "scheme", "query", "cookie", "malformed", "unknown", "revoked", "expired"]) {
@@ -66,7 +81,7 @@ describe("HTTP bearer verification", () => {
     const deps = fakeDeps();
     deps.markUsed.mockRejectedValue(new Error(SECRET));
     const createHandler = vi.fn<McpHttpDependencies["createHandler"]>((factory, options) => {
-      expect(options).toMatchObject({ responseMode: "json", maxRequestBodySize: settings().http.max_body_bytes });
+      expect(options).toMatchObject({ responseMode: "auto", maxRequestBodySize: settings().http.max_body_bytes });
       const real = deps.createHandler(factory, options);
       return { ...real, fetch: async (request, input) => {
         expect(input?.authInfo).toEqual({ token: "", clientId: String(grant.tokenId), scopes: ["jobs:read"], expiresAt: 253402300799 });

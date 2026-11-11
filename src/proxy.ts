@@ -7,7 +7,7 @@
  * 2. Optional web password (`.env`: JOB_RADAR_WEB_PASSWORD_HASH / JOB_RADAR_WEB_PASSWORD): without a local exemption or a
  *    valid session cookie, a page navigation goes to `/login?next=<path>` (303) and anything else gets 401 JSON. The
  *    decision is `authDecision` (pure, unit-tested); the request's standing is `readWebAccess`. No password: no gate.
- *    Exact POST /api/mcp without Next-Action passes this gate; its route checks an agent token on every request.
+ *    Exact /api/mcp without Next-Action passes for POST (agent-token verification) and GET / DELETE (static refusal).
  * 3. While the first-run setup is pending, a page navigation goes to the wizard (`/setup?step=<first open step>`).
  *    The decision is `setupRedirect` (pure, unit-tested); the state is read from setup.yaml with an mtime cache. Proxy runs
  *    in the Node.js runtime (Next 16), so it reads the file directly. The wizard, API routes, Next's assets, files and
@@ -56,7 +56,7 @@ export function proxy(request: NextRequest): NextResponse {
   return target === null ? NextResponse.next() : NextResponse.redirect(new URL(target, request.url));
 }
 
-/** The login gate (step 2): null to go on, or the redirect / refusal. */
+/** The login gate: null to go on, or refusal / redirect with the absolute Location required by Next's proxy. */
 function loginGate(request: NextRequest): NextResponse | null {
   const access = readWebAccess(request.headers, request.cookies);
   const decision = authDecision({
@@ -71,7 +71,6 @@ function loginGate(request: NextRequest): NextResponse | null {
   if (decision === "pass") return null;
   const headers = { "cache-control": "no-store", "x-content-type-options": "nosniff" };
   if (decision === "login_redirect") {
-    // Next requires an absolute Location from a proxy and sends a same-origin one on as a relative path
     const location = new URL(loginRedirectTarget(request.nextUrl.pathname, request.nextUrl.search), request.url);
     return new NextResponse(null, { status: 303, headers: { ...headers, location: location.toString() } });
   }

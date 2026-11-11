@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handleMcpHttpRequest, resetMcpThrottle, type McpHttpDependencies } from "@/lib/mcp/http";
 
-import { expectHygiene, fakeDeps, rpcRequest, SECRET, settings, snapshot } from "./http-helpers";
+import { expectHygiene, fakeDeps, grant, rpcRequest, SECRET, settings, snapshot } from "./http-helpers";
 
 beforeEach(() => resetMcpThrottle());
 
@@ -83,10 +83,115 @@ describe("HTTP streaming limits", () => {
       verified.resolve({ ok: true, grant: { kind: "token", tokenId: 42, permissions: ["jobs:read"] } });
     }
     const response = await handling;
-    if (when === "after response") abort.abort();
+    if (when === "after response") { abort.abort(); await new Promise(setImmediate); }
     else expect(deps.markUsed).not.toHaveBeenCalled();
     expect((await snapshot(await handleMcpHttpRequest(rpcRequest(), deps))).status).toBe(200);
     if (response.body && !response.body.locked) await response.body.cancel();
+  });
+
+  it.each(["verification", "last-use update", "tool call"])("retains the slot for five disconnects during pending %s and releases it exactly once", async (stage) => {
+    const deps = fakeDeps();
+    deps.readSettings.mockReturnValue(settings({ pool: { max_concurrent: 1 } }));
+    let running = 0;
+    let maximum = 0;
+    let entered = Promise.withResolvers<void>();
+    let settled = Promise.withResolvers<void>();
+    const work = async () => {
+      running++;
+      maximum = Math.max(maximum, running);
+      entered.resolve();
+      try { await settled.promise; }
+      finally { running--; }
+    };
+    if (stage === "verification") deps.verify.mockImplementation(async () => { await work(); return { ok: true, grant }; });
+    if (stage === "last-use update") deps.markUsed.mockImplementation(work);
+    const createHandler: McpHttpDependencies["createHandler"] = (factory, options) => ({
+      ...deps.createHandler(factory, options),
+      fetch: async () => { if (stage === "tool call") await work(); return Response.json({ ok: true }); },
+    });
+    const dependencies = { ...deps, createHandler };
+    for (let round = 0; round < 5; round++) {
+      entered = Promise.withResolvers<void>();
+      settled = Promise.withResolvers<void>();
+      const abort = new AbortController();
+      const pending = handleMcpHttpRequest(rpcRequest({ signal: abort.signal }), dependencies);
+      await entered.promise;
+      try {
+        abort.abort();
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const retryAbort = new AbortController();
+          const retry = handleMcpHttpRequest(rpcRequest({ signal: retryAbort.signal }), dependencies);
+          retryAbort.abort();
+          expect(await snapshot(await retry)).toMatchObject({ status: 503, body: '{"error":"busy"}' });
+        }
+        expect(running).toBe(1);
+        expect(maximum).toBe(1);
+      } finally { settled.resolve(); }
+      const response = await pending;
+      expect(running).toBe(0);
+      await response.body?.cancel();
+      abort.abort();
+    }
+    const first = await handleMcpHttpRequest(rpcRequest(), dependencies);
+    expect(first.status).toBe(200);
+    expect(await snapshot(await handleMcpHttpRequest(rpcRequest(), dependencies))).toMatchObject({ status: 503, body: '{"error":"busy"}' });
+    await first.body!.cancel();
+    expect((await snapshot(await handleMcpHttpRequest(rpcRequest(), dependencies))).status).toBe(200);
+  });
+
+  it("cancels an unread request body on disconnect while verification retains the slot", async () => {
+    const deps = fakeDeps();
+    deps.readSettings.mockReturnValue(settings({ pool: { max_concurrent: 1 } }));
+    const entered = Promise.withResolvers<void>();
+    const verification = Promise.withResolvers<Awaited<ReturnType<typeof deps.verify>>>();
+    deps.verify.mockImplementationOnce(() => { entered.resolve(); return verification.promise; });
+    const cancel = vi.fn();
+    const pull = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ pull, cancel }, { highWaterMark: 0 });
+    const abort = new AbortController();
+    const pending = handleMcpHttpRequest(rpcRequest({ body, signal: abort.signal }), deps);
+    await entered.promise;
+    abort.abort();
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(pull).not.toHaveBeenCalled();
+    expect((await snapshot(await handleMcpHttpRequest(rpcRequest(), deps))).status).toBe(503);
+    verification.resolve({ ok: true, grant });
+    await snapshot(await pending);
+    expect((await snapshot(await handleMcpHttpRequest(rpcRequest(), deps))).status).toBe(200);
+  });
+
+  it("stops a body read already locked by the SDK on disconnect", async () => {
+    const deps = fakeDeps();
+    deps.readSettings.mockReturnValue(settings({ pool: { max_concurrent: 1 } }));
+    const reading = Promise.withResolvers<void>();
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ pull() { reading.resolve(); }, cancel }, { highWaterMark: 0 });
+    const abort = new AbortController();
+    const pending = handleMcpHttpRequest(rpcRequest({ body, signal: abort.signal }), deps);
+    await reading.promise;
+    abort.abort();
+    await snapshot(await pending);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect((await snapshot(await handleMcpHttpRequest(rpcRequest(), deps))).status).toBe(200);
+  });
+
+  it("cancels a locked response reader on disconnect and releases the slot once", async () => {
+    const reading = Promise.withResolvers<void>();
+    const cancel = vi.fn();
+    const deps = responseDeps(() => new Response(new ReadableStream({ pull() { reading.resolve(); }, cancel }, { highWaterMark: 0 })));
+    const abort = new AbortController();
+    const response = await handleMcpHttpRequest(rpcRequest({ signal: abort.signal }), deps);
+    const reader = response.body!.getReader();
+    const pending = reader.read();
+    await reading.promise;
+    abort.abort();
+    expect(await pending).toEqual({ done: true, value: undefined });
+    await reader.cancel();
+    expect(cancel).toHaveBeenCalledTimes(1);
+    const next = await handleMcpHttpRequest(rpcRequest(), deps);
+    expect(next.status).toBe(200);
+    expect((await snapshot(await handleMcpHttpRequest(rpcRequest(), deps))).status).toBe(503);
+    await next.body!.cancel();
   });
 
   it("normalizes exceptions the real SDK converts into an HTTP error", async () => {

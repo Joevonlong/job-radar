@@ -16,7 +16,7 @@ export function fakeDeps() {
   const audit = { record: vi.fn(async () => {}), inTransaction: vi.fn(async () => {}), close: vi.fn(async () => {}) };
   return {
     ...realDeps(),
-    readSettings: vi.fn(() => settings()), password: vi.fn(() => ({ kind: "plain" as const, plain: "test-password" })),
+    readSettings: vi.fn(() => settings()), password: vi.fn<McpHttpDependencies["password"]>(() => ({ kind: "plain", plain: "test-password" })),
     readDb: vi.fn(() => read), writeDb: vi.fn(() => write), audit: vi.fn(() => audit),
     verify: vi.fn<McpHttpDependencies["verify"]>(async () => ({ ok: true, grant })), markUsed: vi.fn(async () => {}),
     readGrant: vi.fn(() => vi.fn(async () => grant)), writerEnabled: vi.fn(() => false),
