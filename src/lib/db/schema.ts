@@ -5,6 +5,7 @@ import {
   boolean,
   check,
   customType,
+  date,
   index,
   integer,
   jsonb,
@@ -1378,4 +1379,17 @@ export const activityEvents = pgTable("activity_events", {
 }, (t) => [
   index("activity_events_root_at_idx").on(t.rootId, t.at, t.id),
   index("activity_events_span_at_idx").on(t.spanId, t.at, t.id),
+]);
+
+/** One row per caller, action and local day; the counter behind mcp.yaml budgets. */
+export const agentBudgetUsage = pgTable("agent_budget_usage", {
+  caller: text("caller").notNull(),
+  action: text("action").notNull(),
+  day: date("day", { mode: "string" }).notNull(),
+  used: integer("used").notNull().default(0),
+  updatedAt: timestamptz("updated_at").notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.caller, t.action, t.day] }),
+  check("agent_budget_usage_used_nonnegative", sql`${t.used} >= 0`),
+  index("agent_budget_usage_day_idx").on(t.day),
 ]);

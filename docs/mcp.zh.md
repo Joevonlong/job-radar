@@ -39,6 +39,13 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 `search_jobs` 和 `get_job` 共用 `jobs:read`，`list_applications` 需要 `tracking:read`。权限目录中的其他 id 也能填写，但暂不提供工具。版本 2 的工具开关会迁移为两份权限列表；如果此前只关了一个岗位工具，`jobs:read` 会同时提供两个，`config:migrate` 会打印提示。移除 `jobs:read` 可以同时关闭两个。写进 `mcp.yaml` 的权限也适用于以后版本在它下面新增的工具，所以只授予应当可读或可写的权限。
 
+`budgets` 为后续 agent 动作工具预留每日额度；现有工具还不使用这些计数。
+`per_caller` 分别计算本地 stdio 连接和每个 token 的额度，限制采集请求、岗位翻译、拆解、薪资查询、公司查询、回答起草和简历定制；`score_jobs` 按批次里的每个岗位计数。
+薪资与公司查询也包括 agent 写入间接触发的自动研究。某项额度为 `0` 就禁止 agent 触发该动作。
+`total` 统计所有 caller、所有动作的请求总数，批量请求只算一次；`0` 禁止全部 agent 动作。
+日期与下次重置时间遵循 `schedule.yaml` 的时区及夏令时。runner 每小时清理早于「当前本地日期减去 `retention_days`」的计数行。
+这些设置有默认值，仍使用 `config_version: 3`。
+
 ```yaml
 config_version: 3
 enabled: true

@@ -19,6 +19,7 @@ import {
 const EXPECTED_TABLES = [
   "activity_events",
   "activity_spans",
+  "agent_budget_usage",
   "ai_usage",
   "application_answer_versions",
   "application_events",

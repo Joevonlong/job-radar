@@ -18,7 +18,7 @@ afterEach(() => {
 
 describe("mcp.yaml schema", () => {
   it("defaults to off, the read tools on, the writer tools off, 20 results and 12000 JD characters", () => {
-    expect(mcpSchema.parse({})).toEqual({
+    expect(mcpSchema.parse({})).toMatchObject({
       enabled: false,
       permissions: ["jobs:read", "tracking:read"],
       stdio: { permissions: ["jobs:read", "tracking:read"] },

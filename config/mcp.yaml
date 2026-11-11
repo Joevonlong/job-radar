@@ -34,3 +34,28 @@ limits:
   max_results: 20
   # Most characters of a JD one get_job call returns (500-100000); a longer JD is cut and marked as cut
   max_description_chars: 12000
+
+# Daily agent counters use the calendar day in schedule.yaml's time zone; action tools are not connected yet.
+budgets:
+  # Daily caps per caller (stdio and each token separately); 0 forbids agents from triggering that action
+  per_caller:
+    # Collection requests per caller per day
+    run_collection: 2
+    # Jobs scored per caller per day; a batch counts each job
+    score_jobs: 100
+    # Job translation requests per caller per day
+    translate_job: 20
+    # Job breakdown requests per caller per day
+    breakdown_job: 20
+    # Salary lookups, including automatic research started by an agent's write
+    research_salary: 10
+    # Company lookups, including automatic research started by an agent's write
+    research_company: 10
+    # Answer drafting requests per caller per day
+    draft_answer: 20
+    # Resume tailoring requests per caller per day
+    tailor_resume: 5
+  # Requests per day across all agents and actions; a batch counts once; 0 forbids all agent actions
+  total: 150
+  # Days the runner keeps daily counter rows
+  retention_days: 90
