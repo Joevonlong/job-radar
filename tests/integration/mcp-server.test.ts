@@ -174,7 +174,7 @@ describe("search_jobs", () => {
       const visa = await visaFilterAvailable(db);
       const ghost = await ghostFilterAvailable(db);
       expect({ visa, ghost }).toEqual({ visa: true, ghost: true });
-      const client = await connect({ mcp: settings({ limits: { max_results: 100, max_description_chars: 12000 } }) });
+      const client = await connect({ mcp: settings({ limits: { max_results: 100, max_description_chars: 12000, max_raw_chars: 20_000 } }) });
       const cases: Array<{ args: Record<string, unknown>; query: string }> = [
         { args: { scope: "archive" }, query: "scope=archive" },
         { args: { scope: "all" }, query: "scope=all" },
@@ -348,7 +348,7 @@ describe("search_jobs", () => {
   });
 
   it("cuts at the limit and says so", async () => {
-    const client = await connect({ mcp: settings({ limits: { max_results: 2, max_description_chars: 12_000 } }) });
+    const client = await connect({ mcp: settings({ limits: { max_results: 2, max_description_chars: 12_000, max_raw_chars: 20_000 } }) });
     const { structured } = await call<SearchJobsOutput>(client, "search_jobs", { limit: 50 });
     expect(structured.returned).toBe(2);
     expect(structured.truncated).toBe(true);
@@ -387,7 +387,7 @@ describe("get_job", () => {
   it("cuts a long JD at max_description_chars and marks it", async () => {
     const [long] = await getDb().select({ id: schema.jobs.id, length: sql<number>`length(${schema.jobs.description})`.mapWith(Number) }).from(schema.jobs).orderBy(sql`length(${schema.jobs.description}) desc nulls last`).limit(1);
     expect(long!.length).toBeGreaterThan(500);
-    const client = await connect({ mcp: settings({ limits: { max_results: 20, max_description_chars: 500 } }) });
+    const client = await connect({ mcp: settings({ limits: { max_results: 20, max_description_chars: 500, max_raw_chars: 20_000 } }) });
     const { structured } = await call<GetJobOutput>(client, "get_job", { job_id: long!.id });
     if (!structured.job.description.available) throw new Error("the JD should be available");
     expect(structured.job.description.text!.length).toBeLessThanOrEqual(500);
@@ -643,7 +643,7 @@ describe("privacy: what must never come out", () => {
     await db.insert(schema.applicationEvents).values({ applicationId: app!.id, fromStatus: "applied", toStatus: "interviewing", note: S.eventNote });
     await db.insert(schema.jobFavorites).values({ jobId: starred!, note: S.favorite }).onConflictDoUpdate({ target: schema.jobFavorites.jobId, set: { note: S.favorite } });
 
-    const client = await connect({ mcp: settings({ limits: { max_results: 100, max_description_chars: 100_000 } }) });
+    const client = await connect({ mcp: settings({ limits: { max_results: 100, max_description_chars: 100_000, max_raw_chars: 20_000 } }) });
     const answers: string[] = [];
     const keep = (result: Called<unknown>) => answers.push(result.text, JSON.stringify(result.structured));
     keep(await call(client, "search_jobs", { limit: 100 }));
