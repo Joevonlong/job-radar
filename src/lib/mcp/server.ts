@@ -19,14 +19,14 @@ import { loadBaseCurrency } from "@/lib/signals/floor";
 import { readWriterInputs } from "@/lib/writer/settings";
 
 import { formatCallLine, stderrLine, type LogLine } from "./call-log";
-import { runLogged, ToolFailure, type McpContext } from "./context";
+import { auditEntry, runLogged, ToolFailure, type McpContext } from "./context";
 import { toolResult } from "./guard";
 import { mcpTranslator, type McpTranslator } from "./text";
 
 export const MCP_SERVER_NAME = "job-radar";
 
 /** The context with the real loaders (config files, the city groups of the database); `readSettings` defaults to mcp.yaml read fresh from disk. */
-export function defaultContext(db: Db, settings: McpConfig, options: { text?: McpTranslator; log?: LogLine; writeDb?: Db | null; readSettings?: () => McpConfig } = {}): McpContext {
+export function defaultContext(db: Db, settings: McpConfig, options: { text?: McpTranslator; log?: LogLine; writeDb?: Db | null; readSettings?: () => McpConfig; audit?: McpContext["audit"]; caller?: McpContext["caller"] } = {}): McpContext {
   return {
     db,
     settings,
@@ -44,6 +44,8 @@ export function defaultContext(db: Db, settings: McpConfig, options: { text?: Mc
     text: options.text ?? mcpTranslator(),
     log: options.log ?? stderrLine,
     writer: { inputs: readWriterInputs, writeDb: options.writeDb ?? null },
+    audit: options.audit,
+    caller: options.caller,
   };
 }
 
@@ -51,13 +53,16 @@ export function defaultContext(db: Db, settings: McpConfig, options: { text?: Mc
  * The input schema as the SDK sees it, plus one call log line when the SDK rejects the arguments (the handler then never runs, so
  * the line would be missing). The JSON Schema the client is shown is the original one.
  */
-export function observeInvalidInput<S extends StandardSchemaWithJSON>(schema: S, tool: string, log: LogLine): S {
+export function observeInvalidInput<S extends StandardSchemaWithJSON>(schema: S, tool: string, log: LogLine, ctx?: Pick<McpContext, "audit" | "caller">): S {
   const std = schema["~standard"];
   const validate: typeof std.validate = (value, options) => {
     const started = performance.now();
     const result = std.validate(value, options);
     const report = (outcome: Awaited<typeof result>) => {
-      if (outcome.issues && outcome.issues.length > 0) log(formatCallLine({ tool, ok: false, count: 0, ms: performance.now() - started, category: "invalid_input" }));
+      if (outcome.issues && outcome.issues.length > 0) {
+        log(formatCallLine({ tool, ok: false, count: 0, ms: performance.now() - started, category: "invalid_input" }));
+        void ctx?.audit?.record(auditEntry(ctx, tool, null, { outcome: "invalid_input", error_category: null }, 0, performance.now() - started));
+      }
       return outcome;
     };
     return result instanceof Promise ? result.then(report) : report(result);
@@ -86,18 +91,18 @@ export function buildServer(ctx: McpContext, options: { version?: string; capabi
       {
         title: t(cap.text.title),
         description: t(cap.text.description),
-        inputSchema: observeInvalidInput(cap.input(ctx), cap.id, ctx.log),
+        inputSchema: observeInvalidInput(cap.input(ctx), cap.id, ctx.log, ctx),
         outputSchema: cap.output,
         annotations: cap.annotations,
       },
       async (args) =>
-        runLogged(ctx, cap.id, async () => {
+        runLogged(ctx, cap.id, async (callCtx) => {
           const decision = authorize(cap, ctx.readSettings);
           if (!decision.allowed) throw accessFailure(decision, t);
           if (cap.availability && !cap.availability.available(ctx)) throw new ToolFailure(cap.availability.category, t(cap.availability.message));
-          const output = await cap.handler({ ...ctx, settings: decision.settings }, args);
+          const output = await cap.handler({ ...callCtx, settings: decision.settings }, args);
           return { result: toolResult(output), count: cap.count(output) };
-        }),
+        }, cap.target?.(args) ?? null),
     );
   }
 

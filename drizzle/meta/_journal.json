@@ -414,6 +414,13 @@
       "when": 1794006344952,
       "tag": "0058_career_tailor_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1794389765158,
+      "tag": "0059_agent_calls",
+      "breakpoints": true
     }
   ]
 }
