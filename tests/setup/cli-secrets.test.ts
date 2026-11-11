@@ -134,12 +134,12 @@ describe("pnpm run setup", () => {
   it("Worldwide is remote only, typed at the prompt or written in an answers file", async () => {
     const typed = io(["", "", "", "", "", "Worldwide, Utrecht", "Europe/Amsterdam", "y"]);
     expect(await runSetupCli(["--step", "market", "--lang", "en"], typed)).toBe(0);
-    expect(reloadConfig("preferences").places).toEqual([{ place: "Worldwide", relocate: false }, { place: "Utrecht", relocate: true }]);
+    expect(reloadConfig("preferences").places).toEqual([{ place: "Worldwide", relocate: false, id: "worldwide" }, { place: "Utrecht", relocate: true, id: expect.any(Number) }]);
 
     const answers = path.join(tmp.root, "worldwide.yaml");
     fs.writeFileSync(answers, "market: { pack: generic, country: NL, currency: EUR, home_language: nl, home_city: Amsterdam, places: [{ place: Worldwide, relocate: true }], timezone: Europe/Amsterdam }\n");
     expect(await runSetupCli(["--answers", answers, "--step", "market"], io())).toBe(0);
-    expect(reloadConfig("preferences").places).toEqual([{ place: "Worldwide", relocate: false }]);
+    expect(reloadConfig("preferences").places).toEqual([{ place: "Worldwide", relocate: false, id: "worldwide" }]);
   });
 
   it("--step runs one step only; a missing section is recorded as skipped", async () => {

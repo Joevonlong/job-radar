@@ -66,14 +66,16 @@ export async function previewStaleOnProfileChange(db: Db, yamlText: string): Pro
 /**
  * The values of a profile text that count as "the profile": everything except preferences `deal_breakers` (veto rules
  * of the hard filter: not in any prompt, applied to the existing results in place, so a change of them alone must
- * not make scores stale).
+ * not make scores stale) and the dictionary ids of the places (the scoring prompt reads the places by name, so the ids
+ * the first save after an upgrade adds to an older file do not send every job to be scored again).
  */
 function profileValues(kind: ScoredProfileName, text: string): unknown {
   const value = parseConfigText(kind, text, kind);
   if (kind !== "preferences") return value;
-  const { deal_breakers: _ignored, ...rest } = value as Record<string, unknown>;
+  const { deal_breakers: _ignored, home_city_id: _homeId, places, ...rest } = value as Record<string, unknown> & { places?: ReadonlyArray<Record<string, unknown>> };
   void _ignored;
-  return rest;
+  void _homeId;
+  return { ...rest, places: (places ?? []).map((entry) => ({ place: entry.place, relocate: entry.relocate })) };
 }
 
 /** Both texts are valid and mean the same profile values (after the in-memory config migration, ignoring `deal_breakers`). */

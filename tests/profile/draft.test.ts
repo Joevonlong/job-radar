@@ -34,6 +34,7 @@ const PREFS: PreferencesDraft = {
   market: { pack: "de", country: "", currency: "", home_language: "" },
   target_titles: ["AI Engineer"],
   home_city: "Berlin",
+  home_city_id: null,
   places: [],
   workplace: ["hybrid", "remote"],
   seniority: "all",
@@ -105,6 +106,15 @@ describe("preferences draft", () => {
   it("round-trips through the config shape", () => {
     const parsed = preferencesSchema.parse(preferencesDraftToCandidate(PREFS));
     expect(preferencesConfigToDraft(parsed)).toEqual(PREFS);
+  });
+
+  it("round-trips the ids of picked places, and writes none for a place never picked", () => {
+    const draft: PreferencesDraft = { ...PREFS, home_city_id: 2950159, places: [{ place: "Amsterdam", relocate: true, id: 2759794 }, { place: "eu", relocate: false, id: "eu" }, { place: "Atlantis", relocate: true, id: null }] };
+    const candidate = preferencesDraftToCandidate(draft);
+    expect(candidate).toMatchObject({ home_city_id: 2950159, places: [{ place: "Amsterdam", relocate: true, id: 2759794 }, { place: "eu", relocate: false, id: "eu" }, { place: "Atlantis", relocate: true }] });
+    expect((candidate as { places: object[] }).places[2]).not.toHaveProperty("id");
+    expect(preferencesConfigToDraft(preferencesSchema.parse(candidate))).toEqual(draft);
+    expect(preferencesDraftToCandidate({ ...draft, home_city: "" })).not.toHaveProperty("home_city_id");
   });
 
   it("derives contract allow/exclude lists from the per-kind modes", () => {

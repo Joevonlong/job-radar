@@ -302,6 +302,7 @@ describe("deal-breakers and profile snapshots", () => {
     expect(after.map((s) => s.id)).toEqual([snapshotId]);
     expect(after[0]?.contentYaml).toBe(fs.readFileSync(getConfigPath("preferences"), "utf8"));
     expect(reloadConfig("preferences").deal_breakers.map((rule) => rule.id)).toEqual(["german-gate"]);
+    expect(reloadConfig("preferences").home_city_id, "the save added the place ids an older file lacks; they alone are no new snapshot").toEqual(expect.any(Number));
     expect(await rowsOf(job.id)).toMatchObject([{ score: 75, stale: false }]);
 
     await saveFromForm((draft) => ({ ...draft, exclude_keywords: ["blockchain"] }));

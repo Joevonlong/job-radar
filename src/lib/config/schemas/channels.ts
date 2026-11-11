@@ -49,7 +49,7 @@ export const arbeitsagenturSettingsSchema = z.strictObject({
   api_key: z.string().trim().min(1, "must not be empty"),
   /** Search radius around each configured city, in km. */
   radius_km: positiveInt,
-  /** German name to search for a place, as the API matches German names only: spelling -> name. Country names need no entry. */
+  /** Removed: the German names come from the place dictionary. Still accepted from older files, and not read. */
   location_names: z.record(z.string(), z.string()).optional(),
   /** Postings per search page. */
   page_size: positiveInt,

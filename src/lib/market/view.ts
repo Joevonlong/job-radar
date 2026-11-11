@@ -8,7 +8,8 @@ import { loadConfig } from "@/lib/config";
 
 import { GENERIC_PACK_ID, listPackIds, loadPack } from "./load";
 import { loadPipeline } from "./effective";
-import { placeGeo, type PlaceGeo } from "./places";
+import { placeDictionary, placeLang, type Place as Geoname } from "./geo";
+import { lookupPlace, placeGeo, type PlaceGeo } from "./places";
 import { loadMarket, MarketUnresolvedError } from "./resolve";
 import type { Market } from "./types";
 
@@ -65,8 +66,13 @@ export interface MarketView {
   languageStep: boolean;
   /** Regions first (named regions of the packs), then every country of the table. */
   scopeOptions: ScopeOption[];
-  /** The tables a place is looked up in, so the forms can name what they do not know. */
+  /** The tables a place is looked up in, without the dictionary (the browser never loads it whole). */
   placeGeo: PlaceGeo;
+  /**
+   * The dictionary's entries of the saved home city and places, names in the page's language: with `placeGeo` the forms read
+   * these places as the server does (`createPlaceSource`), and a name that has none is one to pick again.
+   */
+  placeRecords: Geoname[];
   /** The named region the home country belongs to (what "remote in the home region" means), with its name in the page's language; null when it has none. */
   homeRegion: { id: string; name: string } | null;
   /** The named regions with their countries, names in the page's language: what a draft market's home region is worked out from (`draftHomeRegion`). */
@@ -154,9 +160,27 @@ function rateCurrencies(): string[] {
 /** The market's tables with the user's city spellings; only the market's when pipeline.yaml cannot be read. */
 function placeGeoOf(market: Market): PlaceGeo {
   try {
-    return placeGeo(loadPipeline());
+    return placeGeo(loadPipeline(), null);
   } catch {
     return { cityAliases: {}, cities: market.cities, countries: market.countries, regions: market.regions };
+  }
+}
+
+/** The dictionary's entries of the saved home city and places (see `MarketView.placeRecords`); none when a file cannot be read. */
+function savedPlaceRecords(locale: string): Geoname[] {
+  try {
+    const preferences = loadConfig("preferences");
+    const dictionary = placeDictionary();
+    const geo = placeGeo(loadPipeline(), dictionary);
+    const lang = placeLang(locale);
+    const saved = [{ text: preferences.home_city, id: preferences.home_city_id ?? null }, ...preferences.places.map((entry) => ({ text: entry.place, id: entry.id ?? null }))];
+    const ids = new Set(saved.flatMap(({ text, id }) => {
+      const found = lookupPlace(text, geo, id)?.geoname;
+      return found === undefined || found === null ? [] : [found.id];
+    }));
+    return [...ids].flatMap((id) => dictionary.getPlace(id, lang) ?? []);
+  } catch {
+    return [];
   }
 }
 
@@ -209,6 +233,7 @@ export function marketViewOf(market: Market, locale: string, regionLabel: (id: s
     languageStep: market.language !== null,
     scopeOptions: [...regions, ...countries],
     placeGeo: placeGeoOf(market),
+    placeRecords: savedPlaceRecords(locale),
     regionChoices: Object.entries(market.regions).map(([id, region]) => ({ id, name: regionLabel(id) ?? region.name, countries: [...region.countries] })),
     homeRegion: market.homeRegion === null ? null : { id: market.homeRegion, name: regionLabel(market.homeRegion) ?? market.regions[market.homeRegion]?.name ?? market.homeRegion },
   };
@@ -238,6 +263,7 @@ export function loadMarketView(locale: string, regionLabel: (id: string) => stri
       languageStep: false,
       scopeOptions: [],
       placeGeo: { cityAliases: {}, cities: {}, countries: [], regions: {} },
+      placeRecords: [],
       homeRegion: null,
       regionChoices: [],
     };

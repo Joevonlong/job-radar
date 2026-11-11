@@ -21,12 +21,16 @@ export const languageInputSchema = z.strictObject({
 });
 export type LanguageInput = z.infer<typeof languageInputSchema>;
 
+const placeIdSchema = z.number().int().positive();
+
 export const marketInputSchema = z.strictObject({
   market: z.strictObject({ pack: text(40), country: text(10), currency: text(10), home_language: text(10) }),
   /** Where a job counts as local. */
   home_city: text(200),
-  /** Other places a job can be based. */
-  places: z.array(z.strictObject({ place: text(200), relocate: z.boolean() })).max(200),
+  /** The picked home city's GeoNames id; null or absent when the city was typed (it is then looked up by name). */
+  home_city_id: placeIdSchema.nullable().optional(),
+  /** Other places a job can be based; `id` names a picked one (see the preferences file). */
+  places: z.array(z.strictObject({ place: text(200), relocate: z.boolean(), id: z.union([placeIdSchema, text(40)]).nullable().optional() })).max(200),
   /** IANA time zone of the schedule. */
   timezone: text(100),
 });

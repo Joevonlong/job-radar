@@ -26,7 +26,9 @@ import { DealBreakersCard } from "./deal-breakers-card";
 import { Field, TagInput, describedBy, fieldErrorMap } from "./fields";
 import { FloorPreview } from "./floor-preview";
 import { FormCard } from "./form-card";
+import { HomeCityField } from "./home-city-field";
 import { MarketFields } from "./market-fields";
+import { usePlaceGeo } from "./place-picker";
 import { PlacesField } from "./places-field";
 
 
@@ -57,9 +59,10 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
   const errors = fieldErrorMap(state, "preferences", hash);
   const dirtyCount = changedPaths(draft, initial).length;
   const sameMarket = draft.market.pack === market.packId && market.error === null;
-  const leftovers = sameMarket ? searchEntriesOutsidePlaces(oldSearch, draft, market.placeGeo, { country: market.country, countryName: market.countryName }) : [];
-  const added = sameMarket ? placesBeyondSearchEntries(oldSearch, draft, market.placeGeo, { country: market.country, countryName: market.countryName }) : [];
-  const abroad = sameMarket ? homeCityAbroad(draft.home_city, market.placeGeo, market.country) : null;
+  const { geo, remember } = usePlaceGeo(market.placeGeo, market.placeRecords);
+  const leftovers = sameMarket ? searchEntriesOutsidePlaces(oldSearch, draft, geo, { country: market.country, countryName: market.countryName }) : [];
+  const added = sameMarket ? placesBeyondSearchEntries(oldSearch, draft, geo, { country: market.country, countryName: market.countryName }) : [];
+  const abroad = sameMarket ? homeCityAbroad(draft.home_city, geo, market.country, draft.home_city_id ?? null) : null;
 
   function patch(next: Partial<PreferencesDraft>) {
     setDraft((current) => ({ ...current, ...next }));
@@ -102,14 +105,16 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
       </Field>
 
       <Field id={ids.homeCity} label={t("fields.home_city.label")} hint={t("fields.home_city.hint")} error={errors.get("home_city")}>
-        <Input
+        <HomeCityField
           id={ids.homeCity}
-          className="max-w-72"
-          value={draft.home_city}
-          data-testid="home-city"
-          aria-invalid={errors.has("home_city") || undefined}
-          aria-describedby={describedBy(ids.homeCity, true, errors.get("home_city"))}
-          onChange={(event) => patch({ home_city: event.target.value })}
+          value={{ home_city: draft.home_city, home_city_id: draft.home_city_id ?? null }}
+          onChange={(next) => patch(next)}
+          geo={geo}
+          onPick={remember}
+          known={sameMarket}
+          testId="home-city"
+          invalid={errors.has("home_city")}
+          describedBy={describedBy(ids.homeCity, true, errors.get("home_city"))}
         />
       </Field>
       <Field id={ids.places} label={t("fields.places.label")} hint={t("fields.places.hint")} error={errors.get("places")}>
@@ -117,10 +122,11 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
           id={ids.places}
           value={draft.places}
           onChange={(places) => patch({ places })}
-          geo={market.placeGeo}
+          geo={geo}
+          onPick={remember}
           options={market.scopeOptions}
-          known={draft.market.pack === market.packId && market.error === null}
-          search={{ homeCity: draft.home_city, workplace: draft.workplace, home: { country: market.country, countryName: market.countryName } }}
+          known={sameMarket}
+          search={{ homeCity: draft.home_city, homeCityId: draft.home_city_id ?? null, workplace: draft.workplace, home: { country: market.country, countryName: market.countryName } }}
           invalid={errors.has("places")}
           describedBy={describedBy(ids.places, true, errors.get("places"))}
         />

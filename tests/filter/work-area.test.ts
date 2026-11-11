@@ -20,7 +20,7 @@ const LABELLED = parse(fs.readFileSync(path.join(import.meta.dirname, "../fixtur
 /** The phrases being measured are the shipped ones, so this reads the repository's packs, not the fixture's. It holds them to a hit rate and asserts no value of theirs. */
 const shippedPack = (id: string) => readPackDir(id, path.join(import.meta.dirname, "../../config/packs", id), "shipped");
 const pipeline = buildEffectivePipeline(shippedPipelineFile(), resolveMarket({ pack: "de" }, shippedPack), shippedPack);
-const geo = placeGeo(pipeline);
+const geo = placeGeo(pipeline, null);
 const phrases: WorkAreaPhrases = pipeline.filter.remote.work_area;
 const area = compileWorkArea(phrases);
 

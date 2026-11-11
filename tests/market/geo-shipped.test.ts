@@ -3,6 +3,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { matchPlaceName, placeDictionary, resetPlaceDictionaryCache, searchPlaces } from "@/lib/market/geo";
+import { lookupPlace, placeGeo, resolvePlaces, type PlacePreferences } from "@/lib/market/places";
 
 beforeAll(() => {
   resetPlaceDictionaryCache();
@@ -39,9 +40,24 @@ describe("shipped place dictionary", () => {
     expect(searchPlaces("慕尼", { lang: "zh", limit: 5 })[0]?.id).toBe(munich);
   });
 
+  it("completes Au with places named so, not with one that only has an alias starting so", () => {
+    const names = searchPlaces("Au", { limit: 5 }).map((p) => p.name);
+    expect(names.slice(0, 2)).toEqual(expect.arrayContaining(["Australia", "Austria"]));
+    expect(names).not.toContain("Kosovo");
+  });
+
   it("does not take one place for another that only shares a prefix", () => {
     const aue = matchPlaceName("Aue", { country: "DE" });
     expect(aue).toHaveLength(1);
     expect(matchPlaceName("Au").map((p) => p.id)).not.toContain(aue[0]?.id);
+  });
+
+  it("reads Marburg and Neustadt without an id as German places for a German market, and saves their German ids", () => {
+    const geo = placeGeo({ filter: { city_aliases: {} }, market: { cities: {}, countries: [], regions: {}, country: "DE" } }, placeDictionary());
+    expect(lookupPlace("Marburg", geo)?.countries).toEqual(["DE"]);
+    expect(lookupPlace("Neustadt", geo)?.countries).toEqual(["DE"]);
+    const saved = resolvePlaces<PlacePreferences>({ home_city: "Marburg", places: [{ place: "Neustadt", relocate: true }] }, geo, false);
+    const ids = [saved.home_city_id, ...saved.places.map((entry) => entry.id)];
+    expect(ids.map((id) => (typeof id === "number" ? placeDictionary().getPlace(id)?.countryCode : id))).toEqual(["DE", "DE"]);
   });
 });

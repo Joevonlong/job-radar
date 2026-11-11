@@ -10,6 +10,7 @@ import { getDb, getDbNow, getLatestHeartbeat } from "@/lib/db";
 import type { Locale } from "@/i18n/locale";
 import { GENERIC_PACK_ID, listPackIds, loadMarket, loadPack, loadPipeline } from "@/lib/market";
 import { placeGeo, wantedCities, type PlacePreferences } from "@/lib/market/places";
+import { placeDictionary } from "@/lib/market/geo";
 import { loadAiWorkerStatus } from "@/lib/ops/ai-worker";
 import { loadTelegramStatus, type TelegramStatusView } from "@/lib/notify/telegram-status";
 import type { Db } from "@/lib/db/client";
@@ -189,7 +190,7 @@ export function profileDraft(draft: MeDraft, locations: readonly string[] | null
 /** The cities the market step chose, for the profile step's city; none while the market cannot be read. */
 function chosenCities(places: PlacePreferences): readonly string[] | null {
   try {
-    return wantedCities(places, placeGeo(loadPipeline()));
+    return wantedCities(places, placeGeo(loadPipeline(), placeDictionary()));
   } catch {
     return null;
   }

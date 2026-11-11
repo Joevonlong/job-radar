@@ -10,6 +10,7 @@ import {
 } from "@/lib/config";
 import { getDb } from "@/lib/db/client";
 import { placeGeo, type PlacePreferences } from "@/lib/market/places";
+import { placeDictionary } from "@/lib/market/geo";
 import { loadPipeline } from "@/lib/market";
 
 import { issuePaths } from "../ats/envelope";
@@ -107,7 +108,7 @@ export function createHandpickedChannel(deps: HandpickedDeps = defaultHandpicked
         watchedCompanies: inputs.interests.watched_companies,
         pipeline: inputs.pipeline,
       });
-      const places = buildPlaces({ preferences: inputs.preferences, geo: placeGeo(inputs.pipeline), country: inputs.country });
+      const places = buildPlaces({ preferences: inputs.preferences, geo: placeGeo(inputs.pipeline, placeDictionary()), country: inputs.country });
       const known = knownBoardKeys(inputs.companies);
 
       ctx.signal.throwIfAborted();

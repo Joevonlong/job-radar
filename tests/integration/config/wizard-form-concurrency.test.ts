@@ -84,11 +84,11 @@ afterEach(() => {
 describe("a wizard step next to a settings form", () => {
   it("the same file: both finish well inside lock_wait_seconds, nobody is busy, and the file is one writer's whole result", async () => {
     const hook = holdFirstLockRequest(iso.url);
-    const draft = { ...preferencesConfigToDraft(loadConfig("preferences")), home_city: "Form Town" };
+    const draft = { ...preferencesConfigToDraft(loadConfig("preferences")), home_city: "Hamburg" };
 
     const form = saveProfile("preferences", draft);
     await hook.stopped;
-    const wizard = saveMarketStep(marketInput("Wizard Town"));
+    const wizard = saveMarketStep(marketInput("Leipzig"));
 
     // The step has done its first write (the pending setup file), and now waits for the form's file lock.
     await waitUntil("the wizard's pending setup file", () => fs.existsSync(getUserConfigPath("setup")));
@@ -108,7 +108,7 @@ describe("a wizard step next to a settings form", () => {
     expect(wizardResult.status === "saved" || (wizardResult.status === "error" && wizardResult.formError === "writeFailed"), JSON.stringify(wizardResult)).toBe(true);
 
     const file = preferences();
-    expect(file.home_city).toBe(wizardResult.status === "saved" ? "Wizard Town" : "Form Town");
+    expect(file.home_city).toBe(wizardResult.status === "saved" ? "Leipzig" : "Hamburg");
     expect(file.target_titles).toBeDefined(); // the rest of the file is still there
     expect(await lockHolder(probe)).toBeNull();
   });
@@ -120,13 +120,13 @@ describe("a wizard step next to a settings form", () => {
     const form = saveProfile("me", draft);
     await hook.stopped;
 
-    const wizardResult = await saveMarketStep(marketInput("Wizard Town"));
+    const wizardResult = await saveMarketStep(marketInput("Leipzig"));
     expect(wizardResult.status, JSON.stringify(wizardResult)).toBe("saved");
 
     hook.release();
     expect((await form).status).toBe("saved");
 
-    expect(preferences().home_city).toBe("Wizard Town");
+    expect(preferences().home_city).toBe("Leipzig");
     expect((parse(fs.readFileSync(path.join(temp.profileDir, "me.yaml"), "utf8")) as Record<string, unknown>).city).toBe("Form City");
   });
 });

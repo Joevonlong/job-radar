@@ -1,5 +1,6 @@
 import type { AiConfig, PipelineConfig, PreferencesConfig, MeConfig } from "@/lib/config";
 import { canonicalCity, citySpellings, placeAreas, placeGeo, type PlaceGeo } from "@/lib/market/places";
+import { placeDictionary } from "@/lib/market/geo";
 import { foldText, wholeWordPattern } from "@/lib/filter/rules";
 import type { GermanLevel, JobLocation } from "@/lib/domain/types";
 
@@ -209,7 +210,7 @@ export function createPriorityScorer(inputs: PriorityInputs): PriorityScorer {
     ...inputs.keywordGroupTerms.map((t) => ({ words: words(t), factor: config.keyword_group_factor })),
   ];
   const generic = new Set(config.generic_title_words.map((w) => foldText(w)));
-  const matcher = buildLocationMatcher(inputs.preferences, inputs.pipeline.filter, inputs.pipeline.market.country, placeGeo(inputs.pipeline));
+  const matcher = buildLocationMatcher(inputs.preferences, inputs.pipeline.filter, inputs.pipeline.market.country, placeGeo(inputs.pipeline, placeDictionary()));
   const { weights } = config;
   const nowMs = inputs.now.getTime();
 

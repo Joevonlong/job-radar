@@ -61,6 +61,10 @@ filters:
 companies:
   page_size: 50
 
+# Place picker (home city and places on /me and in the setup wizard): candidates listed at most while you type (1-50)
+place_picker:
+  candidates: 8
+
 # Advanced config editor (Settings → Advanced)
 config_editor:
   # Max bytes of text the editor accepts

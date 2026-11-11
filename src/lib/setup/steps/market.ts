@@ -5,16 +5,15 @@
  * channels on is the sources step's job (it pre-selects the pack's `default_channels`).
  */
 import { isValidTimeZone, loadConfig, mutateConfig, preferencesSchema, scheduleSchema, type PreferencesConfig } from "@/lib/config";
-import { effectivePipeline, marketSettingsProblems, resolveMarket, type MarketSettings } from "@/lib/market";
-import { placeGeo, samePlaceKey, storedPlaceName } from "@/lib/market/places";
+import { effectivePipeline, marketSettingsProblems, resolveMarket } from "@/lib/market";
+import { placeDictionary } from "@/lib/market/geo";
+import { placeGeo, resolvePlaces } from "@/lib/market/places";
 import { preferencesConfigToDraft, preferencesDraftToCandidate, toFieldErrors, type FieldError, type PreferencesDraft } from "@/lib/profile/draft";
 import { savePreferencesPatch } from "@/lib/profile/service";
 
 import { marketInputSchema } from "../inputs";
 import { stepError, type SetupFieldError, type SetupStepResult } from "../types";
 import { editable, profileFieldErrors, profileSaveProblem, readFresh, setupWriteError, withStepWrite } from "./common";
-
-type PlaceEntry = PreferencesConfig["places"][number];
 
 /** The fields of the market step (the other preferences fields are reported by the targets step). */
 const MARKET_PATHS = /^(market(\.|$)|home_city$|places$)/;
@@ -28,16 +27,15 @@ function marketProblems(draftMarket: unknown): FieldError[] {
   }));
 }
 
-/** The places as the form writes them, in the chosen market's tables: each once, a ✈ on any spelling winning, without the home city. What comes from the command line can spell them any way. */
-function storedPlaces(places: readonly PlaceEntry[], market: MarketSettings, homeCity: string): PlaceEntry[] {
-  const geo = placeGeo(effectivePipeline(loadConfig("pipeline"), resolveMarket(market)));
-  const home = samePlaceKey(homeCity, geo);
-  const byKey = new Map<string, PlaceEntry>();
-  for (const { place, relocate } of places) {
-    const key = samePlaceKey(place, geo);
-    if (key !== home) byKey.set(key, { place: storedPlaceName(place, geo), relocate: relocate || (byKey.get(key)?.relocate ?? false) });
-  }
-  return [...byKey.values()];
+/**
+ * The location settings in the chosen market's tables and the place dictionary: each place once, a ✈ on any spelling winning,
+ * without the home city, every known place under its stored name and with its id. The command line and an answers file can
+ * spell them any way; a name the dictionary does not know is left for the save to refuse.
+ */
+function storedPlaces(value: PreferencesConfig): Pick<PreferencesConfig, "home_city" | "home_city_id" | "places"> {
+  const geo = placeGeo(effectivePipeline(loadConfig("pipeline"), resolveMarket(value.market)), placeDictionary());
+  const { home_city, home_city_id, places } = resolvePlaces(value, geo, true);
+  return { home_city, home_city_id, places };
 }
 
 export async function saveMarketStep(raw: unknown): Promise<SetupStepResult> {
@@ -51,7 +49,13 @@ export async function saveMarketStep(raw: unknown): Promise<SetupStepResult> {
   if (schedule === null) return stepError("market", "configUnreadable");
 
   const errors: SetupFieldError[] = [];
-  const draft: PreferencesDraft = { ...preferencesConfigToDraft(preferences), market: input.market, home_city: input.home_city, places: input.places };
+  const draft: PreferencesDraft = {
+    ...preferencesConfigToDraft(preferences),
+    market: input.market,
+    home_city: input.home_city,
+    home_city_id: input.home_city_id ?? null,
+    places: input.places.map((entry) => ({ place: entry.place, relocate: entry.relocate, id: entry.id ?? null })),
+  };
   const candidate = preferencesSchema.safeParse(preferencesDraftToCandidate(draft));
   if (!candidate.success) {
     errors.push(...profileFieldErrors(toFieldErrors(candidate.error).filter((e) => MARKET_PATHS.test(e.path))));
@@ -66,7 +70,13 @@ export async function saveMarketStep(raw: unknown): Promise<SetupStepResult> {
   if (!candidate.success || errors.length > 0 || !nextSchedule.success) return stepError("market", null, errors);
 
   return withStepWrite("market", async () => {
-    const saved = await savePreferencesPatch({ market: input.market, home_city: input.home_city, places: storedPlaces(candidate.data.places, candidate.data.market, candidate.data.home_city) });
+    const stored = storedPlaces(candidate.data);
+    const saved = await savePreferencesPatch({
+      market: input.market,
+      home_city: stored.home_city,
+      home_city_id: stored.home_city_id ?? null,
+      places: stored.places.map((entry) => ({ place: entry.place, relocate: entry.relocate, id: entry.id ?? null })),
+    });
     const problem = profileSaveProblem("market", saved);
     if (problem !== null) return problem;
     try {

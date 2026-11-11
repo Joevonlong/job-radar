@@ -219,8 +219,8 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
   notify: ["reminders.interested_days", "reminders.applied_days", "telegram.setup"],
   // The hidden statuses / categories are the workflow tab's status table; the editor's own limits are in the advanced editor.
   // web_access (the login limits) is a protected key: changed in the file only, never from the dashboard.
-  // The job checks (the recheck of watched jobs, the visa check) are edited in the YAML or the advanced editor.
-  ui: ["applications", "filters", "companies", "config_editor", "web_access", "job_checks"],
+  // The job checks (the recheck of watched jobs, the visa check) and the place picker's limit are edited in the YAML or the advanced editor.
+  ui: ["applications", "filters", "companies", "config_editor", "web_access", "job_checks", "place_picker"],
   insights: [],
   resume: [],
   career: ["import", "evidence", "document", "preview", "pdf", "check"],

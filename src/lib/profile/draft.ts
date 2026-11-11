@@ -70,12 +70,16 @@ export const DEAL_BREAKER_SCOPES = ["any", "title", "description"] as const;
 export interface PlaceDraft {
   place: string;
   relocate: boolean;
+  /** The picked place (see `PlaceId`); null or missing for an older entry that was never picked. */
+  id?: number | string | null;
 }
 
 export interface PreferencesDraft {
   market: MarketDraft;
   target_titles: string[];
   home_city: string;
+  /** The picked home city's GeoNames id; null or missing when none was picked. */
+  home_city_id?: number | null;
   places: PlaceDraft[];
   workplace: string[];
   seniority: string;
@@ -112,11 +116,14 @@ export const meDraftSchema = z.strictObject({
   summary: z.string(),
 });
 
+const placeDraftIdSchema = z.number().int().positive();
+
 export const preferencesDraftSchema = z.strictObject({
   market: z.strictObject({ pack: z.string(), country: z.string(), currency: z.string(), home_language: z.string() }),
   target_titles: z.array(z.string()),
   home_city: z.string(),
-  places: z.array(z.strictObject({ place: z.string(), relocate: z.boolean() })),
+  home_city_id: placeDraftIdSchema.nullable().optional(),
+  places: z.array(z.strictObject({ place: z.string(), relocate: z.boolean(), id: z.union([placeDraftIdSchema, z.string().max(40)]).nullable().optional() })),
   workplace: z.array(z.string()),
   seniority: z.string(),
   salary_floor_year: z.string(),
@@ -181,7 +188,8 @@ export function preferencesConfigToDraft(prefs: PreferencesConfig): PreferencesD
     market: { pack: prefs.market.pack, country: prefs.market.country ?? "", currency: prefs.market.currency ?? "", home_language: prefs.market.home_language ?? "" },
     target_titles: [...prefs.target_titles],
     home_city: prefs.home_city,
-    places: prefs.places.map((entry) => ({ ...entry })),
+    home_city_id: prefs.home_city_id ?? null,
+    places: prefs.places.map((entry) => ({ place: entry.place, relocate: entry.relocate, id: entry.id ?? null })),
     workplace: [...prefs.workplace],
     seniority: prefs.seniority,
     salary_floor_year: String(prefs.salary_floor_year),
@@ -232,7 +240,8 @@ export function preferencesDraftToCandidate(draft: PreferencesDraft): unknown {
     market: marketCandidate(draft.market),
     target_titles: draft.target_titles,
     home_city: draft.home_city,
-    places: draft.places.map((entry) => ({ place: entry.place.trim(), relocate: entry.relocate })),
+    ...(draft.home_city_id == null || draft.home_city.trim() === "" ? {} : { home_city_id: draft.home_city_id }),
+    places: draft.places.map((entry) => ({ place: entry.place.trim(), relocate: entry.relocate, ...(entry.id == null ? {} : { id: entry.id }) })),
     workplace: WORKPLACE_OPTIONS.filter((option) => draft.workplace.includes(option)),
     seniority: draft.seniority,
     salary_floor_year: toNumber(draft.salary_floor_year, false),
@@ -262,6 +271,7 @@ export type FieldErrorKey =
   | "invalidChoice"
   | "contractConflict"
   | "slowPattern"
+  | "unknownPlace"
   | "invalid";
 
 export interface FieldError {

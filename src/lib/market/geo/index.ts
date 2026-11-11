@@ -11,7 +11,7 @@ import { getAppRoot, getDefaultsDir } from "@/lib/config/paths";
 import { createPlaceDictionary, type MatchOptions, type Place, type PlaceDictionary, type PlaceLang, type SearchOptions } from "./dictionary";
 import { placeDictionaryFileSchema } from "./format";
 
-export { createPlaceDictionary, placeKey, type MatchOptions, type Place, type PlaceDictionary, type PlaceKind, type PlaceLang, type SearchOptions } from "./dictionary";
+export { createPlaceDictionary, createPlaceSource, placeKey, placeLang, type MatchOptions, type Place, type PlaceDictionary, type PlaceKind, type PlaceLang, type PlaceSource, type SearchOptions } from "./dictionary";
 export { PLACE_DICTIONARY_FORMAT, placeDictionaryFileSchema, type PlaceDictionaryFile } from "./format";
 
 export const PLACE_DICTIONARY_FILE = path.join("geo", "places.json.gz");

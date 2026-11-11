@@ -1,5 +1,6 @@
 import type { PipelineConfig } from "@/lib/config";
 import { canonicalCity, citySpellings, lookupPlace, placeGeo } from "@/lib/market/places";
+import { placeDictionary } from "@/lib/market/geo";
 import { foldText, foldTransliterated, wholeWordPattern } from "@/lib/filter/rules";
 import type { Market } from "@/lib/market/types";
 import { normalizeLocation } from "@/lib/pipeline/geography";
@@ -52,7 +53,7 @@ interface Target {
 const inCountriesOf = (row: Pick<CityRow, "countryCode">, target: Target): boolean => target.countries === null || row.countryCode === null || target.countries.has(row.countryCode);
 
 function compileTargets(config: CityGroupConfig): Target[] {
-  const geo = placeGeo(config);
+  const geo = placeGeo(config, placeDictionary());
   const canonical = (name: string): string => canonicalCity(name, geo);
   const spellings = (name: string): string[] => citySpellings(name, geo);
 

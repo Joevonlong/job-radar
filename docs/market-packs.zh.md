@@ -227,7 +227,7 @@ GeoNames 数据采用 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 
 
 同一个网站会以同样方式发出的搜索，每轮只跑一次。在去掉网站发送不了的搜索的那一步里，如果一个单元里每个已启用、已配置的通道发出的请求都相同，两条查询就合并：Apify 设了 `remote_locations.region: Europe` 时，`{region: [eu]}` 和 `{region: [CH]}` 发往同一个地点，只算一次付费运行；Arbeitsagentur、StepStone、XING 和 JSearch 的远程搜索不带地点，每个关键词组只跑一次远程搜索。判断不了的通道（LinkedIn 会话、Monid、jobspy）把每条查询分开，所以启用了其中之一的级联不合并。
 
-已知限制：✈ 城市按数据表给它的国家搜索，所以即使旧配置指的是马萨诸塞州的 Cambridge，✈ `Cambridge` 也搜英国（过滤仍在本国保留 Cambridge）；常住美国时 ✈ `Paris` 也保留 `Paris, TX`。Arbeitsagentur 只认德语地名（`München`、`Deutschland`，以及 `sources.arbeitsagentur.location_names` 里的城市），国外的地点在那里搜不到结果；它是免费网站，所以不跳过。
+已知限制：✈ 城市按数据表给它的国家搜索，所以即使旧配置指的是马萨诸塞州的 Cambridge，✈ `Cambridge` 也搜英国（过滤仍在本国保留 Cambridge）；常住美国时 ✈ `Paris` 也保留 `Paris, TX`。Arbeitsagentur 只认德语地名（`München`、`Deutschland`；城市按地名词典里的德语名发出），国外的地点在那里搜不到结果；它是免费网站，所以不跳过。
 
 每次读取 `preferences.yaml`，不管是谁写的（表单、设置向导、`pnpm run setup`、答案文件或手改），`places` 都按同一套规则处理：
 

@@ -54,6 +54,20 @@ describe("setup steps against the database", () => {
     expect((await listProfileSnapshots(db, "preferences", 10)).length).toBeGreaterThan(0);
   });
 
+  it("the market step stores each place under its stored name with its id, and refuses one nothing knows", async () => {
+    const market = { pack: "generic", country: "DE", currency: "EUR", home_language: "de" };
+    expect(await saveMarketStep({ market, home_city: "munich", places: [{ place: "amsterdam", relocate: true }, { place: "eu", relocate: false }], timezone: "Europe/Berlin" })).toEqual({ status: "saved", step: "market" });
+    const saved = reloadConfig("preferences");
+    expect(saved).toMatchObject({ home_city: "München", places: [{ place: "Amsterdam", relocate: true }, { place: "eu", relocate: false, id: "eu" }] });
+    expect(typeof saved.home_city_id).toBe("number");
+    expect(typeof saved.places[0]?.id).toBe("number");
+
+    const before = fs.readFileSync(getConfigPath("preferences"), "utf8");
+    const refused = await saveMarketStep({ market, home_city: "München", places: [{ place: "Qwxzyville", relocate: true }], timezone: "Europe/Berlin" });
+    expect(refused).toMatchObject({ status: "error", step: "market", fieldErrors: [{ path: "places", ns: "profile", key: "unknownPlace", params: { name: "Qwxzyville" } }] });
+    expect(fs.readFileSync(getConfigPath("preferences"), "utf8")).toBe(before);
+  });
+
   it("an upgraded profile with remote collection off keeps it off when only the time zone is saved", async () => {
     fs.writeFileSync(
       getConfigPath("preferences"),
@@ -83,6 +97,16 @@ describe("setup steps against the database", () => {
 });
 
 describe("pnpm run setup against the database", () => {
+  it("--answers with a place nothing knows saves nothing and says how to fix it", async () => {
+    const answers = path.join(temp.root, "answers.yaml");
+    fs.writeFileSync(answers, fs.readFileSync(ANSWERS, "utf8").replace("{place: Utrecht, relocate: true}", "{place: Qwxzyville, relocate: true}"));
+    const run = io();
+    expect(await runSetupCli(["--answers", answers, "--lang", "en"], run)).not.toBe(0);
+    expect(run.errors.join("\n")).toMatch(/places: "Qwxzyville" isn't a known place\. Pick it from the suggestions/);
+    expect(reloadConfig("preferences").places.map((entry) => entry.place)).not.toContain("Qwxzyville");
+  });
+
+
   it("--answers with run_first_cycle queues a cycle, and --status --json reports the runner", async () => {
     const answers = path.join(temp.root, "answers.yaml");
     fs.writeFileSync(answers, fs.readFileSync(ANSWERS, "utf8").replace("run_first_cycle: false", "run_first_cycle: true"));

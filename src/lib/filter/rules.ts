@@ -1,5 +1,6 @@
 import type { PipelineConfig, PreferencesConfig } from "@/lib/config";
 import type { GermanLevel, JobLocation, JobSalary } from "@/lib/domain/types";
+import type { PlaceSource } from "@/lib/market/geo/dictionary";
 import { canonicalCity, citySpellings, lookupPlace, placeAreas, placeGeo, type PlaceGeo } from "@/lib/market/places";
 import type { Market } from "@/lib/market/types";
 import { buildBlacklistedCompanyKeys, buildWatchedCompanyKeys, isCompanyExcluded, isCompanyWatched } from "@/lib/companies/marks";
@@ -150,7 +151,6 @@ export interface CompiledFilter {
   descriptionInScope: readonly RegExp[];
   /** The phrases of check 2, the tables they are read with, and the countries a posting may require. */
   workArea: CompiledWorkArea;
-  geo: PlaceGeo;
   liveCountries: ReadonlySet<string>;
   liveOpen: boolean;
   livePlaces: readonly RegExp[];
@@ -163,6 +163,8 @@ export interface CompiledFilter {
   /** preferences.yaml `deal_breakers`, compiled. */
   dealBreakers: CompiledDealBreakers;
   pipeline: PipelineConfig;
+  /** The market's tables and the place dictionary the location settings were read with. */
+  geo: PlaceGeo;
 }
 
 /** What the filter reads besides preferences.yaml and pipeline.yaml. */
@@ -171,6 +173,8 @@ export interface FilterContext {
   me: DealBreakerMe | null;
   /** `interests.yaml: watched_companies` (company names): a watched company's on-site jobs are kept anywhere in the home country. Default: none. */
   watchedCompanies?: readonly string[];
+  /** The place dictionary the location settings are read with; none: the market's tables alone. */
+  places?: PlaceSource | null;
 }
 
 const compilePatterns = (patterns: readonly string[]): RegExp[] => patterns.map((p) => new RegExp(p, "iu"));
@@ -181,7 +185,7 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
   const market: Market = pipeline.market;
   const transliterations = market.transliterations;
 
-  const geo = placeGeo(pipeline);
+  const geo = placeGeo(pipeline, context.places ?? null);
   const areas = placeAreas(preferences, geo, market.country);
   const spellings = (name: string): string[] => citySpellings(name, geo);
 
@@ -243,7 +247,6 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
     outsideStateCode: outsideStateCodes(market, remoteCountries),
     descriptionInScope: compilePatterns(cfg.remote.description_in_scope_patterns),
     workArea: compileWorkArea(cfg.remote.work_area),
-    geo,
     liveCountries: areas.liveCountries,
     liveOpen: areas.liveOpen,
     livePlaces: compileLivePlaces(areas.liveSpellings),
@@ -254,6 +257,7 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
     legalSuffixes: pipeline.company.legal_suffixes,
     dealBreakers: compileDealBreakers(preferences.deal_breakers, { language: market.language?.code ?? null, me: context.me, limits: cfg.deal_breakers, visa: visaRulesFor(pipeline) }),
     pipeline,
+    geo,
   };
 }
 
@@ -343,7 +347,7 @@ function titleOutsideMarker(title: string, filter: CompiledFilter): string | nul
  * words the tables read as a country. "East Coast" or "Americas" names none.
  */
 function markerNamesCountry(marker: string, filter: CompiledFilter): boolean {
-  const geo = placeGeo(filter.pipeline);
+  const geo = filter.geo;
   const words = marker.split(/[\s\-–—]+/u).filter((word) => word !== "");
   for (let length = words.length; length > 0; length--) {
     for (let start = 0; start + length <= words.length; start++) {

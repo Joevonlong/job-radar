@@ -5,6 +5,7 @@ import { buildQueries, queryPlaces } from "@/lib/channels/query";
 import { parseConfigText } from "@/lib/config";
 import { preferences003 } from "@/lib/config/migrations/preferences/003-places";
 import { evaluateJob } from "@/lib/filter";
+import { placeDictionary } from "@/lib/market/geo";
 import { normalizePlaces, placeGeo, wantedLocations, wantedRemoteScope, type PlaceGeo } from "@/lib/market/places";
 
 import { shippedSearch } from "../channels/helpers";
@@ -18,7 +19,7 @@ const geo: PlaceGeo = placeGeo({
     countries: [{ code: "XA", name: "Xaland", aliases: [] }, { code: "CH", name: "Switzerland", aliases: [] }],
     regions: { eu: { name: "European Union", countries: ["XA", "NL"] } },
   },
-});
+}, null);
 
 function migrate(text: string): Record<string, unknown> {
   const doc = parseDocument(`target_titles: [Engineer]\n${text}`);
@@ -115,7 +116,7 @@ describe("the upgrade through the config loader", () => {
   it("a version 2 file with more than 50 locations still plans a search for each of them", () => {
     const cities = Array.from({ length: 52 }, (_, i) => `Town ${i}`);
     const prefs = load(preferencesFile(2, `locations: [${cities.join(", ")}]\nremote_scope: home_country`));
-    const onsite = buildQueries(shippedSearch(), queryPlaces(prefs, shippedPipeline()), "manual").filter((query) => !query.remote);
+    const onsite = buildQueries(shippedSearch(), queryPlaces(prefs, shippedPipeline(), placeDictionary()), "manual").filter((query) => !query.remote);
     const groups = Object.keys(shippedSearch().keyword_groups).length;
     expect(onsite).toHaveLength(52 * groups);
     expect(new Set(onsite.map((query) => query.location))).toEqual(new Set(cities));
@@ -124,7 +125,7 @@ describe("the upgrade through the config loader", () => {
   it("a version 2 file with a location over 100 characters still plans its search", () => {
     const long = `Town ${"x".repeat(120)}`;
     const prefs = load(preferencesFile(2, `locations: [Berlin, ${long}]\nremote_scope: home_country`));
-    const locations = buildQueries(shippedSearch(), queryPlaces(prefs, shippedPipeline()), "manual").filter((query) => !query.remote).map((query) => query.location);
+    const locations = buildQueries(shippedSearch(), queryPlaces(prefs, shippedPipeline(), placeDictionary()), "manual").filter((query) => !query.remote).map((query) => query.location);
     expect(new Set(locations)).toEqual(new Set(["Berlin", long]));
   });
 
@@ -154,7 +155,7 @@ describe("the old `none`: what jobs I want and what is collected are separate", 
   });
 
   it("collection: an upgraded none stops remote queries through the workplace; search.yaml's old key is not read", () => {
-    const remoteQueries = (prefs: ReturnType<typeof load>, search = shippedSearch()) => buildQueries(search, queryPlaces(prefs, shippedPipeline()), "manual").some((q) => q.remote);
+    const remoteQueries = (prefs: ReturnType<typeof load>, search = shippedSearch()) => buildQueries(search, queryPlaces(prefs, shippedPipeline(), placeDictionary()), "manual").some((q) => q.remote);
     expect(remoteQueries(load(preferencesFile(2, "locations: [Berlin]\nremote_scope: none")))).toBe(false);
     expect(remoteQueries(load(preferencesFile(2, "locations: [Berlin]\nremote_scope: home_country")))).toBe(true);
     expect(remoteQueries(load(preferencesFile(3, "home_city: Berlin\nplaces: []")), { ...shippedSearch(), remote_scope: "none" })).toBe(true);
