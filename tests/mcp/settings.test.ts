@@ -17,13 +17,20 @@ afterEach(() => {
 });
 
 describe("mcp.yaml schema", () => {
-  it("defaults to off, the read tools on, the writer tools off, 20 results and 12000 JD characters", () => {
-    expect(mcpSchema.parse({})).toMatchObject({
+  it("defaults to off, the read tools on, the writer tools off, 20 results, 12000 JD characters and the daily agent budgets", () => {
+    expect(mcpSchema.parse({})).toEqual({
       enabled: false,
       permissions: ["jobs:read", "tracking:read"],
       stdio: { permissions: ["jobs:read", "tracking:read"] },
       audit: { retention_days: 90, connect_timeout_seconds: 2, statement_timeout_ms: 1500, lock_timeout_ms: 200, write_timeout_ms: 2000 },
       limits: { max_results: 20, max_description_chars: 12_000 },
+      budgets: {
+        per_caller: {
+          run_collection: 2, score_jobs: 100, translate_job: 20, breakdown_job: 20,
+          research_salary: 10, research_company: 10, draft_answer: 20, tailor_resume: 5,
+        },
+        total: 150,
+      },
     });
   });
   it("defaults the stdio grant and limits independently of the global matrix", () => {
