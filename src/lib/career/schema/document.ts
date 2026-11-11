@@ -45,13 +45,6 @@ export const documentLayoutSchema = z.strictObject({
     .max(CAREER_FILE_BOUNDS.entries).nullable(),
   signature: z.strictObject({ place: optional, date: z.union([z.literal("auto"), z.iso.date()]) }).nullable(),
 });
-const customEntry = z.strictObject({
-  ...base, kind: z.literal("entry"), heading: docTextSchema, sub: maybeText, url,
-  date: careerDateSchema, start: careerDateSchema, end: careerDateSchema, location: optional,
-  tags: strings, text: maybeText, bullets,
-});
-const customText = z.strictObject({ ...base, kind: z.enum(["text", "bullet", "tag"]), text: docTextSchema });
-
 export const claimTargetSchema = z.union([
   z.strictObject({ text: id("dtx").min(1) }),
   z.strictObject({ entry: id("ent").min(1), field: value.min(1), value }),
@@ -69,61 +62,72 @@ export const claimSchema = z.strictObject({
 });
 export type Claim = z.infer<typeof claimSchema>;
 
-export const documentSchema = z.strictObject({
-  schema_version: z.literal(1),
-  id: id("doc"),
-  title: value,
-  kind: z.enum(["general", "tailored"]),
-  job: z.strictObject({ id: z.number().int(), company: value, title: value, jd_hash: value }).nullable(),
-  profile_hash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
-  created_at: z.iso.datetime({ offset: true }),
-  updated_at: z.iso.datetime({ offset: true }),
-  layout: documentLayoutSchema,
-  hide_contact: z.array(z.enum(["address", "location", "email", "phone", "work_auth", "availability", "links", "photo"]))
-    .max(8).refine((items) => new Set(items).size === items.length),
-  requirements: strings,
-  headline: maybeText,
-  summary: maybeText,
-  experience: entries(z.strictObject({
-    ...base, company: value, url, location: optional, start: careerDateSchema, end: careerDateSchema,
-    stack: strings, role: docTextSchema, summary: maybeText, bullets,
-  })),
-  projects: entries(z.strictObject({ ...base, name: value, url, tagline: maybeText, bullets, stack: strings })),
-  education: entries(z.strictObject({
-    ...base, school: value, url, degree: docTextSchema, location: optional, start: careerDateSchema, end: careerDateSchema,
-    summary: maybeText, bullets,
-  })),
-  certifications: entries(z.strictObject({ ...base, name: value, issuer: optional, date: careerDateSchema })),
-  languages: entries(z.strictObject({ ...base, name: value, level: value })),
-  skills: entries(z.strictObject({
-    ...base, group: value, items: entries(z.strictObject({
-      id: id("itm"),
-      source: z.strictObject({ item_id: z.string().regex(/^skl_[a-z2-7]{10}$/) }).nullable().default(null),
-      name: value, included: z.boolean(),
-    })),
-  })),
-  approach: entries(z.strictObject({ ...base, title: value, text: docTextSchema })),
-  custom_sections: entries(z.strictObject({
-    ...base, title: docTextSchema, layout: z.enum(["list", "grid", "tags"]),
-    columns: z.number().int().min(1).max(4).nullable(), side: z.enum(["main", "aside"]),
-    items: entries(z.discriminatedUnion("kind", [customEntry, customText])),
-  })),
-  letter: z.strictObject({
-    recipient: strings, place: optional, date: z.iso.date().nullable(), subject: optional, salutation: optional,
-    body: bullets, closing: optional,
-  }).nullable(),
-  claims: z.array(claimSchema).max(CAREER_FILE_BOUNDS.entries),
-}).superRefine((document, ctx) => {
-  const seen = new Set<string>();
-  let count = 0;
-  visitProfile(document, (object) => {
-    if (typeof object.id !== "string") return;
-    if (object.id && seen.has(object.id)) ctx.addIssue({ code: "custom", message: "duplicate id" });
-    if (object.id) seen.add(object.id);
-    if (!("origin" in object) && !("schema_version" in object) && !("target" in object)) count++;
+export function buildDocumentSchema<U extends z.ZodType<string | null>>(url: U) {
+  const customEntry = z.strictObject({
+    ...base, kind: z.literal("entry"), heading: docTextSchema, sub: maybeText, url,
+    date: careerDateSchema, start: careerDateSchema, end: careerDateSchema, location: optional,
+    tags: strings, text: maybeText, bullets,
   });
-  if (count > CAREER_FILE_BOUNDS.entries) ctx.addIssue({ code: "custom", message: "too many entries" });
-});
+  const customText = z.strictObject({ ...base, kind: z.enum(["text", "bullet", "tag"]), text: docTextSchema });
+
+  return z.strictObject({
+    schema_version: z.literal(1),
+    id: id("doc"),
+    title: value,
+    kind: z.enum(["general", "tailored"]),
+    job: z.strictObject({ id: z.number().int(), company: value, title: value, jd_hash: value }).nullable(),
+    profile_hash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+    created_at: z.iso.datetime({ offset: true }),
+    updated_at: z.iso.datetime({ offset: true }),
+    layout: documentLayoutSchema,
+    hide_contact: z.array(z.enum(["address", "location", "email", "phone", "work_auth", "availability", "links", "photo"]))
+      .max(8).refine((items) => new Set(items).size === items.length),
+    requirements: strings,
+    headline: maybeText,
+    summary: maybeText,
+    experience: entries(z.strictObject({
+      ...base, company: value, url, location: optional, start: careerDateSchema, end: careerDateSchema,
+      stack: strings, role: docTextSchema, summary: maybeText, bullets,
+    })),
+    projects: entries(z.strictObject({ ...base, name: value, url, tagline: maybeText, bullets, stack: strings })),
+    education: entries(z.strictObject({
+      ...base, school: value, url, degree: docTextSchema, location: optional, start: careerDateSchema, end: careerDateSchema,
+      summary: maybeText, bullets,
+    })),
+    certifications: entries(z.strictObject({ ...base, name: value, issuer: optional, date: careerDateSchema })),
+    languages: entries(z.strictObject({ ...base, name: value, level: value })),
+    skills: entries(z.strictObject({
+      ...base, group: value, items: entries(z.strictObject({
+        id: id("itm"),
+        source: z.strictObject({ item_id: z.string().regex(/^skl_[a-z2-7]{10}$/) }).nullable().default(null),
+        name: value, included: z.boolean(),
+      })),
+    })),
+    approach: entries(z.strictObject({ ...base, title: value, text: docTextSchema })),
+    custom_sections: entries(z.strictObject({
+      ...base, title: docTextSchema, layout: z.enum(["list", "grid", "tags"]),
+      columns: z.number().int().min(1).max(4).nullable(), side: z.enum(["main", "aside"]),
+      items: entries(z.discriminatedUnion("kind", [customEntry, customText])),
+    })),
+    letter: z.strictObject({
+      recipient: strings, place: optional, date: z.iso.date().nullable(), subject: optional, salutation: optional,
+      body: bullets, closing: optional,
+    }).nullable(),
+    claims: z.array(claimSchema).max(CAREER_FILE_BOUNDS.entries),
+  }).superRefine((document, ctx) => {
+    const seen = new Set<string>();
+    let count = 0;
+    visitProfile(document, (object) => {
+      if (typeof object.id !== "string") return;
+      if (object.id && seen.has(object.id)) ctx.addIssue({ code: "custom", message: "duplicate id" });
+      if (object.id) seen.add(object.id);
+      if (!("origin" in object) && !("schema_version" in object) && !("target" in object)) count++;
+    });
+    if (count > CAREER_FILE_BOUNDS.entries) ctx.addIssue({ code: "custom", message: "too many entries" });
+  });
+}
+
+export const documentSchema = buildDocumentSchema(url);
 export type CareerDocument = z.infer<typeof documentSchema>;
 
 export function parseStoredDocument(raw: unknown): CareerDocument {

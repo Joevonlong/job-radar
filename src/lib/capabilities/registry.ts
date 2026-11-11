@@ -22,6 +22,12 @@ import { get_insights } from "./jobs/get-insights";
 import { get_application } from "./tracking/get-application";
 import { list_favorites } from "./tracking/list-favorites";
 
+import { get_career_profile } from "./career/get-career-profile";
+import { list_career_documents } from "./career/list-career-documents";
+import { get_career_document } from "./career/get-career-document";
+import { check_career_document } from "./career/check-career-document";
+import { list_replies } from "./replies/list-replies";
+
 export const CAPABILITIES: readonly Capability[] = [
   search_jobs,
   get_job,
@@ -38,18 +44,26 @@ export const CAPABILITIES: readonly Capability[] = [
   list_favorites,
   get_application_context,
   save_application_answer,
+  get_career_profile,
+  list_career_documents,
+  get_career_document,
+  check_career_document,
+  list_replies,
 ];
 
 /**
  * The capabilities a client is offered now: authorized for the connection's grant against one fresh read of mcp.yaml (none when it
  * cannot be read), and available.
  */
-export function visibleCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer" | "grant">): readonly Capability[] {
+export function visibleCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer" | "features" | "grant">): readonly Capability[] {
   return listedCapabilities(capabilities, ctx).map(({ capability }) => capability);
 }
 
 /** A list and its caller's effective permissions share one fresh settings read, including a failed read. */
-export function listedCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer" | "grant">): { capability: Capability; permissions: ReadonlySet<Permission> }[] {
+export function listedCapabilities(
+  capabilities: readonly Capability[],
+  ctx: Pick<McpContext, "readSettings" | "writer" | "features" | "grant">,
+): { capability: Capability; permissions: ReadonlySet<Permission> }[] {
   let read: { settings: McpConfig } | { error: unknown };
   try {
     read = { settings: ctx.readSettings() };

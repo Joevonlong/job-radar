@@ -46,6 +46,8 @@ export interface McpContext {
   log: LogLine;
   /** Absent: the writer tools are not offered. */
   writer?: McpWriterAccess;
+  /** Absent readers close the corresponding feature gates. */
+  features?: { careerEnabled: () => boolean; repliesEnabled: () => boolean };
   /**
    * The caller's effective permissions for this call, from the authorization decision (the server sets it; never read settings a
    * second time). Absent: no field block is given.

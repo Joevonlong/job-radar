@@ -40,6 +40,10 @@ function storedValues(): StoredValues {
 }
 
 export function scrubCareerFinal(text: string) { return scrubFinal(text, storedValues()); }
+export function careerOutboundScrubber(): (text: string) => string {
+  const stored = storedValues();
+  return (text) => scrubOutbound(text, stored).text;
+}
 export function scrubCareerOutbound(text: string) { return scrubOutbound(text, storedValues()); }
 export function outboundCareerText(text: string) { return toOutbound(text, storedValues()); }
 export function confirmCareerText(text: string) { return confirmedOutbound(text, storedValues()); }

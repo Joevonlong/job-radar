@@ -10,7 +10,7 @@ import { McpServer, type StandardSchemaWithJSON } from "@modelcontextprotocol/se
 import { authorizeCall, liveMcpSettings, type AccessDecision } from "@/lib/agent-access/authorize";
 import { CAPABILITIES, listedCapabilities } from "@/lib/capabilities/registry";
 import type { Capability } from "@/lib/capabilities/types";
-import { loadConfig } from "@/lib/config";
+import { loadConfig, reloadConfig } from "@/lib/config";
 import type { McpConfig } from "@/lib/config/schemas/mcp";
 import type { Db } from "@/lib/db/client";
 import { cityMembers } from "@/lib/jobs/city-groups";
@@ -23,6 +23,11 @@ import { formatCallLine, stderrLine, type LogLine } from "./call-log";
 import { auditEntry, runLogged, ToolFailure, type McpContext } from "./context";
 import { toolResult } from "./guard";
 import { mcpTranslator, type McpTranslator } from "./text";
+
+function featureEnabled(name: "career" | "replies"): boolean {
+  try { return reloadConfig(name).enabled; }
+  catch { return false; }
+}
 
 export const MCP_SERVER_NAME = "job-radar";
 
@@ -57,6 +62,7 @@ export function defaultContext(
     searchPlan: buildSearchPlanLenient,
     text: options.text ?? mcpTranslator(),
     log: options.log ?? stderrLine,
+    features: { careerEnabled: () => featureEnabled("career"), repliesEnabled: () => featureEnabled("replies") },
     writer: { inputs: readWriterInputs, writeDb: options.writeDb ?? null },
     audit: options.audit,
     caller: options.caller,
