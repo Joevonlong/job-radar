@@ -413,8 +413,8 @@ describe("tools come from the registry", () => {
     expect(lines).toEqual([expect.stringMatching(/^\[mcp\] registry_probe fail disabled items=0 ms=\d+$/)]);
   });
 
-  it("lists byte-identical tool definitions to the SDK for all five tools", async () => {
-    const ctx = context({ permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"], stdio: { permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"] } });
+  it("lists byte-identical tool definitions to the SDK for every registered tool", async () => {
+    const ctx = context({ permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write", "profile:read"], stdio: { permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write", "profile:read"] } });
     ctx.writer = { inputs: () => ({ writer: writerSchema.parse({ enabled: true }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: untouchable };
     const reference = new McpServer({ name: "reference", version: "1" }, { capabilities: { tools: {} } });
     for (const cap of CAPABILITIES) {
@@ -501,5 +501,29 @@ describe("authorization on every call", () => {
     expect(lines.at(-1)).toContain("fail settings_unreadable");
     expect(lines).toHaveLength(4);
     expect((await client.listTools()).tools).toEqual([]);
+  });
+});
+
+
+describe("personal read permissions", () => {
+  const personal = ["get_profile", "get_interests", "preview_deal_breakers", "preview_interest_category"];
+  it.each(([[], ["writer:read"], ["career:read"], ["profile:read"], [...PERMISSIONS]] as Permission[][]).map((permissions) => ({ permissions })))("lists only the effective personal reads: $permissions", async ({ permissions }) => {
+    const ctx = context({ permissions, stdio: { permissions } });
+    const client = await connect(ctx);
+    const listed = (await client.listTools()).tools.map((t) => t.name);
+    expect(listed.filter((id) => personal.includes(id))).toEqual(permissions.includes("profile:read") ? personal : []);
+    if (!permissions.includes("profile:read")) {
+      for (const name of personal) {
+        const args = name === "preview_deal_breakers" ? { rules: [] } : name === "preview_interest_category" ? { draft: { categories: [], retired: [], bonusCap: "0" }, categoryId: "test" } : {};
+        const result = await client.callTool({ name, arguments: args });
+        expect(result.isError).toBe(true);
+        expect(result.structuredContent).toBeUndefined();
+        expect(textOf(result)).toContain("profile:read");
+      }
+    }
+  });
+  it("intersects global and connection permissions", async () => {
+    const client = await connect(context({ permissions: ["profile:read"], stdio: { permissions: ["career:read"] } }));
+    expect((await client.listTools()).tools.map((t) => t.name)).toEqual([]);
   });
 });

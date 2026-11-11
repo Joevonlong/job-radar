@@ -13,9 +13,10 @@
  * questions and their settings; for each question the material chosen for it (profile summary, skills and languages, the chosen
  * stories, the emphasis note); the fields of the company background (AI web search, unverified) and the fit note made from them; and
  * the answer versions with their sentence statuses and evidence quotes.
- * Never given under any permission: local paths (resume variants), emails, secrets, the profile files and snapshots, private
- * profile values (salary floor, your language level, deal-breaker names), signal bonus, AI provider/model/usage, notifications and
- * run records. Writer material is the explicitly selected subset described above; unselected stories are never given (a fit note
+ * profile:read gives selected me/preferences/stories drafts with their web form hashes, interest vocabulary, saved views,
+ * watched companies, pending suggestions and read-only rule previews. No history or import drafts are included.
+ * Never given under any permission: local paths (resume variants), emails, secrets, profile snapshots, AI provider/model/usage, notifications and
+ * run records. Writer material is the explicitly selected subset described above; unselected stories are never given by writer:read alone (a fit note
  * can retain short quotes selected when it was made).
  *
  * Every string that comes from a job posting goes through the caller's `clean` (invisible characters removed, an instruction to an
@@ -30,3 +31,5 @@ export { trackingBlockDto } from "./job-tracking";
 export { notesBlockDto } from "./notes";
 export { applicationDto, historyDto, applicationItemDto, listApplicationsOutput, toApplicationDto, toApplicationItemDto, type ApplicationItemDto, type ListApplicationsOutput } from "./tracking";
 export { writerVersionDto, writerJdPointDto, writerStoryDto, writerQuestionDto, getApplicationContextOutput, saveApplicationAnswerOutput, type WriterVersionDto, type WriterQuestionDto, type GetApplicationContextOutput, type SaveApplicationAnswerOutput } from "./writer";
+
+export { getProfileOutput, getInterestsOutput, previewDealBreakersOutput, previewInterestCategoryOutput, toMeDto, toPreferencesDto, toStoriesDto, toInterestSettingsDto, toSuggestionDto, toDealBreakerPreviewDto, toCategoryPreviewDto, type GetProfileOutput, type GetInterestsOutput } from "./profile";

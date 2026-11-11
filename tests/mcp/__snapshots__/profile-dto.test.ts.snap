@@ -1,0 +1,301 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`personal output allow-lists > pins every field of get_interests > get_interests 1`] = `
+{
+  "$": [
+    "notices",
+    "pending_suggestions",
+    "returned",
+    "total",
+    "truncated",
+    "views",
+    "vocabulary",
+    "watched_companies",
+  ],
+  "$.properties.pending_suggestions.items": [
+    "createdAt",
+    "id",
+    "payload",
+  ],
+  "$.properties.pending_suggestions.items.properties.payload.anyOf[0].oneOf[0]": [
+    "confidence",
+    "evidence",
+    "kind",
+    "reasons",
+    "term",
+    "tier",
+  ],
+  "$.properties.pending_suggestions.items.properties.payload.anyOf[0].oneOf[0].properties.evidence.items": [
+    "company",
+    "jobId",
+    "quote",
+    "title",
+  ],
+  "$.properties.pending_suggestions.items.properties.payload.anyOf[0].oneOf[1]": [
+    "company",
+    "confidence",
+    "evidence",
+    "kind",
+    "reasons",
+  ],
+  "$.properties.pending_suggestions.items.properties.payload.anyOf[0].oneOf[1].properties.evidence.items": [
+    "company",
+    "jobId",
+    "quote",
+    "title",
+  ],
+  "$.properties.pending_suggestions.items.properties.payload.anyOf[0].oneOf[2]": [
+    "action",
+    "confidence",
+    "evidence",
+    "kind",
+    "reasons",
+    "value",
+  ],
+  "$.properties.pending_suggestions.items.properties.payload.anyOf[0].oneOf[2].properties.evidence.items": [
+    "company",
+    "jobId",
+    "quote",
+    "title",
+  ],
+  "$.properties.views.items": [
+    "default",
+    "filters",
+    "id",
+    "name",
+  ],
+  "$.properties.views.items.properties.filters": [
+    "app",
+    "city",
+    "company",
+    "contract",
+    "dateBy",
+    "filtered",
+    "from",
+    "ghost",
+    "hideLang",
+    "high",
+    "minSalary",
+    "minScore",
+    "q",
+    "salary",
+    "source",
+    "status",
+    "to",
+    "trap",
+    "visa",
+    "within",
+    "workplace",
+  ],
+  "$.properties.vocabulary": [
+    "bonusCap",
+    "categories",
+    "retired",
+  ],
+  "$.properties.vocabulary.properties.categories.items": [
+    "aiConfirmOnly",
+    "aiDefinition",
+    "color",
+    "exclude",
+    "highValue",
+    "icon",
+    "id",
+    "keywords",
+    "kind",
+    "labelEn",
+    "labelZh",
+    "patterns",
+    "tagPatterns",
+    "tags",
+    "weight",
+  ],
+  "$.properties.vocabulary.properties.categories.items.properties.tagPatterns.items": [
+    "name",
+    "pattern",
+  ],
+  "$.properties.vocabulary.properties.retired.items": [
+    "aiConfirmOnly",
+    "aiDefinition",
+    "color",
+    "exclude",
+    "highValue",
+    "icon",
+    "id",
+    "keywords",
+    "kind",
+    "labelEn",
+    "labelZh",
+    "patterns",
+    "tagPatterns",
+    "tags",
+    "weight",
+  ],
+  "$.properties.vocabulary.properties.retired.items.properties.tagPatterns.items": [
+    "name",
+    "pattern",
+  ],
+}
+`;
+
+exports[`personal output allow-lists > pins every field of get_profile > get_profile 1`] = `
+{
+  "$": [
+    "me",
+    "notices",
+    "preferences",
+    "stories",
+  ],
+  "$.properties.me": [
+    "baseHash",
+    "data",
+  ],
+  "$.properties.me.properties.data": [
+    "city",
+    "languages",
+    "needs_visa_sponsorship",
+    "skills",
+    "summary",
+    "years_experience",
+  ],
+  "$.properties.me.properties.data.properties.languages.items": [
+    "code",
+    "level",
+  ],
+  "$.properties.me.properties.data.properties.skills.items": [
+    "name",
+    "years",
+  ],
+  "$.properties.preferences": [
+    "baseHash",
+    "data",
+  ],
+  "$.properties.preferences.properties.data": [
+    "contracts",
+    "deal_breakers",
+    "exclude_companies",
+    "exclude_keywords",
+    "exclude_student_roles",
+    "home_city",
+    "home_city_id",
+    "market",
+    "places",
+    "salary_floor_year",
+    "seniority",
+    "target_titles",
+    "workplace",
+  ],
+  "$.properties.preferences.properties.data.properties.contracts": [
+    "fixed_term",
+    "freelance",
+    "permanent",
+    "temp_agency",
+  ],
+  "$.properties.preferences.properties.data.properties.deal_breakers.items": [
+    "at_least",
+    "enabled",
+    "id",
+    "label",
+    "patterns",
+    "scope",
+    "terms",
+    "type",
+    "unless",
+  ],
+  "$.properties.preferences.properties.data.properties.market": [
+    "country",
+    "currency",
+    "home_language",
+    "pack",
+  ],
+  "$.properties.preferences.properties.data.properties.places.items": [
+    "id",
+    "place",
+    "relocate",
+  ],
+  "$.properties.stories": [
+    "baseHash",
+    "data",
+  ],
+  "$.properties.stories.properties.data": [
+    "stories",
+  ],
+  "$.properties.stories.properties.data.properties.stories.items": [
+    "id",
+    "language",
+    "metrics",
+    "period",
+    "result",
+    "skills",
+    "source",
+    "tags",
+    "title",
+    "what",
+  ],
+}
+`;
+
+exports[`personal output allow-lists > pins every field of preview_deal_breakers > preview_deal_breakers 1`] = `
+{
+  "$": [
+    "notices",
+    "partial",
+    "rules",
+    "total",
+  ],
+  "$.properties.rules.items": [
+    "count",
+    "id",
+    "ms",
+    "samples",
+    "status",
+  ],
+  "$.properties.rules.items.properties.samples.items": [
+    "company",
+    "jobId",
+    "quote",
+    "title",
+  ],
+}
+`;
+
+exports[`personal output allow-lists > pins every field of preview_interest_category > preview_interest_category 1`] = `
+{
+  "$": [
+    "notices",
+    "preview",
+  ],
+  "$.properties.preview.oneOf[0]": [
+    "hits",
+    "review",
+    "samples",
+    "scanned",
+    "status",
+    "truncated",
+  ],
+  "$.properties.preview.oneOf[0].properties.review.anyOf[0]": [
+    "jobs",
+    "perCycleLimit",
+    "rounds",
+  ],
+  "$.properties.preview.oneOf[0].properties.samples.items": [
+    "jobId",
+    "quote",
+    "title",
+  ],
+  "$.properties.preview.oneOf[1]": [
+    "fieldErrors",
+    "status",
+  ],
+  "$.properties.preview.oneOf[1].properties.fieldErrors.items": [
+    "key",
+    "params",
+    "path",
+  ],
+  "$.properties.preview.oneOf[2]": [
+    "status",
+  ],
+  "$.properties.preview.oneOf[3]": [
+    "status",
+  ],
+}
+`;

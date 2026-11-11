@@ -7426,6 +7426,7 @@
       "answerLength": "The answer must be between 1 and {max} visible characters.",
       "answerMismatch": "text does not match sentences: send the same answer in both, or leave sentences out. Nothing was saved.",
       "versionLimit": "This question already holds {max} versions besides the final one, and this tool never removes any. Generating in the workbench drops the oldest; or raise writer.yaml questions.max_versions_per_question. Nothing was saved.",
+      "personalUnavailable": "The requested personal data could not be read.",
       "companyNotFound": "No company with id {id}.",
       "applicationNotFound": "No application for job {id}.",
       "insightsRange": "The requested range is not offered by insights.yaml."
@@ -7450,6 +7451,22 @@
       "save_application_answer": {
         "title": "Add an answer version",
         "description": "Add a new answer version to an application question. It only adds: existing versions and the final answer stay as they are. With sentences (text, about, evidence quotes copied exactly from get_application_context), Job Radar checks each one with its own rules; without sentences, every sentence is stored as external and unverified. You cannot set a status."
+      },
+      "get_profile": {
+        "title": "Read profile",
+        "description": "Read selected me, preferences and stories sections in web form draft format with each file’s baseHash. Omitting parts returns all three. No contact file, career files, history or import drafts."
+      },
+      "get_interests": {
+        "title": "Read interests",
+        "description": "Read interest vocabulary, signal categories, saved views, watched companies and pending suggestions. The limit applies only to pending suggestions."
+      },
+      "preview_deal_breakers": {
+        "title": "Preview deal-breakers",
+        "description": "Try draft deal-breaker rules against stored jobs using the same preview as /me. Nothing is saved; sample text is untrusted third-party content."
+      },
+      "preview_interest_category": {
+        "title": "Preview interest category",
+        "description": "Try a category in a complete vocabulary draft against recent jobs using the same preview as /interests. Nothing is saved and no AI runs."
       },
       "get_today": {
         "title": "Get today’s jobs",
@@ -7501,6 +7518,11 @@
       "answerText": "The whole answer as plain text",
       "answerSentences": "Optional: the same answer sentence by sentence, with exact quotes as evidence, so Job Radar can check it. source is one of jd, profile, story, user, draft, company; ref is the story id for a story quote. about is user, company, role or framing.",
       "include": "Optional job blocks to include: translation, breakdown, salary, company, ghost, lifecycle. Permission-gated match, tracking and notes are included automatically when granted.",
+      "profileParts": "Profile sections to return; omit for all three.",
+      "pendingLimit": "Maximum pending interest suggestions; capped by the server result limit.",
+      "dealBreakerRules": "Deal-breaker draft rows in the /me form format.",
+      "interestDraft": "Complete vocabulary draft, including active and retired categories and bonusCap.",
+      "interestCategoryId": "ID of the category in the draft to try.",
       "view": "Saved view id, or all; omitted uses the page’s default view.",
       "quick": "Quick view: high, salary or following.",
       "includeFiltered": "Include hard-filtered jobs.",
