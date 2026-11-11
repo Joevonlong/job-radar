@@ -22,7 +22,6 @@ import { liveMcpSettings } from "@/lib/agent-access/authorize";
 import { pruneAgentCallsOnce } from "./agent-calls-prune";
 import { pruneAgentBudgetOnce } from "./agent-budget-prune";
 import { pruneAgentBudgetUsage } from "@/lib/db/repos/agent-budget";
-import { readMcpSettings } from "@/lib/mcp/settings";
 import { runControlPoller, runnerRequestKinds } from "@/lib/control";
 import { registerAiControlHandlers } from "@/lib/control/ai-handlers";
 import { expireScrubbedRequests } from "@/lib/control/expire";
@@ -500,7 +499,7 @@ async function main(): Promise<number> {
         await pruneAgentCallsOnce({ now: () => new Date(), readSettings: liveMcpSettings, prune: (olderThan) => pruneAgentCalls(db, olderThan), log });
         await pruneAgentBudgetOnce({
           now: () => new Date(),
-          readSettings: readMcpSettings,
+          readSettings: liveMcpSettings,
           timeZone: () => loadConfig("schedule").timezone,
           prune: (beforeDay) => pruneAgentBudgetUsage(db, beforeDay),
           log,

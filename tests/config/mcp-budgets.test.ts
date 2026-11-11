@@ -26,8 +26,8 @@ describe("MCP daily budget schema", () => {
     }
   });
 
-  it.each([0, 3651, 1.5])("rejects invalid retention %s", (retention_days) => {
-    expect(mcpSchema.safeParse({ budgets: { retention_days } }).success).toBe(false);
+  it("has no retention of its own: counter rows follow the audit retention", () => {
+    expect(mcpSchema.safeParse({ budgets: { retention_days: 90 } }).success).toBe(false);
   });
 
   it("rejects misspelled budget keys", () => {

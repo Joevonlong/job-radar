@@ -70,5 +70,3 @@ budgets:
     tailor_resume: 5
   # Requests per day across all agents and actions; a batch counts once; 0 forbids all agent actions
   total: 150
-  # Days the runner keeps daily counter rows
-  retention_days: 90

@@ -37,9 +37,7 @@ const budgetsSchema = z.strictObject({
   }).default(perCallerDefaults),
   /** Requests per day across all agents and actions; a batch counts once. 0 forbids all agent actions. */
   total: cap.default(150),
-  /** Days the runner keeps daily counter rows. */
-  retention_days: z.number().int().min(1).max(3650).default(90),
-}).default({ per_caller: perCallerDefaults, total: 150, retention_days: 90 });
+}).default({ per_caller: perCallerDefaults, total: 150 });
 
 /**
  * config/mcp.yaml: the optional MCP server (`pnpm mcp:serve`, docs/mcp.md) that lets an MCP client the user configured (Claude
