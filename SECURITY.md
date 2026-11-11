@@ -18,12 +18,13 @@ Job Radar is a single-user tool that you run on your own machine:
 
 - The web interface binds to `127.0.0.1` only and, by default, has no login. An optional password
   (`JOB_RADAR_WEB_PASSWORD_HASH`, made with `pnpm web:password`; `docs/configuration.md`, "Web access") puts a sign-in
-  page in front of every page, API route and Server Action; set it before anybody else can reach the web (a shared
+  page in front of protected pages, API routes and Server Actions; set it before anybody else can reach the web (a shared
   tailnet, the LAN through `JOB_RADAR_WEB_BIND`, a reverse proxy). The password is stored as an scrypt hash, compared
   in constant time and never logged; sessions are HMAC-signed `HttpOnly`, `SameSite=Lax` cookies (`Secure` and the
   `__Host-` prefix over https) that end when the password changes or on "Sign out everywhere"; failed logins are rate-limited per source and globally before any hash is
   computed. Do not publish port 3000 to a network you do not trust without it; for phone access use a private overlay
   network such as Tailscale, not a public tunnel.
+- The exact path `/api/mcp`, method `POST`, without a `Next-Action` header is the one MCP exception to the browser session gate. Its route checks its own agent token on every request, including localhost. It requires both MCP switches and a usable web password; it has independent failure throttling, bounded bodies and concurrency, no CORS, and dedicated database pools. Other path spellings and methods still require a session. Host and Origin checks run before this exception. See [MCP HTTP](docs/mcp.md#reaching-it-from-other-devices-http).
 - With a password set, requests from the machine itself skip the login: the decision rests on request headers (the
   `Host`, the forwarded client address, the absence of proxy headers), because the web cannot see the real peer address
   inside Docker, and a client can send any of these headers itself. The exemption is therefore on only when

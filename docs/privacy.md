@@ -38,6 +38,8 @@ description, not legal advice.
 
 The activity log lives only in local Postgres and stores IDs, codes, numbers and times, never message text, error text, URLs, job descriptions or Telegram messages. It adds no outbound connection. See [Activity log](sources.md#activity-log) for retention and deletion.
 
+MCP stdio stays local; optional HTTP uses the existing web port and requires a bearer agent token even on localhost. HTTP tool audit rows include the token id and transport `http`; successful authentication updates `last_used_at`. Tokens in URLs or cookies are ignored. See [MCP HTTP](mcp.md#reaching-it-from-other-devices-http).
+
 The delivery ledger stays on this machine and is not exposed through MCP or pages. Its retention is configurable in [delivery-audit.yaml](configuration.md#paid-delivery-ledger-delivery-audityaml).
 
 There is no automatic retention for the other database tables listed above: raw postings, unparsed emails, notifications, control

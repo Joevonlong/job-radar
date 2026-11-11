@@ -7,6 +7,7 @@
  * 2. Optional web password (`.env`: JOB_RADAR_WEB_PASSWORD_HASH / JOB_RADAR_WEB_PASSWORD): without a local exemption or a
  *    valid session cookie, a page navigation goes to `/login?next=<path>` (303) and anything else gets 401 JSON. The
  *    decision is `authDecision` (pure, unit-tested); the request's standing is `readWebAccess`. No password: no gate.
+ *    Exact POST /api/mcp without Next-Action passes this gate; its route checks an agent token on every request.
  * 3. While the first-run setup is pending, a page navigation goes to the wizard (`/setup?step=<first open step>`).
  *    The decision is `setupRedirect` (pure, unit-tested); the state is read from setup.yaml with an mtime cache. Proxy runs
  *    in the Node.js runtime (Next 16), so it reads the file directly. The wizard, API routes, Next's assets, files and
@@ -65,6 +66,7 @@ function loginGate(request: NextRequest): NextResponse | null {
     local: access.localExempt,
     configured: access.password !== null,
     sessionValid: access.sessionValid,
+    serverAction: request.headers.has("next-action"),
   });
   if (decision === "pass") return null;
   const headers = { "cache-control": "no-store", "x-content-type-options": "nosniff" };

@@ -1,5 +1,5 @@
 # MCP server (docs/mcp.md): lets an MCP client you configure yourself (Claude Desktop, Claude Code, ...) query your jobs and
-# applications. The client starts `pnpm mcp:serve` as a local child process and talks to it over stdio; no port is opened. Nothing
+# applications. Local clients start `pnpm mcp:serve` over stdio; optional HTTP uses the web port and agent tokens. Nothing
 # can be written, except that `save_application_answer`, when you grant writer:write, adds answer versions; it cannot change or
 # delete any. Each call also adds one metadata row to the local `agent_calls` table (see `audit` below).
 # Privacy: whatever the tools return is handed by your client to the model provider it uses (Anthropic for Claude, ...).
@@ -29,6 +29,33 @@ stdio:
   permissions:
     - jobs:read
     - tracking:read
+
+# Optional HTTP on the existing web port; off by default and requires a usable web password (pnpm web:password).
+http:
+  # Both this and the master enabled switch must be true
+  enabled: false
+  # Largest request body in bytes (1024-4194304), also enforced for chunked uploads
+  max_body_bytes: 262144
+  # Dedicated database pools, separate from the web pool; restart the web process after changing pool sizes
+  pool:
+    # Maximum read-only connections (1-20)
+    read_max: 3
+    # Maximum writable connections for token last-use and permitted writes (1-10)
+    write_max: 2
+    # Requests served concurrently (1-64), including response streams; excess gets 503 and Retry-After: 1
+    max_concurrent: 8
+  # Authentication failures use independent process-memory counters, separate from web login
+  throttle:
+    # Failures from one source before lockout (1-100)
+    max_failures: 5
+    # Rolling failure window in minutes (1-1440)
+    window_minutes: 10
+    # Source lockout and maximum global wait in minutes (1-1440)
+    lockout_minutes: 15
+    # Failures across all sources before a global wait (1-10000)
+    global_max_failures: 50
+    # Initial global wait in seconds (1-3600), doubles on further failures up to lockout_minutes
+    global_delay_seconds: 2
 
 limits:
   # Most jobs or applications one call returns (1-100); the answer says when more matched

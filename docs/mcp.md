@@ -4,10 +4,10 @@
 
 Job Radar can answer questions from an MCP client you set up yourself, such as Claude Desktop or Claude Code: "what new jobs
 are worth a look today?", "which applications have had no answer for two weeks?", "what does this job say about pay?". The
-client starts `pnpm mcp:serve` as a local child process and talks to it over stdin / stdout.
+client can start `pnpm mcp:serve` locally over stdin / stdout, or connect to the optional token-protected HTTP endpoint.
 
 - **Off by default.** Nothing happens until you set `enabled: true` in `mcp.yaml`.
-- **Local only.** No port is opened and there is no token: only a program you configure on this computer can start it.
+- **Local stdio or optional HTTP.** Stdio opens no port and needs no token. HTTP uses the web port and requires an agent token on every request.
 - **Read-only, with one permission-controlled exception.** The tools read over read-only database sessions. The only tool that can write,
   `save_application_answer`, requires `writer:write`, and all it can do is add an answer version. The server never starts a
   collection or an AI call.
@@ -54,11 +54,11 @@ made, even if they are no longer chosen.
 1. Open `mcp.yaml` (Settings → Advanced, or `data/config/mcp.yaml`) and set `enabled: true`. The global `permissions` matrix caps every connection; the local grant is
    `stdio.permissions`, and only their intersection is effective. Both default to `jobs:read` and `tracking:read`; `limits` caps how many items one call returns (`max_results`, at most 100) and how long a JD may be
    (`max_description_chars`).
-2. Check it: `pnpm run doctor` shows `data.mcp` as on, with the global matrix and effective stdio permissions.
+2. Check it: `pnpm run doctor` shows `data.mcp` as on, with the global matrix, effective stdio permissions, HTTP switch, usable-password warning, active token count and nearest active expiry.
 3. Add the server to your client (below), then restart the client.
 
 The server reads `mcp.yaml` again on every call. Disabling it, removing a permission, or a file that can no longer be read
-refuses the next call of a client that is already connected, without a restart; granting access needs a client restart.
+refuses the next call of a client that is already connected, without a restart. Refresh the client's tool list after granting access; a stdio process needs a restart when newly enabling its write connection.
 
 `search_jobs` and `get_job` share `jobs:read`; `list_applications` needs `tracking:read`. Other ids from the permission catalog
 are accepted; `match:read` adds match blocks to cards and details, and `notes:read` adds a block to `get_job` as described below. Version-2 tool switches migrate to both permission lists; if only one jobs tool
@@ -121,6 +121,127 @@ Settings → Developer → Edit Config opens `claude_desktop_config.json`. Add:
   (System Settings → Privacy & Security → Files and Folders). The client's log for the server then shows a permission error.
 
 Other MCP clients work the same way: a stdio server, command `pnpm`, arguments `--silent --dir <project> mcp:serve`.
+
+## Reaching it from other devices (HTTP)
+
+`POST /api/mcp` serves the same tools in the web process. It is optional and stateless: it opens no additional listening port.
+Persistent change-notification subscriptions are not supported; refresh `tools/list` to see changed permissions.
+All three preconditions must hold: `mcp.yaml` has `enabled: true` and `http.enabled: true`, and the web process has a usable
+web password configured with `pnpm web:password`. A malformed password hash does not qualify. The host allowlist and Origin
+check still run first; the exact POST path without a `Next-Action` header bypasses the browser session gate and checks its
+own agent token. Other spellings and methods do not bypass that gate. Even requests from localhost need an agent token.
+
+Create one token for each client on the host:
+
+```bash
+pnpm agent:token create --name laptop --permissions jobs:read,tracking:read --expires 2027-12-31
+pnpm agent:token list
+pnpm agent:token revoke laptop
+```
+
+Choose a future expiry date; it is valid through that date in the schedule's time zone. Omit `--expires` for no expiry.
+The secret is shown **once**, on creation. Store it privately; `list` shows metadata, never the secret. Revoke by name or
+unambiguous display prefix. Effective permissions are **token permissions intersected with the global `permissions`
+matrix**; `stdio.permissions` does not grant HTTP access. A token cannot enable a globally disabled capability. Writer tools
+also need `writer.yaml: enabled`. Settings are read afresh on each request and tool call. Revocation or expiry takes effect
+on the very next request, and the token row is re-read before every tool call, including calls inside a batch.
+
+Only `Authorization: Bearer <token>` authenticates. Tokens in the query string or cookies are ignored, including browser
+sessions. The endpoint sends no CORS headers; use a native MCP client. Claude Desktop's **remote connectors and the phone
+apps cannot use this endpoint**: they need OAuth and a public URL, which this token endpoint does not provide. Claude
+Desktop can still use local stdio. An agent with shell access on this machine is not bound by MCP permissions: those limits
+cover the tools, not commands it can execute independently.
+
+### HTTP client configuration
+
+[Claude Code](https://code.claude.com/docs/en/mcp):
+
+```bash
+claude mcp add --transport http job-radar https://<host>/api/mcp --header "Authorization: Bearer <token>"
+```
+
+[Codex CLI](https://developers.openai.com/codex/mcp), in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.job-radar]
+url = "https://<host>/api/mcp"
+bearer_token_env_var = "JOB_RADAR_AGENT_TOKEN"
+```
+
+Set `JOB_RADAR_AGENT_TOKEN` in the environment that launches Codex. [Cursor](https://cursor.com/docs/mcp), in your private
+`mcp.json`, can use the same environment variable:
+
+```json
+{
+  "mcpServers": {
+    "job-radar": {
+      "url": "https://<host>/api/mcp",
+      "headers": { "Authorization": "Bearer ${env:JOB_RADAR_AGENT_TOKEN}" }
+    }
+  }
+}
+```
+
+Use [Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve) to reach the web over HTTPS within your tailnet:
+
+```bash
+tailscale serve --bg http://127.0.0.1:3000
+```
+
+Use your configured web port if different. Add `<machine>.<tailnet>.ts.net` to `JOB_RADAR_ALLOWED_HOSTS` and restart the web
+process. The URL is `https://<machine>.<tailnet>.ts.net/api/mcp`. Verify the proxy preserves Authorization with an initialize
+request through that URL:
+
+```bash
+curl -i 'https://<machine>.<tailnet>.ts.net/api/mcp' \
+  -H "Authorization: Bearer ${JOB_RADAR_AGENT_TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-06-18' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"check","version":"1"}}}'
+```
+
+A valid token gets a JSON-RPC answer (inside SSE for the 2025 protocol); a wrong token gets 401. If both get 401, check the
+forwarded header and the token's state. A 421 is the host/Origin check, before authentication. Prefer HTTPS; avoid printing
+request headers with verbose curl or proxy access logs.
+
+### HTTP limits and database connections
+
+All keys below have defaults; existing files still work with `config_version: 3`. Edit `data/config/mcp.yaml` or Settings →
+Advanced. Restart the web process for **pool sizes and audit connection timeouts**; request limits are read on every request.
+
+| Key under `http` | Default | Meaning / bounds |
+|---|---|---|
+| `enabled` | `false` | Opt in; also needs the master switch and a web password |
+| `max_body_bytes` | `262144` | 256 KiB; 1024–4194304 bytes, including chunked bodies |
+| `pool.read_max` | `3` | Read-only sessions, 1–20; restart for pool size |
+| `pool.write_max` | `2` | Writable sessions, 1–10; restart for pool size |
+| `pool.max_concurrent` | `8` | Requests in flight, 1–64; includes unread response streams |
+| `throttle.max_failures` | `5` | Failures per source before lockout, 1–100 |
+| `throttle.window_minutes` | `10` | Rolling failure window, 1–1440 minutes |
+| `throttle.lockout_minutes` | `15` | Per-source lockout and maximum global wait, 1–1440 minutes |
+| `throttle.global_max_failures` | `50` | Failures across sources before a global wait, 1–10000 |
+| `throttle.global_delay_seconds` | `2` | Initial global wait, 1–3600 seconds; doubles on further failures up to lockout |
+
+The source is the last `X-Forwarded-For` entry, or `direct`. The process-wide failure counters are separate from web login;
+restart clears them. Successful authentication clears that source's failures, not the global history. A throttled request
+never reads credentials or the database. Authentication failures create no `agent_calls` row; refusal logs contain only a
+short SHA-256 source tag, never the address or credentials.
+
+HTTP adds up to `read_max + write_max + 1` database sessions (six by default), separate from the web shared pool and any
+stdio process. Pools and the dedicated audit connection open lazily. `agent_tokens.last_used_at` is updated after successful
+authentication and the declared-size check; update failure is category-only logged and does not fail the MCP call. The write
+pool serves last-use metadata, but is passed to tools only when the same writer and permission rules as stdio allow it.
+HTTP tool audit rows carry `caller: token`, the token id and `transport: http`, without token text, hash or prefix.
+
+`pnpm run doctor` (`data.mcp`) includes HTTP enabled, usable-password status (warns with 503 and `pnpm web:password` when
+missing), active token count and the nearest expiry among active tokens that have one. Revoked and expired tokens are
+excluded. If the database is unavailable, counts and expiry remain unknown without failing this check; no token, hash or
+prefix is printed.
+
+For a hardened database role, verification needs `SELECT` on `agent_tokens`. Last-use metadata additionally needs
+`UPDATE (last_used_at)` on that table, or accept that last use is not recorded. The HTTP pools use the web process's database
+URL; restrict that role only if it can still perform the web's required operations. The optional stdio role below is separate.
 
 ## The tools
 
@@ -222,7 +343,7 @@ long it took, and whether it worked. Never the arguments or the results. Errors 
 ## Audit trail
 
 Each tool call also adds one row to the local `agent_calls` table. `tools/list` adds none. A row holds only its numeric id,
-call time (`called_at`), caller and transport (both `stdio` today), nullable `token_id` (null today), capability id,
+call time (`called_at`), caller (`stdio` or `token`), transport (`stdio` or `http`), and nullable `token_id` (null for stdio), capability id,
 optional target type and numeric id (`job`, `application` or `question`), outcome (`ok`, `not_permitted`, `invalid_input`
 or `error`), returned item count and duration in milliseconds. Only an `error` row has an `error_category`: a fixed
 category such as `database` or `not_found`. Invalid input has no target. No row holds arguments, returned content or
@@ -250,8 +371,8 @@ while MCP is off; without a running runner, they remain. Old database backups ca
 | `write_timeout_ms` | 2000 ms | 100–10000 |
 
 The idle-in-transaction timeout uses `statement_timeout_ms` too. `statement_timeout_ms` and `lock_timeout_ms` are enforced by the database,
-`connect_timeout_seconds` by the server's client, and `write_timeout_ms` is the server's own deadline, so it also holds when the database stops replying. When the client goes
-away, the server waits at most `write_timeout_ms` for running calls and their rows, then closes its database connections,
+`connect_timeout_seconds` by the server's client, and `write_timeout_ms` is the server's own deadline, so it also holds when the database stops replying. When the stdio client goes
+away, its server waits at most `write_timeout_ms` for running calls and their rows, then closes its database connections,
 giving a query that is still running at most 5 more seconds. The `audit` timeouts, including `write_timeout_ms`, take effect on server restart;
 retention is read afresh by the runner. Existing config files get these defaults without a version change. `pnpm run
 doctor` reports the audit retention days in `data.mcp` when MCP is on.
@@ -290,6 +411,15 @@ GRANT USAGE ON SEQUENCE agent_calls_id_seq TO job_radar_ro;
 
 | What you see | Why, and what to do |
 |---|---|
+| HTTP 404 `not_found` | Master switch or HTTP is off, or mcp.yaml is unreadable. Check both switches and `pnpm config:check`. |
+| HTTP 503 `web_password_required` | Set a usable web password with `pnpm web:password`, then restart the web process. |
+| HTTP 401 `unauthorized` | Missing, malformed, unknown, revoked or expired token; all return the same body and `WWW-Authenticate: Bearer`. Send Authorization, not a query parameter or cookie. |
+| HTTP 429 `too_many_attempts` | Authentication throttle; wait the `Retry-After` seconds before retrying. |
+| HTTP 413 `payload_too_large` | Declared or streamed body exceeds `http.max_body_bytes`; reduce the request. |
+| HTTP 503 `busy` | All `http.pool.max_concurrent` slots are occupied; consume or cancel response bodies, then retry after 1 second. |
+| HTTP 503 `unavailable` | Token verification could not reach the database; no authentication failure is counted. |
+| HTTP 405 | Use exact `POST /api/mcp`; other methods are refused without CORS. |
+| HTTP 500 `internal` | Unexpected failure; logs show only the category, never exception contents. |
 | The client says the server exited; its log shows "The Job Radar MCP server is switched off" | `mcp.yaml: enabled` is `false`. Set it to `true` and restart the client. |
 | "mcp.yaml cannot be read" | `pnpm config:check` names the setting. |
 | A call fails with "has not granted …" | The required permission is missing from `permissions` or `stdio.permissions`. Add it to both and restart the client. |

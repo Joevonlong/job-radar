@@ -6382,7 +6382,11 @@
           "none": "无",
           "off": "未打开（mcp.yaml 的 enabled: false，默认）",
           "configError": "mcp.yaml 读不出来：{problem}",
-          "configHint": "pnpm config:check 会指出是哪一项"
+          "configHint": "pnpm config:check 会指出是哪一项",
+          "http": "HTTP 启用：{enabled}。有效 token：{count}；最近到期：{expiry}。",
+          "unknown": "未知",
+          "passwordRequired": "设置可用的 Web 密码前，HTTP 入口返回 503。",
+          "passwordHint": "运行 pnpm web:password，配置 Web 密码后重启 Web 进程。"
         },
         "replies": {
           "title": "Gmail 回信",

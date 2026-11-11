@@ -1,11 +1,6 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
-
 import { loadDatabaseEnv } from "@/lib/env";
 
-import { connectTimeoutFromEnv, QUERY_SESSION_SETTINGS, type Db } from "./client";
-import * as schema from "./schema";
-import { assertTestDatabase } from "./test-guard";
+import { createConnection, QUERY_SESSION_SETTINGS, type Db } from "./client";
 
 /** Connections of a read-only process (one tool call runs a handful of queries in parallel). */
 const READ_ONLY_POOL_MAX = 3;
@@ -25,15 +20,13 @@ export interface ReadOnlyDb {
  * pool gets those settings: the MCP server (`scripts/mcp-serve.ts`) and `scripts/deliveries-show.ts`; their short lookups gain
  * nothing from JIT either. The dry run of `scripts/cycle-run.ts` uses the read-only shared pool instead (`initializeReadOnlyDb`).
  */
-export function createReadOnlyDb(options: { url?: string; connectTimeoutSeconds?: number } = {}): ReadOnlyDb {
+export function createReadOnlyDb(options: { url?: string; connectTimeoutSeconds?: number; max?: number } = {}): ReadOnlyDb {
   const url = options.url ?? loadDatabaseEnv().DATABASE_URL;
-  assertTestDatabase(url);
-  const sql = postgres(url, {
-    max: READ_ONLY_POOL_MAX,
-    connect_timeout: options.connectTimeoutSeconds ?? connectTimeoutFromEnv(),
-    idle_timeout: 30,
-    onnotice: () => {},
-    connection: { ...QUERY_SESSION_SETTINGS, default_transaction_read_only: true },
+  const { db, sql } = createConnection(url, {
+    max: options.max ?? READ_ONLY_POOL_MAX,
+    connectTimeoutSeconds: options.connectTimeoutSeconds,
+    readOnly: true,
+    sessionSettings: QUERY_SESSION_SETTINGS,
   });
-  return { db: drizzle(sql, { schema }), close: () => sql.end({ timeout: 5 }) };
+  return { db, close: () => sql.end({ timeout: 5 }) };
 }
