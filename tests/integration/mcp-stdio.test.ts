@@ -127,12 +127,12 @@ describe("mcp:serve over stdio", () => {
     for (const reply of replies) expect(reply.jsonrpc).toBe("2.0");
     const byId = new Map(replies.map((r) => [r.id, r.result]));
     expect((byId.get(1)?.serverInfo as { name: string }).name).toBe("job-radar");
-    expect((byId.get(2)?.tools as Array<{ name: string }>).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications"]);
+    expect((byId.get(2)?.tools as Array<{ name: string }>).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites"]);
     const search = byId.get(3) as { isError?: boolean; structuredContent: { returned: number } };
     expect(search.isError).not.toBe(true);
     expect(search.structuredContent.returned).toBe(3);
     // same config defaults as this process, so the same language
-    expect(session.stderr).toContain(mcpTranslator()("serve.ready", { tools: "search_jobs, get_job, list_applications" }));
+    expect(session.stderr).toContain(mcpTranslator()("serve.ready", { tools: "search_jobs, get_job, list_applications, get_today, list_companies, get_company, get_insights, get_application, list_favorites" }));
     expect(session.stderr).toMatch(/\[mcp\] search_jobs ok items=3 ms=\d+/);
     expect(session.code).toBe(0);
   }, 60_000);
@@ -187,7 +187,7 @@ describe("mcp:serve over stdio", () => {
       serverEnv(configDir),
     );
     const replies = session.stdout.map((line) => JSON.parse(line) as { id: number; result?: { tools?: Array<{ name: string }> } });
-    const all = ["search_jobs", "get_job", "list_applications", "get_application_context", "save_application_answer"];
+    const all = ["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer"];
     expect(replies.find((reply) => reply.id === 2)?.result?.tools?.map((tool) => tool.name)).toEqual(all);
     expect(session.stderr).toContain(mcpTranslator()("serve.ready", { tools: all.join(", ") }));
     expect(session.code).toBe(0);

@@ -1,7 +1,8 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const floor = vi.hoisted(() => ({ currency: "CHF" as string | null, unreadable: false, reads: 0 }));
+afterEach(() => { floor.currency = "CHF"; floor.unreadable = false; floor.reads = 0; });
 vi.mock("@/lib/signals/floor", () => ({
   loadBaseCurrency: () => floor.currency,
   loadHighValuePolicy: () => {
