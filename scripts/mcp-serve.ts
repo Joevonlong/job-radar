@@ -1,7 +1,8 @@
 /**
  * The MCP server over stdio (docs/mcp.md): an MCP client you configure (Claude Desktop, Claude Code, ...) starts this as a child
  * process and talks to it on stdin / stdout. No port is opened. Tool calls write metadata-only audit rows; the tool
- * `save_application_answer`, when granted writer:write, adds answer versions over a connection of its own.
+ * `save_application_answer`, when granted writer:write, adds answer versions over a connection of its own. Permitted action
+ * triggers use a separate single-session write connection for budgets and the existing control queue.
  *
  *   pnpm --silent mcp:serve
  *
@@ -47,7 +48,7 @@ function packageVersion(): string {
  * The write connection is decided before the offered list, because the writing tool is offered only when it has one: it is opened
  * when a writing capability is permitted at startup and writer.yaml is on. Switching it on later needs a restart.
  */
-function main(): void {
+async function main(): Promise<void> {
   const text = mcpTranslator();
   let settings;
   try {
@@ -62,11 +63,14 @@ function main(): void {
   }
   const writes = readWriterEnabled() && CAPABILITIES.some((capability) => capability.kind === "write" && authorize(capability, liveMcpSettings).allowed);
   const writable = writes ? createConnection(loadDatabaseEnv().DATABASE_URL, { max: 1 }) : null;
-  const tools = visibleCapabilities(CAPABILITIES, { readSettings: liveMcpSettings, writer: { inputs: readWriterInputs, writeDb: writable?.db ?? null } }).map(
+  const actionWrites = CAPABILITIES.some((capability) => capability.kind === "trigger" && authorize(capability, liveMcpSettings).allowed);
+  const actionConnection = actionWrites ? createConnection(loadDatabaseEnv().DATABASE_URL, { max: 1 }) : null;
+  const tools = (await visibleCapabilities(CAPABILITIES, { readSettings: liveMcpSettings, writer: { inputs: readWriterInputs, writeDb: writable?.db ?? null }, actions: actionConnection ? { db: actionConnection.db } : undefined })).map(
     (capability) => capability.id,
   );
   if (tools.length === 0) {
     stderrLine(text("serve.noTools"));
+    await Promise.allSettled([...(writable ? [writable.sql.end()] : []), ...(actionConnection ? [actionConnection.sql.end()] : [])]);
     process.exit(1);
   }
 
@@ -81,7 +85,7 @@ function main(): void {
     return { db: connection.db, end: (options: { timeout: number }) => connection.sql.end(options) };
   };
   const audit = createAuditRecorder(openAudit, { text, log: stderrLine, writeTimeoutMs: auditSettings.write_timeout_ms });
-  const context = defaultContext(database.db, settings, { text, writeDb: writable?.db ?? null, audit });
+  const context = defaultContext(database.db, settings, { text, writeDb: writable?.db ?? null, actionDb: actionConnection?.db, audit });
   const version = packageVersion();
   const handle = serveStdio(() => buildServer(context, { version }), {
     onerror: (error) => stderrLine(`[mcp] transport error: ${error.name}`),
@@ -92,7 +96,7 @@ function main(): void {
   const stop = (code: number) => {
     if (stopping) return;
     stopping = true;
-    void Promise.allSettled([handle.close()]).then(() => Promise.allSettled([audit.close()])).then(() => Promise.allSettled([database.close(), ...(writable ? [writable.sql.end({ timeout: 5 })] : [])])).then(() => {
+    void Promise.allSettled([handle.close()]).then(() => Promise.allSettled([audit.close()])).then(() => Promise.allSettled([database.close(), ...(actionConnection ? [actionConnection.sql.end({ timeout: 5 })] : []), ...(writable ? [writable.sql.end({ timeout: 5 })] : [])])).then(() => {
       stderrLine(text("serve.stopped"));
       process.exit(code);
     });
@@ -107,4 +111,7 @@ function main(): void {
   });
 }
 
-main();
+void main().catch((error: unknown) => {
+  stderrLine(mcpTranslator()("serve.failed", { category: error instanceof Error ? error.name : typeof error }));
+  process.exit(1);
+});

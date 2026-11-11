@@ -1,7 +1,7 @@
 # MCP server (docs/mcp.md): lets an MCP client you configure yourself (Claude Desktop, Claude Code, ...) query your jobs and
-# applications. The client starts `pnpm mcp:serve` as a local child process and talks to it over stdio; no port is opened. Nothing
-# can be written, except that `save_application_answer`, when you grant writer:write, adds answer versions; it cannot change or
-# delete any. Each call also adds one metadata row to the local `agent_calls` table (see `audit` below).
+# applications and queue permitted actions. The client starts `pnpm mcp:serve` as a local child process and talks to it over stdio; no port is opened. Nothing
+# grants write access by default. `save_application_answer` needs writer:write and adds answer versions. Action tools need
+# actions:run and use the existing control queue. Each call adds metadata to `agent_calls` (see `audit` below).
 # Privacy: whatever the tools return is handed by your client to the model provider it uses (Anthropic for Claude, ...).
 # What may be returned is fixed in code: job facts, source links, scores and ranks, signals with their JD quotes, the JD after
 # AI-trap cleaning, and the status, dates, next step and interview rounds of your applications. Never returned: your profile,
@@ -16,10 +16,15 @@ config_version: 3
 enabled: false
 
 # The global matrix is the most any connection may receive. Tool permissions:
-# search_jobs / get_job: jobs:read; list_applications: tracking:read
+# search_jobs / get_job / get_today / list_companies / get_company / get_insights: jobs:read
+# list_applications / get_application / list_favorites: tracking:read
 # get_application_context: writer:read and writer.yaml enabled (shares your chosen application material)
 # save_application_answer: writer:write and writer.yaml enabled (only adds answer versions)
-# Other catalog permission ids are accepted but do not give tools yet.
+# run_collection / score_jobs / translate_job / breakdown_job / research_salary / research_company: actions:run
+# draft_answer: actions:run + writer:write; tailor_resume: actions:run + career:write (owner accepts proposals in the web UI)
+# get_request_status: actions:run; only this caller's requests, no daily charge
+# Feature gates still apply: breakdown.enabled, salary.lookup.enabled, research.enabled, writer.enabled, career.enabled.
+# Other catalog permission ids are accepted; only implemented capabilities and field blocks are offered.
 permissions:
   - jobs:read
   - tracking:read
@@ -48,16 +53,16 @@ audit:
   # Longest a call waits for its audit row (100-10000), queueing included; also the longest shutdown waits for the last rows
   write_timeout_ms: 2000
 
-# Daily agent counters use the calendar day in schedule.yaml's time zone; action tools are not connected yet.
+# Live daily action budgets use the calendar day in schedule.yaml's time zone; joined requests and cache hits are refunded.
 budgets:
   # Daily caps per caller (stdio and each token separately); 0 forbids agents from triggering that action
   per_caller:
     # Collection requests per caller per day
     run_collection: 2
     # Jobs scored per caller per day; a batch counts each job
-    score_jobs: 100
+    score_jobs: 300
     # Job translation requests per caller per day
-    translate_job: 20
+    translate_job: 60
     # Job breakdown requests per caller per day
     breakdown_job: 20
     # Salary lookups, including automatic research started by an agent's write
@@ -69,4 +74,4 @@ budgets:
     # Resume tailoring requests per caller per day
     tailor_resume: 5
   # Requests (not jobs) per day across all agents and actions; a score_jobs batch counts once; 0 forbids all agent actions
-  total: 150
+  total: 200

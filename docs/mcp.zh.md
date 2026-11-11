@@ -7,7 +7,7 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 - **默认关闭。** 在 `mcp.yaml` 里设 `enabled: true` 之前什么都不会发生。
 - **只在本机。** 不开端口、没有 token：只有你在这台电脑上配置的程序能启动它。
-- **只读，有一个由权限控制的例外。** 工具都通过只读的数据库会话读取。唯一能写的工具 `save_application_answer` 需要 `writer:write` 权限，也只能新增答案版本。服务从不触发采集或 AI 调用。
+- **写入由权限控制。** 读取工具使用只读会话。`save_application_answer` 需要 `writer:write`，只能新增答案版本。获得 `actions:run` 后，动作工具通过与网页按钮相同的函数提交采集和 AI 请求，由执行器异步处理。
 
 服务还会通过单独的审计连接，把调用元数据存在本机的 `agent_calls` 表里（见[调用审计](#调用审计)）。
 
@@ -22,10 +22,11 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 | 岗位写明的薪资 | AI 服务商 / 模型 / 用量、信号加分 |
 | 分数与排名 | 本机路径（定制简历文件） |
 | 薪酬 / 福利信号及其 JD 引用和位置 | 邮件和求职回信 |
-| 经 AI 陷阱清洗的 JD（见下文） | `.env` 和 `.auth/` 里的值、密钥、AI 用量、通知、运行记录、配置文件内容 |
+| 经 AI 陷阱清洗的 JD（见下文） | `.env` 和 `.auth/` 里的值、密钥、AI 用量、通知、原始运行记录、配置文件内容 |
 | 你的申请：状态、最近一次变更时间、在该状态停留的天数、下一步及日期、面试轮数、状态历史 | |
+| 授予 `actions:run` 后：请求 id、状态、时间戳、队列位置、执行器在线状态、安全的结果计数和错误码、采集进度及每日额度元数据 | |
 
-职业档案本身（它的文件、文档、联系方式和草稿）永远不给，没有 MCP 工具读取它。
+职业档案本身（文件、文档、联系方式和草稿）永远不返回。`tailor_resume` 在服务器读取已有文档与档案，准备和网页流程相同的外发内容，由配置的 AI 执行器处理。MCP 客户端只收到请求元数据。
 
 这两列说的是结构化字段。有两个权限还会给出字段清单拦不住的自由文本：
 
@@ -48,11 +49,11 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 `search_jobs` 和 `get_job` 共用 `jobs:read`，`list_applications` 需要 `tracking:read`。权限目录中的其他 id 也能填写；`match:read` 为搜索卡片和详情增加匹配字段块，`notes:read` 为 `get_job` 增加备注字段块。版本 2 的工具开关会迁移为两份权限列表；如果此前只关了一个岗位工具，`jobs:read` 会同时提供两个，`config:migrate` 会打印提示。移除 `jobs:read` 可以同时关闭两个。写进 `mcp.yaml` 的权限也适用于以后版本在它下面新增的工具，所以只授予应当可读或可写的权限。
 
-`budgets` 为后续 agent 动作工具预留每日额度；现有工具还不使用这些计数。
+`budgets` 为下列八个动作工具执行每日上限。读取工具（包括 `get_request_status`）和 `save_application_answer` 不消耗这些额度。
 `per_caller` 分别计算本地 stdio 连接和每个 token 的额度，限制采集请求、岗位翻译、拆解、薪资查询、公司查询、回答起草和简历定制；`score_jobs` 按批次里的每个岗位计数。
-薪资与公司查询也包括 agent 写入间接触发的自动研究。某项额度为 `0` 就禁止 agent 触发该动作。
+同一套计数通过 `takeIndirectBudget` 支持间接薪资与公司研究。某项额度为 `0` 就禁止 agent 触发该动作。
 `total` 统计所有 caller、所有动作的请求数，不是岗位数：一次给 40 个岗位打分的 `score_jobs` 批量请求占该 caller `score_jobs` 额度的 40，只占 `total` 的 1。`0` 禁止全部 agent 动作。
-日期与下次重置时间遵循 `schedule.yaml` 的时区及夏令时。runner 每小时清理早于「当前本地日期减去 `audit.retention_days`」的计数行。
+日期与下次重置时间遵循 `schedule.yaml` 的时区及夏令时。runner 每小时清理早于「当前本地日期减去 `audit.retention_days`」的计数行和票据行。
 这些设置有默认值，仍使用 `config_version: 3`。
 
 ```yaml
@@ -135,7 +136,7 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 
 JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查询内容，以及 `match` 块里 AI 写的摘要、匹配理由和差距一起扣留，并给出与 JD 一致的原因（此时 `match` 的 `available` 为 false，分数、过滤结果和三项检查照常给出）；未存储的研究或查询仍为 null。JD 引用沿用陷阱标记，职位拆解条目、匹配理由或差距的引用被标记替换时，其正文 / 名称也使用同一标记。所有文字（包括摘要、理由和备注）都经过清洗。含 AI 指令的来源链接变成 null。返回衍生内容时，在第三方提示之后追加说明；扣留多个块也只追加一条扣留提示。
 
-任何权限都不提供简历路径、关闭备注、邮件、密钥、画像文件 / 快照及作为字段的私有值（薪资底线、你的语言等级、硬性筛选规则的显示名称）、AI 服务商 / 模型 / 用量、运行记录。`match:read` 和 `notes:read` 给出的自由文本见本页开头表格下的说明。写作工具只提供上文明确选中的材料。
+任何权限都不提供简历路径、关闭备注、邮件、密钥、画像文件 / 快照及作为字段的私有值（薪资底线、你的语言等级、硬性筛选规则的显示名称）、AI 服务商 / 模型 / 用量、原始运行记录。动作工具只返回下文说明的请求元数据。`match:read` 和 `notes:read` 给出的自由文本见本页开头表格下的说明。写作工具只提供上文明确选中的材料。
 
 `get_job` 仍能返回休眠岗位：`status` 仍是 `possibly_closed`，`closed_reason` 为 `dormant`。
 
@@ -160,7 +161,7 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 - 谁都不能指定状态。传 `sentences`（每句带 `text`、`about` 和从材料逐字复制的证据引用）时，Job Radar 用和工作台相同的规则，按这道题当前选中的材料逐句核对。`text` 必须和 `sentences` 是同一份答案，否则不保存。不传 `sentences` 时，每句都记为“外部，未核对”。
 - 保存前去掉不可见字符。这个版本标为“来自你的 AI 客户端”，不记录提供方或模型。
 
-它用一条单独的数据库连接，只在 `writer:write` 生效且写作功能开启时才建立，其他工具都仍走只读会话。用下面的[只读角色](#可选只能读的数据库角色)时，保存会报数据库错误：这个角色不能写。
+它用一条单独的数据库连接，只在 `writer:write` 生效且写作功能开启时才建立。读取工具仍走只读会话，动作触发工具使用独立的动作写连接。用下面的[只读角色](#可选只能读的数据库角色)时，保存会报数据库错误：这个角色不能写。
 
 ## AI 陷阱与 JD
 
@@ -178,11 +179,79 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 
 每次调用往 stderr 写一行（客户端会保存在该服务的日志里）：工具名、返回条数、耗时、成功与否。从不写参数和结果。错误只给类别（`database`、`not_found`、`invalid_input` 等），不含地址或路径。
 
+## 动作工具和每日上限
+
+九个工具都需要 `permissions` 和 `stdio.permissions` 两份列表交集中的 `actions:run`。
+`draft_answer` 还需要两处的 `writer:write`，`tailor_resume` 还需要 `career:write`。缺少权限时工具不列出，
+直接调用返回 `not_permitted` 并指出缺少的权限。关闭功能后，工具隐藏，直接调用在扣额度前返回 `disabled`。
+八个触发工具还需要动作写连接：首次授予动作权限后重启客户端。stdio 服务仅在启动时有动作能力获授权的情况下，
+打开一条独立写连接（`max: 1`），关闭时释放；读取继续使用只读连接。
+
+| 工具 | 输入 | 行为和额外开关 |
+|---|---|---|
+| `run_collection` | 可选 `channel_ids`（1–50 个已配置字符串）、`backfill_hours` | 提交手动采集；补抓受 `collect.max_backfill_hours` 和采集忙碌检查限制 |
+| `score_jobs` | `job_ids`（1–50 个正整数）或 `backlog: true`，必须且只能选一项 | 提交打分；指定岗位逐个计数；积压模式预留 `ai.yaml: scoring.backlog_per_run`，至少一个单位 |
+| `translate_job` | `job_id`、可选 `force`（默认 false） | 提交 JD 翻译或复用有效缓存 |
+| `breakdown_job` | `job_id`、可选 `force`（默认 false） | 提交 JD 拆解或复用有效缓存；需要 `breakdown.yaml: enabled` |
+| `research_salary` | `job_id`、可选 `force`（默认 false） | 提交薪资查询或复用有效缓存；需要 `salary.yaml: lookup.enabled` |
+| `research_company` | `job_id`、可选 `force`（默认 false） | 提交公司研究或复用有效缓存；需要 `research.yaml: enabled` |
+| `draft_answer` | `job_id`、`question_id`、`mode`（`draft` 或 `polish`）；polish 还需 `option`（`align_to_job` 或 `language_only`）和 `text` | 需要 `writer:write` 和 `writer.yaml: enabled`；文本受 `draft_max_chars` 限制，材料选择和载荷清理沿用网页写作流程 |
+| `tailor_resume` | `doc_id`、可选 `job_id`（省略时取文档关联岗位）、`with_letter`（默认 false） | 需要 `career:write` 和 `career.yaml: enabled`；服务器计算当前外发哈希；生成的提议由所有者在网页逐条接受，工具不修改档案 |
+| `get_request_status` | 正整数 `request_id` | 只读、不消耗每日额度；查询当前连接自己的动作请求状态与白名单结果元数据 |
+
+数字 id 必须为正整数，`doc_id` 使用职业文档标识。输入拒绝未知字段，包括 `caller`。调用方由服务器通过独立参数设置。
+合并到已有请求不会改变原调用方。
+
+| 每日额度 | 每个调用方的默认值 |
+|---|---:|
+| `run_collection` | 2 |
+| `score_jobs`（岗位数） | 300 |
+| `translate_job` | 60 |
+| `breakdown_job` | 20 |
+| `research_salary` | 10 |
+| `research_company` | 10 |
+| `draft_answer` | 20 |
+| `tailor_resume` | 5 |
+| `total`（所有调用方和动作的请求数） | 200 |
+
+在 `data/config/mcp.yaml` 或设置 → 高级中覆盖 `budgets`，例如：
+
+```yaml
+budgets:
+  per_caller:
+    score_jobs: 300
+    translate_job: 60
+  total: 200
+```
+
+这是额外的一层限制。已有路径中实施的手动触发最小间隔、薪资/公司每日配额、AI 用量窗口、冷却、API 预算和
+`another_cycle_running` 仍然有效。重复采集会加入已有且覆盖本次范围的开放请求；现有采集入队函数没有增加最小间隔检查。
+有开放采集请求时补抓被拒，执行阶段继续检查处理轮锁。执行阶段失败可通过状态查询获取。
+
+入队前先预留额度，只有新建请求保留扣减。合并开放请求、命中缓存、入队错误和异常都退回票据，且一张票只退一次。
+成功入队后执行器失败仍保留扣减。批量超过剩余额度时整批以 `over_budget` 拒绝：消息包含动作名、上限、剩余单位
+（打分为岗位数，总额度拒绝为请求数）、本次需求量、下次本地重置时间及时区，不提交任何请求。
+`total` 按请求计，一批打分只占一个总额度单位。按 schedule 时区的本地午夜重置。单项为零禁止该动作，`total: 0` 禁止全部动作。
+
+八个触发工具只返回 `request_id`（可空）、`state`（`queued`、`joined_existing`、`cached`）、`existing`、
+`budget`（`action`、`remaining`、ISO 格式 `resets_at`）和 `notices`。缓存命中不排队，也没有请求 id。
+定制结果的 notice 会说明需要所有者接受提议。
+
+`get_request_status` 只查八种动作产生的请求（`run_cycle`、`score_jobs`、`translate_job`、`breakdown_job`、
+`salary_lookup`、`company_research`、`writer_job`、`career_tailor`），并要求 `payload.caller` 与当前连接精确相等。
+其他调用方、网页、定时任务、不支持的种类和不存在的 id 全部返回同样的「未找到请求」。工具合并了网页请求也一样：
+会返回其 id，但当前调用方无权查询。结果包含 `pending`、`running`、`done` 或 `failed`、时间戳、排队 `ahead`、
+`worker_online`（完成后这两项为 null），以及白名单错误码、`resume_at`、`scored` / `failed` / `remaining` / `fetched` / `new`
+计数、`stopped` 和采集轮进度。不返回载荷、结果文本、供应商详情或错误详情，未知错误文字替换为 `other`。
+
+提交与查询各走正常审计路径。超额度记录 `outcome: over_budget`，`error_category: null`；审计从不含参数。
+单岗位工具以岗位为目标，起草以问题为目标；采集、批量打分、定制和状态查询没有审计目标。
+
 ## 调用审计
 
 每次工具调用还会在本机的 `agent_calls` 表里加一行，`tools/list` 不记。每行只有数字 id、调用时间（`called_at`）、
 调用方和传输方式（目前都是 `stdio`）、可空的 `token_id`（目前为空）、capability id、可选的目标类型和数字 id
-（`job`、`application` 或 `question`）、结果（`ok`、`not_permitted`、`invalid_input` 或 `error`）、返回条数和毫秒耗时。
+（`job`、`application` 或 `question`）、结果（`ok`、`not_permitted`、`invalid_input`、`over_budget` 或 `error`）、返回条数和毫秒耗时。
 只有 `error` 行有 `error_category`，值是 `database`、`not_found` 这样的固定类别。参数不合法时没有目标。
 从不存参数、返回内容或消息文字，错误消息也不存。
 

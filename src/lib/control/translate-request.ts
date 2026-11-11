@@ -3,6 +3,7 @@
  * `translate_job` request for the ai-worker (or the runner, with `execution: container`) and then asks for its
  * state. Server only; the Server Actions in `app/jobs/[id]/actions.ts` are the callers.
  */
+import type { AgentCaller } from "@/lib/agent-access/caller";
 import type { Db } from "@/lib/db/client";
 import { clearControlRequestOrigin, findLatestJobControlRequest, findOpenTranslateRequest, getControlRequest, insertControlRequest } from "@/lib/db/repos/control-requests";
 import { getJobForTranslation, getTranslation, getTranslationProgress } from "@/lib/db/repos/translations";
@@ -34,7 +35,7 @@ export type TranslateRequestOutcome =
   | { state: "error"; error: "not_found" | "no_description" | "same_language" };
 
 /** A current cached translation is returned as it is; otherwise a `translate_job` request is queued (an open one for the same job is reused). */
-export async function requestTranslateJob(db: Db, input: { jobId: number; force: boolean; origin: "user" | "auto" }): Promise<TranslateRequestOutcome> {
+export async function requestTranslateJob(db: Db, input: { jobId: number; force: boolean; caller?: AgentCaller; origin: "user" | "auto" }): Promise<TranslateRequestOutcome> {
   const job = await getJobForTranslation(db, input.jobId);
   if (!job) return { state: "error", error: "not_found" };
   if (job.description === null || job.description.trim() === "") return { state: "error", error: "no_description" };
@@ -49,7 +50,7 @@ export async function requestTranslateJob(db: Db, input: { jobId: number; force:
     if (input.origin === "user") await clearControlRequestOrigin(db, open.id);
     return { state: "queued", requestId: open.id, existing: true };
   }
-  const created = await insertControlRequest(db, { kind: "translate_job", payload: { jobId: input.jobId, force: input.force, ...(input.origin === "auto" ? { origin: "auto" } : {}) } });
+  const created = await insertControlRequest(db, { kind: "translate_job", payload: { jobId: input.jobId, force: input.force, ...(input.caller === undefined ? {} : { caller: input.caller }), ...(input.origin === "auto" ? { origin: "auto" } : {}) } });
   return { state: "queued", requestId: created.id, existing: false };
 }
 

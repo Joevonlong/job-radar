@@ -14,7 +14,7 @@ export type AccessDecision =
  * The decision for one call, made on every call: mcp.yaml is read through `readSettings`, and a read that fails refuses the call.
  * The connection's effective permissions are its grant intersected with the global matrix.
  */
-export function authorize(capability: { id: string; permission: Permission }, readSettings: () => McpConfig): AccessDecision {
+export function authorize(capability: { id: string; permission: Permission; alsoRequires?: readonly Permission[] }, readSettings: () => McpConfig): AccessDecision {
   let settings: McpConfig;
   try {
     settings = readSettings();
@@ -23,7 +23,9 @@ export function authorize(capability: { id: string; permission: Permission }, re
   }
   if (!settings.enabled) return { allowed: false, reason: "disabled" };
   const permissions = effectivePermissions(settings.stdio.permissions, settings.permissions);
-  if (!permissions.has(capability.permission)) return { allowed: false, reason: "missing_permission", permission: capability.permission };
+  for (const permission of [capability.permission, ...capability.alsoRequires ?? []]) {
+    if (!permissions.has(permission)) return { allowed: false, reason: "missing_permission", permission };
+  }
   return { allowed: true, settings, permissions };
 }
 

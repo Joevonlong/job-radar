@@ -5,7 +5,7 @@ import { withConfigWriteLock } from "@/lib/config/write-lock";
 import { safeErrorCode } from "@/lib/activity/error-codes";
 import { expireScrubbedRequests } from "@/lib/control/expire";
 import { loadQueueView } from "@/lib/control/queue-view";
-import { withoutCaller } from "@/lib/agent-access/caller";
+import { withoutCaller, type AgentCaller } from "@/lib/agent-access/caller";
 import { careerTailorPayloadSchema } from "@/lib/control/types";
 import type { Db } from "@/lib/db/client";
 import { setApplicationStatus } from "@/lib/db/repos/applications";
@@ -19,9 +19,9 @@ import { readProposals } from "./proposals";
 import { z } from "zod";
 
 /** A newly queued tailoring run for a job moves its application to preparing; a status write failure never fails the request. */
-export async function requestCareerTailor(db: Db, raw: unknown) {
+export async function requestCareerTailor(db: Db, raw: unknown, options: { caller?: AgentCaller } = {}) {
   const input = withoutCaller(raw);
-  const result = await queueCareerTailor(db, input);
+  const result = await queueCareerTailor(db, input, options.caller);
   const payload = careerTailorPayloadSchema.safeParse(input).data;
   if (result.state === "queued" && !result.existing && payload?.mode === "tailor" && payload.jobId !== null) {
     await setApplicationStatus(db, payload.jobId, "preparing", "career", { allowFrom: RESUME_ALLOW_FROM })
@@ -30,11 +30,11 @@ export async function requestCareerTailor(db: Db, raw: unknown) {
   return result;
 }
 
-async function queueCareerTailor(db: Db, raw: unknown) {
+async function queueCareerTailor(db: Db, raw: unknown, caller?: AgentCaller) {
   if (!(await readCareerGate()).enabled) return { state: "error" as const, error: "disabled" as const };
   const parsed = careerTailorPayloadSchema.safeParse(raw);
   if (!parsed.success || parsed.data.mode === "shrink" && (parsed.data.over_pages === null || parsed.data.with_letter)) return { state: "error" as const, error: "invalid" as const };
-  const payload = parsed.data;
+  const payload = { ...parsed.data, ...(caller === undefined ? {} : { caller }) };
   const settings = loadConfig("career");
   await expireScrubbedRequests(db, { careerSettings: settings });
   return withFileLock(careerDocumentPath(payload.doc_id), () => withConfigWriteLock(async () => {

@@ -26,10 +26,10 @@ describe("mcp.yaml schema", () => {
       limits: { max_results: 20, max_description_chars: 12_000 },
       budgets: {
         per_caller: {
-          run_collection: 2, score_jobs: 100, translate_job: 20, breakdown_job: 20,
+          run_collection: 2, score_jobs: 300, translate_job: 60, breakdown_job: 20,
           research_salary: 10, research_company: 10, draft_answer: 20, tailor_resume: 5,
         },
-        total: 150,
+        total: 200,
       },
     });
   });

@@ -61,11 +61,11 @@ test("payload is strict and has no material fields", () => {
   expect(careerTailorPayloadSchema.safeParse(valid).success).toBe(true);
   for (const key of ["text", "requirements", "blocks", "jd", "materials"]) expect(careerTailorPayloadSchema.safeParse({ ...valid, [key]: "private" }).success).toBe(false);
 });
-test("only the API imports the single enqueue function", () => {
+test("only the API and the agent entry import the single enqueue function", () => {
   expectTypeOf<Parameters<typeof buildCareerTailorPrompt>[0][number]["text"]>().toEqualTypeOf<OutboundText>();
   const files = fs.readdirSync("src", { recursive: true }).filter((file): file is string => typeof file === "string" && /\.tsx?$/.test(file));
   const callers = files.filter((file) => fs.readFileSync(`src/${file}`, "utf8").includes("requestCareerTailor"));
-  expect(callers.sort()).toEqual(["app/api/career/tailor/route.ts", "lib/career/tailor/request.ts"]);
+  expect(callers.sort()).toEqual(["app/api/career/tailor/route.ts", "lib/career/tailor/agent-request.ts", "lib/career/tailor/request.ts"]);
   expect(aiDisclosure(pinnedAi()).find((row) => row.task === "career_tailor")).toMatchObject({ web: false });
 });
 

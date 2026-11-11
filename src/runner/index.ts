@@ -21,7 +21,7 @@ import { pruneAgentCalls } from "@/lib/db/repos/agent-calls";
 import { liveMcpSettings } from "@/lib/agent-access/authorize";
 import { pruneAgentCallsOnce } from "./agent-calls-prune";
 import { pruneAgentBudgetOnce } from "./agent-budget-prune";
-import { pruneAgentBudgetUsage } from "@/lib/db/repos/agent-budget";
+import { pruneAgentBudgetRows } from "@/lib/db/repos/agent-budget";
 import { runControlPoller, runnerRequestKinds } from "@/lib/control";
 import { registerAiControlHandlers } from "@/lib/control/ai-handlers";
 import { expireScrubbedRequests } from "@/lib/control/expire";
@@ -501,7 +501,7 @@ async function main(): Promise<number> {
           now: () => new Date(),
           readSettings: liveMcpSettings,
           timeZone: () => loadConfig("schedule").timezone,
-          prune: (beforeDay) => pruneAgentBudgetUsage(db, beforeDay),
+          prune: (beforeDay) => pruneAgentBudgetRows(db, beforeDay),
           log,
         });
         const drafts = await deleteExpiredStoryDrafts(db, storyDraftTtlDays());

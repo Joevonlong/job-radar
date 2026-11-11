@@ -45,6 +45,7 @@ export interface McpContext {
   log: LogLine;
   /** Absent: the writer tools are not offered. */
   writer?: McpWriterAccess;
+  actions?: { db: Db };
   /**
    * The caller's effective permissions for this call, from the authorization decision (the server sets it; never read settings a
    * second time). Absent: no field block is given.
@@ -85,8 +86,8 @@ export function errorCategory(error: unknown): string {
 
 export function auditFailure(error: unknown): AuditOutcome {
   const category = error instanceof ToolFailure ? error.category : errorCategory(error);
-  return category === "not_permitted" && error instanceof ToolFailure
-    ? { outcome: "not_permitted", error_category: null }
+  return (category === "not_permitted" || category === "over_budget") && error instanceof ToolFailure
+    ? { outcome: category, error_category: null }
     : { outcome: "error", error_category: category };
 }
 

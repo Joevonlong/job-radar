@@ -15,7 +15,7 @@ export type AgentAction = typeof AGENT_ACTIONS[number];
 
 const cap = z.number().int().min(0).max(MCP_MAX_DAILY_CAP);
 const perCallerDefaults = (): Record<AgentAction, number> => ({
-  run_collection: 2, score_jobs: 100, translate_job: 20, breakdown_job: 20,
+  run_collection: 2, score_jobs: 300, translate_job: 60, breakdown_job: 20,
   research_salary: 10, research_company: 10, draft_answer: 20, tailor_resume: 5,
 });
 
@@ -25,8 +25,8 @@ const budgetsSchema = z.strictObject({
   per_caller: z.strictObject({
     run_collection: cap.default(2),
     /** Counts jobs: each job in a batch consumes one unit. */
-    score_jobs: cap.default(100),
-    translate_job: cap.default(20),
+    score_jobs: cap.default(300),
+    translate_job: cap.default(60),
     breakdown_job: cap.default(20),
     /** Also counts automatic salary lookups started indirectly by an agent's write. */
     research_salary: cap.default(10),
@@ -36,12 +36,12 @@ const budgetsSchema = z.strictObject({
     tailor_resume: cap.default(5),
   }).default(perCallerDefaults),
   /** Requests, not jobs, per day across all agents and actions; a `score_jobs` batch counts once. 0 forbids all agent actions. */
-  total: cap.default(150),
-}).default(() => ({ per_caller: perCallerDefaults(), total: 150 }));
+  total: cap.default(200),
+}).default(() => ({ per_caller: perCallerDefaults(), total: 200 }));
 
 /**
  * config/mcp.yaml: the optional MCP server (`pnpm mcp:serve`, docs/mcp.md) that lets an MCP client the user configured (Claude
- * Desktop, Claude Code, ...) query jobs and applications over stdio and, with writer permissions, add answer versions. Every key has a default, so a missing file means
+ * Desktop, Claude Code, ...) query jobs and applications over stdio, add permitted answer versions, and queue budgeted actions. Every key has a default, so a missing file means
  * "off" and the defaults below. What the server may return is fixed in code (`src/lib/mcp/dto/index.ts`), not here.
  */
 export const mcpSchema = z.strictObject({

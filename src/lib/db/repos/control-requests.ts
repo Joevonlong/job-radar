@@ -3,6 +3,22 @@ import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { Db } from "../client";
 import type { Executor } from "../executor";
 import { controlRequests } from "../schema";
+import type { AgentCaller } from "@/lib/agent-access/caller";
+
+const AGENT_REQUEST_KINDS = ["run_cycle", "score_jobs", "translate_job", "breakdown_job", "salary_lookup", "company_research", "writer_job", "career_tailor"] as const;
+
+/** Ownership and kind are filtered together in SQL; payloads never leave this query. */
+export async function getAgentControlRequest(db: Db, id: number, caller: AgentCaller) {
+  const [row] = await db.select({
+    id: controlRequests.id, kind: controlRequests.kind, status: controlRequests.status,
+    requestedAt: controlRequests.requestedAt, startedAt: controlRequests.startedAt, finishedAt: controlRequests.finishedAt,
+    result: controlRequests.result,
+  }).from(controlRequests).where(and(
+    eq(controlRequests.id, id), inArray(controlRequests.kind, [...AGENT_REQUEST_KINDS]),
+    sql`${controlRequests.payload} -> 'caller' = ${JSON.stringify(caller)}::jsonb`,
+  )).limit(1);
+  return row ?? null;
+}
 
 export type ControlRequest = typeof controlRequests.$inferSelect;
 export type ControlRequestKind = ControlRequest["kind"];

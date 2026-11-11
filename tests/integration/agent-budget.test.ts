@@ -9,7 +9,7 @@ import type { AgentCaller } from "@/lib/agent-access/caller";
 import { mcpSchema } from "@/lib/config/schemas/mcp";
 import { closeDb, createConnection, getDb, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
-import { pruneAgentBudgetUsage, readBudgetUsage, takeBudgetUnits } from "@/lib/db/repos/agent-budget";
+import { pruneAgentBudgetRows, readBudgetUsage, takeBudgetUnits } from "@/lib/db/repos/agent-budget";
 
 const url = inject("testDatabaseUrl");
 const db = () => getDb();
@@ -45,6 +45,28 @@ afterAll(async () => {
 });
 
 describe("agent daily budgets", () => {
+  it("interleaves takes and repeated refunds without exceeding either cap or releasing a ticket twice", async () => {
+    const cap = 4;
+    const deps = settings({ per_caller: { translate_job: cap }, total: cap });
+    const held = await Promise.all(Array.from({ length: cap }, async () => ticket(await takeAgentBudget(db(), { caller: "stdio", action: "translate_job" }, deps))));
+    for (let round = 0; round < 5; round++) {
+      const old = held.splice(0);
+      const refunds = old.flatMap((item) => [giveBackAgentBudget(db(), item), giveBackAgentBudget(db(), item)]);
+      const takes = Array.from({ length: cap * 2 }, () => takeAgentBudget(db(), { caller: "stdio", action: "translate_job" }, deps));
+      const [returned, results] = await Promise.all([Promise.all(refunds), Promise.all(takes)]);
+      expect(returned.filter(Boolean)).toHaveLength(old.length);
+      for (const result of results) if (result.ok) held.push(result.ticket);
+      const [own, total] = await readBudgetUsage(db(), { day: DAY, keys: [{ caller: "stdio", action: "translate_job" }, { caller: "*", action: "*" }] });
+      expect(own.used).toBe(held.length);
+      expect(total.used).toBe(held.length);
+      expect(own.used).toBeLessThanOrEqual(cap);
+      expect(total.used).toBeGreaterThanOrEqual(0);
+    }
+    await Promise.all(held.map((item) => giveBackAgentBudget(db(), item)));
+    expect(await usage()).toBe(0);
+    expect(await usage("*", "*")).toBe(0);
+  });
+
   it("refuses beyond the caller cap, then allows the next local day", async () => {
     const deps = settings({ per_caller: { translate_job: 3 }, total: 20 });
     for (let i = 0; i < 3; i += 1) ticket(await takeAgentBudget(db(), { caller: "stdio", action: "translate_job" }, deps));
@@ -244,11 +266,11 @@ describe("agent daily budgets", () => {
     const days = ["2026-11-09", "2026-11-10", "2026-11-11"];
     await db().insert(schema.agentBudgetUsage).values(days.map((day) => ({ caller: "stdio", action: "translate_job", day, used: 1 })));
     await db().insert(schema.agentBudgetTickets).values(days.map((day) => ({ caller: "stdio", action: "translate_job", day, units: 1 })));
-    expect(await pruneAgentBudgetUsage(db(), "2026-11-10")).toBe(2);
+    expect(await pruneAgentBudgetRows(db(), "2026-11-10")).toBe(2);
     const rows = await db().select().from(schema.agentBudgetUsage).orderBy(schema.agentBudgetUsage.day);
     expect(rows.map((row) => row.day)).toEqual(["2026-11-10", "2026-11-11"]);
     const held = await db().select().from(schema.agentBudgetTickets).orderBy(schema.agentBudgetTickets.day);
     expect(held.map((row) => row.day)).toEqual(["2026-11-10", "2026-11-11"]);
-    expect(await pruneAgentBudgetUsage(db(), "2026-11-10")).toBe(0);
+    expect(await pruneAgentBudgetRows(db(), "2026-11-10")).toBe(0);
   });
 });

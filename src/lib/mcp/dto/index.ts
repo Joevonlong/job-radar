@@ -15,7 +15,8 @@
  * the answer versions with their sentence statuses and evidence quotes.
  * Never given under any permission: local paths (resume variants), emails, secrets, the profile files and snapshots, private
  * profile values (salary floor, your language level, deal-breaker names), signal bonus, AI provider/model/usage, notifications and
- * run records. Writer material is the explicitly selected subset described above; unselected stories are never given (a fit note
+ * raw run records. actions:run returns request metadata, safe counts and codes, cycle progress and budget metadata, never payloads.
+ * Writer material is the explicitly selected subset described above; unselected stories are never given (a fit note
  * can retain short quotes selected when it was made).
  *
  * Every string that comes from a job posting goes through the caller's `clean` (invisible characters removed, an instruction to an
@@ -30,3 +31,4 @@ export { trackingBlockDto } from "./job-tracking";
 export { notesBlockDto } from "./notes";
 export { applicationDto, historyDto, applicationItemDto, listApplicationsOutput, toApplicationDto, toApplicationItemDto, type ApplicationItemDto, type ListApplicationsOutput } from "./tracking";
 export { writerVersionDto, writerJdPointDto, writerStoryDto, writerQuestionDto, getApplicationContextOutput, saveApplicationAnswerOutput, type WriterVersionDto, type WriterQuestionDto, type GetApplicationContextOutput, type SaveApplicationAnswerOutput } from "./writer";
+export { actionOutput, requestStatusOutput, requestSummaryDto, toRequestSummary, type ActionOutput, type RequestStatusOutput } from "./actions";

@@ -9,7 +9,7 @@ import { CAPABILITIES, visibleCapabilities } from "@/lib/capabilities/registry";
 describe("capability registry", () => {
   it("contains exactly one definition for each tool, in tool-list order", () => {
     const ids = CAPABILITIES.map((capability) => capability.id);
-    expect(ids).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer"]);
+    expect(ids).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer", "run_collection", "score_jobs", "translate_job", "breakdown_job", "research_salary", "research_company", "draft_answer", "tailor_resume", "get_request_status"]);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -26,6 +26,16 @@ describe("capability registry", () => {
       { id: "list_favorites", permission: "tracking:read", kind: "read" },
       { id: "get_application_context", permission: "writer:read", kind: "read" },
       { id: "save_application_answer", permission: "writer:write", kind: "write" },
+      { id: "run_collection", permission: "actions:run", kind: "trigger" },
+      { id: "score_jobs", permission: "actions:run", kind: "trigger" },
+      { id: "translate_job", permission: "actions:run", kind: "trigger" },
+      { id: "breakdown_job", permission: "actions:run", kind: "trigger" },
+      { id: "research_salary", permission: "actions:run", kind: "trigger" },
+      { id: "research_company", permission: "actions:run", kind: "trigger" },
+      { id: "draft_answer", permission: "actions:run", kind: "trigger" },
+      { id: "tailor_resume", permission: "actions:run", kind: "trigger" },
+      { id: "get_request_status", permission: "actions:run", kind: "read" },
+
     ]);
   });
 
@@ -43,7 +53,7 @@ it("new readers require their area permission, never raw, and presets still excl
   const tracking = ["get_application", "list_favorites"];
   for (const permission of ["jobs:read", "tracking:read", "notes:read", "raw:read"] as const) {
     const settings = mcpSchema.parse({ enabled: true, permissions: [permission], stdio: { permissions: [permission] } });
-    const ids = visibleCapabilities(CAPABILITIES, { readSettings: () => settings }).map((item) => item.id);
+    const ids = (await visibleCapabilities(CAPABILITIES, { readSettings: () => settings })).map((item) => item.id);
     expect(ids.filter((id) => [...jobs, ...tracking].includes(id))).toEqual(permission === "jobs:read" ? jobs : permission === "tracking:read" ? tracking : []);
   }
   expect(PERMISSION_PRESETS.read_only).not.toContain("raw:read");

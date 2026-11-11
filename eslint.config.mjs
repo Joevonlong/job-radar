@@ -16,6 +16,7 @@ export const CORE_IMPORTING_CAREER = {
   "src/app/jobs/[id]/page.tsx": ["src/components/career/job-entry.tsx"],
   "src/app/me/page.tsx": ["src/components/career/career-card.tsx"],
   "src/lib/control/ai-handlers.ts": ["src/lib/career/extract/handler.ts", "src/lib/career/tailor/handler.ts"],
+  "src/lib/capabilities/actions/tailor-resume.ts": ["src/lib/career/tailor/agent-request.ts"],
 };
 export const ENGINE_FORBIDDEN_GLOBALS = [
   "Buffer", "process", "__dirname", "__filename", "require", "fetch", "XMLHttpRequest", "WebSocket",

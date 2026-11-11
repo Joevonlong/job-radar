@@ -1,4 +1,5 @@
 /** Reads and writes of `salary_lookups` and the `salary_lookup` requests around them. */
+import type { AgentCaller } from "@/lib/agent-access/caller";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 
 import { rekeySalaryLookupKey, salaryLookupKey } from "@/lib/salary/lookup-key";
@@ -124,7 +125,7 @@ const manualSince = (since: Date) => and(eq(controlRequests.kind, "salary_lookup
  * counts as manual); without room it stays where it is and
  * the press gets the quota answer.
  */
-export async function reserveSalaryLookupRequest(db: Executor, input: { lookupKey: string; jobId: number; force: boolean; origin?: "auto"; maxPerDay: number; now: Date }): Promise<SalaryReservation> {
+export async function reserveSalaryLookupRequest(db: Executor, input: { lookupKey: string; jobId: number; force: boolean; caller?: AgentCaller; origin?: "auto"; maxPerDay: number; now: Date }): Promise<SalaryReservation> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(${QUOTA_LOCK})`);
     const since = new Date(input.now.getTime() - 86_400_000);
@@ -153,7 +154,7 @@ export async function reserveSalaryLookupRequest(db: Executor, input: { lookupKe
     }
     const [row] = await tx
       .insert(controlRequests)
-      .values({ kind: "salary_lookup", payload: { jobId: input.jobId, force: input.force, lookupKey: input.lookupKey, ...(input.origin ? { origin: input.origin } : {}) }, requestedAt: input.now })
+      .values({ kind: "salary_lookup", payload: { jobId: input.jobId, force: input.force, ...(input.caller === undefined ? {} : { caller: input.caller }), lookupKey: input.lookupKey, ...(input.origin ? { origin: input.origin } : {}) }, requestedAt: input.now })
       .returning({ id: controlRequests.id });
     if (!row) throw new Error("reserveSalaryLookupRequest: insert returned no row");
     return { state: "queued", requestId: row.id };
