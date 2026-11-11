@@ -29,7 +29,7 @@ that provider's terms. Turning the server on adds this exit to the ones listed i
 
 The career profile itself (its files, documents, contact details and drafts) is never given; no MCP tool reads it.
 
-The list is fixed in code (`src/lib/mcp/dto.ts`); each answer is built field by field, so a new database column never shows up
+The list is fixed in code (`src/lib/mcp/dto/index.ts`); each answer is built field by field, so a new database column never shows up
 by itself.
 
 **Granting `writer:read`, which gives `get_application_context`, adds your own writing material to what leaves:** the job's breakdown points, its

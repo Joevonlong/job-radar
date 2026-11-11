@@ -9,7 +9,7 @@ export const MCP_MAX_DESCRIPTION_CHARS_CAP = 100_000;
 /**
  * config/mcp.yaml: the optional MCP server (`pnpm mcp:serve`, docs/mcp.md) that lets an MCP client the user configured (Claude
  * Desktop, Claude Code, ...) query jobs and applications over stdio and, with writer permissions, add answer versions. Every key has a default, so a missing file means
- * "off" and the defaults below. What the server may return is fixed in code (`src/lib/mcp/dto.ts`), not here.
+ * "off" and the defaults below. What the server may return is fixed in code (`src/lib/mcp/dto/index.ts`), not here.
  */
 export const mcpSchema = z.strictObject({
   /** Off by default: `pnpm mcp:serve` refuses to start until this is true. */

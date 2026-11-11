@@ -22,13 +22,16 @@ export interface Capability {
    * failure a call gets when it cannot. The list and the call apply the same rule.
    */
   availability?: { available: (ctx: Pick<McpContext, "writer">) => boolean; category: string; message: MessageKey };
+  blocks?: readonly { key: string; permission: Permission; onRequest: boolean }[];
+  outputFor?: (permissions: ReadonlySet<Permission>) => z.ZodType<CapabilityOutput>;
 }
 
-type CapabilityDefinition<I extends z.ZodObject, O extends z.ZodType<CapabilityOutput>> = Omit<Capability, "input" | "output" | "handler" | "count"> & {
+type CapabilityDefinition<I extends z.ZodObject, O extends z.ZodType<CapabilityOutput>> = Omit<Capability, "input" | "output" | "handler" | "count" | "outputFor"> & {
   input: (ctx: Pick<McpContext, "text">) => I;
   output: O;
   handler: (ctx: McpContext, args: z.output<I>) => Promise<z.output<O>>;
   count: (output: z.output<O>) => number;
+  outputFor?: (permissions: ReadonlySet<Permission>) => z.ZodType<z.output<O>>;
 };
 
 /** The SDK validates inputs and outputs; only this registry boundary erases each definition's matching schema types. */

@@ -44,7 +44,7 @@ function sentenceDto(sentence: CheckedSentence, clean: CleanText): WriterVersion
 
 /**
  * Everything to write one job's application answers from: the job's facts, its breakdown points, its questions, for each question
- * the material the user chose for it, and the saved versions. The result is built field by field (`dto.ts`).
+ * the material the user chose for it, and the saved versions. The result is built field by field (`src/lib/mcp/dto/index.ts`).
  *
  * The reader is an AI, so nothing here is handed over as written. The JD follows the rule of `get_job`: only after the trap findings
  * were removed, and withheld (with the breakdown points, which quote it) when the trap check cannot vouch for it; a point whose

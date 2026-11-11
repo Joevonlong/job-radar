@@ -1,3 +1,4 @@
+import type { Permission } from "@/lib/agent-access/permissions";
 import type { McpConfig } from "@/lib/config/schemas/mcp";
 import type { TrapsConfig } from "@/lib/config/schemas/traps";
 import type { SearchPlan } from "@/lib/jobs/search-query";
@@ -43,6 +44,11 @@ export interface McpContext {
   log: LogLine;
   /** Absent: the writer tools are not offered. */
   writer?: McpWriterAccess;
+  /**
+   * The caller's effective permissions for this call, from the authorization decision (the server sets it; never read settings a
+   * second time). Absent: no field block is given.
+   */
+  permissions?: ReadonlySet<Permission>;
 }
 
 type ErrorResult = ReturnType<typeof errorResult>;

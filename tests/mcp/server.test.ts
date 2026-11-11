@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { DEFAULT_PERMISSIONS, type Permission } from "@/lib/agent-access/permissions";
+import { blockList, blockShape, includeInput, loadBlocks, type FieldBlock } from "@/lib/capabilities/blocks";
 import { CAPABILITIES } from "@/lib/capabilities/registry";
 import { defineCapability, READ_ONLY, type Capability } from "@/lib/capabilities/types";
 
@@ -50,8 +51,8 @@ afterEach(async () => {
   close = null;
 });
 
-async function connect(ctx: McpContext): Promise<Client> {
-  const server = buildServer(ctx, { version: "9.9.9" });
+async function connect(ctx: McpContext, capabilities?: readonly Capability[]): Promise<Client> {
+  const server = buildServer(ctx, { version: "9.9.9", capabilities });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
   const client = new Client({ name: "test", version: "1.0.0" });
@@ -64,6 +65,90 @@ async function connect(ctx: McpContext): Promise<Client> {
 }
 
 const textOf = (result: { content?: unknown }): string => ((result.content as Array<{ text?: string }> | undefined) ?? []).map((c) => c.text ?? "").join("\n");
+
+describe("caller-specific output blocks", () => {
+  const blocks: readonly FieldBlock<{ id: number }>[] = [
+    { key: "plain", permission: "match:read", schema: z.strictObject({ score: z.number() }), onRequest: false, load: async () => ({ score: 80 }) },
+    { key: "requested", permission: "notes:read", schema: z.strictObject({ text: z.string() }), onRequest: true, load: async () => ({ text: "private block value" }) },
+  ];
+  const outputFor = (permissions: ReadonlySet<Permission>) => z.strictObject({ notices: z.array(z.string()), ...blockShape(blocks, permissions) });
+  const fake = defineCapability({
+    id: "block_probe",
+    kind: "read",
+    permission: "jobs:read",
+    input: () => z.strictObject({ include: includeInput(blocks, "Requested blocks") }),
+    output: outputFor(new Set<Permission>(["match:read", "notes:read"])),
+    outputFor,
+    blocks: blockList(blocks),
+    handler: async (ctx, args) => ({ notices: [], ...await loadBlocks(blocks, ctx, { id: 7 }, args.include) }),
+    count: () => 1,
+    annotations: READ_ONLY,
+    text: { title: "tools.search_jobs.title", description: "tools.search_jobs.description" },
+  });
+
+  it("passes the authorization decision's effective permissions without rereading settings", async () => {
+    const ctx = context();
+    let reads = 0;
+    ctx.readSettings = () => {
+      reads++;
+      return mcpSchema.parse({ enabled: true, permissions: ["jobs:read", "match:read", "notes:read"], stdio: { permissions: ["jobs:read", "match:read"] } });
+    };
+    let received: ReadonlySet<Permission> | undefined;
+    const client = await connect(ctx, [{ ...fake, handler: async (callCtx, args) => {
+      received = callCtx.permissions;
+      return fake.handler(callCtx, args);
+    } }]);
+    const before = reads;
+    const result = await client.callTool({ name: fake.id, arguments: { include: ["requested"] } });
+    expect(received).toEqual(new Set(["jobs:read", "match:read"]));
+    expect(reads - before).toBe(1);
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({ notices: [], plain: { score: 80 } });
+  });
+
+  it("returns an internal error without data when a handler returns an unpermitted block", async () => {
+    const lines: string[] = [];
+    const ctx = context({}, lines);
+    const client = await connect(ctx, [{ ...fake, handler: async () => ({ notices: [], requested: { text: "private block value" } }) }]);
+    const result = await client.callTool({ name: fake.id, arguments: {} });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toBeUndefined();
+    expect(textOf(result)).toBe(ctx.text("errors.failed", { category: "internal" }));
+    expect(JSON.stringify(result)).not.toContain("private block value");
+    expect(lines).toEqual([expect.stringMatching(/^\[mcp\] block_probe fail internal items=0 ms=\d+$/)]);
+  });
+
+  it("returns automatic blocks with permission and requested blocks only when included", async () => {
+    const grants: Permission[] = ["jobs:read", "match:read", "notes:read"];
+    const client = await connect(context({ permissions: grants, stdio: { permissions: grants } }), [fake]);
+    const automatic = await client.callTool({ name: fake.id, arguments: {} });
+    expect(automatic.isError).not.toBe(true);
+    expect(automatic.structuredContent).toEqual({ notices: [], plain: { score: 80 } });
+    const requested = await client.callTool({ name: fake.id, arguments: { include: ["requested"] } });
+    expect(requested.isError).not.toBe(true);
+    expect(requested.structuredContent).toEqual({ notices: [], plain: { score: 80 }, requested: { text: "private block value" } });
+  });
+
+  it("lists only effective block keys using one fresh settings read for the entire list", async () => {
+    const ctx = context();
+    let reads = 0;
+    let granted: Permission[] = ["jobs:read", "match:read"];
+    ctx.readSettings = () => {
+      reads++;
+      return mcpSchema.parse({ enabled: true, permissions: ["jobs:read", "match:read", "notes:read"], stdio: { permissions: granted } });
+    };
+    const client = await connect(ctx, [...CAPABILITIES, fake]);
+    for (const keys of [["notices", "plain"], ["notices", "requested"]]) {
+      const before = reads;
+      const { tools } = await client.listTools();
+      const listed = tools.find((tool) => tool.name === fake.id);
+      const schema = z.object({ properties: z.record(z.string(), z.unknown()), additionalProperties: z.literal(false) }).parse(listed?.outputSchema);
+      expect(Object.keys(schema.properties)).toEqual(keys);
+      expect(reads - before).toBe(1);
+      granted = ["jobs:read", "notes:read"];
+    }
+  });
+});
 
 describe("tools/list", () => {
   it("offers the three read-only tools with titles, descriptions and schemas", async () => {
@@ -256,6 +341,18 @@ describe("tools come from the registry", () => {
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain("jobs:read");
     expect(lines).toEqual([expect.stringMatching(/^\[mcp\] registry_probe fail not_permitted items=0 ms=\d+$/)]);
+  });
+
+  it("validates output against the base schema when no caller-specific schema is defined", async () => {
+    const lines: string[] = [];
+    const ctx = context({}, lines);
+    const client = await connectCapabilities(ctx, [{ ...fake, handler: async () => ({ notices: [], value: "hello", limit: 4, secret: "private output" }) }]);
+    const result = await client.callTool({ name: fake.id, arguments: { value: "hello" } });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toBeUndefined();
+    expect(textOf(result)).toBe(ctx.text("errors.failed", { category: "internal" }));
+    expect(JSON.stringify(result)).not.toContain("private output");
+    expect(lines).toEqual([expect.stringMatching(/^\[mcp\] registry_probe fail internal items=0 ms=\d+$/)]);
   });
 
   it("applies a capability's availability to the call as well as the list, before its handler runs", async () => {
