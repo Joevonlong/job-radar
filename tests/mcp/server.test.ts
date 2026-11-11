@@ -119,6 +119,37 @@ describe("tools/list", () => {
   });
 });
 
+describe("a connection made with an agent token", () => {
+  const matrix = { permissions: ["jobs:read", "tracking:read"] as Permission[], stdio: { permissions: [] as Permission[] } };
+  const tokenContext = (permissions: Permission[], readGrant: McpContext["readGrant"]): McpContext => ({
+    ...context(matrix),
+    grant: { kind: "token", tokenId: 3, permissions },
+    readGrant,
+  });
+
+  it("lists only what the token and the global matrix both allow, regardless of the stdio grant", async () => {
+    const client = await connect(tokenContext(["tracking:read", "writer:read"], async () => null));
+    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["list_applications"]);
+  });
+
+  it("refuses a call once the token is no longer valid, before the tool runs", async () => {
+    const lines: string[] = [];
+    const ctx = { ...tokenContext(["jobs:read"], async () => null), log: (line: string) => lines.push(line) };
+    const client = await connect(ctx);
+    const result = await client.callTool({ name: "get_job", arguments: { job_id: 1 } });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toBe(ctx.text("errors.tokenInactive"));
+    expect(lines).toEqual([expect.stringMatching(/^\[mcp\] get_job fail not_permitted items=0 ms=\d+$/)]);
+  });
+
+  it("judges a call by the token's list as read at the call", async () => {
+    const ctx = tokenContext(["jobs:read"], async (tokenId) => ({ kind: "token", tokenId, permissions: ["tracking:read"] }));
+    const client = await connect(ctx);
+    const result = await client.callTool({ name: "get_job", arguments: { job_id: 1 } });
+    expect(textOf(result)).toBe(ctx.text("errors.notPermitted", { permission: "jobs:read" }));
+  });
+});
+
 describe("invalid arguments", () => {
   it.each([
     ["search_jobs", { limit: 101 }, "limit"],

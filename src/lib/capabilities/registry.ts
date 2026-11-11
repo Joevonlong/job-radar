@@ -18,8 +18,11 @@ export const CAPABILITIES: readonly Capability[] = [
   save_application_answer,
 ];
 
-/** The capabilities a client is offered now: authorized against one fresh read of mcp.yaml (none when it cannot be read), and available. */
-export function visibleCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer">): readonly Capability[] {
+/**
+ * The capabilities a client is offered now: authorized for the connection's grant against one fresh read of mcp.yaml (none when it
+ * cannot be read), and available.
+ */
+export function visibleCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer" | "grant">): readonly Capability[] {
   let read: { settings: McpConfig } | { error: unknown };
   try {
     read = { settings: ctx.readSettings() };
@@ -30,5 +33,5 @@ export function visibleCapabilities(capabilities: readonly Capability[], ctx: Pi
     if ("error" in read) throw read.error;
     return read.settings;
   };
-  return capabilities.filter((capability) => authorize(capability, once).allowed && (capability.availability?.available(ctx) ?? true));
+  return capabilities.filter((capability) => authorize(capability, once, ctx.grant).allowed && (capability.availability?.available(ctx) ?? true));
 }
