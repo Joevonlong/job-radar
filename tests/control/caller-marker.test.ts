@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import type { z } from "zod";
 
-import { agentCallerSchema, callerKey } from "@/lib/agent-access/caller";
+import { agentCallerSchema, callerKey, withoutCaller } from "@/lib/agent-access/caller";
 import {
   breakdownJobPayloadSchema, careerExtractPayloadSchema, careerTailorPayloadSchema, companyResearchPayloadSchema,
   modelsSyncPayloadSchema, rescorePayloadSchema, runAiPayloadSchema, runCyclePayloadSchema, salaryLookupPayloadSchema,
@@ -58,6 +58,14 @@ describe.each(cases)("caller marker in $name", ({ schema, payload }) => {
   it.each([0, "token", 1.5])("rejects caller %s", (caller) => {
     expect(schema.safeParse({ ...payload, caller }).success).toBe(false);
   });
+});
+
+it("drops a caller from untrusted input and leaves everything else as it is", () => {
+  expect(withoutCaller({ jobIds: [1], caller: 7 })).toEqual({ jobIds: [1] });
+  expect(withoutCaller({ backlog: true, caller: "stdio" })).toEqual({ backlog: true });
+  const plain = { jobIds: [1] };
+  expect(withoutCaller(plain)).toBe(plain);
+  for (const raw of [null, undefined, "caller", 7, ["caller"]]) expect(withoutCaller(raw)).toBe(raw);
 });
 
 it("uses separate keys for stdio and numeric tokens", () => {

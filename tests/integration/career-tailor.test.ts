@@ -187,9 +187,17 @@ it.each(["tailor", "shrink"] as const)("scrubs sentinels through the real %s pat
 it("merges identical requests and refuses different content while busy", async () => {
   const { payload } = await setup(); const id = await queue(payload);
   expect(await requestCareerTailor(db(), payload)).toMatchObject({ state: "queued", requestId: id, existing: true });
-  expect(await requestCareerTailor(db(), { ...payload, caller: "stdio" })).toMatchObject({ state: "queued", requestId: id, existing: true });
-  expect(await requestCareerTailor(db(), { ...payload, caller: 7 })).toMatchObject({ state: "queued", requestId: id, existing: true });
   expect(await requestCareerTailor(db(), { ...payload, with_letter: true })).toMatchObject({ error: "busy" });
+});
+
+it("does not store a caller marker sent by the browser and merges with an agent's identical request", async () => {
+  const { payload } = await setup();
+  const response = await enqueueRoute(jsonRequest({ ...payload, caller: 7 })); expect(response.status).toBe(200);
+  const { requestId } = await response.json() as { requestId: number };
+  expect((await row(requestId)).payload).not.toHaveProperty("caller");
+  await db().update(schema.controlRequests).set({ payload: { ...payload, caller: 7 } }).where(eq(schema.controlRequests.id, requestId));
+  expect(await requestCareerTailor(db(), payload)).toMatchObject({ state: "queued", requestId, existing: true });
+  expect(await requestCareerTailor(db(), { ...payload, caller: "stdio" })).toMatchObject({ state: "queued", requestId, existing: true });
 });
 
 it.each(["requirements", "profile", "preference", "jd", "contact"])("rejects changed outbound %s before calling a provider", async (part) => {
