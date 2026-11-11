@@ -75,7 +75,7 @@ import { shippedConfigId, shortShippedConfigId } from "../src/lib/config/shipped
 import { dealBreakerLimitProblems, slowPatternProblems } from "../src/lib/filter/deal-breakers";
 import { vmTimeBox } from "../src/lib/filter/time-box";
 import { listPackIds, loadMarket, loadPipeline, packDirs, readPackDir } from "../src/lib/market";
-import { placeDictionary } from "../src/lib/market/geo";
+import { placeDictionary, placeDictionaryPath } from "../src/lib/market/geo";
 import { homeCityAbroad, placeGeo, placesBeyondSearchEntries, searchEntriesOutsidePlaces, unknownPlaces } from "../src/lib/market/places";
 import { compileGhostRules } from "../src/lib/ghost/rules";
 import { compileVisaRules } from "../src/lib/visa/rules";
@@ -333,14 +333,25 @@ report("preferences.yaml market", () => {
   }
 }
 
+/** The place dictionary, or null (said once) when its file cannot be read: the other location checks then use the tables alone. */
+function readPlaceDictionaryOrNull(): ReturnType<typeof placeDictionary> | null {
+  try {
+    return placeDictionary();
+  } catch (error) {
+    console.log(`! place dictionary (${rel(placeDictionaryPath())}) cannot be read, so unknown places are not checked: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
 // places the dictionary does not know (written by hand or before the picker); search.yaml's old location keys are ignored: warn
 // about what they name that the location settings lack; and about a home city abroad
 if (fs.existsSync(path.join(getProfileDir(), "preferences.yaml"))) {
   try {
     const preferences = parseConfigText("preferences", readConfigText("preferences"));
     const pipeline = loadPipeline();
-    const geo = placeGeo(pipeline, placeDictionary());
-    const unknown = unknownPlaces(preferences, geo);
+    const dictionary = readPlaceDictionaryOrNull();
+    const geo = placeGeo(pipeline, dictionary);
+    const unknown = dictionary === null ? [] : unknownPlaces(preferences, geo);
     if (unknown.length > 0) console.log(`! preferences.yaml: ${unknown.join(", ")} not in the place dictionary; still searched and matched as written. Pick each again from the list on /me (or run pnpm setup)`);
     const added = placesBeyondSearchEntries(readEffectiveConfig("search"), preferences, geo, { country: pipeline.market.country, countryName: pipeline.market.countryName });
     if (added.length > 0) console.log(`! preferences.yaml: ${added.join(", ")} searched now, though search.yaml's old locations, remote_scope did not list them`);

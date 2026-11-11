@@ -36,6 +36,15 @@ describe("pnpm config:check on the location settings", () => {
     expect(run.out).toContain(": Oldtown not in");
   });
 
+  it("names the places the dictionary does not know, and asks to pick them again", () => {
+    writeLocationSettings(tmp, { home_city: "Berlin", places: [{ place: "Qwxzyville", relocate: true }, { place: "Amsterdam", relocate: true }], workplace: ["onsite"] });
+    fs.mkdirSync(path.join(tmp.defaultsDir, "geo"), { recursive: true });
+    fs.copyFileSync(path.resolve(import.meta.dirname, "../../config/geo/places.json.gz"), path.join(tmp.defaultsDir, "geo", "places.json.gz"));
+    const run = runConfigScript(tmp, "config-check.ts");
+    expect(run.out).toContain("! preferences.yaml: Qwxzyville not in the place dictionary; still searched and matched as written. Pick each again");
+    expect(run.out).not.toMatch(/Amsterdam[^\n]*not in the place dictionary/);
+  });
+
   it("stays quiet about it without the old keys", () => {
     const run = runConfigScript(tmp, "config-check.ts");
     expect(run.out).not.toContain("searched now");
