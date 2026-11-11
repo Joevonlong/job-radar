@@ -37,7 +37,7 @@ pnpm run doctor --only config.market
 | Area | Behaviour |
 |---|---|
 | Locations | A location that names a country gets that country's code (`Remote - USA` → US, `Dublin, CA` → US). The city before the home country's name (`Gütersloh, Germany`) is read only in the home market. |
-| Remote scope | `none`, `home_country`, `worldwide`, or `{region: [eu, CH, …]}` (named regions and ISO countries) in search.yaml; in preferences.yaml it follows from the remote-only `places`. Old values: `eu_hire_in_de` = `home_country`, `eu_any` = `{region: [eu]}`. `home_country` keeps remote jobs located in the home country, those that name the pack's `region` (the Germany pack: EU, Europe, EMEA, EEA) or worldwide, and shows as "Remote from Germany (incl. EU / Europe / EMEA / worldwide remote)"; a market without a `region` shows "Remote from <country>". Row by row: [Remote jobs and watched companies](usage.md#remote-jobs-and-watched-companies). |
+| Remote scope | It follows from `places` in preferences.yaml: a remote job may be based in the home country and in every listed country, region or city, ✈ or remote only alike, or anywhere with Worldwide listed. A label that names the pack's `region` (the Germany pack: EU, Europe, EMEA, EEA) also counts, whatever else is listed, so `[DE, CH]` still keeps `Remote - EU`. The scoring prompt names it as `home_country`, `worldwide` or `{region: [eu, CH, …]}`, shown as "Remote from Germany (incl. EU / Europe / EMEA / worldwide remote)"; a market without a `region` shows "Remote from <country>". Old values: `eu_hire_in_de` = `home_country`, `eu_any` = `{region: [eu]}`. Row by row: [Remote jobs and watched companies](usage.md#remote-jobs-and-watched-companies). |
 | Local language | When the pack has requirement rules for its language and `home_language` is that language, the level a posting requires is read and a level above yours (me.yaml `languages`) costs points (ai.yaml `scoring.language_penalty`). Otherwise the step is off: no level is read, nothing is deducted, the scoring prompt does not ask for it, and the pages hide its filter and badges. |
 | Base currency | Salary floor, "minimum salary" filter, statistics and the high-pay threshold are in the market's currency. Amounts in other currencies are converted with pipeline.yaml `salary.fx_pivot` + `fx_rates`; an amount in a currency without a rate is never compared. |
 | Channels | A channel with `markets: [DE]` in sources.yaml runs only in those markets; elsewhere it is shown folded under "Other markets" and is not counted as a failure. Country parameters left empty (`country`, `country_name`, `country_indeed`) and remote-location keys left out follow the market. |
@@ -236,7 +236,23 @@ EUR are read as EUR.
 | `remote_scope: none` | `remote` removed from `workplace`, unless it's the only value |
 | A place in both `locations` and `remote_scope` | One ✈ entry: moving there includes working remotely there |
 
-Results that change: with `none`, a remote job in an allowed city was shown and is now hidden as `workplace_not_wanted`; with `none` and `workplace: [remote]`, remote jobs are now checked instead of hidden. If the first of `locations` was a foreign city, it becomes the home city.
+Results that change: with `none`, a remote job in an allowed city was shown and is now hidden as `workplace_not_wanted`; with `none` and `workplace: [remote]`, remote jobs are now checked instead of hidden; with `{region: [...]}` that leaves out home, home-country remote jobs now show; a foreign city in `locations` becomes a ✈ place and starts matching. `locations: [Berlin, CH]` with `remote_scope: {region: [CH]}` now keeps German remote jobs next to Swiss ones. If the first of `locations` was a foreign city (`[Amsterdam, Berlin]` for a German market), it becomes the home city and a job there is compared with the home country; `config:check` and `/me` warn about a home city outside the home country, so you can set one at home and list the other as ✈.
+
+`search.yaml`'s `locations` and `remote_scope` are accepted and ignored, with no migration step: searches come from `places`, and `config:check` and `/me` warn about entries that `places` doesn't list, and about searches `places` adds that those keys didn't list. When the two files agreed, the upgrade keeps the same queries and query ids, so the rotation history carries over. These configs add or change a search:
+
+| Old config | Change |
+|---|---|
+| A scope with several tokens | One search per token, with new ids |
+| A scope that doesn't cover home | The home remote search is added |
+| `none` with `workplace: [remote]` | The home remote search is added |
+| A foreign city in `locations` | Its remote search is added |
+| `workplace` without `remote`, and a scope other than `none` | The remote search is dropped, because this can't be told apart from a migrated `none` |
+
+An on-site entry of the old `locations` counts as listed only when it is the home city or a ✈ place, since only those get an on-site search; a scope token counts when it is home or any listed place. So a remote-only `CH` doesn't hide the warning for an old on-site `Switzerland`.
+
+Searches that a board would send the same way run once a cycle. In the step that leaves out what a board can't send, two queries are merged when every enabled, configured channel of the unit would send the same request: Apify with `remote_locations.region: Europe` sends `{region: [eu]}` and `{region: [CH]}` to the same location, so it's one paid run, and Arbeitsagentur, StepStone, XING and JSearch, which send no place on a remote search, run one remote search per keyword group. A channel that can't tell (the LinkedIn session, Monid, jobspy) keeps every query apart, so a cascade with one of them enabled merges nothing.
+
+Known limits: a ✈ city searches in the country the tables give it, so ✈ `Cambridge` searches the UK even if the old config meant Cambridge, MA (the filter still keeps Cambridge at home); ✈ `Paris` for a US home also keeps `Paris, TX`. Arbeitsagentur finds only German place names (`München`, `Deutschland`, cities in `sources.arbeitsagentur.location_names`), so a place abroad returns nothing there; it is a free board, so it isn't skipped.
 
 Every read of `preferences.yaml`, whoever wrote it (the forms, the setup wizard, `pnpm run setup`, an answers file or an edit by hand), applies the same rules to `places`:
 
@@ -246,9 +262,9 @@ Every read of `preferences.yaml`, whoever wrote it (the forms, the setup wizard,
 
 There is no limit on the number of places or the length of a name, as there was none on `locations`.
 
-The remote scope follows from the places: Worldwide anywhere means worldwide; otherwise the countries and regions among them, remote-only and ✈ alike, with the home country added when none of them is remote-only; with no country or region it is the home country. So `locations: [Berlin, CH]` with `remote_scope: {region: [CH]}` still keeps Swiss remote jobs after the upgrade, and German ones too.
+The remote scope the scoring prompt names follows from the places: Worldwide anywhere means worldwide; otherwise the countries and regions among them, remote-only and ✈ alike, with the home country added when none of them is remote-only; with no country or region it is the home country. The filter reads the places directly (above), with home always in.
 
-The setup wizard's Market step writes search.yaml's `locations` and `remote_scope` from the places, except that `remote_scope: none` (remote searches switched off) stays until you change it in `/settings`.
+The setup wizard writes only preferences.yaml: search.yaml's old keys stay as they were and are ignored. To stop remote searches, take Remote out of Workplace.
 
 Older code can't read version 3. Before going back to it, put back the version 2 file saved before the upgrade: `pnpm config:migrate --write`, which a deploy runs, copies it to `data/config/.backup/<timestamp>/profile/preferences.yaml`, or take it from your own backup ([Backup and restore](backup-restore.md)). Restoring an older version from the profile history on `/me` doesn't help: the save converts it to version 3 again.
 

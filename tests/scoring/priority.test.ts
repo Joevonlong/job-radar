@@ -206,3 +206,27 @@ describe("the priority", () => {
     expect(ordered.map((r) => r.jobId)).toEqual([4, 3, 2, 1]);
   });
 });
+
+describe("the location fit of the location settings", () => {
+  const base = shippedPipeline();
+  const pipeline = { ...base, market: { ...base.market, cities: { ...base.market.cities, amsterdam: ["Amsterdam", "NL"] as [string, string] } } };
+  const fit = (home_city: string, places: { place: string; relocate: boolean }[], over: Partial<PriorityJob>) => score(over, inputs({ pipeline, preferences: { ...examplePreferences(), home_city, places } })).location;
+
+  it("a place to move to is an exact fit in its country, not another", () => {
+    const wanted = [{ place: "Amsterdam", relocate: true }];
+    const exact = fit("Berlin", [], { locations: [place("Berlin")] });
+    expect(fit("Berlin", wanted, { locations: [place("Amsterdam", "NL")] })).toBe(exact);
+    expect(fit("Berlin", wanted, { locations: [place("Amsterdam", "US")] })).toBeLessThan(exact);
+  });
+
+  it("a remote-only place is no fit for a job at a place", () => {
+    const exact = fit("Berlin", [], { locations: [place("Berlin")] });
+    expect(fit("Berlin", [{ place: "Amsterdam", relocate: false }], { locations: [place("Amsterdam", "NL")] })).toBeLessThan(exact);
+  });
+
+  it("a whole country to move to, and home without a home city, fit jobs at a place", () => {
+    const exact = fit("Berlin", [], { locations: [place("Berlin")] });
+    expect(fit("Berlin", [{ place: "NL", relocate: true }], { locations: [place("Utrecht", "NL")] })).toBe(exact);
+    expect(fit("", [], { locations: [place("Stuttgart", "DE")] })).toBe(exact);
+  });
+});

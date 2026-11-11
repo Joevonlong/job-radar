@@ -6,7 +6,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { lookupPlace, samePlaceKey, storedPlaceName, type Place, type PlaceGeo } from "@/lib/market/places";
+import { lookupPlace, plannedSearches, samePlaceKey, storedPlaceName, type Place, type PlaceGeo } from "@/lib/market/places";
 import type { ScopeOption } from "@/lib/market/view";
 import type { PlaceDraft } from "@/lib/profile/draft";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,8 @@ interface PlacesFieldProps {
   options: readonly ScopeOption[];
   /** false when `geo` is not the market the save will use (another pack was chosen): it cannot tell what is unknown. */
   known: boolean;
+  /** What the count of searches per place depends on besides the places. */
+  search: { homeCity: string; workplace: readonly string[]; home: { country: string; countryName: string } };
   invalid?: boolean;
   describedBy?: string | undefined;
 }
@@ -46,7 +48,7 @@ function labelOf(place: Place | null, stored: string, options: readonly ScopeOpt
  * click. A city starts as a place to move to, a country or region as remote only, and Worldwide is always remote only. A name
  * the tables do not know is kept and warned about: no table has every town, and it is matched as written.
  */
-export function PlacesField({ id, value, onChange, geo, options, known, invalid = false, describedBy }: PlacesFieldProps) {
+export function PlacesField({ id, value, onChange, geo, options, known, search, invalid = false, describedBy }: PlacesFieldProps) {
   const t = useTranslations("profile.fields.places");
   const [text, setText] = useState("");
   const worldwide = t("worldwide");
@@ -57,15 +59,16 @@ export function PlacesField({ id, value, onChange, geo, options, known, invalid 
     const typed = fromLabel(text, options, worldwide);
     setText("");
     const key = samePlaceKey(typed, geo);
-    if (value.some((entry) => samePlaceKey(entry.place, geo) === key)) return;
+    if (key === samePlaceKey(search.homeCity, geo) || value.some((entry) => samePlaceKey(entry.place, geo) === key)) return;
     const kind = lookupPlace(typed, geo)?.kind;
     onChange([...value, { place: storedPlaceName(typed, geo), relocate: kind === undefined || kind === "city" }]);
   };
 
-  const chosen = new Set(value.map((entry) => samePlaceKey(entry.place, geo)));
+  const chosen = new Set([search.homeCity, ...value.map((entry) => entry.place)].map((place) => samePlaceKey(place, geo)));
   const cities = [...new Set(Object.values(geo.cities).map(([city]) => city))];
   const choices = [worldwide, ...options.map((option) => option.label), ...cities].filter((name) => !chosen.has(samePlaceKey(fromLabel(name, options, worldwide), geo)));
   const unknown = known ? value.filter((entry) => lookupPlace(entry.place, geo) === null) : [];
+  const planned = known ? plannedSearches({ home_city: search.homeCity, places: value, workplace: search.workplace }, geo, search.home) : [];
 
   return (
     <div className="flex flex-col gap-2" data-testid="places-field">
@@ -93,6 +96,7 @@ export function PlacesField({ id, value, onChange, geo, options, known, invalid 
                 {entry.relocate ? <Plane aria-hidden className="size-3.5" /> : null}
                 <span>{label}</span>
                 <span className="font-normal text-ink-2">{state}</span>
+                {known ? <span className="font-normal text-ink-2" data-testid="place-searches">{t("searches", { count: planned.filter((search) => search.place === entry.place).length })}</span> : null}
               </button>
               <button
                 type="button"
@@ -140,6 +144,7 @@ export function PlacesField({ id, value, onChange, geo, options, known, invalid 
       <ul className="list-disc pl-5 text-body-sm text-ink-2" data-testid="places-rules">
         <li>{t("ruleMove")}</li>
         <li>{t("ruleWorldwide")}</li>
+        <li>{t("ruleSearches")}</li>
       </ul>
     </div>
   );

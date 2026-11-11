@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
 import { buildQueries } from "@/lib/channels/query";
+import { loadQueryPlaces } from "@/lib/channels/query-places";
 import { ensureProfileFiles, getConfigPath, mutateConfig, reloadConfig, setOnProfileSaved } from "@/lib/config";
 import { closeDb, getDb, listControlRequests, listProfileSnapshots, writeHeartbeat } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
@@ -66,9 +67,8 @@ describe("setup steps against the database", () => {
     expect(await saveMarketStep({ ...draft, timezone: "Europe/Berlin" })).toEqual({ status: "saved", step: "market" });
     expect(reloadConfig("schedule").timezone).toBe("Europe/Berlin");
     expect(fs.readFileSync(getConfigPath("preferences"), "utf8")).toMatch(/^config_version: 3$/m);
-    const search = reloadConfig("search");
-    expect(search).toMatchObject({ locations: ["Amsterdam", "Utrecht"], remote_scope: "none" });
-    expect(buildQueries(search, "manual").some((query) => query.remote)).toBe(false);
+    expect(reloadConfig("preferences").workplace).toEqual(["onsite", "hybrid"]);
+    expect(buildQueries(reloadConfig("search"), loadQueryPlaces(), "manual").some((query) => query.remote)).toBe(false);
   });
 
   it("the first cycle and the Telegram test are queued as control requests (they run while the setup is pending)", async () => {

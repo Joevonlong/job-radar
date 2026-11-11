@@ -21,6 +21,8 @@ export interface JsearchRequest {
   datePosted: ReturnType<typeof datePostedFor>;
   /** `work_from_home=true` (remote queries). */
   remote: boolean;
+  /** Lower-case ISO code for a place abroad; otherwise the configured country applies. */
+  country?: string;
 }
 
 /**
@@ -28,7 +30,7 @@ export interface JsearchRequest {
  * own (Google for Jobs has no reliable OR), in the city, or as a remote search without one. A company query is one
  * request, `<company> in <home country>`, without the home-office filter; `homeCountryName` is the market's country name.
  */
-export function buildRequests(query: SearchQuery, settings: Pick<JsearchSettings, "keywords_per_query">, homeCountryName?: string): JsearchRequest[] {
+export function buildRequests(query: SearchQuery, settings: Pick<JsearchSettings, "keywords_per_query">, homeCountryName?: string, homeCountry?: string): JsearchRequest[] {
   const datePosted = datePostedFor(query.windowHours);
   if (searchKind(query) === "company") {
     if (!homeCountryName) throw new Error("jsearch: a company query needs the home country name");
@@ -39,5 +41,6 @@ export function buildRequests(query: SearchQuery, settings: Pick<JsearchSettings
     query: remote ? keyword : `${keyword} in ${query.location}`,
     datePosted,
     remote,
+    ...(query.country === null || homeCountry === undefined || query.country === homeCountry ? {} : { country: query.country.toLowerCase() }),
   }));
 }

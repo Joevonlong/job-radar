@@ -14,6 +14,7 @@ import { makeTempConfig, type TempConfig } from "../config/helpers";
 import { config, quietLogger } from "../cycle/helpers";
 import { addJob, ago } from "./dormant-fixture";
 import { addRun, maintenanceOptions, pipelineOptions, posting } from "./relist-fixture";
+import { oneCityPlaces } from "../channels/helpers";
 
 let temp: TempConfig;
 beforeAll(() => { process.env.DATABASE_URL = inject("testDatabaseUrl"); });
@@ -53,7 +54,8 @@ it.each([
   registerCycleStep("maintenance", async () => ({ result: await runMaintenance(db, { ...maintenanceOptions(), now: () => new Date() }) }));
   registerCycleStep("ai", async () => {});
   const configs = config();
-  configs.search = { ...configs.search, keyword_groups: { one: ["Engineer"], two: ["Developer"] }, locations: ["Testville"], remote_scope: "none" };
+  configs.search = { ...configs.search, keyword_groups: { one: ["Engineer"], two: ["Developer"] } };
+  configs.places = oneCityPlaces();
   configs.channels = { ...configs.channels, collect: { ...configs.channels.collect, concurrency: 1 } };
   const result = await runCycle("manual", { registry, config: configs, cascades: [], logger: quietLogger, sleep: async () => {}, db });
   expect(result.status).toBe("succeeded");

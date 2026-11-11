@@ -107,7 +107,8 @@ export const preferencesSchema = z.strictObject({
   market: marketSettingsSchema,
   target_titles: stringList.min(1),
   /** Where a job counts as local. It is sent to your AI provider with every job. */
-  home_city: nonEmptyString,
+  /** Empty: anywhere in the home country. */
+  home_city: z.string().trim().default(""),
   /** Other places a job can be based; read through `normalizePlaces` (Worldwide remote only, one entry per place). */
   places: z.array(placeEntry).default([]),
   workplace: uniqueEnumList(workplace).refine((w) => w.length > 0, "needs at least one workplace type"),

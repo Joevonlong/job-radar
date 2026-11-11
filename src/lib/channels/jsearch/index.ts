@@ -88,6 +88,8 @@ export function createJsearchChannel(deps: JsearchDeps = {}): Channel {
     kind: "api",
     usesQueries: true,
     supportsCompanyQueries: true,
+    supportsRemotePlaces: false,
+    requestKey: (query) => JSON.stringify([buildRequests(query, configured(), marketForChannel().countryName, marketForChannel().country), query.maxResults]),
     estimateCost: (paidRecords) => paidRecords * configured().overage_cost_per_request_usd,
 
     async collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPostingInput[]> {
@@ -107,7 +109,7 @@ export function createJsearchChannel(deps: JsearchDeps = {}): Channel {
       let interrupted: ChannelError | null = null;
       /** A later keyword was refused by the plan's own limits before its request: a planned stop, not a failure. */
       let stoppedBy: BudgetExceededError | null = null;
-      for (const [index, request] of buildRequests(query, settings, marketForChannel().countryName).entries()) {
+      for (const [index, request] of buildRequests(query, settings, marketForChannel().countryName, marketForChannel().country).entries()) {
         ctx.signal.throwIfAborted();
         if (index > 0) await ctx.throttle();
         try {

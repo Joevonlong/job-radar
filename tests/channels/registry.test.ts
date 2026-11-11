@@ -8,6 +8,10 @@ import { createFixtureChannel, FIXTURE_SETTINGS } from "@/lib/channels/fixture";
 import { channelsWith, shippedChannels } from "./helpers";
 
 describe("CHANNEL_CONFIG_TABLE", () => {
+  it.each(["arbeitsagentur", "jsearch", "stepstone", "xing"] as const)("%s sends no place on a remote search", (id) => {
+    expect(CHANNEL_CONFIG_TABLE[id].supportsRemotePlaces).toBe(false);
+  });
+
   it("maps every block of sources.yaml to exactly one channel id", () => {
     const config = shippedChannels();
     const expected = [
@@ -24,7 +28,7 @@ describe("CHANNEL_CONFIG_TABLE", () => {
     expect(CHANNEL_CONFIG_TABLE["linkedin-monid"]).toEqual({ section: "linkedin", key: "monid" });
     expect(CHANNEL_CONFIG_TABLE["linkedin-guest"]).toEqual({ section: "linkedin", key: "guest", supportsCompanyQueries: true });
     expect(CHANNEL_CONFIG_TABLE["linkedin-session:recommended"]).toEqual({ section: "linkedin", key: "session", view: "recommended", usesQueries: false, statesPostedAt: true });
-    expect(CHANNEL_CONFIG_TABLE.arbeitsagentur).toEqual({ section: "sources", key: "arbeitsagentur", supportsCompanyQueries: true });
+    expect(CHANNEL_CONFIG_TABLE.arbeitsagentur).toEqual({ section: "sources", key: "arbeitsagentur", supportsCompanyQueries: true, supportsRemotePlaces: false });
     expect(CHANNEL_CONFIG_TABLE.arbeitnow).toEqual({ section: "sources", key: "arbeitnow", usesQueries: false });
     expect(CHANNEL_CONFIG_TABLE.berlinstartupjobs).toEqual({ section: "sources", key: "berlinstartupjobs", usesQueries: false });
     expect(CHANNEL_CONFIG_TABLE.handpicked).toEqual({ section: "sources", key: "handpicked", usesQueries: false });

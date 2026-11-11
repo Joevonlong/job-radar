@@ -1,5 +1,6 @@
 /** Reads everything `/sources` shows (server only) and folds it with `buildSourcesView`. */
 import { buildQueries } from "@/lib/channels/query";
+import { loadQueryPlaces } from "@/lib/channels/query-places";
 import { monthKey } from "@/lib/channels/budget";
 import { loadConfig, reloadConfig, type AiConfig, type ModelsConfig } from "@/lib/config";
 import {
@@ -84,7 +85,7 @@ export async function loadSourcesView(at?: Date): Promise<SourcesView> {
   const budgetAlertPercent = Math.round(Math.min(...reloadConfig("notify").alerts.budget_thresholds) * 100);
   let queries: ReturnType<typeof buildQueries> = [];
   try {
-    if (channelsConfig.collect.query_rotation) queries = buildQueries(loadConfig("search"), "manual");
+    if (channelsConfig.collect.query_rotation) queries = buildQueries(loadConfig("search"), loadQueryPlaces(), "manual");
   } catch {
     // Search is optional here; omit rotation when its queries cannot be built.
   }

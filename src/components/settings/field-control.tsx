@@ -3,7 +3,6 @@
 import { useFormatter, useTranslations } from "next-intl";
 
 import { Field, TagInput } from "@/components/profile/fields";
-import { RemoteScopeField } from "@/components/profile/remote-scope-field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -19,7 +18,6 @@ import type { SettingsActionState } from "@/lib/settings/types";
 import { cn } from "@/lib/utils";
 
 import { KeywordGroupsEditor, OrderedList, RouteEditor, type ModelChoice } from "./field-editors";
-import { useMarketScope } from "./market-scope";
 import { modelChoices, type ModelTextHelpers } from "./model-options";
 import { LOCALE_META, intlTag, isLocale } from "@/i18n/locale";
 
@@ -151,7 +149,6 @@ export function nodeLabels(t: Translator, options: readonly string[]): Record<st
 
 export function FieldControl({ def, id, value, error, onChange, t, draft, catalog, providerStates, compact = false }: FieldControlProps) {
   const modelText = useModelText(t);
-  const scope = useMarketScope();
   const label = t(`fields.${def.label}.label`);
   const ownHint = fieldHint(t, def.label);
   // a protected key: read-only here, edited by hand in the file
@@ -223,7 +220,7 @@ export function FieldControl({ def, id, value, error, onChange, t, draft, catalo
             {unsupported ? <option value={asText}>{t("controls.effortUnsupported", { effort: asText })}</option> : null}
             {offered.map((option) => (
               <option key={option} value={option} {...(def.localeOptions && isLocale(option) ? { lang: intlTag(option) } : {})}>
-                {def.localeOptions && isLocale(option) ? LOCALE_META[option].name : def.optionGroup === "remoteScope" ? t(`options.remoteScope.${option as "none" | "home_country" | "worldwide"}`) : def.optionGroup === "breakdownMode" ? t(`options.breakdownMode.${option as "manual" | "auto"}`) : def.optionGroup === "aiUsageRange" ? t(`options.aiUsageRange.${option as "today" | "7d" | "30d" | "month"}`) : def.optionGroup === "researchTrigger" ? t(`options.researchTrigger.${option as "manual" | "favorite" | "favorite_or_applying"}`) : notes[option] ? `${option} (${notes[option]})` : option}
+                {def.localeOptions && isLocale(option) ? LOCALE_META[option].name : def.optionGroup === "breakdownMode" ? t(`options.breakdownMode.${option as "manual" | "auto"}`) : def.optionGroup === "aiUsageRange" ? t(`options.aiUsageRange.${option as "today" | "7d" | "30d" | "month"}`) : def.optionGroup === "researchTrigger" ? t(`options.researchTrigger.${option as "manual" | "favorite" | "favorite_or_applying"}`) : notes[option] ? `${option} (${notes[option]})` : option}
               </option>
             ))}
           </Select>
@@ -286,12 +283,6 @@ export function FieldControl({ def, id, value, error, onChange, t, draft, catalo
       return (
         <Field id={id} group hideLabel label={label} {...(hint ? { hint } : {})} {...(errorText ? { errorText } : {})}>
           <KeywordGroupsEditor id={id} rows={asList.filter(isGroupRow)} invalid={invalid} describedBy={describedBy} onChange={onChange} />
-        </Field>
-      );
-    case "remoteScope":
-      return (
-        <Field id={id} label={label} {...(hint ? { hint } : {})} {...(errorText ? { errorText } : {})}>
-          <RemoteScopeField id={id} value={asText} onChange={onChange} options={scope.options} countryName={scope.countryName} homeRegion={scope.homeRegion} invalid={invalid} describedBy={describedBy} namespace="settings" />
         </Field>
       );
     case "route": {

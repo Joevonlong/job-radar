@@ -13,7 +13,7 @@ import { runMigrations } from "@/lib/db/migrate";
 import { createReadOnlyDb, type ReadOnlyDb } from "@/lib/db/read-only-client";
 import type { PipelineResult } from "@/lib/pipeline";
 
-import { channelsWith, shippedSearch } from "../channels/helpers";
+import { channelsWith, shippedSearch, testPlaces } from "../channels/helpers";
 import { fixtureHtml, htmlResponse } from "../channels/web/helpers";
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 import { config, quietLogger } from "../cycle/helpers";
@@ -85,8 +85,8 @@ function cycle(fetch: FetchLike, channelIds: string[], extra: Partial<RunCycleOp
       if (id === "xing") sources[id]!.max_pages = 1;
     }
   });
-  const search = { ...shippedSearch(), keyword_groups: { engineering: ["AI Engineer"] }, locations: ["Berlin"], remote_scope: "none" as const };
-  return runCycle("manual", { registry, config: { ...config(), channels, search }, logger: quietLogger, sleep: async () => {}, channelIds, fetch, ...extra });
+  const search = { ...shippedSearch(), keyword_groups: { engineering: ["AI Engineer"] } };
+  return runCycle("manual", { registry, config: { ...config({ places: testPlaces({ places: [], workplace: ["onsite", "hybrid"] }) }), channels, search }, logger: quietLogger, sleep: async () => {}, channelIds, fetch, ...extra });
 }
 
 describe("runCycle with the stepstone and xing channels", () => {

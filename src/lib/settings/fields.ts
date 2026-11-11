@@ -52,9 +52,7 @@ export type FieldKind =
   /** `search.yaml: keyword_groups` — group id → keywords. */
   | "keywordGroups"
   /** `ai.yaml: tasks.<task>` as a whole — the ordered providers of the task, each with an optional model of its own. */
-  | "route"
-  /** A remote scope (`none` / `home_country` / `worldwide` / a list of regions and countries), edited as its scope key. */
-  | "remoteScope";
+  | "route";
 
 export interface FieldDef {
   /** Dotted path in the config value, e.g. `linkedin.brightdata.throttle.min_delay_ms`. */
@@ -235,7 +233,6 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
 // importing the schemas here would pull zod's cron parser into the browser bundle.
 /** Time ranges of the AI usage page (mirrors the zod enum in the ui schema; the fields test compares them). */
 export const AI_USAGE_RANGES = ["today", "7d", "30d", "month"] as const;
-export const REMOTE_SCOPES = ["none", "home_country", "worldwide"] as const;
 export const LINKEDIN_CASCADE_OPTIONS = ["linkedin-brightdata", "linkedin-apify", "linkedin-monid", "linkedin-session", "linkedin-guest"] as const;
 
 const bool = (path: string, label: FieldLabelId, extra: Partial<FieldDef> = {}): FieldDef => ({ path, kind: "bool", label, ...extra });
@@ -309,14 +306,6 @@ const scheduleSections: SectionDef[] = [
 
 const searchSections: SectionDef[] = [
   { id: "keywords", title: { section: "search_keywords" }, fields: [{ path: "keyword_groups", kind: "keywordGroups", label: "keyword_groups" }] },
-  {
-    id: "where",
-    title: { section: "search_where" },
-    fields: [
-      tags("locations", "locations"),
-      { path: "remote_scope", kind: "remoteScope", label: "remote_scope" },
-    ],
-  },
   {
     id: "limits",
     title: { section: "search_limits" },

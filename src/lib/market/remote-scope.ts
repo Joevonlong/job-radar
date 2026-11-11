@@ -1,5 +1,5 @@
 /**
- * The remote scope (search.yaml / preferences.yaml `remote_scope`): `none`, `home_country`, `worldwide` or
+ * The remote scope of a remote search and of old config files: `none`, `home_country`, `worldwide` or
  * `{ region: [eu | ISO …] }`. Pure helpers: the countries a scope covers, the location texts that name it as a whole,
  * a stable key (query ids), the old values (`eu_hire_in_de`, `eu_any`) and the location a channel searches with.
  */
@@ -58,16 +58,6 @@ export function scopeCountries(scope: RemoteScopeValue, market: Pick<Market, "co
   return new Set(scope.region.flatMap((token) => regionCountries(token, market)));
 }
 
-/**
- * Location-text patterns that name the scope as a whole ("EU", "Europe", "EMEA"): the home region's for `home_country`
- * (a remote job "anywhere in the EU" hires in Germany too), the named regions' for a region scope.
- */
-export function scopeWidePatterns(scope: RemoteScopeValue, market: Pick<Market, "homeRegion" | "regions">): string[] {
-  if (scope === "none" || scope === "worldwide") return [];
-  const regions = scope === "home_country" ? (market.homeRegion === null ? [] : [market.homeRegion]) : scope.region;
-  return [...new Set(regions.flatMap((token) => market.regions[token]?.patterns ?? []))];
-}
-
 /** English name of a region token ("European Union", "Switzerland"), the token itself when unknown. */
 export function regionTokenName(token: string, market: Pick<Market, "regions" | "countries">): string {
   if (/^[A-Z]{2}$/.test(token)) return market.countries.find((c) => c.code === token)?.name ?? token;
@@ -91,4 +81,14 @@ export function remoteLocationFor(
   if (scope === "worldwide") return worldwideText;
   if (scope === "home_country") return market.countryName;
   return scope.region.map((token) => regionTokenName(token, market)).join(", ");
+}
+
+/** The text a remote query searches with: the place it names, else the channel's location for its scope. Every channel with a location field calls this. */
+export function remoteQueryLocation(
+  query: { location: string | null; remoteScope: ActiveRemoteScope | null },
+  block: Partial<Record<RemoteLocationKey, string>> | undefined,
+  market: Pick<Market, "countryName" | "regions" | "countries">,
+  options: { worldwideText?: string; emptyMeansNoLocation?: boolean } = {},
+): string {
+  return query.location ?? remoteLocationFor(query.remoteScope ?? "worldwide", block, market, options);
 }

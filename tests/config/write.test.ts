@@ -175,8 +175,8 @@ describe("writeConfig", () => {
     });
 
     const shrunk = loadConfig("search");
-    await writeConfig("search", { ...shrunk, locations: ["Berlin"] });
-    expect((parse(read(tmp.configDir, "search.yaml")) as { locations: string[] }).locations).toEqual(["Berlin"]);
+    await writeConfig("search", { ...shrunk, keyword_groups: { a: ["Berlin"] } });
+    expect((parse(read(tmp.configDir, "search.yaml")) as { keyword_groups: unknown }).keyword_groups).toEqual({ a: ["Berlin"] });
     expect(read(tmp.configDir, "search.yaml")).toContain("# 工程类");
   });
 

@@ -4,7 +4,8 @@ import type { Channel, ChannelRuntimeSettings, NormalizedPostingDraft, RawPostin
 import type { CollectResult } from "@/lib/cycle/collect";
 import type { CycleRunResult } from "@/lib/cycle/run-cycle";
 
-import { shippedChannels, shippedSchedule, shippedSearch } from "../channels/helpers";
+import { shippedChannels, shippedSchedule, shippedSearch, testPlaces } from "../channels/helpers";
+import type { QueryPlaces } from "@/lib/channels/query";
 
 export const quietLogger = createLogger({ sink: () => {} });
 
@@ -21,12 +22,13 @@ export function pinnedSearch() {
   };
 }
 
-export function config(overrides: { concurrency?: number; search?: ReturnType<typeof shippedSearch> } = {}) {
+export function config(overrides: { concurrency?: number; search?: ReturnType<typeof shippedSearch>; places?: QueryPlaces | null } = {}) {
   const channels = shippedChannels();
   return {
     channels: overrides.concurrency === undefined ? channels : { ...channels, collect: { ...channels.collect, concurrency: overrides.concurrency } },
     search: overrides.search ?? shippedSearch(),
     schedule: shippedSchedule(),
+    places: overrides.places === undefined ? testPlaces() : overrides.places,
   };
 }
 

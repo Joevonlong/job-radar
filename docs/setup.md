@@ -12,7 +12,7 @@ pages.
 | Step | What you choose | Written to |
 |---|---|---|
 | Language | Interface language (pre-selected from your browser), language of the AI texts, language job ads are translated into | `language.yaml`: `ui.default_locale`, `ai.output`, `translation.target`; the language cookie of this browser |
-| Market | Market pack, home country, base currency, local language, home city (the pack's cities are offered; any city can be typed), places, time zone (pre-selected from your browser). Picking another country brings its currency and main city, as long as you haven't set those yourself; the profile step then starts with that city | `preferences.yaml`: `market`, `home_city`, `places`; `search.yaml`: `locations`, `remote_scope` worked out from them; `schedule.yaml`: `timezone` |
+| Market | Market pack, home country, base currency, local language, home city (the pack's cities are offered; any city can be typed), places, time zone (pre-selected from your browser). Picking another country brings its currency and main city, as long as you haven't set those yourself; the profile step then starts with that city | `preferences.yaml`: `market`, `home_city`, `places`; `schedule.yaml`: `timezone` |
 | Profile | Summary for the AI, skills with years, languages with their CEFR level (a row for the market's local language is added), years of experience, visa, city | `me.yaml` (a profile history snapshot is kept) |
 | Targets | Job titles, level, work modes, salary floor in the market currency, contract types, companies / keywords / student jobs to leave out | `preferences.yaml`; `search.yaml` `keyword_groups` (see below) |
 | Sources | The channels of your market (the pack's own job boards are listed with a "local" mark; scraping and account channels are never pre-ticked and need a confirmation, see below), company career boards to add | `sources.yaml` |
@@ -23,8 +23,7 @@ pages.
 "Save and continue" writes the step's files at once (comments in the files are kept) and marks the step done; a value the
 file would not accept is shown next to its field and nothing is written. "Skip" only marks the step skipped and writes no
 configuration, except for Telegram: skipping it switches `telegram.enabled` off unless `TELEGRAM_BOT_TOKEN` or
-`TELEGRAM_CHAT_ID` is set, so the push does not complain on every cycle. On `/me`, changing the home city or places offers to copy them
-into the search cities (`search.yaml`: `locations`), which are a separate list. The step bar lets you go back to any step; it shows what the files say now.
+`TELEGRAM_CHAT_ID` is set, so the push does not complain on every cycle. The step bar lets you go back to any step; it shows what the files say now.
 
 **Search keywords.** While `search.yaml` still has the shipped example groups, they are replaced as a whole by one group,
 `targets`, holding your job titles. Groups you changed yourself stay; only `targets` is added or replaced. The targets step

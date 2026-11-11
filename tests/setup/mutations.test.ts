@@ -4,10 +4,9 @@ import fs from "node:fs";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { isNode, parseDocument } from "yaml";
 
-import { ensureProfileFiles, getUserConfigPath, reloadConfig, type ConfigName } from "@/lib/config";
+import { mutateConfig, ensureProfileFiles, getUserConfigPath, reloadConfig, type ConfigName } from "@/lib/config";
 import { withFileLock } from "@/lib/config/write";
 import { preferencesConfigToDraft } from "@/lib/profile/draft";
-import { syncSearchLocations } from "@/lib/profile/search-locations";
 import { completeSetup, markStep, resetSetupStateCache } from "@/lib/setup/state";
 import { saveAiStep } from "@/lib/setup/steps/ai";
 import { saveLanguageStep, writeNotifyLocale } from "@/lib/setup/steps/language";
@@ -65,11 +64,11 @@ it("keeps cities synced by another tab while the targets profile save is waiting
   const saving = saveTargetsStep({ ...targets(), target_titles: ["Platform Engineer"] });
   try {
     await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(await syncSearchLocations(["Austin"])).toMatchObject({ status: "done" });
+    await mutateConfig("search", (current) => ({ ...current, max_per_group_per_location: 7 }));
   } finally { release(); }
   await writer;
   expect(await saving).toMatchObject({ status: "saved" });
-  expect(reloadConfig("search")).toMatchObject({ locations: ["Austin"], keyword_groups: { targets: ["Platform Engineer"] } });
+  expect(reloadConfig("search")).toMatchObject({ max_per_group_per_location: 7, keyword_groups: { targets: ["Platform Engineer"] } });
 });
 
 it.each([

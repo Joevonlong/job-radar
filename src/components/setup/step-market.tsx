@@ -125,6 +125,7 @@ export function StepMarket({ view, done, market }: StepMarketProps) {
           geo={market.placeGeo}
           options={market.scopeOptions}
           known={draft.market.pack === market.packId && market.error === null}
+          search={{ homeCity: draft.home_city, workplace: view.workplace, home: { country: market.country, countryName: market.countryName } }}
           invalid={errors.has("places")}
           describedBy={describedBy(ids.places, true, placesError ?? errors.text("places"))}
         />

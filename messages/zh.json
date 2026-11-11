@@ -615,7 +615,7 @@
       },
       "home_city": {
         "label": "常住城市",
-        "hint": "在这里的现场或混合办公职位算作本地职位。它会随每个职位一起发送给你的 AI 服务商。"
+        "hint": "留空表示本国任何地方都算。在这里的现场或混合办公职位算作本地职位。它会随每个职位一起发送给你的 AI 服务商。"
       },
       "places": {
         "label": "常住城市以外的地点",
@@ -630,18 +630,9 @@
         "remove": "移除 {place}",
         "unknown": "当前市场的数据表里没有“{name}”，所以会按原文匹配。如果这不是你的本意，请检查拼写。",
         "ruleMove": "新添加的城市默认“我愿意搬去”（实线）；国家或地区默认“仅远程”（虚线）。",
-        "ruleWorldwide": "“全球”始终仅远程。"
-      },
-      "searchCities": {
-        "differs": "实际搜索的城市（search.yaml）是单独一份，不会跟着这里改：{cities}。",
-        "sync": "同时用这些地点搜索",
-        "link": "修改搜索城市",
-        "done": "搜索城市已更新：之后的轮次会搜索这些地点。",
-        "failed": "没能更新搜索城市。",
-        "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
-        "busy": "另一个进程正在保存配置，请稍后再试。",
-        "stale": "配置已在别处更改，请刷新后重试。",
-        "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
+        "ruleWorldwide": "“全球”始终仅远程。",
+        "searches": "{count, plural, other {· 每个关键词组 # 次搜索}}",
+        "ruleSearches": "搜索每轮运行。按地点的远程搜索只在能按地点搜索的来源上运行。"
       },
       "workplace": {
         "label": "工作方式"
@@ -665,7 +656,10 @@
       },
       "exclude_keywords": {
         "label": "排除的关键词"
-      }
+      },
+      "searchAdded": "search.yaml 的旧键没有列出 {names}，但你在这里的设置里有，所以现在会搜索它们。如果不需要这些额外的搜索，请在这里修改地点或工作方式。",
+      "homeCityAbroad": "常住城市 {city} 在 {country}，不在本国 {home}，所以现场职位会在 {home} 境内找叫 {city} 的地方。请把 {home} 的一个城市设为常住城市，再把 {city} 加到地点里。",
+      "searchLeftovers": "search.yaml 里还列着 {names}，但你的地点里没有。这些键现在已被忽略，不会再用来搜索。如果还需要，请在这里添加。"
     },
     "options": {
       "level": {
@@ -802,7 +796,6 @@
     "skillScale": {
       "aria": "{name}：{years} 年"
     },
-    "workplaceGroup": "工作方式",
     "units": {
       "perYear": "/年",
       "years": "年"
@@ -2108,7 +2101,6 @@
       "cycle_weekend": "周末轮",
       "schedule_behaviour": "行为",
       "search_keywords": "关键词组",
-      "search_where": "地点与远程",
       "search_limits": "时间窗与上限",
       "channels_budget": "预算与熔断",
       "channels_http": "HTTP 默认值",
@@ -2298,14 +2290,6 @@
       },
       "keyword_groups": {
         "label": "关键词组"
-      },
-      "locations": {
-        "label": "城市",
-        "hint": "每个关键词组按城市各查一次。"
-      },
-      "remote_scope": {
-        "label": "远程范围",
-        "hint": "远程岗位接受的范围。这里决定远程查询用什么地点去搜；过滤用的是“我的画像”里的同名设置。"
       },
       "window_morning": {
         "label": "早轮回看时间窗（小时）",
@@ -4209,7 +4193,8 @@
       "unavailable": "当前没有通道能接查询",
       "remote": "远程",
       "remoteRegion": "远程 · {scope}",
-      "overCap": "{count, plural, other {{number} 个查询}}等待超过补窗上限（{hours} 小时）：这段时间的新岗位可能已错过。可以提高预算或减少查询。"
+      "overCap": "{count, plural, other {{number} 个查询}}等待超过补窗上限（{hours} 小时）：这段时间的新岗位可能已错过。可以提高预算或减少查询。",
+      "remotePlacesSkipped": "{count, plural, other {{number} 个远程地点此来源无法搜索}}"
     },
     "backfill": {
       "button": "补抓…",
@@ -5616,29 +5601,6 @@
     }
   },
   "market": {
-    "scope": {
-      "homeCountryRemote": "能从{country}远程（含面向{region} / 全球的远程岗）",
-      "homeCountryRemoteNoRegion": "能从{country}远程",
-      "homeRegionShort": {
-        "eu": "欧盟 / 欧洲 / EMEA"
-      },
-      "thisCountry": "本国",
-      "kindHint": {
-        "none": "不收远程岗，除非岗位地点在你的目标城市。",
-        "home_country": "保留：地点在{country}、写明面向{region}或全球的远程岗；正文写明可从{country} / {region}远程的也保留。排除：只写了别的国家（如 Remote - Spain）或标题写明只招美国等地区的。没写在哪里招的保留并标注。",
-        "home_countryNoRegion": "保留：地点在{country}或面向全球的远程岗；正文写明可从{country}远程的也保留。排除：只写了别的国家（如 Remote - Spain）或标题写明只招其他地区的。没写在哪里招的保留并标注。",
-        "worldwide": "所有远程岗都保留，不管在哪里招。",
-        "region": "保留：地点在所选区域或国家、或面向全球的远程岗；正文写明在这些地方招的也保留。排除：只写了其他国家，或标题写明只招别处的。没写在哪里招的保留并标注。"
-      },
-      "regions": "区域和国家",
-      "search": "搜索区域或国家",
-      "none": "还没有选",
-      "hint": "岗位在其中任一区域或国家受雇即可",
-      "groups": {
-        "regions": "区域",
-        "countries": "国家"
-      }
-    },
     "regions": {
       "eu": "欧盟",
       "eea": "欧洲经济区",
@@ -8061,7 +8023,8 @@
       "error": "无法加载操作日志，请检查配置和数据库后重试。"
     },
     "viewJob": "查看岗位",
-    "company": "公司：{name}"
+    "company": "公司：{name}",
+    "remotePlace": "远程：{place}"
   },
   "currentScores": {
     "missing": "当前分数投影尚未迁移。",

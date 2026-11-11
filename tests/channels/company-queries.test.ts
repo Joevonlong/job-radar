@@ -5,7 +5,7 @@ import { buildCompanyQueries, buildQueries, companyLabel, queryId, searchKind } 
 import { selectCompanyQueries, orderQueries } from "@/lib/channels/rotation";
 import { watchedCompanyBoards } from "@/lib/companies/watched-boards";
 import { loadPipeline } from "@/lib/market";
-import { shippedSearch } from "./helpers";
+import { shippedSearch, testPlaces } from "./helpers";
 
 const search = shippedSearch();
 const cfg = { enabled: true, max_per_cycle: 2, min_interval_hours: 24, max_results: 17 };
@@ -25,9 +25,9 @@ describe("company queries", () => {
   it("hashes only the company key, independent of name, window, or keyword settings", () => {
     const first = candidates()[0]!;
     expect(queryId({ ...first, company: { name: "Acme GmbH", key: "acme" }, keywords: ["unrelated"], location: "Elsewhere" })).toBe(first.id);
-    expect(buildQueries(search, "manual").every((q) => q.company === null)).toBe(true);
-    expect(searchKind(buildQueries(search, "manual")[0]!)).toBe("city");
-    expect(searchKind(buildQueries(search, "manual").find((q) => q.remote)!)).toBe("remote");
+    expect(buildQueries(search, testPlaces(), "manual").every((q) => q.company === null)).toBe(true);
+    expect(searchKind(buildQueries(search, testPlaces(), "manual")[0]!)).toBe("city");
+    expect(searchKind(buildQueries(search, testPlaces(), "manual").find((q) => q.remote)!)).toBe("remote");
   });
 
   it("preserves fixed legacy hashes byte for byte", () => {
@@ -54,13 +54,13 @@ describe("company query selection", () => {
     expect(select(false, history).selected.map((q) => q.company?.name)).toEqual(["Acme", "Other"]);
     const result = selectCompanyQueries({ candidates: candidates(), history, eligible: ["guest", "session"], now, cfg: { ...cfg, max_per_cycle: 1 }, rotation: true });
     expect(result.selected).toHaveLength(1);
-    const keyword = buildQueries(search, "manual")[0]!;
+    const keyword = buildQueries(search, testPlaces(), "manual")[0]!;
     expect(orderQueries([keyword, ...result.selected], new Map([...result.turns, [keyword.id, now]]), true)[0]?.company?.name).toBe("Other");
     expect(selectCompanyQueries({ candidates: candidates(), history: [row("guest", 0, 24)], eligible: ["guest"], now, cfg, rotation: true }).due).toBe(2);
   });
 
   it("returns turns for the company queries only, so keyword ordering keeps the start channel's own history", () => {
-    const keyword = buildQueries(search, "manual")[0]!;
+    const keyword = buildQueries(search, testPlaces(), "manual")[0]!;
     const history = [row("guest", 0, 2), { channelId: "session", queryHash: keyword.id, firstSeenAt: new Date(0), lastCoveredAt: null, lastTurnAt: now }];
     const { turns } = select(true, history);
     expect([...turns.keys()]).toEqual([candidates()[0]!.id]);

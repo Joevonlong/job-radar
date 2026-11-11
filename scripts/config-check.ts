@@ -12,6 +12,7 @@
  *   - the deal-breakers of preferences.yaml must keep to the limits of pipeline.yaml (a language gate in a market without a
  *     local-language step is only a warning: it does nothing).
  *
+ *   - search.yaml's old `locations` and `remote_scope` name nothing preferences.yaml `places` lacks (only a warning: they are ignored);
  *   - the commented title_guard block of the shipped pipeline.yaml must equal the schema's defaults (a warning when the
  *     same-title limit is below the compatible limit or above the related-company limit);
  *   - the identity of the shipped defaults directory is printed (12 characters); a directory that cannot be identified (a
@@ -74,6 +75,7 @@ import { shippedConfigId, shortShippedConfigId } from "../src/lib/config/shipped
 import { dealBreakerLimitProblems, slowPatternProblems } from "../src/lib/filter/deal-breakers";
 import { vmTimeBox } from "../src/lib/filter/time-box";
 import { listPackIds, loadMarket, loadPipeline, packDirs, readPackDir } from "../src/lib/market";
+import { homeCityAbroad, placeGeo, placesBeyondSearchEntries, searchEntriesOutsidePlaces } from "../src/lib/market/places";
 import { compileGhostRules } from "../src/lib/ghost/rules";
 import { compileVisaRules } from "../src/lib/visa/rules";
 
@@ -327,6 +329,22 @@ report("preferences.yaml market", () => {
     if (sameMax > dedupe.cross_company_simhash_max_distance) console.log(`! dedupe.title_guard.same_title_max_distance (${sameMax}) is above dedupe.cross_company_simhash_max_distance (${dedupe.cross_company_simhash_max_distance}): the same company would be looser than related company names`);
   } catch {
     // reported by the lines above
+  }
+}
+
+// search.yaml's old location keys are ignored: warn about what they name that the location settings lack; and about a home city abroad
+if (fs.existsSync(path.join(getProfileDir(), "preferences.yaml"))) {
+  try {
+    const preferences = parseConfigText("preferences", readConfigText("preferences"));
+    const pipeline = loadPipeline();
+    const added = placesBeyondSearchEntries(readEffectiveConfig("search"), preferences, placeGeo(pipeline), { country: pipeline.market.country, countryName: pipeline.market.countryName });
+    if (added.length > 0) console.log(`! preferences.yaml: ${added.join(", ")} searched now, though search.yaml's old locations, remote_scope did not list them`);
+    const names = searchEntriesOutsidePlaces(readEffectiveConfig("search"), preferences, placeGeo(pipeline), { country: pipeline.market.country, countryName: pipeline.market.countryName });
+    if (names.length > 0) console.log(`! search.yaml locations, remote_scope: ${names.join(", ")} not in preferences.yaml places; these keys are ignored, so they are not searched`);
+    const abroad = homeCityAbroad(preferences.home_city, placeGeo(pipeline), pipeline.market.country);
+    if (abroad !== null) console.log(`! preferences.yaml home_city: ${preferences.home_city} is in ${abroad.name}, not in the home country ${pipeline.market.countryName}; on-site jobs are looked for there inside ${pipeline.market.countryName}. Set a city in ${pipeline.market.countryName} as home_city and list ${preferences.home_city} under places`);
+  } catch {
+    // an unreadable file is reported by its own check above
   }
 }
 

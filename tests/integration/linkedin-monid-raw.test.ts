@@ -7,7 +7,7 @@ import { closeDb, getDb, getMonthUsage, listRawPostingsForChannel, listRunsForCy
 import { runMigrations } from "@/lib/db/migrate";
 import { runPipeline } from "@/lib/pipeline";
 
-import { shippedSearch } from "../channels/helpers";
+import { shippedSearch, oneCityPlaces } from "../channels/helpers";
 import { config, quietLogger } from "../cycle/helpers";
 import { shippedPipeline } from "../pipeline/helpers";
 import { ENV, MONID, MONTH, NOW, monidChannels, monidJob, monidProvider } from "./linkedin-monid-helpers";
@@ -27,10 +27,9 @@ describe("Monid raw posting retention and accounting", () => {
     const provider = monidProvider(output);
     const registry = new ChannelRegistry();
     registry.register(createMonidChannel({ pricePer1kUsd: () => 1, environment: ENV, now: () => NOW, sleep: async () => {} }));
-    const search = { ...shippedSearch(), keyword_groups: { engineering: ["Platform Engineer"] }, locations: ["Example City"],
-      remote_scope: "none" as const, max_per_group_per_location: 10 };
+    const search = { ...shippedSearch(), keyword_groups: { engineering: ["Platform Engineer"] }, max_per_group_per_location: 10 };
     const result = await runCycle("manual", { registry, channelIds: [MONID], cascades: [{ family: "linkedin", order: [MONID] }],
-      config: { ...config({ search }), channels: monidChannels() }, logger: quietLogger, fetch: provider.fetch, sleep: async () => {}, now: () => NOW });
+      config: { ...config({ search, places: oneCityPlaces() }), channels: monidChannels() }, logger: quietLogger, fetch: provider.fetch, sleep: async () => {}, now: () => NOW });
     expect(result.status).toBe("succeeded");
     const before = await listRawPostingsForChannel(getDb(), MONID);
     expect(before).toHaveLength(3);

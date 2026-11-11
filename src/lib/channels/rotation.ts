@@ -79,6 +79,8 @@ export interface RotationUnitSummary {
   queries: number;
   reached: number;
   neverRun: number;
+  /** Remote searches naming a place that these channels cannot send: left out before rotation. */
+  remotePlacesSkipped: number;
   oldestWaitHours: number | null;
   oldestWaiting: { id: string; keywordGroup: string; location: string | null; remoteScope: string | null } | null;
   stretched: number;
@@ -90,6 +92,7 @@ export interface RotationUnitSummary {
 /** History is the snapshot at unit start; reached and the largest requested window describe this cycle. */
 export function rotationSummary(input: {
   queries: readonly SearchQuery[];
+  remotePlacesSkipped: number;
   sortChannel: string | null;
   turns: ReadonlyMap<string, Date | null>;
   reached: number;
@@ -115,6 +118,7 @@ export function rotationSummary(input: {
     queries: input.queries.length,
     reached: input.reached,
     neverRun,
+    remotePlacesSkipped: input.remotePlacesSkipped,
     oldestWaitHours: oldest === null ? null : Math.round((input.now.getTime() - oldest.at.getTime()) / 3_600_000 * 10) / 10,
     oldestWaiting: oldest === null ? null : {
       id: oldest.query.id,

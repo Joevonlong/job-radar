@@ -22,7 +22,8 @@ import { getRuntimeState, setRuntimeState } from "@/lib/db/repos/runtime-state";
 import { buildAlerts, collectErrorsOf } from "@/lib/notify/alerts";
 
 import { fixture, happySite, authFileIn, fakeBrowser, type FakeSite } from "../channels/linkedin/session/helpers";
-import { channelsWith, shippedSearch } from "../channels/helpers";
+import type { QueryPlaces } from "@/lib/channels/query";
+import { channelsWith, shippedSearch, testPlaces } from "../channels/helpers";
 import { collectOf, config, quietLogger } from "../cycle/helpers";
 import { notifyText } from "@/lib/notify/text";
 
@@ -63,7 +64,11 @@ function channels(edit: (session: Record<string, unknown>) => void = () => {}) {
 
 /** One keyword in one or two cities, no remote query: a full read of a query is 7 pages (2 search pages, 101, 102, 103, 104, 106). */
 function searchIn(locations: string[]) {
-  return { ...shippedSearch(), keyword_groups: { engineering: ["AI Engineer"] }, locations, remote_scope: "none" as const, max_per_group_per_location: 25 };
+  const [home_city = "", ...others] = locations;
+  return {
+    search: { ...shippedSearch(), keyword_groups: { engineering: ["AI Engineer"] }, max_per_group_per_location: 25 },
+    places: testPlaces({ home_city, places: others.map((place) => ({ place, relocate: true })), workplace: ["onsite", "hybrid"] }),
+  };
 }
 
 function setup(
@@ -72,6 +77,7 @@ function setup(
     login?: boolean;
     edit?: (session: Record<string, unknown>) => void;
     search?: ReturnType<typeof shippedSearch>;
+    places?: QueryPlaces;
     /** The next channel after the session one; off like `linkedin-guest` in the shipped file when false. */
     guest?: boolean;
   } = {},
@@ -97,7 +103,7 @@ function setup(
   registry.register(session.session);
   registry.register(session.recommended);
   const guest = registerFixtureChannel(registry, { id: GUEST, family: "linkedin", ...(options.guest === false ? { settings: { enabled: false } } : {}) });
-  const cycleConfig = { ...config(), channels: channelsConfig, ...(options.search ? { search: options.search } : {}) };
+  const cycleConfig = { ...config(options.places ? { places: options.places } : {}), channels: channelsConfig, ...(options.search ? { search: options.search } : {}) };
   const run = (kind: CycleKind = "manual", extra: Partial<RunCycleOptions> = {}) =>
     runCycle(kind, { registry, cascades: cascade, config: cycleConfig, logger: quietLogger, sleep: async () => {}, random: () => 0, now: () => clock.now, ...extra });
   return { run, guest, browser, registry, channelsConfig, clock, authFile };
@@ -125,7 +131,7 @@ describe("dry runs with persisted session state", () => {
   it("does not open a browser when the database's daily page count is at the limit", async () => {
     const limit = 4;
     await setRuntimeState(getDb(), "linkedin-session:requests:2026-10-07", { count: limit });
-    const { run, browser } = setup({ search: searchIn(["Berlin"]), edit: (session) => (session.daily_request_limit = limit) });
+    const { run, browser } = setup({ ...searchIn(["Berlin"]), edit: (session) => (session.daily_request_limit = limit) });
     const before = await snapshot();
 
     const result = await run("manual", { dryRun: true, db: getDb(), channelIds: [SESSION] });
@@ -139,7 +145,7 @@ describe("dry runs with persisted session state", () => {
   it.each([false, true])("shares the remaining page allowance across queries and session channels (include recommended: %s)", async (recommended) => {
     await setRuntimeState(getDb(), "linkedin-session:requests:2026-10-07", { count: 1 });
     const { run, browser } = setup({
-      search: searchIn(["Berlin", "München"]),
+      ...searchIn(["Berlin", "München"]),
       edit: (session) => {
         session.daily_request_limit = 3;
         session.fetch_details = false;
@@ -160,7 +166,7 @@ describe("dry runs with persisted session state", () => {
   });
 
   it.each([false, true])("respects the database's re-login flag before browsing (dry run: %s)", async (dryRun) => {
-    const { run, browser, authFile } = setup({ search: searchIn(["Berlin"]) });
+    const { run, browser, authFile } = setup({ ...searchIn(["Berlin"]) });
     const modified = new Date(NOW.getTime() - 1000);
     fs.utimesSync(authFile, modified, modified);
     const expired = { status: "expired", reason: "checkpoint", at: NOW.toISOString() } as const;
@@ -177,7 +183,7 @@ describe("dry runs with persisted session state", () => {
 
   it.each([[SESSION, RECOMMENDED], [RECOMMENDED, SESSION]])("reuses jobs stored under %s when dry-running %s", async (source, target) => {
     const site = happySite({ recommended: (u) => ({ html: fixture(u.searchParams.has("start") ? "search-results-empty.html" : "search-results.html") }) });
-    const { run, browser } = setup({ site, search: searchIn(["Berlin"]), edit: (session) => (session.recommended_daily = true) });
+    const { run, browser } = setup({ site, ...searchIn(["Berlin"]), edit: (session) => (session.recommended_daily = true) });
     await run("manual", { channelIds: [source] });
     const held = await listRawPostingsForChannel(getDb(), source);
     expect(held.map((row) => row.externalId).sort()).toEqual(["4385000101", "4385000102", "4385000104"]);
@@ -352,7 +358,7 @@ describe("the day's page limit reached part way through a query", () => {
   it("the query's postings are stored as a skipped run, no failure is counted, the same query goes to the next channel, and the stale job stays open", async () => {
     const stale = await staleSessionJob();
     // 3 pages: both search pages of the first query and its posting 101; the limit refuses 102
-    const { run, guest, browser } = setup({ search: searchIn(["Berlin", "München"]), edit: limitOf(3) });
+    const { run, guest, browser } = setup({ ...searchIn(["Berlin", "München"]), edit: limitOf(3) });
     const result = await run();
 
     const runs = await listRunsForCycle(getDb(), result.cycleId as number);
@@ -383,7 +389,7 @@ describe("the day's page limit reached part way through a query", () => {
   it("the limit in a later query keeps its stored postings, and the complete earlier query of the channel lets the stale job become possibly closed (judged per channel and by time)", async () => {
     const stale = await staleSessionJob();
     // 9 pages: the first query's 7, then the second query's two search pages; the limit refuses 103 (101, 102 and 104 are stored by then)
-    const { run, browser } = setup({ search: searchIn(["Berlin", "München"]), edit: limitOf(9) });
+    const { run, browser } = setup({ ...searchIn(["Berlin", "München"]), edit: limitOf(9) });
     const result = await run();
 
     const runs = await listRunsForCycle(getDb(), result.cycleId as number);
@@ -400,7 +406,7 @@ describe("the day's page limit reached part way through a query", () => {
   });
 
   it("the limit used up exactly by a query is a success; the next query is skipped before a browser opens and goes to the next channel", async () => {
-    const { run, browser } = setup({ search: searchIn(["Berlin", "München"]), edit: limitOf(7) });
+    const { run, browser } = setup({ ...searchIn(["Berlin", "München"]), edit: limitOf(7) });
     const result = await run();
     const runs = await listRunsForCycle(getDb(), result.cycleId as number);
     expect(runs.map((r) => [r.channelId, r.status])).toEqual([
@@ -421,7 +427,7 @@ describe("the day's page limit reached part way through a query", () => {
       values (${SESSION}, 'linkedin', 'session', 'open', 1, ${new Date(NOW.getTime() - 3_600_000).toISOString()}::timestamptz, 'network')
       on conflict (id) do update set circuit_state = excluded.circuit_state, consecutive_failures = excluded.consecutive_failures,
         circuit_open_until = excluded.circuit_open_until, last_error_code = excluded.last_error_code`);
-    const { run } = setup({ search: searchIn(["Berlin"]), edit: limitOf(3) });
+    const { run } = setup({ ...searchIn(["Berlin"]), edit: limitOf(3) });
     const result = await run();
     const runs = await listRunsForCycle(getDb(), result.cycleId as number);
     expect(runs.map((r) => [r.channelId, r.status])).toEqual([
@@ -434,7 +440,7 @@ describe("the day's page limit reached part way through a query", () => {
   describe("with no channel after the session one (the guest channel off)", () => {
     it("the only query, nothing delivered: the session run and the unit's own row are skipped, and collect fails", async () => {
       // 2 pages: both search pages; the limit refuses the first posting page
-      const { run } = setup({ search: searchIn(["Berlin"]), edit: limitOf(2), guest: false });
+      const { run } = setup({ ...searchIn(["Berlin"]), edit: limitOf(2), guest: false });
       const result = await run();
       const runs = await listRunsForCycle(getDb(), result.cycleId as number);
       expect(runs.map((r) => [r.channelId, r.status, r.fetched])).toEqual([
@@ -448,7 +454,7 @@ describe("the day's page limit reached part way through a query", () => {
     });
 
     it("the only query, postings kept: they are stored, both rows are skipped, and collect still fails (no attempt succeeded)", async () => {
-      const { run } = setup({ search: searchIn(["Berlin"]), edit: limitOf(3), guest: false });
+      const { run } = setup({ ...searchIn(["Berlin"]), edit: limitOf(3), guest: false });
       const result = await run();
       const runs = await listRunsForCycle(getDb(), result.cycleId as number);
       expect(runs.map((r) => [r.channelId, r.status, r.fetched])).toEqual([
@@ -461,7 +467,7 @@ describe("the day's page limit reached part way through a query", () => {
     });
 
     it("the last query, after a complete one: both rows of the last query are skipped and collect is partial", async () => {
-      const { run } = setup({ search: searchIn(["Berlin", "München"]), edit: limitOf(9), guest: false });
+      const { run } = setup({ ...searchIn(["Berlin", "München"]), edit: limitOf(9), guest: false });
       const result = await run();
       const runs = await listRunsForCycle(getDb(), result.cycleId as number);
       expect(runs.map((r) => [r.channelId, r.status, r.fetched])).toEqual([

@@ -54,6 +54,7 @@ export interface FixtureChannelOptions {
   family?: ChannelFamily;
   kind?: ChannelKind;
   usesQueries?: boolean;
+  supportsRemotePlaces?: boolean;
   supportsCatchUp?(settings: ChannelRuntimeSettings): boolean;
   /** Directory of fixture files. Default `<app>/tests/fixtures/fixture-channel`. */
   dir?: string;
@@ -97,6 +98,7 @@ export function createFixtureChannel(options: FixtureChannelOptions = {}): Fixtu
     family: options.family ?? "manual",
     kind: options.kind ?? "manual",
     usesQueries: options.usesQueries ?? true,
+    ...(options.supportsRemotePlaces === undefined ? {} : { supportsRemotePlaces: options.supportsRemotePlaces }),
     supportsCatchUp: options.supportsCatchUp,
     seen,
     ...(cost > 0 ? { estimateCost: (paidRecords: number) => paidRecords * cost } : {}),

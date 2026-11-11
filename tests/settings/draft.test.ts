@@ -47,29 +47,14 @@ describe("config <-> draft", () => {
     expect((candidate as typeof config).jobspy.proxies).toEqual(["http://user:secret@proxy.example.test:8080"]);
   });
 
-  it("edits a region remote scope as its key and gives the list back", () => {
-    const config = { ...(shippedConfig("search") as Record<string, unknown>), remote_scope: { region: ["eu", "CH"] } };
-    const draft = configToDraft("search", config);
-    expect(draft.remote_scope).toBe("region:eu,CH");
-    expect(draftToCandidate("search", draft, config).candidate).toEqual(config);
-    draft.remote_scope = "region:";
-    expect(validate("search", draftToCandidate("search", draft, config).candidate).success).toBe(false);
-    // an old value is shown as the new one
-    expect(configToDraft("search", { ...config, remote_scope: "eu_any" }).remote_scope).toBe("region:eu");
-  });
-
   it("applies edits: numbers, switches, lists, groups, order and prices", () => {
     const config = shippedConfig("search");
     const draft = configToDraft("search", config);
     draft["window_hours.morning"] = "36";
-    draft.remote_scope = "worldwide";
-    draft.locations = ["Berlin", "Hamburg"];
     draft.keyword_groups = [...(draft.keyword_groups as KeywordGroupDraft[]), { id: "data", keywords: ["Data Engineer"] }];
     const { candidate } = draftToCandidate("search", draft, config);
     const parsed = configRegistry.search.schema.parse(candidate);
     expect(parsed.window_hours.morning).toBe(36);
-    expect(parsed.remote_scope).toBe("worldwide");
-    expect(parsed.locations).toEqual(["Berlin", "Hamburg"]);
     expect(parsed.keyword_groups.data).toEqual(["Data Engineer"]);
 
     const channels = shippedConfig("channels");
@@ -235,10 +220,8 @@ describe("field errors", () => {
     expect(channels).toContainEqual(expect.objectContaining({ path: "linkedin.cascade", key: "atLeastOne" }));
     expect(channels).toContainEqual(expect.objectContaining({ path: "sources.greenhouse.title_prefilter.include_terms", key: "duplicates" }));
     const search = errorsFor("search", (d) => {
-      d.locations = [];
       d.keyword_groups = [{ id: "empty_group", keywords: [] }];
     });
-    expect(search).toContainEqual(expect.objectContaining({ path: "locations", key: "atLeastOne" }));
     expect(search).toContainEqual(expect.objectContaining({ path: "keyword_groups", key: "atLeastOne" }));
   });
 

@@ -1,7 +1,7 @@
 import { parseDocument } from "yaml";
 import { describe, expect, it } from "vitest";
 
-import { buildQueries } from "@/lib/channels/query";
+import { buildQueries, queryPlaces } from "@/lib/channels/query";
 import { parseConfigText } from "@/lib/config";
 import { preferences003 } from "@/lib/config/migrations/preferences/003-places";
 import { evaluateJob } from "@/lib/filter";
@@ -9,6 +9,7 @@ import { normalizePlaces, placeGeo, wantedLocations, wantedRemoteScope, type Pla
 
 import { shippedSearch } from "../channels/helpers";
 import { filterWith, job, loc } from "../filter/helpers";
+import { shippedPipeline } from "../pipeline/helpers";
 
 const geo: PlaceGeo = placeGeo({
   filter: { city_aliases: {} },
@@ -111,6 +112,22 @@ describe("the upgrade through the config loader", () => {
     expect(load(preferencesFile(3, `home_city: ${long}\nplaces: []`)).home_city).toBe(long);
   });
 
+  it("a version 2 file with more than 50 locations still plans a search for each of them", () => {
+    const cities = Array.from({ length: 52 }, (_, i) => `Town ${i}`);
+    const prefs = load(preferencesFile(2, `locations: [${cities.join(", ")}]\nremote_scope: home_country`));
+    const onsite = buildQueries(shippedSearch(), queryPlaces(prefs, shippedPipeline()), "manual").filter((query) => !query.remote);
+    const groups = Object.keys(shippedSearch().keyword_groups).length;
+    expect(onsite).toHaveLength(52 * groups);
+    expect(new Set(onsite.map((query) => query.location))).toEqual(new Set(cities));
+  });
+
+  it("a version 2 file with a location over 100 characters still plans its search", () => {
+    const long = `Town ${"x".repeat(120)}`;
+    const prefs = load(preferencesFile(2, `locations: [Berlin, ${long}]\nremote_scope: home_country`));
+    const locations = buildQueries(shippedSearch(), queryPlaces(prefs, shippedPipeline()), "manual").filter((query) => !query.remote).map((query) => query.location);
+    expect(new Set(locations)).toEqual(new Set(["Berlin", long]));
+  });
+
   it("a version 2 file with 60 locations and a long remote scope list stays readable", () => {
     const cities = Array.from({ length: 60 }, (_, i) => `Town ${i}`);
     const prefs = load(preferencesFile(2, `locations: [${cities.join(", ")}]\nremote_scope: {region: [eu, CH, AT, NL, PL]}`));
@@ -136,11 +153,11 @@ describe("the old `none`: what jobs I want and what is collected are separate", 
     expect(evaluateJob(job({ workplace: "remote", locations: [loc("Austin, TX", "Austin", "US")] }), filter).reasons).toEqual(["remote_out_of_scope:Austin"]);
   });
 
-  it("collection: search.yaml none alone stops remote queries; the preferences never start or stop them", () => {
-    expect(buildQueries({ ...shippedSearch(), remote_scope: "none" }, "manual").some((q) => q.remote)).toBe(false);
-    expect(buildQueries({ ...shippedSearch(), remote_scope: "home_country" }, "manual").some((q) => q.remote)).toBe(true);
-    // an opt-out of collection does not hide anything: the filter reads only the preferences
-    expect(evaluateJob(remoteBerlin, filterWith(load(preferencesFile(3, "home_city: Berlin\nplaces: []")))).result).toBe("passed");
+  it("collection: an upgraded none stops remote queries through the workplace; search.yaml's old key is not read", () => {
+    const remoteQueries = (prefs: ReturnType<typeof load>, search = shippedSearch()) => buildQueries(search, queryPlaces(prefs, shippedPipeline()), "manual").some((q) => q.remote);
+    expect(remoteQueries(load(preferencesFile(2, "locations: [Berlin]\nremote_scope: none")))).toBe(false);
+    expect(remoteQueries(load(preferencesFile(2, "locations: [Berlin]\nremote_scope: home_country")))).toBe(true);
+    expect(remoteQueries(load(preferencesFile(3, "home_city: Berlin\nplaces: []")), { ...shippedSearch(), remote_scope: "none" })).toBe(true);
   });
 });
 
@@ -209,5 +226,15 @@ describe("wantedRemoteScope", () => {
 
   it("Worldwide anywhere is worldwide", () => {
     expect(moving("Worldwide")).toBe("worldwide");
+  });
+});
+
+describe("preferences.yaml 2 -> 3, run on its own result", () => {
+  it("changes nothing the second time", () => {
+    const doc = parseDocument("target_titles: [Engineer]\nlocations: [Berlin, Amsterdam]\nremote_scope: {region: [CH]}\n");
+    preferences003.migrate(doc);
+    const once = doc.toJS() as unknown;
+    preferences003.migrate(doc);
+    expect(doc.toJS()).toEqual(once);
   });
 });

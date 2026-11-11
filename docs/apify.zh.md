@@ -17,7 +17,7 @@
 | `price_per_1k_usd` / `run_start_usd` | 记账用：每 1000 条结果的价格、每次运行一次的启动费。以 actor 页面 Pricing 里你所在套餐的价格为准 |
 | `memory_mb` / `timeout_secs` | 单次运行的内存和超时；同步接口上限 300 秒，超时记为可重试的失败 |
 | `country_name` | 城市查询的地点 = `<城市>, <国家名>` |
-| `remote_locations` | 远程查询按 `search.yaml: remote_scope` 用的 location |
+| `remote_locations` | 按范围（本国、区域、全球）做远程搜索时用的 location。针对国外城市或国家的远程搜索用那个地点的名称 |
 | `date_posted` | 模板使用 actor 粗档位过滤时 `{date_posted}` 的取值：窗口 ≤24 小时 / ≤7 天 / ≤30 天 / 更长（空 = 不带这个键）。默认模板不用它 |
 | `input_template` | actor 输入模板；字符串里可用 `{keywords}` `{location}` `{date_posted}` `{posted_within_seconds}` `{limit}`（整串是 `"{limit}"` 时变成数字），值为空的键会被省掉 |
 | `remote_input` | 远程查询在模板上叠加的键（默认为空：LinkedIn 的 `f_WT=2` 经这个 actor 发出没有效果，所以远程查询不会被服务方过滤成远程，只是在 `remote_locations` 的地点搜索，是否远程由流水线根据岗位本身判断）；同名键替换模板的值，但两边都是 `{key, value}` 列表时按 `key` 合并，同一 `key` 以远程为准，空列表不改变模板。其他形状的列表会替换模板的列表，模板里的 `f_TPR` 也随之丢失 |

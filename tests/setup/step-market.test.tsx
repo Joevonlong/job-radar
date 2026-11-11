@@ -49,6 +49,7 @@ const market: MarketView = {
 /** A country table in which ZZ has no entry at all, US has a currency but no city, DE has both. */
 function view(): SetupView["market"] {
   return {
+    workplace: ["onsite", "remote"],
     draft: { market: { pack: "generic", country: "US", currency: "USD", home_language: "en" }, home_city: "New York", places: [], timezone: "America/New_York" },
     saved: { pack: "generic", country: "US", currency: "USD", home_language: "en" },
     cities: { DE: ["Berlin", "München"] },

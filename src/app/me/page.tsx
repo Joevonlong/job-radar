@@ -1,3 +1,4 @@
+import type { OldSearchEntries } from "@/lib/market/places";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 
@@ -53,10 +54,10 @@ export default async function Page() {
   const figures = data.dbAvailable ? await listMonthSalaryFigures(getDb(), { now: new Date(), timeZone: timezone, currency: market.currency }).catch(() => []) : [];
   const summary = summarizeMonthSalaries(figures, { jobId: 0, figure: null, minSample });
   const salaryMedian: SalaryMedian = { value: summary.median, count: summary.count, minSample };
-  // search.yaml cities: shown next to the places of "What I want", which they do not follow by themselves
-  let searchLocations: string[] = [];
+  let oldSearch: OldSearchEntries = {};
   try {
-    searchLocations = [...reloadConfig("search").locations];
+    const { locations, remote_scope } = reloadConfig("search");
+    oldSearch = { locations, remote_scope };
   } catch {
     // an unreadable search.yaml is reported by its settings tab
   }
@@ -64,7 +65,7 @@ export default async function Page() {
     <div className="flex flex-col gap-6">
       <PageHeader title={t("title")} description={t("description")} />
       <ProfileIncompleteBanner missing={profileMissing} waiting={waiting} showLink={false} />
-      <ProfileEditor me={data.me} preferences={data.preferences} stories={data.stories} storyLimits={data.storyLimits} storyImport={data.storyImport} staleScores={data.staleScores} dbAvailable={data.dbAvailable} salaries={salaries} axis={axis} salaryMedian={salaryMedian} market={market} searchLocations={searchLocations} userLanguageLevel={userGermanLabelOrNull()} />
+      <ProfileEditor me={data.me} preferences={data.preferences} stories={data.stories} storyLimits={data.storyLimits} storyImport={data.storyImport} staleScores={data.staleScores} dbAvailable={data.dbAvailable} salaries={salaries} axis={axis} salaryMedian={salaryMedian} market={market} oldSearch={oldSearch} userLanguageLevel={userGermanLabelOrNull()} />
       <CareerCard />
     </div>
   );

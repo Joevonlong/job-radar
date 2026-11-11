@@ -6,7 +6,6 @@ import { searchSchema } from "@/lib/config/schemas/search";
 import {
   CONTRACT_OPTIONS,
   LANGUAGE_LEVEL_OPTIONS,
-  REMOTE_SCOPE_KINDS,
   SENIORITY_OPTIONS,
   WORKPLACE_OPTIONS,
   meConfigToDraft,
@@ -60,9 +59,6 @@ describe("option lists mirror the config schemas", () => {
     expect([...LANGUAGE_LEVEL_OPTIONS]).toEqual(["A1", "A2", "B1", "B2", "C1", "C2", "native"]);
     const prefs = preferencesSchema.shape;
     expect([...SENIORITY_OPTIONS]).toEqual(prefs.seniority.options);
-    // the kinds of remote scope: the three plain values of search.yaml's schema plus `region` (a list)
-    const plain = (searchSchema.shape.remote_scope.options[0] as { options: readonly string[] }).options;
-    expect([...REMOTE_SCOPE_KINDS]).toEqual([...plain, "region"]);
     expect([...WORKPLACE_OPTIONS]).toEqual(prefs.workplace.element.options);
     expect([...CONTRACT_OPTIONS]).toEqual(prefs.contracts.shape.allow.element.options);
   });
@@ -130,7 +126,7 @@ describe("preferences draft", () => {
     const errors = prefErrors({ ...PREFS, target_titles: [], home_city: " ", workplace: [], exclude_companies: [" "] });
     const by = Object.fromEntries(errors.map((e) => [e.path, e.key]));
     expect(by["target_titles"]).toBe("atLeastOne");
-    expect(by["home_city"]).toBe("required");
+    expect(by["home_city"]).toBeUndefined();
     expect(by["workplace"]).toBe("atLeastOne");
     expect(by["exclude_companies"]).toBe("required");
   });

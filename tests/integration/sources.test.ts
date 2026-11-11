@@ -13,7 +13,8 @@ import { runMigrations } from "@/lib/db/migrate";
 import { loadSourcesView } from "@/lib/sources/load";
 import { RUNS_PER_CHANNEL } from "@/lib/settings/constants";
 
-import { makeTempConfig, type TempConfig } from "../config/helpers";
+import { testPlaces } from "../channels/helpers";
+import { makeTempConfig, type TempConfig, writeLocationSettings } from "../config/helpers";
 
 const url = inject("testDatabaseUrl");
 let temp: TempConfig;
@@ -200,11 +201,11 @@ describe("loadSourcesView against the database", () => {
     const searchFile = path.join(temp.configDir, "search.yaml");
     const search = parseDocument(fs.readFileSync(searchFile, "utf8"));
     search.set("keyword_groups", { targets: ["engineer"] });
-    search.set("locations", ["Berlin", "Hamburg"]);
-    search.set("remote_scope", "none");
     search.set("window_hours", { morning: 12, evening: 12, weekend: 24 });
     fs.writeFileSync(searchFile, search.toString());
-    const queries = buildQueries(reloadConfig("search"), "manual");
+    const location = { home_city: "Berlin", places: [{ place: "Hamburg", relocate: true }], workplace: ["onsite"] };
+    writeLocationSettings(temp, location);
+    const queries = buildQueries(reloadConfig("search"), testPlaces(location), "manual");
     const first = queries[0]!;
     const second = queries[1]!;
     const db = getDb();

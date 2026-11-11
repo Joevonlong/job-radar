@@ -166,7 +166,7 @@ describe("discovery store turns", () => {
 });
 
 describe("brave channel with the database store", () => {
-  const search = (input: BraveDeps["inputs"] = () => ({ search: shippedSearch(), companies: loadCompanies(), queryRotation: true })) => {
+  const search = (input: BraveDeps["inputs"] = () => ({ search: shippedSearch(), cities: ["Berlin", "München"], companies: loadCompanies(), queryRotation: true })) => {
     const calls: string[] = [];
     const deps: BraveDeps = { inputs: input, store: () => createDbDiscoveryStore(getDb(), "brave"), environment: { BRAVE_SEARCH_API_KEY: "test-key-not-real" } };
     const registry = new ChannelRegistry();
@@ -213,7 +213,7 @@ describe("brave channel with the database store", () => {
 
   it("rotates discovery searches across due cycles while keeping one run row per cycle", async () => {
     const { run, calls } = search();
-    const queries = buildDiscoveryQueries(shippedSearch()).map((q) => q.q);
+    const queries = buildDiscoveryQueries(shippedSearch(), ["Berlin", "München"]).map((q) => q.q);
     const first = await run();
     expect(first.status).toBe("succeeded");
     const firstQueries = calls.map((call) => new URL(call).searchParams.get("q"));

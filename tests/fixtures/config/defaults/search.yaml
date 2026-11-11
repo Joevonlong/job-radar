@@ -27,12 +27,6 @@ keyword_groups:
     - KI Engineer
     - KI-Entwickler
 
-locations:
-  - Berlin
-  - München
-
-# 远程岗位范围：none | home_country（本国受雇）| worldwide | {region: [eu, CH …]}（这些区域或国家内受雇）
-remote_scope: home_country
 
 # 各轮的回看时间窗（小时）。键对应 schedule.yaml：weekday_morning → morning，weekday_evening → evening，weekend → weekend
 window_hours:

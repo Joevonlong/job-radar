@@ -71,22 +71,44 @@ describe("language", () => {
 });
 
 describe("market", () => {
-  it("writes the market, cities and remote scope to preferences and search, the time zone to schedule", async () => {
+  it("writes the market and the places to preferences, the time zone to schedule, and leaves search.yaml alone", async () => {
+    const before = snapshot("search");
     expect(await saveMarketStep(MARKET)).toEqual({ status: "saved", step: "market" });
     const prefs = reloadConfig("preferences");
     expect(prefs.market).toEqual({ pack: "generic", country: "NL", currency: "EUR", home_language: "nl" });
     expect(prefs.home_city).toBe("Amsterdam");
     expect(prefs.places).toEqual([{ place: "Utrecht", relocate: true }, { place: "eu", relocate: false }]);
-    const search = reloadConfig("search");
-    expect(search.locations).toEqual(["Amsterdam", "Utrecht"]);
-    expect(search.remote_scope).toEqual({ region: ["eu"] });
+    expect(snapshot("search")).toEqual(before);
     expect(reloadConfig("schedule").timezone).toBe("Europe/Amsterdam");
     expect(stepStatus("market")).toBe("done");
   });
 
+  it("stores places as the form does, whatever the command line wrote, each once", async () => {
+    const places = [{ place: "European Union", relocate: false }, { place: "eu", relocate: false }, { place: "netherlands", relocate: false }, { place: "Poing", relocate: true }];
+    expect(await saveMarketStep({ ...MARKET, places })).toEqual({ status: "saved", step: "market" });
+    expect(reloadConfig("preferences").places).toEqual([{ place: "eu", relocate: false }, { place: "NL", relocate: false }, { place: "Poing", relocate: true }]);
+  });
+
+  it("keeps a ✈ given on any spelling of a place, and leaves out the home city", async () => {
+    const places = [{ place: "NL", relocate: false }, { place: "netherlands", relocate: true }, { place: "amsterdam", relocate: true }];
+    expect(await saveMarketStep({ ...MARKET, places })).toEqual({ status: "saved", step: "market" });
+    expect(reloadConfig("preferences").places).toEqual([{ place: "NL", relocate: true }]);
+  });
+
+  it("the profile step is not offered a country or region as a city", async () => {
+    expect(await saveMarketStep({ ...MARKET, home_city: " ", places: [{ place: "NL", relocate: true }, { place: "eu", relocate: true }] })).toEqual({ status: "saved", step: "market" });
+    const draft = (await loadSetupView({ locale: "en", acceptLanguage: null })).profile.draft;
+    expect(draft?.city).not.toBe("NL");
+    expect(draft?.city).not.toBe("eu");
+  });
+
+  it("takes no home city: anywhere in the home country then counts", async () => {
+    expect(await saveMarketStep({ ...MARKET, home_city: " " })).toEqual({ status: "saved", step: "market" });
+    expect(reloadConfig("preferences").home_city).toBe("");
+  });
+
   it.each([
     ["an unknown time zone", { ...MARKET, timezone: "Mars/Olympus" }, "timezone"],
-    ["no city", { ...MARKET, home_city: " " }, "home_city"],
     ["an unknown pack", { ...MARKET, market: { ...MARKET.market, pack: "atlantis" } }, "market.pack"],
     ["a generic pack without a country", { ...MARKET, market: { pack: "generic", country: "", currency: "EUR", home_language: "nl" } }, "market.country"],
   ])("reports %s next to the field and writes nothing", async (_name, input, path) => {
@@ -100,18 +122,18 @@ describe("market", () => {
 });
 
 describe("market: places", () => {
-  it("a place to move to that becomes the home city is saved once, in preferences and in search", async () => {
+  it("a place to move to that becomes the home city is saved once, and search.yaml is left alone", async () => {
     expect(await saveMarketStep(MARKET)).toEqual({ status: "saved", step: "market" });
+    const search = reloadConfig("search");
     expect(await saveMarketStep({ ...MARKET, home_city: "Utrecht" })).toEqual({ status: "saved", step: "market" });
     expect(reloadConfig("preferences")).toMatchObject({ home_city: "Utrecht", places: [{ place: "eu", relocate: false }] });
-    expect(reloadConfig("search").locations).toEqual(["Utrecht"]);
+    expect(reloadConfig("search")).toEqual(search);
   });
 
   it("Worldwide is saved as remote only, and a place named twice once, ✈ winning", async () => {
     const input: MarketInput = { ...MARKET, places: [{ place: "Worldwide", relocate: true }, { place: "Utrecht", relocate: false }, { place: "utrecht", relocate: true }] };
     expect(await saveMarketStep(input)).toEqual({ status: "saved", step: "market" });
     expect(reloadConfig("preferences").places).toEqual([{ place: "Worldwide", relocate: false }, { place: "Utrecht", relocate: true }]);
-    expect(reloadConfig("search")).toMatchObject({ locations: ["Amsterdam", "Utrecht"], remote_scope: "worldwide" });
   });
 
   it("keeps search.yaml's remote_scope: none when only the time zone changes", async () => {

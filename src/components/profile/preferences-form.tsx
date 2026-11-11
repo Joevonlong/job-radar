@@ -1,11 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import Link from "next/link";
-import { useId, useState, useTransition } from "react";
+import { useId, useState, } from "react";
 
-import { syncSearchLocationsAction as rawSyncSearchLocationsAction } from "@/app/me/actions";
-import type { ConfigWriteErrorKey } from "@/lib/config/errors";
 
 import type { SalaryAxisScale } from "@/components/viz";
 import { Button } from "@/components/ui/button";
@@ -14,7 +11,7 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { changedPaths } from "@/lib/draft-diff";
 import type { SalaryMedian, StatedSalary } from "@/lib/profile/floor-preview";
-import { wantedLocations } from "@/lib/market/places";
+import { homeCityAbroad, placesBeyondSearchEntries, searchEntriesOutsidePlaces, type OldSearchEntries } from "@/lib/market/places";
 import type { MarketView } from "@/lib/market/view";
 import {
   CONTRACT_MODES,
@@ -23,7 +20,6 @@ import {
   WORKPLACE_OPTIONS,
   type PreferencesDraft,
 } from "@/lib/profile/draft";
-import { sameLocations } from "@/lib/profile/same-locations";
 import type { ProfileActionState } from "@/lib/profile/types";
 
 import { DealBreakersCard } from "./deal-breakers-card";
@@ -32,9 +28,7 @@ import { FloorPreview } from "./floor-preview";
 import { FormCard } from "./form-card";
 import { MarketFields } from "./market-fields";
 import { PlacesField } from "./places-field";
-import { withActionFeedback } from "@/lib/actions/client";
 
-const syncSearchLocationsAction = withActionFeedback(rawSyncSearchLocationsAction)(() => ({ status: "error", error: "write_failed" }));
 
 interface PreferencesFormProps {
   initial: PreferencesDraft;
@@ -48,25 +42,24 @@ interface PreferencesFormProps {
   salaryMedian: SalaryMedian;
   /** The market (scope choices, currency, language). */
   market: MarketView;
-  /** search.yaml `locations`: the cities that are searched; they do not follow the places of this form. */
-  searchLocations: readonly string[];
+  /** What search.yaml's old keys still name; ignored, and warned about. */
+  oldSearch: OldSearchEntries;
   /** The user's level of the market's local language in me.yaml ("B1", "native"), null = none listed: what a language gate compares. */
   userLanguageLevel: string | null;
   /** me.yaml `needs_visa_sponsorship` as saved; null = me.yaml cannot be read (a visa deal-breaker then does nothing). */
   needsVisaSponsorship: boolean | null;
 }
 
-export function PreferencesForm({ initial, hash, state, pending, onSave, salaries, axis, salaryMedian, market, searchLocations, userLanguageLevel, needsVisaSponsorship }: PreferencesFormProps) {
+export function PreferencesForm({ initial, hash, state, pending, onSave, salaries, axis, salaryMedian, market, oldSearch, userLanguageLevel, needsVisaSponsorship }: PreferencesFormProps) {
   const t = useTranslations("profile");
   const base = useId();
   const [draft, setDraft] = useState<PreferencesDraft>(initial);
   const errors = fieldErrorMap(state, "preferences", hash);
   const dirtyCount = changedPaths(draft, initial).length;
-  const [searchCities, setSearchCities] = useState<readonly string[]>(searchLocations);
-  const [syncing, startSync] = useTransition();
-  const [syncResult, setSyncResult] = useState<"done" | "error" | ConfigWriteErrorKey | null>(null);
-  const wanted = wantedLocations(draft);
-  const searchDiffers = draft.home_city.trim() !== "" && !sameLocations(wanted, searchCities);
+  const sameMarket = draft.market.pack === market.packId && market.error === null;
+  const leftovers = sameMarket ? searchEntriesOutsidePlaces(oldSearch, draft, market.placeGeo, { country: market.country, countryName: market.countryName }) : [];
+  const added = sameMarket ? placesBeyondSearchEntries(oldSearch, draft, market.placeGeo, { country: market.country, countryName: market.countryName }) : [];
+  const abroad = sameMarket ? homeCityAbroad(draft.home_city, market.placeGeo, market.country) : null;
 
   function patch(next: Partial<PreferencesDraft>) {
     setDraft((current) => ({ ...current, ...next }));
@@ -127,43 +120,25 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
           geo={market.placeGeo}
           options={market.scopeOptions}
           known={draft.market.pack === market.packId && market.error === null}
+          search={{ homeCity: draft.home_city, workplace: draft.workplace, home: { country: market.country, countryName: market.countryName } }}
           invalid={errors.has("places")}
           describedBy={describedBy(ids.places, true, errors.get("places"))}
         />
       </Field>
-      {searchDiffers || syncResult !== null ? (
-        <div className="flex flex-col gap-2 text-body-sm" data-testid="search-cities-note">
-          {searchDiffers ? (
-            <>
-              <p className="text-ink-2">{t("fields.searchCities.differs", { cities: searchCities.join(", ") })}</p>
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={syncing}
-                  data-testid="search-cities-sync"
-                  onClick={() =>
-                    startSync(async () => {
-                      const result = await syncSearchLocationsAction(wanted);
-                      if (result.status === "done") setSearchCities(result.locations);
-                      setSyncResult(result.status === "done" ? "done" : ["dbUnavailable", "busy", "stale", "protected"].includes(result.error) ? result.error as ConfigWriteErrorKey : "error");
-                    })
-                  }
-                >
-                  {t("fields.searchCities.sync")}
-                </Button>
-                <Link href="/settings?tab=search" className="font-bold underline decoration-2 underline-offset-4 hover:bg-hi">
-                  {t("fields.searchCities.link")}
-                </Link>
-              </div>
-            </>
-          ) : null}
-          {syncResult !== null ? (
-            <p role="status" className={syncResult === "done" ? undefined : "text-bad font-bold"}>
-              {t(`fields.searchCities.${syncResult === "error" ? "failed" : syncResult}`)}
-            </p>
-          ) : null}
-        </div>
+      {abroad !== null ? (
+        <p role="status" className="text-body-sm font-bold" data-testid="home-city-abroad">
+          {t("fields.homeCityAbroad", { city: draft.home_city.trim(), country: abroad.name, home: market.countryName })}
+        </p>
+      ) : null}
+      {leftovers.length > 0 ? (
+        <p role="status" className="text-body-sm font-bold" data-testid="search-leftovers">
+          {t("fields.searchLeftovers", { names: leftovers.join(", ") })}
+        </p>
+      ) : null}
+      {added.length > 0 ? (
+        <p role="status" className="text-body-sm font-bold" data-testid="search-added">
+          {t("fields.searchAdded", { names: added.join(", ") })}
+        </p>
       ) : null}
 
       <Field id={ids.workplace} group label={t("fields.workplace.label")} error={errors.get("workplace")}>

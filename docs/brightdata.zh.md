@@ -17,7 +17,7 @@
 | `dataset_id` | Bright Data 数据集 ID（`gd_lpfll7v5hcqtkxl6l`） |
 | `poll_interval_ms` / `timeout_ms` | snapshot 进度轮询间隔 / 从触发到下载完成（snapshot 构建 + 下载）合计最长等待，默认 600000（10 分钟）。超时记为可重试的失败，并在日志里写出 snapshot id（供应商保留 30 天，可事后取回） |
 | `country` | 城市查询的国家代码 |
-| `remote_locations` | 远程查询按 `search.yaml: remote_scope` 取的 location |
+| `remote_locations` | 按范围（本国、区域、全球）做远程搜索时用的 location。针对国外城市或国家的远程搜索用那个地点的名称 |
 | `max_results` | 单次查询最多条数（每个输入最多 100，Bright Data 的上限） |
 
 ## 它怎么工作
