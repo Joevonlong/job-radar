@@ -56,6 +56,7 @@
     "models:export": "tsx scripts/models-export.ts",
     "doctor": "node --env-file-if-exists=.env --import tsx scripts/doctor.ts",
     "mcp:serve": "node --env-file-if-exists=.env --import tsx scripts/mcp-serve.ts",
+    "agent:token": "node --env-file-if-exists=.env --import tsx scripts/agent-token.ts",
     "setup": "node --env-file-if-exists=.env --import tsx scripts/setup.ts",
     "migrate:run": "node --env-file-if-exists=.env --import tsx scripts/migrate-run.ts",
     "ops:drain": "node --env-file-if-exists=.env --import tsx scripts/ops-drain.ts",
