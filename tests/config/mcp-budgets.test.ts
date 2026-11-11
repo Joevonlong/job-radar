@@ -30,6 +30,20 @@ describe("MCP daily budget schema", () => {
     expect(mcpSchema.safeParse({ budgets: { retention_days: 90 } }).success).toBe(false);
   });
 
+  it("gives every parse its own default objects", () => {
+    const first = mcpSchema.parse({});
+    first.budgets.per_caller.score_jobs = 1;
+    first.budgets.total = 1;
+    const partial = mcpSchema.parse({ budgets: { total: 5 } });
+    partial.budgets.per_caller.translate_job = 1;
+    const next = mcpSchema.parse({});
+    expect(next.budgets.per_caller.score_jobs).toBe(100);
+    expect(next.budgets.per_caller.translate_job).toBe(20);
+    expect(next.budgets.total).toBe(150);
+    expect(Object.isFrozen(next.budgets.per_caller)).toBe(false);
+    expect(next.budgets.per_caller).not.toBe(mcpSchema.parse({}).budgets.per_caller);
+  });
+
   it("rejects misspelled budget keys", () => {
     expect(mcpSchema.safeParse({ budgets: { unexpected: 1 } }).success).toBe(false);
     expect(mcpSchema.safeParse({ budgets: { per_caller: { unexpected: 1 } } }).success).toBe(false);

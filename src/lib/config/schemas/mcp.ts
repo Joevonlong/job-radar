@@ -14,10 +14,10 @@ export const AGENT_ACTIONS = [
 export type AgentAction = typeof AGENT_ACTIONS[number];
 
 const cap = z.number().int().min(0).max(MCP_MAX_DAILY_CAP);
-const perCallerDefaults = {
+const perCallerDefaults = (): Record<AgentAction, number> => ({
   run_collection: 2, score_jobs: 100, translate_job: 20, breakdown_job: 20,
   research_salary: 10, research_company: 10, draft_answer: 20, tailor_resume: 5,
-};
+});
 
 /** Daily agent limits use the calendar day in schedule.yaml's time zone. */
 const budgetsSchema = z.strictObject({
@@ -37,7 +37,7 @@ const budgetsSchema = z.strictObject({
   }).default(perCallerDefaults),
   /** Requests per day across all agents and actions; a batch counts once. 0 forbids all agent actions. */
   total: cap.default(150),
-}).default({ per_caller: perCallerDefaults, total: 150 });
+}).default(() => ({ per_caller: perCallerDefaults(), total: 150 }));
 
 /**
  * config/mcp.yaml: the optional MCP server (`pnpm mcp:serve`, docs/mcp.md) that lets an MCP client the user configured (Claude
