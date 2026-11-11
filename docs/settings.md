@@ -114,6 +114,7 @@ The "Interface" tab edits `data/config/ui.yaml`. These values only affect displa
 | `trend_cycles` | 7 | How many recent cycles the trend line of the summary block uses | 2 - 60 |
 | `health_cycles` | 14 | How many recent cycles the health squares of each channel on the sources page use; missing cycles are drawn as dashed empty cells | 1 - 60 |
 | `ticker_max_items` | 8 | How many items the top ticker scrolls at most | 1 - 50 |
+| `place_picker.candidates` | 8 | How many places the place picker on `/me` and in the setup wizard lists for what you type (not on the form; edit the file) | 1 - 50 |
 
 - The red line (floor) in the salary axis comes from `data/profile/preferences.yaml: salary_floor_year`, and the red triangle (the push line of the score battery cells) from `notify.yaml: push_min_score`; neither is in `ui.yaml`, and changing them affects the graphics too.
 - When a stated range goes beyond the axis, the colour block is clipped at the two ends (the axis does not auto-scale): to see higher salaries, raise `max_k`.
@@ -130,6 +131,7 @@ freshness: { decay_hours: 72, warn_hours: 24 }
 trend_cycles: 7
 health_cycles: 14
 ticker_max_items: 8
+place_picker: { candidates: 8 }
 ```
 
 ## Notifications tab: Telegram
