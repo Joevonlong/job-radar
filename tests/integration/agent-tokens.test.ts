@@ -189,7 +189,7 @@ describe("an MCP connection made with a token", () => {
     const secret = await created("agent", "jobs:read,notes:read");
     const grant = await tokenGrant(secret);
     const client = await connect(grant);
-    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["search_jobs", "get_job"]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["search_jobs", "get_job", "get_today", "list_companies", "get_company", "get_insights"]);
 
     const ok = await client.callTool({ name: "get_job", arguments: { job_id: jobId } });
     expect(ok.isError).not.toBe(true);
