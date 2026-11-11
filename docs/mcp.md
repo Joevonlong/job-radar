@@ -34,11 +34,10 @@ The career profile itself (its files, documents, contact details and drafts) is 
 These lists cover structured fields. Two permissions also give free text that no field list can hold back:
 
 - With `match:read`, the AI-written summaries, fit reasons and gaps are free text written from your profile and the JD; they may
-  mention things such as your language level or your salary expectations. Filter reasons carry deal-breaker ids and the blacklist
-  keywords that matched (the labels you gave your deal-breakers are not given).
-- With `notes:read`, your application, event and favorite notes are your own text and are given as you wrote them.
+  mention things such as your language level or your salary expectations. Filter reasons carry deal-breaker ids and matched blacklist keywords and can indirectly reveal other preferences, including excluded companies, places, seniority and contract types; these examples are not a complete list. The labels you gave your deal-breakers are not returned as fields.
+- With `notes:read`, your application, event and favorite notes are your own text, returned after cleaning.
 
-Both are cleaned of invisible characters and AI instructions, nothing else. Grant them only if that text may leave your machine.
+These texts pass the invisible-character and AI-instruction cleaner. `get_today`, `list_companies`, `get_company`, `get_insights`, `get_application`, `list_favorites` and `list_applications` redact recognizable email addresses, local paths and credential assignments in free text; `get_job` uses the same cleaning for notes and next actions. Cleaning is not a guarantee that every personal detail is removed; grant these permissions only if the remaining text may leave your machine.
 
 The list is fixed in code (`src/lib/mcp/dto/index.ts`); each answer is built field by field, so a new database column never shows up
 by itself.
@@ -133,7 +132,13 @@ Other MCP clients work the same way: a stdio server, command `pnpm`, arguments `
 |---|---|
 | `search_jobs` | Ranked job cards, filtered like the jobs list: `query` (title, company name/aliases, city/location and country), `search_in` (`summary` by default; `all` adds the original JD and current translations), `country` (1–20 two-letter exact codes, case-insensitive, OR), `city`, `workplace`, `min_rank`, `min_annual_salary` (in the market's base currency), `since` / `until` (first seen, `YYYY-MM-DD`), `application_status`, `sort` (`relevance`, `rank`, `posted`, `first_seen`; default `relevance` with a query, `rank` without one), `scope` (`current` by default, `archive`, `all`), `unseen_only` and `favorites_only` (both need `tracking:read`; without it a call that sets either to `true` is refused as `invalid_input`), `visa` (`offered`, `not_denied`), `ghost` (`only`, `hide`), `limit`. Hard-filtered jobs stay hidden in every scope; current scope also hides closed and dormant jobs. Visa and ghost filters apply only when their web filters are available. No JD text. |
 | `get_job` | One job (`job_id`) in detail: everything above plus seniority, language, the signals with their quotes, the number of AI traps found, your application, and the cleaned JD. |
-| `list_applications` | Your applications, best rank first; `status` filters; `stale_only: true` lists only the ones waiting longer than the daily reminder's thresholds (`notify.yaml: reminders.interested_days` / `applied_days`), the longest waiting first. |
+| `list_applications` | `tracking:read`: applications, best rank first; `status`, `stale_only`, `limit`. Stale uses `notify.yaml: reminders.interested_days` / `applied_days`, longest waiting first. Effective `notes:read` adds each item’s `notes.application_notes`; without it the existing field set stays unchanged. |
+| `get_today` | `jobs:read`: today’s jobs and `quick_counts` for all/high/salary/following. Parameters: `view` (saved id or `all`), `quick` (`high`, `salary`, `following`), `include_filtered`, `hide_language`, `high_value`, `limit`. Uses the same saved-view, qualification and high-value rules as the page. Saved views require `profile:read`; a selected view wins over quick, and without explicit toggles an omitted view uses the default only with that permission. Application-status filters also require `tracking:read`. |
+| `list_companies` | `jobs:read`: companies with jobs in the default jobs list, watched and blacklisted flags, job counts and highest rank. Parameters: `query` (display name), `sort` (`jobs`, `score`, `recent`), `limit`. |
+| `get_company` | `jobs:read`: `company_id`, optional `limit`; aliases, stored website domain and whether it was user-confirmed or inferred, watched/blacklisted flags, stored background fields with source URLs, and active jobs in the default current list. No research is started. |
+| `get_insights` | `jobs:read`: page statistics for `range` days (must be in `insights.yaml: ranges_days`; omitted uses the configured default), optional `limit`. Includes daily/source counts, salary and score histograms, signals and conversion counts. `profile:read` adds cities and configured signal categories. `tracking:read` adds application/funnel totals; `match:read` adds filter-reason counts. Personal salary floor and page navigation links are excluded. |
+| `get_application` | `tracking:read`: application by `job_id`, with status, dates, next action, rounds, history, favorite/seen state, closure and filter override. `notes:read` adds application and event notes. Optional `limit` caps history and event notes; no closure note or résumé path. |
+| `list_favorites` | `tracking:read`: all starred jobs, including closed, filtered and ignored ones. `sort`: `starred` (default, newest first) or `rank`; optional `limit`. `notes:read` adds each item’s `notes.favorite_note`. |
 | `get_application_context` | **Off by default.** Everything to write one job's answers (`job_id`): job facts, the cleaned JD, breakdown points, the company background and fit note, the questions, the material chosen for each and the saved versions (newest first, at most `max_results` per question). |
 | `save_application_answer` | **Off by default.** Adds one answer version (`job_id`, `question_id`, `text`, optional `sentences`). |
 | `set_application_status` | `tracking:write`: sets `job_id` to `status`, creating its application if needed. All web-selectable statuses are allowed. |
@@ -158,7 +163,7 @@ Each search card keeps its existing facts. Effective `tracking:read` automatical
 | `lifecycle` | `jobs:read` | Named in `include`: automatic status, closure reason, last seen/listed/relisted dates, relist count, dormancy |
 | `match` | `match:read` | Automatic: summaries, AI score, German deduction, scoring date, stale flag, fit/gap evidence, filter reasons, deal-breaker and visa evidence, skill/German/salary checks; null without a score |
 | `tracking` | `tracking:read` | Automatic (also with the default permissions): application status/history/next action/dates/rounds, favorite date, seen flag, closure action/link-check outcome, filter override; no notes |
-| `notes` | `notes:read` | Automatic: cleaned application, event and favorite notes, as you wrote them; an event note has its `from` / `to` status only when `tracking:read` is effective too, otherwise only its text and time; never the closure note |
+| `notes` | `notes:read` | Automatic: cleaned application, event and favorite notes; an event note has its `from` / `to` status only when `tracking:read` is effective too, otherwise only its text and time; never the closure note |
 
 Translations, breakdowns, company research, salary lookup content and the `match` block's AI summaries, fit reasons and gaps are withheld with the JD's failure reason whenever the JD cannot pass its safety check (the `match` block then has `available: false`; its numbers, filter result and checks remain). Empty research or lookup storage remains null. JD quotes use the same trap markers as the JD; a breakdown item, fit reason or gap whose quote becomes a marker uses that marker for its own text/name too. All text, including summaries, reasons and notes, goes through the text cleaner. Unsafe instruction-bearing source URLs become null. A derived-content notice follows the third-party notice when derived content is present; withholding adds one notice, regardless of how many blocks were withheld.
 
@@ -166,10 +171,13 @@ No permission releases resume paths, closure notes, emails, secrets, profile fil
 
 `get_job` still returns dormant jobs: `status` stays `possibly_closed`, and `closed_reason` is `dormant`.
 
-"What is new today" is `search_jobs` with `since` = today and `sort` = `rank`, plus `list_applications` with `stale_only`.
+Use `get_today` for the page’s today view, or `search_jobs` with `since` = today for a first-seen-date search. `list_applications` with `stale_only` gives waiting applications.
 
-Every answer says how many items matched (`total`) and how many it returns (`returned`); when it cut the list,
-`truncated` is true and a notice says so. Invalid arguments come back as an error result naming the field.
+List answers report `total`, `returned` and `truncated`. In `get_company` these counts refer to open jobs; in `get_application` they refer to history events. `get_today`, `list_companies`, `get_company`, `get_application` and `list_favorites` cap lists, including aliases, research fields, links and history, at the lower of `limit` and `limits.max_results`. `get_insights` caps sources, cities, signal categories and filter reasons, keeping the largest counts first. Daily series, salary and score histograms, and the tracking funnel remain complete. Nested truncation also sets `truncated` and adds a notice; aggregate totals and quick counts remain full counts. Invalid arguments return a category error.
+
+Job titles, company names, aliases, domains, locations, source labels and links are cleaned independently of trap scans. `list_applications` keeps these fields and its existing response without notes permission. In `get_company`, only research text requires a current, readable, enabled trap scan for the posting that produced the research. If that check fails, research text is null and its availability/reason explains why; company facts, cleaned source links and job cards remain available. These tools return no raw payloads and require no `raw:read`.
+
+Saved views in `get_today` require `profile:read`, whether explicit or default. Without it, no default view is applied or returned; an explicit saved view is refused as `not_permitted` (`view: "all"` remains available). With permission, an omitted view uses the default only when no toggle was supplied. A resolved view containing an application-status filter also requires `tracking:read`; otherwise the entire call is refused as `not_permitted` before querying jobs. `get_insights` omits `cities` and `signals.categories` without `profile:read`, since these rows include configured target cities and interest names, including zero-match categories. Other job-derived statistics remain available.
 
 ## Writing answers from your client
 
@@ -208,8 +216,7 @@ The reader of an answer is an AI, which is exactly what the [AI traps](ai-traps.
 - Notices come first, in this order: for `get_job`, "Job Radar found N pieces of text aimed at AI in this JD and removed them"
   (when it found any), then "The JD was cut at … characters" (when it was cut), then the notice that the posting texts are
   third-party content to be treated as data. `search_jobs` and `list_applications` give the third-party notice first, then the
-  derived-content or withholding notices (when they apply), and last "N of M shown" (when the list was cut). Every answer has the
-  third-party notice; derived-content or withholding notices follow it when applicable.
+  derived-content or withholding notices (when they apply), and last "N of M shown" (when the list was cut).
 
 This lowers the risk; it cannot rule it out. A posting can always word an instruction in a way no rule recognises. With the save
 tool off, the worst a trap can do is mislead your client's answer. With it on, a trap could also get a misleading answer version

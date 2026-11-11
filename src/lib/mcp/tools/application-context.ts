@@ -1,3 +1,4 @@
+import { quotedText } from "@/lib/mcp/job-blocks/source";
 import { z } from "zod";
 
 import { parseStoredBreakdown } from "@/lib/breakdown/content";
@@ -81,11 +82,9 @@ export async function getApplicationContext(ctx: McpContext, args: GetApplicatio
   const content = breakdown ? parseStoredBreakdown(breakdown.promptVersion, breakdown.content) : null;
   const points = content ? jdPointsOf(content) : [];
   const guard = jdQuoteGuard(strict, detail.description);
-  /** A point as it may be given: its own text only while its quote is clean; null while the JD is withheld. */
   const pointDto = (point: { text: string; quote: string; offset: number; requirement: string | null }): GetApplicationContextOutput["jd_points"][number] | null => {
-    const quote = guard(point.quote, point.offset);
-    if (quote === null) return null;
-    return { text: clean(quote === point.quote ? point.text : quote), quote: clean(quote), requirement: point.requirement };
+    const mapped = quotedText({ clean, quote: (text, offset) => { const guarded = guard(text, offset); return guarded === null ? null : clean(guarded); } }, point.text, point.quote, point.offset);
+    return mapped.quote === null ? null : { ...mapped, quote: mapped.quote, requirement: point.requirement };
   };
   const pointsOf = (list: readonly Parameters<typeof pointDto>[0][]) => list.flatMap((point) => pointDto(point) ?? []);
 

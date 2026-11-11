@@ -12,7 +12,7 @@ export const trackingWriteAvailability = {
 export function trackingWriteAccess(ctx: McpContext): AgentWriteAccess {
   if (!ctx.tracking?.writeDb) throw new ToolFailure("disabled", ctx.text("errors.trackingWriteDisabled"));
   if (!ctx.audit || !ctx.auditCall) throw new ToolFailure("audit_unavailable", ctx.text("errors.writeAuditUnavailable"));
-  return { caller: ctx.caller?.caller ?? "stdio", permissions: ctx.permissions ?? new Set(), audit: ctx.audit, entry: ctx.auditCall.success };
+  return { caller: ctx.caller?.tokenId ?? "stdio", permissions: ctx.permissions ?? new Set(), audit: ctx.audit, entry: ctx.auditCall.success };
 }
 
 export function writeFailure(ctx: McpContext, error: unknown): never {

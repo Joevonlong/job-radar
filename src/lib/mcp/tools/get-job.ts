@@ -10,6 +10,7 @@ import type { JobBlockSource } from "@/lib/mcp/job-blocks/source";
 import { ToolFailure, type McpContext } from "../context";
 import { getJobOutput, getJobOutputFor, toJobDetailDto, type DescriptionDto, type GetJobOutput } from "../dto";
 import { availableDescription, jdQuoteGuard, quoteGuard, shortFieldCleaner, unavailableDescription } from "../guard";
+import { readTextCleaner } from "../read-guard";
 import { readTraps } from "./shared";
 
 export function getJobInput(ctx: Pick<McpContext, "text">) {
@@ -46,11 +47,12 @@ export async function getJob(ctx: McpContext, args: GetJobArgs): Promise<GetJobO
 
   const clean = shortFieldCleaner(readTraps(ctx));
   const guard = jdQuoteGuard(strict, detail.description);
-  const source: JobBlockSource = { detail, strict, clean, quote: (quote, offset) => {
+  const source: JobBlockSource = { detail, strict, clean: readTextCleaner(readTraps(ctx), ctx.text("notice.redacted")), quote: (quote, offset) => {
     const guarded = guard(quote, offset);
     return guarded === null ? null : clean(guarded);
   } };
   const job = toJobDetailDto(detail, { traps: counts.get(detail.id) ?? null, description, quote: quoteGuard(strict, detail.description) }, clean);
+  if (job.application?.next_action != null) job.application.next_action = source.clean(job.application.next_action);
   const blocks = await loadBlocks(getJobBlocks, ctx, source, args.include);
   const derived = getJobOutput.parse({ notices, job, ...blocks });
   if ((derived.translation?.items.length ?? 0) > 0 || derived.breakdown?.content != null || (derived.company?.fields.length ?? 0) > 0 || derived.salary?.lookup?.available || (derived.match?.fit_reasons.length ?? 0) > 0 || (derived.match?.gaps.length ?? 0) > 0 || Object.keys(derived.match?.summaries ?? {}).length > 0) notices.push(ctx.text("notice.derived"));

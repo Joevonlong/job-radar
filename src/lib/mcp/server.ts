@@ -1,12 +1,13 @@
 /**
- * The MCP server (`pnpm mcp:serve`, docs/mcp.md): tools generated from the capability registry, each authorized against the current
- * mcp.yaml on every call. Write capabilities use separately granted connections and commit their audit with the change. Every capability is
- * registered with the SDK, but `tools/list` is answered by this file instead of the SDK, so the list follows the current settings
- * and lists only what a call would accept. The stdio entry point is scripts/mcp-serve.ts.
+ * The MCP server (`pnpm mcp:serve`, docs/mcp.md): tools generated from the capability registry, each authorized on every call
+ * against the current mcp.yaml and, for a connection made with an agent token, the token's current row. Write capabilities use
+ * separately granted connections and commit their audit with the change. Every capability is registered with the SDK, but
+ * `tools/list` is answered by this file instead of the SDK, so the list follows the current settings and lists only what a call
+ * would accept. The stdio entry point is scripts/mcp-serve.ts.
  */
 import { McpServer, type StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 
-import { authorize, liveMcpSettings, type AccessDecision } from "@/lib/agent-access/authorize";
+import { authorizeCall, liveMcpSettings, type AccessDecision } from "@/lib/agent-access/authorize";
 import { CAPABILITIES, listedCapabilities } from "@/lib/capabilities/registry";
 import type { Capability } from "@/lib/capabilities/types";
 import { loadConfig } from "@/lib/config";
@@ -26,7 +27,21 @@ import { mcpTranslator, type McpTranslator } from "./text";
 export const MCP_SERVER_NAME = "job-radar";
 
 /** The context with the real loaders (config files, the city groups of the database); `readSettings` defaults to mcp.yaml read fresh from disk. */
-export function defaultContext(db: Db, settings: McpConfig, options: { text?: McpTranslator; log?: LogLine; writeDb?: Db | null; trackingWriteDb?: Db | null; readSettings?: () => McpConfig; audit?: McpContext["audit"]; caller?: McpContext["caller"] } = {}): McpContext {
+export function defaultContext(
+  db: Db,
+  settings: McpConfig,
+  options: {
+    text?: McpTranslator;
+    log?: LogLine;
+    writeDb?: Db | null;
+    trackingWriteDb?: Db | null;
+    readSettings?: () => McpConfig;
+    audit?: McpContext["audit"];
+    caller?: McpContext["caller"];
+    grant?: McpContext["grant"];
+    readGrant?: McpContext["readGrant"];
+  } = {},
+): McpContext {
   return {
     db,
     settings,
@@ -47,6 +62,8 @@ export function defaultContext(db: Db, settings: McpConfig, options: { text?: Mc
     tracking: { writeDb: options.trackingWriteDb ?? null },
     audit: options.audit,
     caller: options.caller,
+    grant: options.grant,
+    readGrant: options.readGrant,
   };
 }
 
@@ -76,6 +93,7 @@ function accessFailure(decision: Exclude<AccessDecision, { allowed: true }>, tex
   switch (decision.reason) {
     case "unreadable": return new ToolFailure("settings_unreadable", text("errors.settingsUnreadable", { problem: decision.problem }));
     case "disabled": return new ToolFailure("not_permitted", text("errors.serverOff"));
+    case "token_inactive": return new ToolFailure("not_permitted", text("errors.tokenInactive"));
     case "missing_permission": return new ToolFailure("not_permitted", text("errors.notPermitted", { permission: decision.permission }));
   }
 }
@@ -98,7 +116,7 @@ export function buildServer(ctx: McpContext, options: { version?: string; capabi
       },
       async (args) =>
         runLogged(ctx, cap.id, async (callCtx) => {
-          const decision = authorize(cap, ctx.readSettings);
+          const decision = await authorizeCall(cap, ctx.readSettings, ctx.grant, ctx.readGrant);
           if (!decision.allowed) throw accessFailure(decision, t);
           if (cap.availability && !cap.availability.available(ctx)) throw new ToolFailure(cap.availability.category, t(cap.availability.message));
           const output = await cap.handler({ ...callCtx, settings: decision.settings, permissions: decision.permissions }, args);

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { loadCompanyOverview, type CompanyOverviewSettings } from "@/lib/companies/overview";
+import { loadCompanyOverview, loadCompanyOverviewParams, type CompanyOverviewSettings } from "@/lib/companies/overview";
 import type { CompanyOverviewRow } from "@/lib/db";
 import { MAX_COMPANY_NAME_CHARS } from "@/lib/interests/service";
 import { MAX_FILTER_VALUE_CHARS } from "@/lib/jobs/constants";
@@ -67,4 +67,10 @@ describe("company overview loader", () => {
     });
     expect(result.rows.map(({ watchable }) => watchable)).toEqual([true, false]);
   });
+});
+
+it("plain company parameters preserve page marks and clamped paging", async () => {
+  const deps = { loadSettings: () => settings, list: async () => ({ rows: [row(1, { aliases: ["Oldbrand GmbH"] })], total: 1, page: 1, pageCount: 1 }) };
+  const result = await loadCompanyOverviewParams({ q: "Acme", sort: "jobs", dir: "desc", page: 3 }, deps);
+  expect(result).toMatchObject({ page: 1, params: { q: "Acme", sort: "jobs", dir: "desc", page: 1 }, rows: [{ id: 1, watched: true, excluded: true, jobCount: 3 }] });
 });

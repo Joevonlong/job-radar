@@ -1,4 +1,3 @@
-import { callerKey, type AgentCaller } from "@/lib/agent-access/caller";
 import type { Permission } from "@/lib/agent-access/permissions";
 import type { McpConfig } from "@/lib/config/schemas/mcp";
 import type { TrapsConfig } from "@/lib/config/schemas/traps";
@@ -6,6 +5,7 @@ import type { SearchPlan } from "@/lib/jobs/search-query";
 import type { Db } from "@/lib/db/client";
 import type { WriterInputs } from "@/lib/writer/settings";
 import type { AuditEntry, AuditOutcome, AuditRecorder, AuditTarget } from "@/lib/agent-access/audit";
+import type { Grant, GrantReader } from "@/lib/agent-access/authorize";
 
 import { formatCallLine, type LogLine } from "./call-log";
 import { errorResult } from "./guard";
@@ -53,7 +53,11 @@ export interface McpContext {
    */
   permissions?: ReadonlySet<Permission>;
   audit?: AuditRecorder;
-  caller?: { caller: AgentCaller; tokenId: number | null; transport: "stdio" | "http" };
+  caller?: { caller: "stdio" | "token"; tokenId: number | null; transport: "stdio" | "http" };
+  /** The permissions this connection was granted; absent = the local stdio process. */
+  grant?: Grant;
+  /** Re-reads a token grant before each call; a token grant without it is refused. */
+  readGrant?: GrantReader;
   auditCall?: { success: (count: number) => AuditEntry; committed: boolean };
 }
 
@@ -94,7 +98,7 @@ export function auditFailure(error: unknown): AuditOutcome {
 
 export function auditEntry(ctx: Pick<McpContext, "caller">, capability: string, target: AuditTarget | null, outcome: AuditOutcome, count: number, durationMs: number): AuditEntry {
   return {
-    caller: callerKey(ctx.caller?.caller ?? "stdio"),
+    caller: ctx.caller?.caller ?? "stdio",
     token_id: ctx.caller?.tokenId ?? null,
     transport: ctx.caller?.transport ?? "stdio",
     capability,

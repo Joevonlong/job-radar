@@ -5,9 +5,9 @@ import { parseStoredBreakdown, type BreakdownContent } from "@/lib/breakdown/con
 import { getJobBreakdown } from "@/lib/db/repos/breakdowns";
 import { getCompanyResearchForJob } from "@/lib/db/repos/company-research";
 import { getTranslation } from "@/lib/db/repos/translations";
-import { annualBaseFigure } from "@/lib/domain/salary";
-import type { GhostReason } from "@/lib/ghost/types";
+import { salaryContextInput } from "@/lib/jobs/detail-inputs";
 import { buildGhostCheckView } from "@/lib/ghost/view";
+import type { GhostReason } from "@/lib/ghost/types";
 import type { McpContext } from "@/lib/mcp/context";
 import { breakdownBlockDto, companyBlockDto, ghostBlockDto, ghostReasonDto, lifecycleBlockDto, salaryBlockDto, translationBlockDto } from "@/lib/mcp/dto/job-analysis";
 import { isoOrNull } from "@/lib/mcp/dto/shared";
@@ -85,7 +85,7 @@ export async function loadCompany(ctx: McpContext, source: JobBlockSource): Prom
 export async function loadSalary(ctx: McpContext, source: JobBlockSource): Promise<z.infer<typeof salaryBlockDto>> {
   const settings = jobBlockSettings();
   const currency = settings.baseCurrency() ?? "";
-  const value = await getSalaryContext(ctx.db, { jobId: source.detail.id, figure: annualBaseFigure(source.detail.salary, currency), currency, salary: settings.salary(), ai: settings.ai(), locale: ctx.text.locale ?? "en", now: ctx.now() });
+  const value = await getSalaryContext(ctx.db, salaryContextInput(source.detail, { currency, salary: settings.salary(), ai: settings.ai(), locale: ctx.text.locale ?? "en", now: ctx.now() }));
   if (value === null) return null;
   const { clean } = source;
   const text = (value: string | null) => value === null ? null : clean(value);

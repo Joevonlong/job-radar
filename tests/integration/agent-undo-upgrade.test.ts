@@ -25,10 +25,10 @@ beforeAll(async () => {
   fs.cpSync(path.resolve("drizzle"), directory, { recursive: true });
   const journalPath = path.join(directory, "meta/_journal.json");
   const journal = JSON.parse(fs.readFileSync(journalPath, "utf8")) as { entries: { idx: number; when: number; tag: string }[] };
-  const latest = journal.entries.find((entry) => entry.tag === "0061_agent_undo")!;
+  const latest = journal.entries.find((entry) => entry.tag === "0062_agent_undo")!;
   expect(latest.when).toBeGreaterThan(Math.max(...journal.entries.filter((entry) => entry.idx < latest.idx).map((entry) => entry.when)));
-  journal.entries = journal.entries.filter((entry) => entry.idx <= 60);
-  expect(journal.entries.at(-1)?.tag).toBe("0060_agent_budget_usage");
+  journal.entries = journal.entries.filter((entry) => entry.idx <= 61);
+  expect(journal.entries.at(-1)?.tag).toBe("0061_agent_tokens");
   fs.writeFileSync(journalPath, JSON.stringify(journal));
   await runMigrations({ url: url.toString(), migrationsFolder: directory, currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
@@ -42,13 +42,17 @@ afterAll(async () => {
   }
 });
 
-it("upgrades the previous schema, preserves audit rows and safely runs the SQL twice", async () => {
+it("upgrades from the token schema, preserves tokens and audit rows, and safely runs the SQL again", async () => {
   const db = connection.db;
   expect(await db.execute(sql`select to_regclass('public.agent_undo') as name`)).toEqual([{ name: null }]);
-  const [audit] = await db.execute<{ id: number }>(sql`insert into agent_calls (capability, outcome, returned_count, duration_ms) values ('existing_call', 'ok', 0, 0) returning id::int`);
-  const migration = fs.readFileSync(path.resolve("drizzle/0061_agent_undo.sql"), "utf8");
+  const [token] = await db.execute<{ id: number }>(sql`insert into agent_tokens (name, token_hash, token_prefix) values ('existing token', 'existing-hash', 'jrt_existing') returning id`);
+  const [audit] = await db.execute<{ id: number }>(sql`insert into agent_calls (capability, outcome, returned_count, duration_ms, token_id) values ('existing_call', 'ok', 0, 0, ${token.id}) returning id::int`);
+  await runMigrations({ url: url.toString(), migrationsFolder: path.resolve("drizzle"), currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
+  expect(await db.execute(sql`select to_regclass('public.agent_undo') as name`)).toEqual([{ name: "agent_undo" }]);
+  const migration = fs.readFileSync(path.resolve("drizzle/0062_agent_undo.sql"), "utf8");
   for (let run = 0; run < 2; run++) for (const statement of migration.split("--> statement-breakpoint")) await db.execute(sql.raw(statement));
-  expect(await db.execute(sql`select capability from agent_calls where id = ${audit.id}`)).toEqual([{ capability: "existing_call" }]);
+  expect(await db.execute(sql`select capability, token_id from agent_calls where id = ${audit.id}`)).toEqual([{ capability: "existing_call", token_id: token.id }]);
+  expect(await db.execute(sql`select name from agent_tokens where id = ${token.id}`)).toEqual([{ name: "existing token" }]);
   const columns = await db.execute<{ column_name: string }>(sql`select column_name from information_schema.columns where table_schema = 'public' and table_name = 'agent_undo'`);
   expect(columns.map((row) => row.column_name).sort()).toEqual(["audit_id", "data_area", "kind", "target_type", "target_id", "before_value", "after_fingerprint", "undone_at", "caller"].sort());
   const indexes = await db.execute<{ indexname: string }>(sql`select indexname from pg_indexes where schemaname = 'public' and tablename = 'agent_undo'`);
