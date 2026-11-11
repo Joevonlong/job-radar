@@ -44,7 +44,7 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 `budgets` 为后续 agent 动作工具预留每日额度；现有工具还不使用这些计数。
 `per_caller` 分别计算本地 stdio 连接和每个 token 的额度，限制采集请求、岗位翻译、拆解、薪资查询、公司查询、回答起草和简历定制；`score_jobs` 按批次里的每个岗位计数。
 薪资与公司查询也包括 agent 写入间接触发的自动研究。某项额度为 `0` 就禁止 agent 触发该动作。
-`total` 统计所有 caller、所有动作的请求总数，批量请求只算一次；`0` 禁止全部 agent 动作。
+`total` 统计所有 caller、所有动作的请求数，不是岗位数：一次给 40 个岗位打分的 `score_jobs` 批量请求占该 caller `score_jobs` 额度的 40，只占 `total` 的 1。`0` 禁止全部 agent 动作。
 日期与下次重置时间遵循 `schedule.yaml` 的时区及夏令时。runner 每小时清理早于「当前本地日期减去 `audit.retention_days`」的计数行。
 这些设置有默认值，仍使用 `config_version: 3`。
 

@@ -62,7 +62,8 @@ writable.
 `per_caller` counts the local stdio connection and each token separately. It caps collection requests, job translations,
 breakdowns, salary lookups, company lookups, answer drafts and resume tailoring; `score_jobs` counts each job in a batch.
 Salary and company lookups also include automatic research started by an agent's write. An action cap of `0` forbids that
-action. `total` counts requests across all callers and actions (a batch counts once); `0` forbids all agent actions.
+action. `total` counts requests, not jobs, across all callers and actions: a `score_jobs` batch of 40 jobs uses 40 of the
+caller's `score_jobs` cap but only 1 of `total`. `0` forbids all agent actions.
 The day and next reset follow `schedule.yaml`'s time zone, including daylight saving changes. The runner prunes counter rows older
 than the current local day minus `audit.retention_days` once an hour. These settings have defaults and keep `config_version: 3`.
 

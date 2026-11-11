@@ -68,5 +68,5 @@ budgets:
     draft_answer: 20
     # Resume tailoring requests per caller per day
     tailor_resume: 5
-  # Requests per day across all agents and actions; a batch counts once; 0 forbids all agent actions
+  # Requests (not jobs) per day across all agents and actions; a score_jobs batch counts once; 0 forbids all agent actions
   total: 150

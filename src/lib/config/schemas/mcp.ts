@@ -35,7 +35,7 @@ const budgetsSchema = z.strictObject({
     draft_answer: cap.default(20),
     tailor_resume: cap.default(5),
   }).default(perCallerDefaults),
-  /** Requests per day across all agents and actions; a batch counts once. 0 forbids all agent actions. */
+  /** Requests, not jobs, per day across all agents and actions; a `score_jobs` batch counts once. 0 forbids all agent actions. */
   total: cap.default(150),
 }).default(() => ({ per_caller: perCallerDefaults(), total: 150 }));
 
