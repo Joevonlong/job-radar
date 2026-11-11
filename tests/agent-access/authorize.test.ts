@@ -1,0 +1,75 @@
+// @vitest-environment node
+import fs from "node:fs";
+import path from "node:path";
+
+import { afterEach, describe, expect, it } from "vitest";
+
+import { authorize, liveMcpSettings } from "@/lib/agent-access/authorize";
+import { ConfigError, loadConfig } from "@/lib/config";
+import { mcpSchema } from "@/lib/config/schemas/mcp";
+
+import { makeTempConfig, type TempConfig } from "../config/helpers";
+
+const capability = { id: "search_jobs", permission: "jobs:read" } as const;
+let temp: TempConfig | null = null;
+afterEach(() => {
+  temp?.cleanup();
+  temp = null;
+});
+
+describe("authorize", () => {
+  it.each([
+    [new ConfigError({ configName: "mcp", filePath: "/private/config/mcp.yaml", kind: "schema", issues: [{ path: "enabled", message: "invalid" }] }), "schema: enabled"],
+    [new Error("cannot read /private/config/mcp.yaml"), "unreadable"],
+  ])("fails closed on an unreadable setting without exposing a path", (error, problem) => {
+    const decision = authorize(capability, () => { throw error; });
+    expect(decision).toEqual({ allowed: false, reason: "unreadable", problem });
+    expect(JSON.stringify(decision)).not.toContain("/private");
+  });
+
+  it("checks the server switch before permissions or tool switches", () => {
+    expect(authorize(capability, () => mcpSchema.parse({ tools: { search_jobs: false, get_job: false } }))).toEqual({ allowed: false, reason: "disabled" });
+  });
+
+  it("names a missing permission before checking the per-tool switch", () => {
+    expect(authorize(capability, () => mcpSchema.parse({ enabled: true, tools: { search_jobs: false, get_job: false } }))).toEqual({ allowed: false, reason: "missing_permission", permission: "jobs:read" });
+  });
+
+  it("refuses a switched-off tool even when its shared permission is granted", () => {
+    expect(authorize({ id: "get_job", permission: "jobs:read" }, () => mcpSchema.parse({ enabled: true, tools: { get_job: false } }))).toEqual({ allowed: false, reason: "switched_off" });
+  });
+
+  it("returns exactly the settings just read and their effective permissions", () => {
+    const settings = mcpSchema.parse({ enabled: true, limits: { max_results: 3 } });
+    const decision = authorize(capability, () => settings);
+    expect(decision.allowed).toBe(true);
+    if (!decision.allowed) throw new Error("expected access");
+    expect(decision.settings).toBe(settings);
+    expect([...decision.permissions]).toEqual(["jobs:read", "tracking:read"]);
+  });
+});
+
+describe("liveMcpSettings", () => {
+  it("rereads each file without retaining or updating the last valid cached settings", () => {
+    temp = makeTempConfig();
+    process.env.JOB_RADAR_CONFIG_POLL_MS = "0";
+    const file = path.join(temp.configDir, "mcp.yaml");
+    fs.writeFileSync(file, "enabled: true\n");
+    const cached = loadConfig("mcp");
+    expect(authorize(capability, liveMcpSettings).allowed).toBe(true);
+    fs.writeFileSync(file, "enabled: [\n");
+    expect(authorize(capability, liveMcpSettings)).toEqual({ allowed: false, reason: "unreadable", problem: "yaml" });
+    expect(loadConfig("mcp")).toBe(cached);
+    expect(cached.enabled).toBe(true);
+    fs.writeFileSync(file, "enabled: false\n");
+    expect(authorize(capability, liveMcpSettings)).toEqual({ allowed: false, reason: "disabled" });
+    expect(loadConfig("mcp")).toBe(cached);
+  });
+
+  it("uses disabled schema defaults when neither file exists", () => {
+    temp = makeTempConfig({ user: "empty" });
+    fs.rmSync(path.join(temp.defaultsDir, "mcp.yaml"));
+    expect(liveMcpSettings()).toEqual(mcpSchema.parse({}));
+    expect(authorize(capability, liveMcpSettings)).toEqual({ allowed: false, reason: "disabled" });
+  });
+});

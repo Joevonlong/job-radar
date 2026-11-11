@@ -47,6 +47,9 @@ made, even if they are no longer chosen.
 2. Check it: `pnpm run doctor` shows `data.mcp` as on, with the tools.
 3. Add the server to your client (below), then restart the client.
 
+The server reads `mcp.yaml` again on every call. Switching it off, switching a tool off, or a file that can no longer be read
+refuses the next call of a client that is already connected, without a restart; switching something on needs a client restart.
+
 The server reads the database the same way the host-side `ai-worker` does: from `.env` in the project directory (or the
 `POSTGRES_*` defaults, port 5433). The stack has to be running (`docker compose up -d`).
 
@@ -175,6 +178,7 @@ config file; keep that file private.
 |---|---|
 | The client says the server exited; its log shows "The Job Radar MCP server is switched off" | `mcp.yaml: enabled` is `false`. Set it to `true` and restart the client. |
 | "mcp.yaml cannot be read" | `pnpm config:check` names the setting. |
+| A call fails with "has not granted …" or "is switched off in mcp.yaml" | `mcp.yaml` was changed while the client was connected: that tool is off now. Switch it back on and restart the client. |
 | "Every tool is switched off" | All `tools` are `false`. |
 | `get_application_context` or `save_application_answer` is not offered | It is `false` under `tools`, or `writer.yaml: enabled` is `false`. Restart the client after changing either. |
 | "text does not match sentences" | The client sent two different answers. Send the same one in both, or leave `sentences` out. |

@@ -24,6 +24,8 @@ export interface McpContext {
   /** A read-only connection (`createReadOnlyDb`). */
   db: Db;
   settings: McpConfig;
+  /** mcp.yaml as it is on disk now, read again for every call (throws when it cannot be read). */
+  readSettings: () => McpConfig;
   now: () => Date;
   /** schedule.yaml `timezone`: what "today" and the date filters mean. */
   timezone: () => string;

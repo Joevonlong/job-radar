@@ -35,6 +35,8 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 2. 检查：`pnpm run doctor` 的 `data.mcp` 显示已打开和工具列表。
 3. 把服务加到你的客户端（见下），然后重启客户端。
 
+服务每次调用都重读 `mcp.yaml`。把它关掉、关掉某个工具，或者文件读不出来，已经连上的客户端下一次调用就会被拒，不用重启；打开什么则要重启客户端。
+
 服务读数据库的方式和宿主机上的 `ai-worker` 一样：读项目目录里的 `.env`（或 `POSTGRES_*` 默认值，端口 5433）。需要整套服务在运行（`docker compose up -d`）。
 
 ### Claude Code
@@ -139,6 +141,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO job_radar_ro
 |---|---|
 | 客户端说服务退出了，日志里是"Job Radar 的 MCP 服务没有打开" | `mcp.yaml: enabled` 是 `false`。改成 `true` 再重启客户端。 |
 | "mcp.yaml 读不出来" | `pnpm config:check` 会指出是哪一项。 |
+| 调用失败，说"没有给这个连接授权 …"或"在 mcp.yaml（tools）里关掉了" | 客户端连着的时候 `mcp.yaml` 改过：这个工具现在是关的。打开它，再重启客户端。 |
 | "所有工具都关了" | `tools` 下每一项都是 `false`。 |
 | 客户端里没有 `get_application_context` 或 `save_application_answer` | 它在 `tools` 下是 `false`，或 `writer.yaml: enabled` 是 `false`。改完要重启客户端。 |
 | "text 和 sentences 对不上" | 客户端发了两份不同的答案。两边发同一份，或者不传 `sentences`。 |
