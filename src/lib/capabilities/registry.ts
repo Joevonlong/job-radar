@@ -32,13 +32,16 @@ export const CAPABILITIES: readonly Capability[] = [
   save_application_answer,
 ];
 
-/** The capabilities a client is offered now: authorized against one fresh read of mcp.yaml (none when it cannot be read), and available. */
-export function visibleCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer">): readonly Capability[] {
+/**
+ * The capabilities a client is offered now: authorized for the connection's grant against one fresh read of mcp.yaml (none when it
+ * cannot be read), and available.
+ */
+export function visibleCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer" | "grant">): readonly Capability[] {
   return listedCapabilities(capabilities, ctx).map(({ capability }) => capability);
 }
 
 /** A list and its caller's effective permissions share one fresh settings read, including a failed read. */
-export function listedCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer">): { capability: Capability; permissions: ReadonlySet<Permission> }[] {
+export function listedCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer" | "grant">): { capability: Capability; permissions: ReadonlySet<Permission> }[] {
   let read: { settings: McpConfig } | { error: unknown };
   try {
     read = { settings: ctx.readSettings() };
@@ -50,7 +53,7 @@ export function listedCapabilities(capabilities: readonly Capability[], ctx: Pic
     return read.settings;
   };
   return capabilities.flatMap((capability) => {
-    const decision = authorize(capability, once);
+    const decision = authorize(capability, once, ctx.grant);
     return decision.allowed && (capability.availability?.available(ctx) ?? true) ? [{ capability, permissions: decision.permissions }] : [];
   });
 }

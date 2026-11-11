@@ -6551,6 +6551,35 @@
       "listUndone": "undone {at}",
       "listActive": "in force",
       "unknownCompany": "(no longer exists)"
+    },
+    "agentToken": {
+      "usage": "Usage: pnpm agent:token create --name NAME --permissions LIST [--expires YYYY-MM-DD] | list | revoke NAME_OR_PREFIX",
+      "nameInvalid": "--name needs a name of 1 to {max} characters, without control characters or token values.",
+      "permissionsMissing": "--permissions needs at least one permission or preset name.",
+      "permissionsInvalid": "Unknown permission or preset: {invalid}.",
+      "permissionsValid": "Presets: {presets}. Permissions: {permissions}. Separate several with commas or repeat --permissions.",
+      "expiresInvalid": "--expires needs a date as YYYY-MM-DD.",
+      "expiresPast": "--expires is a day that is already over; the token would never be valid.",
+      "nameTaken": "A token named \"{name}\" exists and is not revoked. Choose another name, or revoke that token first. Nothing was created.",
+      "created": "Created token \"{name}\" ({prefix}). Permissions: {permissions}. Expires: {expires} ({zone}).",
+      "createdNoExpiry": "Created token \"{name}\" ({prefix}). Permissions: {permissions}. Does not expire.",
+      "shownOnce": "The line above is the token. Copy it now: it is not shown again, and only its hash is stored. Revoke it with pnpm agent:token revoke {prefix}.",
+      "never": "never",
+      "neverUsed": "never",
+      "none": "none",
+      "empty": "No agent tokens.",
+      "listHeader": "Times in {zone}. The tokens themselves cannot be shown.",
+      "row": "{prefix}  {name}  {state}  created {created}  last used {used}  expires {expires}  permissions: {permissions}",
+      "state": {
+        "active": "active",
+        "revoked": "revoked",
+        "expired": "expired"
+      },
+      "revokeTokenInvalid": "Use a token name or display prefix to revoke it. Do not pass the token value.",
+      "revokeNone": "No token that is not revoked has the name or prefix \"{key}\". pnpm agent:token list shows them.",
+      "revokeAmbiguous": "More than one token matches \"{key}\" ({prefixes}). Revoke by prefix instead.",
+      "revoked": "Revoked token \"{name}\" ({prefix}). The next request with it is refused.",
+      "failed": "agent:token failed ({category}). Nothing was printed that could expose a token."
     }
   },
   "setup": {
@@ -7383,6 +7412,7 @@
       "settingsUnreadable": "mcp.yaml cannot be read ({problem}), so no call is allowed until it is fixed. Run pnpm config:check to see which setting.",
       "serverOff": "The Job Radar MCP server is switched off (mcp.yaml enabled), so this call was refused.",
       "notPermitted": "The owner has not granted {permission} to this connection (mcp.yaml), so this call was refused.",
+      "tokenInactive": "This agent token has been revoked or has expired, so this call was refused.",
       "notFound": "No job with id {id}.",
       "trackingFilter": "favorites_only and unseen_only filter by your stars and the jobs you have looked at, which need tracking:read; the owner has not granted it to this connection (mcp.yaml). Leave them out.",
       "searchTimeout": "Searching job descriptions took too long and was stopped (search_timeout). Narrow the query or the filters, or search without search_in: \"all\".",
