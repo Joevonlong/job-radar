@@ -122,18 +122,18 @@ describe("market", () => {
 });
 
 describe("market: places", () => {
-  it("a place to move to that becomes the home city is saved once, in preferences and in search", async () => {
+  it("a place to move to that becomes the home city is saved once, and search.yaml is left alone", async () => {
     expect(await saveMarketStep(MARKET)).toEqual({ status: "saved", step: "market" });
+    const search = reloadConfig("search");
     expect(await saveMarketStep({ ...MARKET, home_city: "Utrecht" })).toEqual({ status: "saved", step: "market" });
     expect(reloadConfig("preferences")).toMatchObject({ home_city: "Utrecht", places: [{ place: "eu", relocate: false }] });
-    expect(reloadConfig("search").locations).toEqual(["Utrecht"]);
+    expect(reloadConfig("search")).toEqual(search);
   });
 
   it("Worldwide is saved as remote only, and a place named twice once, ✈ winning", async () => {
     const input: MarketInput = { ...MARKET, places: [{ place: "Worldwide", relocate: true }, { place: "Utrecht", relocate: false }, { place: "utrecht", relocate: true }] };
     expect(await saveMarketStep(input)).toEqual({ status: "saved", step: "market" });
     expect(reloadConfig("preferences").places).toEqual([{ place: "Worldwide", relocate: false }, { place: "Utrecht", relocate: true }]);
-    expect(reloadConfig("search")).toMatchObject({ locations: ["Amsterdam", "Utrecht"], remote_scope: "worldwide" });
   });
 
   it("keeps a workplace without remote when only the time zone changes", async () => {
