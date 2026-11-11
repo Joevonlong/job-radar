@@ -257,10 +257,11 @@ never reads credentials or the database. Authentication failures create no `agen
 short keyed hash that changes on restart, never the address or credentials. The tag is the first eight hex characters of
 HMAC-SHA256 with a random per-process key, generated on first use and never logged or persisted.
 
-A concurrency slot stays occupied until verification, last-use metadata and handler work settle, then until the response
-body ends or is cancelled. Disconnecting stops body reads but does not free a slot while awaited work is still running.
-Each request gets its own server and token context; only the transport handler is cached by body-size limit. Modern replies
-use JSON unless a mid-call notification requires SSE; legacy replies use SSE. Persistent subscriptions remain disabled.
+A concurrency slot stays occupied until the response body ends or is cancelled and every tool call the request started has
+settled. Disconnecting stops body reads but does not free a slot while verification, the last-use update or a tool call is
+still running. Each request gets its own transport handler, server and token context. Modern (2026-07-28) replies are plain
+JSON; legacy (2025-06-18) replies are a single SSE exchange that ends with the result, served by the SDK's fallback.
+Persistent subscriptions remain disabled.
 
 HTTP adds up to `read_max + write_max + 1` database sessions (six by default), separate from the web shared pool and any
 stdio process. Pools and the dedicated audit connection open lazily. `agent_tokens.last_used_at` is updated after successful
@@ -465,7 +466,7 @@ GRANT USAGE ON SEQUENCE agent_calls_id_seq TO job_radar_ro;
 | HTTP 401 `unauthorized` | Missing, malformed, unknown, revoked or expired token; all return the same body and `WWW-Authenticate: Bearer`. Send Authorization, not a query parameter or cookie. |
 | HTTP 429 `too_many_attempts` | Authentication throttle; wait the `Retry-After` seconds before retrying. |
 | HTTP 413 `payload_too_large` | Declared or streamed body exceeds `http.max_body_bytes`; reduce the request. |
-| HTTP 503 `busy` | All `http.pool.max_concurrent` slots are occupied; consume or cancel response bodies, then retry after 1 second. Disconnected requests keep their slots until awaited work settles. |
+| HTTP 503 `busy` | All `http.pool.max_concurrent` slots are occupied; consume or cancel response bodies, then retry after 1 second. Disconnected requests keep their slots until their tool calls settle. |
 | HTTP 503 `unavailable` | Token verification could not reach the database; no authentication failure is counted. |
 | HTTP 405 `method_not_allowed` | Exact GET/DELETE probes return 405 with `Allow: POST` after preconditions, without token lookup. Send MCP calls by POST. Other methods still pass through the browser session gate; no CORS is returned. |
 | HTTP 401 `login_required` | The browser session gate refused a path spelling, non-exempt method or `Next-Action` request. Use exact `/api/mcp` without `Next-Action`; only POST/GET/DELETE are exempt. |

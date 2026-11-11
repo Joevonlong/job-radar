@@ -16,7 +16,7 @@ import { readWriterEnabled } from "@/lib/writer/settings";
 
 import { version } from "../../../package.json";
 import { stderrLine } from "./call-log";
-import { errorCategory } from "./context";
+import { errorCategory, type McpContext } from "./context";
 import { buildServer, defaultContext } from "./server";
 
 export interface McpHttpDependencies {
@@ -111,8 +111,12 @@ function managedBody(source: ReadableStream<Uint8Array>, finish: () => void, log
 
 const contentLength = z.string().regex(/^\d+$/).transform(BigInt);
 
+/**
+ * The request's concurrency slot is freed once, when the response is done (sent, cancelled or refused) and no tool call it
+ * started is still running. A disconnect ends the response but not a running call, so the call keeps the slot.
+ */
 export async function handleMcpHttpRequest(request: Request, deps: McpHttpDependencies = realDeps()): Promise<Response> {
-  let release: (() => void) | undefined;
+  let endResponse: (() => void) | undefined;
   let responseOwnsSlot = false;
   let input: ReturnType<typeof managedBody> | undefined;
   let closeHandler: (() => void) | undefined;
@@ -130,30 +134,46 @@ export async function handleMcpHttpRequest(request: Request, deps: McpHttpDepend
     if (current.inFlight >= settings.http.pool.max_concurrent) return refusal(503, "busy", { "Retry-After": "1" });
     current.inFlight++;
     let released = false;
+    let responseDone = false;
+    let runningCalls = 0;
     let output: ReturnType<typeof managedBody> | null = null;
     const abort = () => {
       void input?.cancel();
       void output?.cancel();
     };
-    release = () => {
-      if (!released) {
+    const releaseWhenIdle = () => {
+      if (!released && responseDone && runningCalls === 0) {
         released = true;
-        closeHandler?.();
         current.inFlight--;
-        request.signal.removeEventListener("abort", abort);
+      }
+    };
+    endResponse = () => {
+      if (responseDone) return;
+      responseDone = true;
+      closeHandler?.();
+      request.signal.removeEventListener("abort", abort);
+      releaseWhenIdle();
+    };
+    const track = async <T>(call: () => Promise<T>): Promise<T> => {
+      if (responseDone) throw new Error("request closed");
+      runningCalls++;
+      try { return await call(); }
+      finally {
+        runningCalls--;
+        releaseWhenIdle();
       }
     };
     if (request.body) input = managedBody(request.body, () => {}, deps.log);
     request.signal.addEventListener("abort", abort, { once: true });
     request.signal.throwIfAborted();
     const forwarded = input ? new Request(request, { body: input.body, ...{ duplex: "half" } }) : request;
-    const response = hygiene(await authenticatedResponse(forwarded, deps, settings, key, current.throttle, (close) => { closeHandler = close; }));
+    const response = hygiene(await authenticatedResponse(forwarded, deps, settings, key, current.throttle, { adopt: (close) => { closeHandler = close; }, track }));
     if (request.signal.aborted) {
       await response.body?.cancel();
       request.signal.throwIfAborted();
     }
     if (!response.body) return response;
-    output = managedBody(response.body, release, deps.log);
+    output = managedBody(response.body, endResponse, deps.log);
     const result = new Response(output.body, { status: response.status, statusText: response.statusText, headers: response.headers });
     responseOwnsSlot = true;
     return result;
@@ -162,7 +182,7 @@ export async function handleMcpHttpRequest(request: Request, deps: McpHttpDepend
     return refusal(500, "internal");
   } finally {
     void input?.cancel();
-    if (!responseOwnsSlot) release?.();
+    if (!responseOwnsSlot) endResponse?.();
   }
 }
 
@@ -183,9 +203,12 @@ function createJsonHandler(create: McpHttpDependencies["createHandler"], ...args
 
 /**
  * Builds a fresh SDK handler and server for every request, so one token's grant, results and audit context cannot reach
- * another request; the handler is closed together with the request slot.
+ * another request; the handler is closed when the response ends, and its tool calls run through `slot.track`.
  */
-async function authenticatedResponse(request: Request, deps: McpHttpDependencies, settings: McpConfig, key: string, throttle: LoginThrottle, adopt: (close: () => void) => void): Promise<Response> {
+async function authenticatedResponse(
+  request: Request, deps: McpHttpDependencies, settings: McpConfig, key: string, throttle: LoginThrottle,
+  slot: { adopt: (close: () => void) => void; track: NonNullable<McpContext["track"]> },
+): Promise<Response> {
   const secret = bearerAgentToken(request.headers.get("authorization"));
   let verified: Awaited<ReturnType<typeof verifyAgentToken>> = { ok: false, reason: "malformed" };
   let readDb;
@@ -219,6 +242,7 @@ async function authenticatedResponse(request: Request, deps: McpHttpDependencies
     grant, readGrant: deps.readGrant(readDb, deps.now), writeDb: writes ? deps.writeDb(settings) : null,
   });
   context.now = deps.now;
+  context.track = slot.track;
   const handler = createJsonHandler(deps.createHandler, () => {
     const server = buildServer(context, { version });
     server.server.registerCapabilities({ tools: { listChanged: false } });
@@ -227,7 +251,7 @@ async function authenticatedResponse(request: Request, deps: McpHttpDependencies
     responseMode: "json", maxRequestBodySize: settings.http.max_body_bytes, maxSubscriptions: 0,
     onerror: (error) => deps.log(`[mcp] http transport error: ${errorCategory(error)}`),
   });
-  adopt(() => { void handler.close().catch((error: unknown) => deps.log(`[mcp] http close error: ${errorCategory(error)}`)); });
+  slot.adopt(() => { void handler.close().catch((error: unknown) => deps.log(`[mcp] http close error: ${errorCategory(error)}`)); });
   const response = await handler.fetch(request, {
     authInfo: { token: "", clientId: String(grant.tokenId), scopes: [...grant.permissions], expiresAt: 253402300799 },
   });

@@ -227,10 +227,10 @@ curl -i 'https://<machine>.<tailnet>.ts.net/api/mcp' \
 认证失败不写 `agent_calls`；拒绝日志只有重启后会变化的来源短密钥哈希，不含地址或凭据。
 标签使用 HMAC-SHA256 的前八个十六进制字符；进程密钥在首次使用时随机生成，从不写入日志或持久化。
 
-并发名额会保留到 token 验证、最后使用时间更新及 handler 工作完成，再等响应体读完或被取消后释放。
-断开连接会停止读取请求体或响应体，但等待中的工作未完成时不会释放名额。
-每次请求都有独立的 server 和 token 上下文，只有传输 handler 按请求体上限缓存。
-现代协议通常返回 JSON，中途通知需要时转为 SSE；旧协议使用 SSE。长连接订阅仍被禁用。
+并发名额要等响应体读完或被取消、且该请求发起的工具调用全部结束后才释放。
+断开连接会停止读取请求体或响应体，但 token 验证、最后使用时间更新或工具调用仍在运行时不会释放名额。
+每次请求都有独立的传输 handler、server 和 token 上下文。现代协议（2026-07-28）返回普通 JSON；
+旧协议（2025-06-18）由 SDK 的兼容路径处理，是一次以结果结束的 SSE 交换。长连接订阅仍被禁用。
 
 HTTP 额外使用最多 `read_max + write_max + 1` 个数据库连接（默认六个），与 Web 共享池及各 stdio 进程独立，
 连接池和审计连接都延迟打开。认证通过且声明大小未超限后更新 `agent_tokens.last_used_at`；更新失败只记错误类别，
@@ -404,7 +404,7 @@ GRANT USAGE ON SEQUENCE agent_calls_id_seq TO job_radar_ro;
 | HTTP 401 `unauthorized` | token 缺失、格式错误、未知、吊销或过期都返回相同响应及 `WWW-Authenticate: Bearer`。使用 Authorization 请求头，不能用查询参数或 cookie。 |
 | HTTP 429 `too_many_attempts` | 认证限流；等待 `Retry-After` 指定的秒数。 |
 | HTTP 413 `payload_too_large` | 声明或流式读取的请求体超过 `http.max_body_bytes`，缩小请求。 |
-| HTTP 503 `busy` | `http.pool.max_concurrent` 已满；读完或取消响应流，1 秒后重试。断开的请求仍占用名额，直到等待中的工作结束。 |
+| HTTP 503 `busy` | `http.pool.max_concurrent` 已满；读完或取消响应流，1 秒后重试。断开的请求仍占用名额，直到它的工具调用结束。 |
 | HTTP 503 `unavailable` | token 验证无法访问数据库，不计入认证失败。 |
 | HTTP 405 `method_not_allowed` | 精确路径的 GET/DELETE 探测在前提检查后返回 405 和 `Allow: POST`，不验证 token。MCP 调用使用 POST；其他方法仍经过浏览器会话检查，所有响应均无 CORS。 |
 | HTTP 401 `login_required` | 浏览器会话检查拒绝了其他路径拼写、未豁免的方法或带 `Next-Action` 的请求。使用精确 `/api/mcp` 且不带 `Next-Action`；只有 POST/GET/DELETE 豁免。 |
