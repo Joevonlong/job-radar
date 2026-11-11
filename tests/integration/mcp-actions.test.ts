@@ -11,13 +11,8 @@ import { readAgentBudget, takeIndirectBudget } from "@/lib/agent-access/budget";
 import type { Permission } from "@/lib/agent-access/permissions";
 import { CAPABILITIES } from "@/lib/capabilities/registry";
 import { runAction } from "@/lib/capabilities/actions/run-action";
-import { loadConfig, resetConfigCache, writerSchema } from "@/lib/config";
+import { resetConfigCache, writerSchema } from "@/lib/config";
 import { mcpSchema } from "@/lib/config/schemas/mcp";
-import { saveCareerProfile } from "@/lib/career/store/profile";
-import { careerProfilePath, careerDocumentPath } from "@/lib/career/store/paths";
-import { prepareTailor } from "@/lib/career/tailor/prepare";
-import { loadTailorContext } from "@/lib/career/tailor/context";
-import { requestCareerTailor } from "@/lib/career/tailor/request";
 import { readSalaryActionSettings, readCompanyActionSettings } from "@/lib/control/action-settings";
 import { requestRunCycle, requestScoreJobs, requestModelsSync } from "@/lib/control/service";
 import { requestSalaryLookup } from "@/lib/control/salary-request";
@@ -37,14 +32,14 @@ import type { ActionOutput, RequestStatusOutput } from "@/lib/mcp/dto/actions";
 import { buildServer, defaultContext } from "@/lib/mcp/server";
 import { mcpTranslator } from "@/lib/mcp/text";
 import { descriptionHash } from "@/lib/translation/hash";
-import { profile, tempCareer } from "../career/fixtures";
+import { tempCareer } from "../career/fixtures";
 import { quietLogger } from "../cycle/helpers";
 
 const url = inject("testDatabaseUrl");
 const NOW = new Date("2026-11-11T12:00:00Z");
 const db = () => getDb();
 const actions = CAPABILITIES.filter((cap) => cap.permission === "actions:run").map((cap) => cap.id);
-const permissions: Permission[] = ["actions:run", "writer:write", "career:write"];
+const permissions: Permission[] = ["actions:run", "writer:write"];
 let temp: ReturnType<typeof tempCareer>;
 let readOnly: ReadOnlyDb;
 let closes: (() => Promise<void>)[] = [];
@@ -92,15 +87,6 @@ async function connect(options: { permissions?: Permission[]; budgets?: Record<s
   };
   const usage = () => readAgentBudget(db(), options.caller ?? "stdio", { budgets: () => settings.budgets, timeZone: ctx.timezone, now: ctx.now });
   return { client, ctx, settings, call, usage };
-}
-
-async function tailorFixture() {
-  const target = await job();
-  const saved = await saveCareerProfile(profile(), { baseHash: null });
-  if (!saved.ok) throw new Error("fixture profile failed");
-  const prepared = await prepareTailor(db(), { jobId: target.id, mode: "tailor", new: true });
-  if (!("hash" in prepared)) throw new Error("fixture prepare failed");
-  return { target, prepared };
 }
 
 beforeAll(async () => {
@@ -164,44 +150,25 @@ it.each(["draft", "polish"] as const)("draft_answer queues %s material and retai
   expect(JSON.stringify(audit)).not.toContain("SENTINEL");
 });
 
-it("tailor_resume prepares its own current hash, infers the linked job and leaves the profile and document unchanged", async () => {
-  const { target, prepared } = await tailorFixture();
-  const beforeProfile = fs.readFileSync(careerProfilePath(), "utf8");
-  const beforeDoc = fs.readFileSync(careerDocumentPath(prepared.doc_id), "utf8");
-  const session = await connect();
-  const result = await session.call("tailor_resume", { doc_id: prepared.doc_id, with_letter: true });
-  expect(result.error, result.text).toBe(false);
-  const { outbound } = await loadTailorContext(db(), { doc_id: prepared.doc_id, jobId: target.id, mode: "tailor" }, loadConfig("career"));
-  expect(await getControlRequest(db(), result.data.request_id!)).toMatchObject({ kind: "career_tailor", payload: { caller: "stdio", mode: "tailor", doc_id: prepared.doc_id, jobId: target.id, with_letter: true, outbound_hash: outbound.hash } });
-  expect(result.data.notices.join(" ")).toContain("one by one");
-  expect(fs.readFileSync(careerProfilePath(), "utf8")).toBe(beforeProfile);
-  expect(fs.readFileSync(careerDocumentPath(prepared.doc_id), "utf8")).toBe(beforeDoc);
-  const joined = await session.call("tailor_resume", { doc_id: prepared.doc_id, job_id: target.id, with_letter: true });
-  expect(joined.data.state).toBe("joined_existing");
-  expect((await session.usage()).actions.tailor_resume.used).toBe(1);
-});
-
-it("hides all nine without actions:run and names missing secondary permissions on direct calls", async () => {
-  const absent = await connect({ permissions: ["writer:write", "career:write"] });
+it("hides all eight without actions:run and names missing secondary permissions on direct calls", async () => {
+  const absent = await connect({ permissions: ["writer:write"] });
   expect((await absent.client.listTools()).tools.map((tool) => tool.name).filter((name) => actions.includes(name))).toEqual([]);
   expect((await absent.call("translate_job", { job_id: 1 })).text).toContain("actions:run");
   const basic = await connect({ permissions: ["actions:run"] });
   const names = (await basic.client.listTools()).tools.map((tool) => tool.name);
   expect(names).not.toContain("draft_answer");
-  expect(names).not.toContain("tailor_resume");
   expect((await basic.call("draft_answer", { job_id: 1, question_id: 1, mode: "draft" })).text).toContain("writer:write");
-  expect((await basic.call("tailor_resume", { doc_id: "doc_aaaaaaaaaa" })).text).toContain("career:write");
 });
 
 it.each([
   ["breakdown_job", "breakdown", ["enabled"]], ["research_salary", "salary", ["lookup", "enabled"]],
-  ["research_company", "research", ["enabled"]], ["draft_answer", "writer", ["enabled"]], ["tailor_resume", "career", ["enabled"]],
+  ["research_company", "research", ["enabled"]], ["draft_answer", "writer", ["enabled"]],
 ] as const)("%s disappears when its live feature gate closes and takes no budget", async (tool, file, keys) => {
   const session = await connect();
   expect((await session.client.listTools()).tools.map((item) => item.name)).toContain(tool);
   setting(file, [...keys], false);
   expect((await session.client.listTools()).tools.map((item) => item.name)).not.toContain(tool);
-  const args = tool === "tailor_resume" ? { doc_id: "doc_aaaaaaaaaa" } : tool === "draft_answer" ? { job_id: 1, question_id: 1, mode: "draft" } : { job_id: 1 };
+  const args = tool === "draft_answer" ? { job_id: 1, question_id: 1, mode: "draft" } : { job_id: 1 };
   expect((await session.call(tool, args)).text).toContain("disabled");
   expect(await db().select().from(schema.agentBudgetTickets)).toHaveLength(0);
   expect(await db().select().from(schema.agentBudgetUsage)).toHaveLength(0);
@@ -452,13 +419,7 @@ it("strips a web-supplied caller and uses only the separate server argument", as
     expect(result.status, JSON.stringify(result)).toBe("queued");
     if (result.status === "queued") expect((await getControlRequest(db(), result.request))?.payload).not.toHaveProperty("caller");
   }
-  const { target: tailorJob, prepared } = await tailorFixture();
-  const tailor = await requestCareerTailor(db(), { mode: "tailor", doc_id: prepared.doc_id, jobId: tailorJob.id, outbound_hash: prepared.hash, caller: 88 });
-  expect(tailor.state).toBe("queued");
-  if (tailor.state === "queued") expect((await getControlRequest(db(), tailor.requestId))?.payload).not.toHaveProperty("caller");
   const session = await connect({ caller: 7 });
-  const joined = await session.call("tailor_resume", { doc_id: prepared.doc_id });
-  expect(joined.data.state).toBe("joined_existing");
   expect((await session.usage()).total.used).toBe(0);
   expect((await session.call("run_collection", { caller: 88 })).error).toBe(true);
 });

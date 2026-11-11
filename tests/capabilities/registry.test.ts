@@ -9,7 +9,7 @@ import { CAPABILITIES, visibleCapabilities } from "@/lib/capabilities/registry";
 describe("capability registry", () => {
   it("contains exactly one definition for each tool, in tool-list order", () => {
     const ids = CAPABILITIES.map((capability) => capability.id);
-    expect(ids).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer", "run_collection", "score_jobs", "translate_job", "breakdown_job", "research_salary", "research_company", "draft_answer", "tailor_resume", "get_request_status"]);
+    expect(ids).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer", "run_collection", "score_jobs", "translate_job", "breakdown_job", "research_salary", "research_company", "draft_answer", "get_request_status"]);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -33,7 +33,6 @@ describe("capability registry", () => {
       { id: "research_salary", permission: "actions:run", kind: "trigger" },
       { id: "research_company", permission: "actions:run", kind: "trigger" },
       { id: "draft_answer", permission: "actions:run", kind: "trigger" },
-      { id: "tailor_resume", permission: "actions:run", kind: "trigger" },
       { id: "get_request_status", permission: "actions:run", kind: "read" },
 
     ]);

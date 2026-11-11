@@ -273,8 +273,8 @@ test("all source dependencies respect the career and engine boundaries", () => {
   expect(coreCareerImports(sources)).toEqual(CORE_IMPORTING_CAREER);
 });
 
-test("the core career import whitelist contains only UI entries, worker handlers and the agent tailoring entry", () => {
-  expect(CORE_IMPORTING_CAREER).toEqual({ "src/app/jobs/[id]/page.tsx": ["src/components/career/job-entry.tsx"], "src/app/me/page.tsx": ["src/components/career/career-card.tsx"], "src/lib/control/ai-handlers.ts": ["src/lib/career/extract/handler.ts", "src/lib/career/tailor/handler.ts"], "src/lib/capabilities/actions/tailor-resume.ts": ["src/lib/career/tailor/agent-request.ts"] });
+test("the core career import whitelist contains only the card, the job page entry and career handler registration", () => {
+  expect(CORE_IMPORTING_CAREER).toEqual({ "src/app/jobs/[id]/page.tsx": ["src/components/career/job-entry.tsx"], "src/app/me/page.tsx": ["src/components/career/career-card.tsx"], "src/lib/control/ai-handlers.ts": ["src/lib/career/extract/handler.ts", "src/lib/career/tailor/handler.ts"] });
 });
 
 test("core career import comparison rejects unlisted imports and unused whitelist entries", () => {
@@ -556,9 +556,9 @@ test("the resume-kit import is reachable only from web routes and pages, never f
   expect([...new Set(users)].sort()).toEqual(["src/app/api/career/import/route.ts", "src/components/career/kit-import.tsx"]);
 });
 
-test("MCP modules never import career modules and the tool list includes the guarded action capabilities", async () => {
+test("MCP modules never import career modules and the tool list is unchanged", async () => {
   const career = importedTargets("src/lib/mcp").filter(({ to }) => CAREER.some((directory) => to.startsWith(`${directory}/`)));
   expect(career).toEqual([]);
   const { CAPABILITIES } = await import("@/lib/capabilities/registry");
-  expect(CAPABILITIES.map((capability) => capability.id)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer", "run_collection", "score_jobs", "translate_job", "breakdown_job", "research_salary", "research_company", "draft_answer", "tailor_resume", "get_request_status"]);
+  expect(CAPABILITIES.map((capability) => capability.id)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer", "run_collection", "score_jobs", "translate_job", "breakdown_job", "research_salary", "research_company", "draft_answer", "get_request_status"]);
 });

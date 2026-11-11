@@ -25,7 +25,6 @@ import { breakdown_job } from "./actions/breakdown-job";
 import { research_salary } from "./actions/research-salary";
 import { research_company } from "./actions/research-company";
 import { draft_answer } from "./actions/draft-answer";
-import { tailor_resume } from "./actions/tailor-resume";
 import { get_request_status } from "./actions/get-request-status";
 
 export const CAPABILITIES: readonly Capability[] = [
@@ -47,7 +46,6 @@ export const CAPABILITIES: readonly Capability[] = [
   research_salary,
   research_company,
   draft_answer,
-  tailor_resume,
   get_request_status,
 ];
 

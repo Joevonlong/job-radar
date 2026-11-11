@@ -46,7 +46,7 @@ describe("action input boundaries", () => {
 });
 
 it("names each missing additional permission in the effective intersection", () => {
-  for (const [tool, permission] of [["draft_answer", "writer:write"], ["tailor_resume", "career:write"]] as const) {
+  for (const [tool, permission] of [["draft_answer", "writer:write"]] as const) {
     const cap = CAPABILITIES.find((item) => item.id === tool)!;
     for (const settings of [
       mcpSchema.parse({ enabled: true, permissions: ["actions:run"], stdio: { permissions: ["actions:run", permission] } }),

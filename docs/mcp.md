@@ -28,7 +28,7 @@ that provider's terms. Turning the server on adds this exit to the ones listed i
 | Your applications: status, when it last changed, days in that status, next step and its date, interview rounds, the status history | |
 | With `actions:run`: request ids, status, timestamps, queue position, worker availability, safe result counts and codes, cycle progress and daily budget metadata | |
 
-The career profile itself (its files, documents, contact details and drafts) is never returned. `tailor_resume` reads the existing document and profile on the server to prepare the same outbound content as the web workflow; the configured AI worker processes it. The MCP client receives request metadata only.
+The career profile itself (its files, documents, contact details and drafts) is never given; no MCP tool reads it.
 
 These lists cover structured fields. Two permissions also give free text that no field list can hold back:
 
@@ -65,9 +65,9 @@ was off, `jobs:read` offers both and `config:migrate` prints a notice. Remove `j
 you write into `mcp.yaml` also covers tools that later versions add under it, so grant only what should be readable or
 writable.
 
-`budgets` enforces daily limits for the eight action tools below. Read tools, including `get_request_status`, and `save_application_answer` do not consume them.
+`budgets` enforces daily limits for the seven trigger tools below. Read tools, including `get_request_status`, and `save_application_answer` do not consume them.
 `per_caller` counts the local stdio connection and each token separately. It caps collection requests, job translations,
-breakdowns, salary lookups, company lookups, answer drafts and resume tailoring; `score_jobs` counts each job in a batch.
+breakdowns, salary lookups, company lookups and answer drafts; `score_jobs` counts each job in a batch.
 The same counters support indirect salary and company research through `takeIndirectBudget`. An action cap of `0` forbids that
 action. `total` counts requests, not jobs, across all callers and actions: a `score_jobs` batch of 40 jobs uses 40 of the
 caller's `score_jobs` cap but only 1 of `total`. `0` forbids all agent actions.
@@ -220,10 +220,10 @@ long it took, and whether it worked. Never the arguments or the results. Errors 
 
 ## Action tools and daily limits
 
-All nine tools require effective `actions:run` in both `permissions` and `stdio.permissions`. Add `writer:write` for
-`draft_answer` and `career:write` for `tailor_resume` in both lists as well. Missing permissions hide a tool and refuse a direct
+All eight tools require effective `actions:run` in both `permissions` and `stdio.permissions`. Add `writer:write` for
+`draft_answer` in both lists as well. Missing permissions hide a tool and refuse a direct
 call as `not_permitted`, naming the missing permission. Feature switches hide their tools and direct calls fail as `disabled`
-before touching a budget. The eight triggers also require an action write connection: restart the client after first granting
+before touching a budget. The seven triggers also require an action write connection: restart the client after first granting
 action access. The stdio server opens one separate write session (`max: 1`) only when an action capability is permitted at
 startup and closes it on shutdown. Reads retain their read-only connection.
 
@@ -235,11 +235,10 @@ startup and closes it on shutdown. Reads retain their read-only connection.
 | `breakdown_job` | `job_id`, optional `force` (false) | Queues JD breakdown or uses a current cache; `breakdown.yaml: enabled` |
 | `research_salary` | `job_id`, optional `force` (false) | Queues salary research or uses a current cache; `salary.yaml: lookup.enabled` |
 | `research_company` | `job_id`, optional `force` (false) | Queues company research or uses a current cache; `research.yaml: enabled` |
-| `draft_answer` | `job_id`, `question_id`, `mode` (`draft` or `polish`); polish also requires `option` (`align_to_job` or `language_only`) and `text` | Needs `writer:write` and `writer.yaml: enabled`; text is bounded by `draft_max_chars`, selected material and payload scrubbing match the web writer |
-| `tailor_resume` | `doc_id`, optional `job_id` (otherwise uses the document's linked job), `with_letter` (false) | Needs `career:write` and `career.yaml: enabled`; server computes the current outbound hash; creates proposals the owner accepts one by one in the web UI, never edits the profile |
+| `draft_answer` | `job_id`, `question_id`, `mode` (`draft` or `polish`); polish also requires `option` (`align_to_job` or `language_only`) and `text` | Needs `writer:write` and `writer.yaml: enabled`; text is bounded by `draft_max_chars`, selected material and payload scrubbing match the web writer. In polish mode, the agent-supplied `text` is sent as the owner’s draft ("your draft"); the agent decides what it pastes. |
 | `get_request_status` | `request_id` (positive integer) | Read-only, no daily budget; status and allow-listed result metadata for this connection's action requests |
 
-All numeric ids are positive integers; `doc_id` uses the career document identifier. Inputs reject unknown fields, including
+All numeric ids are positive integers. Inputs reject unknown fields, including
 `caller`. Caller identity is set by the server, separately from input. Joining a request never changes its original caller.
 
 | Daily cap | Default per caller |
@@ -251,7 +250,7 @@ All numeric ids are positive integers; `doc_id` uses the career document identif
 | `research_salary` | 10 |
 | `research_company` | 10 |
 | `draft_answer` | 20 |
-| `tailor_resume` | 5 |
+| `tailor_resume` (reserved, no tool uses it yet) | 5 |
 | `total` (requests across all callers and actions) | 200 |
 
 Set overrides under `budgets` in `data/config/mcp.yaml` or Settings → Advanced, for example:
@@ -264,8 +263,9 @@ budgets:
   total: 200
 ```
 
-These caps are an additional layer. Existing manual-trigger minimum intervals where implemented, salary/company daily quotas,
-AI usage windows, cooldowns, API budgets and `another_cycle_running` remain authoritative. Collection repeats join an open
+Feature switches are checked before taking budget; quotas, deduplication, busy and backfill gates run as on the web,
+and a refused request refunds the charge. These caps are an additional layer. Existing manual-trigger minimum intervals
+where implemented, salary/company daily quotas, AI usage windows, cooldowns, API budgets and `another_cycle_running` remain authoritative. Collection repeats join an open
 covering request; the collection enqueue function does not add a minimum-interval check. A backfill is refused while a cycle
 request is open; execution still checks the active processing-cycle lock. Runtime failures remain visible through status.
 
@@ -276,12 +276,11 @@ A batch exceeding the remaining budget is refused in full as `over_budget`: the 
 queued. `total` counts requests, so one scoring batch consumes one total unit. Counters reset at local midnight in the schedule
 time zone. Zero disables the action, or all actions for `total: 0`.
 
-The eight trigger results contain only `request_id` (nullable), `state` (`queued`, `joined_existing`, `cached`), `existing`,
+The seven trigger results contain only `request_id` (nullable), `state` (`queued`, `joined_existing`, `cached`), `existing`,
 `budget` (`action`, `remaining`, `resets_at` as ISO), and `notices`. A cache hit queues nothing and has no request id.
-Tailoring's notice explains that proposals require the owner's acceptance.
 
-`get_request_status` only finds the eight created kinds (`run_cycle`, `score_jobs`, `translate_job`, `breakdown_job`,
-`salary_lookup`, `company_research`, `writer_job`, `career_tailor`) with an exact `payload.caller` match. Other callers, web
+`get_request_status` only finds the seven created kinds (`run_cycle`, `score_jobs`, `translate_job`, `breakdown_job`,
+`salary_lookup`, `company_research`, `writer_job`) with an exact `payload.caller` match. Other callers, web
 requests, scheduler requests, unsupported kinds and missing ids all return the same **Request not found** response. This also
 applies when a tool joined a web request: its id is returned, but that caller cannot inspect it. Status gives `pending`,
 `running`, `done` or `failed`, timestamps, queue `ahead` and `worker_online` (both null after completion), allow-listed error
@@ -290,7 +289,7 @@ returns the payload, result text, provider details or error detail. Unknown erro
 
 Submissions and status queries each use the normal audit path. An over-budget refusal records `outcome: over_budget` with
 `error_category: null`; no audit row contains arguments. Per-job actions target the job; drafting targets the question;
-collection, scoring batches, tailoring and status queries have no audit target.
+collection, scoring batches and status queries have no audit target.
 
 ## Audit trail
 

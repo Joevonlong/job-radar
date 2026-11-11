@@ -5,7 +5,7 @@ import type { Executor } from "../executor";
 import { controlRequests } from "../schema";
 import type { AgentCaller } from "@/lib/agent-access/caller";
 
-const AGENT_REQUEST_KINDS = ["run_cycle", "score_jobs", "translate_job", "breakdown_job", "salary_lookup", "company_research", "writer_job", "career_tailor"] as const;
+const AGENT_REQUEST_KINDS = ["run_cycle", "score_jobs", "translate_job", "breakdown_job", "salary_lookup", "company_research", "writer_job"] as const;
 
 /** Ownership and kind are filtered together in SQL; payloads never leave this query. */
 export async function getAgentControlRequest(db: Db, id: number, caller: AgentCaller) {

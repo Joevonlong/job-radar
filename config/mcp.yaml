@@ -1,7 +1,8 @@
 # MCP server (docs/mcp.md): lets an MCP client you configure yourself (Claude Desktop, Claude Code, ...) query your jobs and
-# applications and queue permitted actions. The client starts `pnpm mcp:serve` as a local child process and talks to it over stdio; no port is opened. Nothing
-# grants write access by default. `save_application_answer` needs writer:write and adds answer versions. Action tools need
-# actions:run and use the existing control queue. Each call adds metadata to `agent_calls` (see `audit` below).
+# applications and queue permitted actions. The client starts `pnpm mcp:serve` as a local child process and talks to it
+# over stdio; no port is opened. No permission that writes is granted by default. `save_application_answer` needs
+# writer:write and adds answer versions. Action tools need actions:run and use the existing control queue.
+# Each call adds metadata to `agent_calls` (see `audit` below).
 # Privacy: whatever the tools return is handed by your client to the model provider it uses (Anthropic for Claude, ...).
 # What may be returned is fixed in code: job facts, source links, scores and ranks, signals with their JD quotes, the JD after
 # AI-trap cleaning, and the status, dates, next step and interview rounds of your applications. Never returned: your profile,
@@ -21,9 +22,9 @@ enabled: false
 # get_application_context: writer:read and writer.yaml enabled (shares your chosen application material)
 # save_application_answer: writer:write and writer.yaml enabled (only adds answer versions)
 # run_collection / score_jobs / translate_job / breakdown_job / research_salary / research_company: actions:run
-# draft_answer: actions:run + writer:write; tailor_resume: actions:run + career:write (owner accepts proposals in the web UI)
+# draft_answer: actions:run + writer:write
 # get_request_status: actions:run; only this caller's requests, no daily charge
-# Feature gates still apply: breakdown.enabled, salary.lookup.enabled, research.enabled, writer.enabled, career.enabled.
+# Feature gates still apply: breakdown.enabled, salary.lookup.enabled, research.enabled, writer.enabled.
 # Other catalog permission ids are accepted; only implemented capabilities and field blocks are offered.
 permissions:
   - jobs:read
@@ -71,7 +72,7 @@ budgets:
     research_company: 10
     # Answer drafting requests per caller per day
     draft_answer: 20
-    # Resume tailoring requests per caller per day
+    # Resume tailoring budget: reserved, no tool uses it yet
     tailor_resume: 5
   # Requests (not jobs) per day across all agents and actions; a score_jobs batch counts once; 0 forbids all agent actions
   total: 200

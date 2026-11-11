@@ -1,5 +1,4 @@
 import { readBreakdownSettings } from "@/lib/breakdown/settings";
-import { readCareerGate } from "@/lib/config/career-gate";
 import type { AgentAction } from "@/lib/config/schemas/mcp";
 import type { McpContext } from "@/lib/mcp/context";
 import { readResearchSettings } from "@/lib/research/settings";
@@ -21,7 +20,6 @@ export async function actionAvailable(ctx: Pick<McpContext, "writer" | "actions"
       return settings.state === "ok" && settings.config.enabled;
     }
     case "draft_answer": return ctx.writer?.inputs().writer?.enabled === true;
-    case "tailor_resume": return (await readCareerGate()).enabled;
     default: return true;
   }
 }

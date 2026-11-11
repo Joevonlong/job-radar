@@ -17,7 +17,6 @@ const errorCategories = {
   invalidPayload: "invalid_input", invalid: "invalid_input", unknownChannel: "unknown_channel",
   nothingToScore: "nothing_to_score", databaseUnavailable: "database", tooSoon: "too_soon",
   backfillOverLimit: "backfill_over_limit", cycleBusy: "cycle_busy", configUnavailable: "config_error",
-  doc_gone: "not_found", document_missing: "not_found", job_gone: "not_found",
 } as const;
 
 export const actionCaller = (ctx: Pick<McpContext, "caller">): AgentCaller => ctx.caller?.tokenId ?? "stdio";
@@ -50,9 +49,6 @@ const actionErrorMessages = {
   not_ready: "actionErrors.not_ready",
   no_material: "actionErrors.no_material",
   too_long: "actionErrors.too_long",
-  review_again: "actionErrors.review_again",
-  no_jd: "actionErrors.no_jd",
-  limits: "actionErrors.limits",
   failed: "actionErrors.failed",
 } as const;
 
@@ -68,7 +64,7 @@ export function controlOutcome(outcome: ControlActionState): EnqueueResult {
 }
 
 /** Reserve before enqueueing; only a newly queued request keeps its ticket, including when a later response read fails. */
-export async function runAction(ctx: McpContext, action: AgentAction, enqueue: (db: Db, caller: AgentCaller) => Promise<EnqueueResult>, options: { units?: number; notices?: string[] } = {}) {
+export async function runAction(ctx: McpContext, action: AgentAction, enqueue: (db: Db, caller: AgentCaller) => Promise<EnqueueResult>, options: { units?: number } = {}) {
   if (!await actionAvailable(ctx, action) || !ctx.actions) throw new ToolFailure("disabled", ctx.text("errors.actionDisabled"));
   const db = ctx.actions.db;
   const caller = actionCaller(ctx);
@@ -92,6 +88,6 @@ export async function runAction(ctx: McpContext, action: AgentAction, enqueue: (
     state: outcome.state === "cached" ? "cached" : outcome.existing ? "joined_existing" : "queued",
     existing: outcome.state === "queued" && outcome.existing,
     budget: { action, remaining: budget.actions[action].remaining, resets_at: budget.resetsAt.toISOString() },
-    notices: options.notices ?? [],
+    notices: [],
   });
 }
