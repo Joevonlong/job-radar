@@ -37,7 +37,7 @@ export function HomeCityField({ id, value, onChange, geo, onPick, known, invalid
     <div className="flex flex-col gap-2">
       {text !== "" ? (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex min-h-8 items-center gap-1.5 border-2 border-ink bg-hi px-2 text-body-sm font-bold" data-testid={`${testId}-value`}>
+          <span className="inline-flex min-h-8 items-center gap-1.5 border-2 border-ink bg-hi px-2 text-body-sm font-bold" data-place={text} data-testid={`${testId}-value`}>
             {label}
             {detail !== "" ? <span className="font-normal text-ink-2">{detail}</span> : null}
           </span>

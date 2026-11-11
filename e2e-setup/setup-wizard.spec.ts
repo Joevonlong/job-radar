@@ -91,8 +91,8 @@ test("language: the browser's language is preselected, Chinese switches the page
 
 // Hydration shows in the time zone: the server render has the shipped schedule's zone (America/New_York), the browser's own
 // zone replaces it on a new install only once the page is hydrated. Wait for it before touching the step's controls.
-// a city in the field is a chip with a remove button (the page is in Chinese since the language step)
-const homeCity = () => page.getByTestId("setup-home-city");
+// the home city shows as a chip in the page's language; data-place holds the name that is saved
+const homeCity = () => page.getByTestId("setup-home-city-value");
 const hydrated = (): Promise<void> => expect(page.getByTestId("setup-timezone")).toHaveValue("America/Los_Angeles");
 
 test("market: the example's market is preselected; another country brings its currency and main city until the user sets them", async () => {
@@ -105,11 +105,11 @@ test("market: the example's market is preselected; another country brings its cu
   await expect(page.getByTestId("market-pack")).toHaveValue(market.pack);
   await expect(country).toHaveValue(market.country);
   await expect(currency).toHaveValue(market.currency);
-  await expect(homeCity()).toHaveValue(exampleCity);
+  await expect(homeCity()).toHaveAttribute("data-place", exampleCity);
   // another country brings the currency of the country table and its main city, in place of the example's
   await country.selectOption("DE");
   await expect(currency).toHaveValue("EUR");
-  await expect(homeCity()).toHaveValue("Berlin");
+  await expect(homeCity()).toHaveAttribute("data-place", "Berlin");
   // a currency chosen by hand stays
   await currency.selectOption("CHF");
   await country.selectOption("NL");
@@ -125,17 +125,18 @@ test("market: the example's city, one added by hand, the browser's time zone and
   const { market, home_city: exampleCity } = examplePreferences();
   await hydrated();
   // the example's city is in the field; add a place to move to by hand
-  await expect(homeCity()).toHaveValue(exampleCity);
+  await expect(homeCity()).toHaveAttribute("data-place", exampleCity);
   await page.locator("#setup-market-places").fill("Boston");
+  await expect(page.getByTestId("place-candidates").getByRole("option").first()).toBeVisible();
   await page.locator("#setup-market-places").press("Enter");
-  await expect(page.getByTestId("places-list")).toContainText("Boston");
+  await expect(page.getByTestId("places-list")).toContainText(/Boston|波士顿/);
   // a new install preselects the browser's time zone, not the shipped schedule's
   await page.getByTestId("setup-timezone").selectOption("America/Chicago");
   await save("profile");
   const prefs = profile("preferences") as { market: { pack: string; country: string; currency: string }; home_city: string; places: unknown[] };
   expect(prefs.market).toMatchObject({ pack: market.pack, country: market.country, currency: market.currency });
   expect(prefs.home_city).toBe(exampleCity);
-  expect(prefs.places).toEqual([{ place: "Boston", relocate: true }]);
+  expect(prefs.places).toEqual([{ place: "Boston", relocate: true, id: expect.any(Number) }]);
   expect(config("schedule").timezone).toBe("America/Chicago");
   expect(setup().steps?.market?.status).toBe("done");
 });
