@@ -83,7 +83,7 @@ it("adds the table and the foreign key to a database that has all earlier migrat
 
 // The migrator skips SQL it has applied, so running it twice proves nothing about the file: replay the statements themselves.
 it("can be replayed statement by statement on a database that already has it", async () => {
-  const file = fs.readFileSync(path.resolve("drizzle", `${journal(path.resolve("drizzle")).entries.at(-1)?.tag}.sql`), "utf8");
+  const file = fs.readFileSync(path.resolve("drizzle", `${journal(path.resolve("drizzle")).entries.find((entry) => entry.tag.endsWith(`_${MIGRATION}`))?.tag}.sql`), "utf8");
   for (const statement of file.split("--> statement-breakpoint").map((part) => part.trim()).filter((part) => part !== "")) await db.execute(sql.raw(statement));
   expect(await tokenObjects()).toEqual({ table: ["agent_tokens"], constraint: ["agent_calls_token_id_agent_tokens_id_fk"] });
 });
