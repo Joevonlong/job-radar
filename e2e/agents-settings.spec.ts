@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { parse } from "yaml";
+import { z } from "zod";
 
 import { expect, test, type Page } from "./fixtures";
 
@@ -24,6 +25,16 @@ test.beforeEach(() => {
 test.afterAll(() => {
   fs.copyFileSync(path.join(DEFAULTS_DIR, "mcp.yaml"), MCP);
 });
+
+const manifestSchema = z.object({ node: z.record(z.string(), z.object({ filename: z.string().optional(), exportedName: z.string().optional() })) });
+
+/** The id the production build gave a Server Action of the agent access page (the build the run serves, in .next). */
+function actionId(name: string): string {
+  const manifest = manifestSchema.parse(JSON.parse(fs.readFileSync(path.resolve(".next/server/server-reference-manifest.json"), "utf8")));
+  const entry = Object.entries(manifest.node).find(([, value]) => value.filename === "src/app/settings/agents/actions.ts" && value.exportedName === name);
+  if (!entry) throw new Error(`no Server Action ${name} in the build`);
+  return entry[0];
+}
 
 async function open(page: Page) {
   await page.goto("/settings/agents");
@@ -57,6 +68,28 @@ test("on this machine without a session: the sign-in card, every control read-on
   await expect(page.getByTestId("agents-switch-enabled")).toBeEnabled();
   await expect(page.getByTestId("matrix-jobs:read")).toBeEnabled();
   await expect(page.getByTestId("stdio-edit")).toBeEnabled();
+});
+
+test("on this machine without a session, a Server Action posted by hand past the page is refused and mcp.yaml stays as it was", async ({ page }) => {
+  await open(page);
+  const before = fs.readFileSync(MCP, "utf8");
+  const calls = [
+    ["setAgentSwitchAction", { key: "http", value: true }],
+    ["saveAgentMatrixAction", { permissions: ["jobs:read", "config:write"], baseHash: "0" }],
+    ["saveStdioPermissionsAction", { permissions: ["jobs:read"], baseHash: "0" }],
+  ] as const;
+  for (const [name, argument] of calls) {
+    const answer = await page.evaluate(
+      async ({ id, body }) => {
+        const response = await fetch("/settings/agents", { method: "POST", headers: { "next-action": id, accept: "text/x-component", "content-type": "text/plain;charset=UTF-8" }, body });
+        return { status: response.status, text: await response.text() };
+      },
+      { id: actionId(name), body: JSON.stringify([argument]) },
+    );
+    expect(answer.status).toBe(200);
+    expect(answer.text).toContain('"status":"session_required"');
+  }
+  expect(fs.readFileSync(MCP, "utf8")).toBe(before);
 });
 
 test("from elsewhere the page stays behind the normal login", async ({ request }) => {

@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { hashPassword, parsePasswordHash, passwordVersion, plainPasswordLength, readPasswordSetting, verifyPassword } from "@/lib/security/password";
+import { hashPassword, parsePasswordHash, passwordVersion, plainPasswordLength, readPasswordSetting, verifyPassword, webPasswordUsable } from "@/lib/security/password";
 
 describe("password hashing", () => {
   it("writes scrypt N=2^17, r=8, p=1 with a 16-byte salt and a 32-byte key, without `$` or spaces", async () => {
@@ -67,5 +67,14 @@ describe("password hashing", () => {
     expect(passwordVersion({ kind: "plain", plain: "one password" }, secret)).toBe(a);
     expect(passwordVersion({ kind: "plain", plain: "another one" }, secret)).not.toBe(a);
     expect(passwordVersion({ kind: "plain", plain: "one password" }, randomBytes(32))).not.toBe(a);
+  });
+});
+
+describe("webPasswordUsable", () => {
+  it("a plain password or a readable hash is usable; none, or a hash this code cannot read, is not", async () => {
+    expect(webPasswordUsable({})).toBe(false);
+    expect(webPasswordUsable({ JOB_RADAR_WEB_PASSWORD: "a long test password" })).toBe(true);
+    expect(webPasswordUsable({ JOB_RADAR_WEB_PASSWORD_HASH: await hashPassword("a long test password") })).toBe(true);
+    expect(webPasswordUsable({ JOB_RADAR_WEB_PASSWORD_HASH: "scrypt:not-a-hash", JOB_RADAR_WEB_PASSWORD: "a long test password" })).toBe(false);
   });
 });

@@ -143,6 +143,8 @@ Settings → Agent access (`/settings/agents`) sets the keys of step 1: the mast
 
 Once a web password is set, these changes need a real session. Every other page lets a visit from the host skip the login, but another process on the same machine could use that to widen an agent's access, so this page asks for the password once more. It shows a sign-in card that uses the normal login and brings you back to the page. The same rule covers `mcp.yaml` in the advanced editor (save, restore default, repair). Without a web password the page works without a sign-in, and HTTP stays off, because HTTP needs the password. Editing `data/config/mcp.yaml` by hand on the host is not affected.
 
+What the session gate does not cover: it stops processes that only reach the dashboard over the network. A process running as your user with access to the files can edit `mcp.yaml` directly, gate or not. Use a strong web password. When the page shows the HTTP address as plain `http://` to another host, a client using it sends its bearer token in clear text: use it only on localhost or over Tailscale (HTTPS).
+
 ## Reaching it from other devices (HTTP)
 
 `POST /api/mcp` serves the same tools in the web process. It is optional and stateless: it opens no additional listening port.

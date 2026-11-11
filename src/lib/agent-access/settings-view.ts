@@ -10,9 +10,10 @@ import { getDb } from "@/lib/db";
 import { latestAgentCallAt } from "@/lib/db/repos/agent-calls";
 import { activeAgentTokenGrants } from "@/lib/db/repos/agent-tokens";
 import { configProblem } from "@/lib/mcp/settings";
-import { probeMcp, webPasswordUsable } from "@/lib/ops/doctor/mcp-probe";
+import { probeMcp } from "@/lib/ops/doctor/mcp-probe";
 import { mcpVerdict, type McpVerdict } from "@/lib/ops/doctor/mcp-verdict";
 import type { OwnerSessionState } from "@/lib/security/owner-session";
+import { webPasswordUsable } from "@/lib/security/password";
 
 import { liveMcpSettings } from "./authorize";
 import { normalizePermissions } from "./matrix";
@@ -24,7 +25,7 @@ export type AgentAccessConfig =
 
 export interface AgentAccessStatus {
   verdict: McpVerdict;
-  /** Tokens that can still be used; null when the database cannot be read. */
+  /** Tokens that can still be used, read from the database whether or not mcp.yaml can be read; null when the database cannot be. */
   activeTokens: number | null;
   /** ISO time of the last recorded agent call; null before the first or when the database cannot be read. */
   lastCallAt: string | null;
@@ -86,7 +87,7 @@ export async function loadAgentAccessView(session: OwnerSessionState, now: Date 
     config,
     status: {
       verdict: mcpVerdict(probe),
-      activeTokens: probe.state === "ok" ? probe.activeTokens : null,
+      activeTokens: grants === null ? null : grants.length,
       lastCallAt: lastCall?.toISOString() ?? null,
     },
     tools: toolsByPermission(),

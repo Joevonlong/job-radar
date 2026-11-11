@@ -9,8 +9,8 @@ import { z } from "zod";
 import { ConfigError, layeredConfigFingerprint, mutateConfig, writeConfig } from "@/lib/config";
 import type { McpConfig } from "@/lib/config/schemas/mcp";
 import { logActionFailure } from "@/lib/logging/action-failure";
-import { webPasswordUsable } from "@/lib/ops/doctor/mcp-probe";
 import { ownerMayChange, type OwnerSessionState } from "@/lib/security/owner-session";
+import { webPasswordUsable } from "@/lib/security/password";
 
 import { liveMcpSettings } from "./authorize";
 import { normalizePermissions } from "./matrix";

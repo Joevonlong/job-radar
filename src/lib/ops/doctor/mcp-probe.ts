@@ -9,17 +9,9 @@ import type { McpConfig } from "@/lib/config/schemas/mcp";
 import { getDb } from "@/lib/db";
 import { activeAgentTokenStats } from "@/lib/db/repos/agent-tokens";
 import { readMcpSettings } from "@/lib/mcp/settings";
-import { readPasswordSetting } from "@/lib/security/password";
+import { webPasswordUsable } from "@/lib/security/password";
 
 import type { McpProbe } from "./types";
-
-type Env = Readonly<Record<string, string | undefined>>;
-
-/** A password HTTP may rely on: set, and when given as a hash, a hash this code can read. */
-export function webPasswordUsable(env: Env = process.env): boolean {
-  const password = readPasswordSetting(env);
-  return password !== null && (password.kind !== "hash" || password.parsed !== null);
-}
 
 /** Never throws; token counts are aggregate metadata and a database failure leaves them unknown. */
 export async function probeMcp(now: Date, read: () => McpConfig = () => readMcpSettings()): Promise<McpProbe> {
