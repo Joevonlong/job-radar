@@ -2,9 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 
 import postgres from "postgres";
+import { parse } from "yaml";
 
 import { minimalPdf } from "../tests/fixtures/pdf";
-import { expect, test, type Page } from "./fixtures";
+import { expect, test, type Locator, type Page } from "./fixtures";
 
 // playwright.config.ts points the web server at this directory (and a disposable database).
 const PROFILE_DIR = process.env.E2E_PROFILE_DIR ?? "";
@@ -227,6 +228,45 @@ test("an incomplete profile is announced on Today and /me until a summary is sav
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(page.getByTestId("profile-incomplete-banner")).toHaveCount(0);
+});
+
+async function pickPlace(field: Locator, text: string) {
+  const input = field.getByRole("combobox");
+  await input.fill(text);
+  await expect(field.getByTestId("place-candidates").getByRole("option").first()).toBeVisible();
+  await input.press("Enter");
+}
+
+test("places: a city and a region are picked from the dictionary's list and saved with their ids", async ({ page }) => {
+  await open(page);
+  const prefs = page.getByTestId("preferences-card");
+  const field = prefs.getByTestId("places-field");
+  await pickPlace(field, "Amsterdam");
+  await pickPlace(field, "EU");
+  await expect(prefs.getByTestId("places-list")).toContainText(/Amsterdam|阿姆斯特丹/);
+  await expect(prefs.getByTestId("places-unknown")).toHaveCount(0);
+  await prefs.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(() => read(PREFS_FILE)).toContain("place: Amsterdam");
+  const saved = parse(read(PREFS_FILE)) as { places: Array<{ place: string; relocate: boolean; id?: number | string }> };
+  const [amsterdam, eu] = saved.places.slice(-2);
+  expect(amsterdam).toMatchObject({ place: "Amsterdam", relocate: true });
+  expect(typeof amsterdam?.id).toBe("number");
+  expect(eu).toMatchObject({ place: "eu", relocate: false, id: "eu" });
+});
+
+test("places: the old search.yaml keys are compared with them in both directions", async ({ page }) => {
+  const searchFile = path.join(process.env.E2E_CONFIG_DIR ?? "", "search.yaml");
+  const before = fs.readFileSync(searchFile, "utf8");
+  fs.writeFileSync(searchFile, `${before.trimEnd()}\nlocations: [Oldtown]\n`);
+  try {
+    await open(page);
+    const prefs = page.getByTestId("preferences-card");
+    await expect(prefs.getByTestId("search-leftovers")).toContainText("Oldtown");
+    await pickPlace(prefs.getByTestId("places-field"), "Rotterdam");
+    await expect(prefs.getByTestId("search-added")).toContainText(/Rotterdam|鹿特丹/);
+  } finally {
+    fs.writeFileSync(searchFile, before);
+  }
 });
 
 test("experience library: add a story, save, reload, reorder and see it in the history", async ({ page }) => {

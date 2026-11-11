@@ -11,7 +11,7 @@
 | 步骤 | 选什么 | 写到哪里 |
 |---|---|---|
 | 语言 | 界面语言（按浏览器预选）、AI 文字的语言、岗位翻译成的语言 | `language.yaml` 的 `ui.default_locale`、`ai.output`、`translation.target`；这个浏览器的语言 cookie |
-| 市场 | 市场包、本国、基准货币、本地语言、城市（列出包里的城市，也可以自己输入）、远程范围、时区（按浏览器预选）。换一个国家时，只要你还没自己改过，货币和城市会换成这个国家的货币和主要城市；画像步骤的所在城市也从这里预填 | `preferences.yaml` 的 `market`、`locations`、`remote_scope`；`search.yaml` 的 `locations`、`remote_scope`；`schedule.yaml` 的 `timezone` |
+| 市场 | 市场包、本国、基准货币、本地语言、常住城市和其他地点（从离线地名词典里选）、时区（按浏览器预选）。换一个国家时，只要你还没自己改过，货币和城市会换成这个国家的货币和主要城市；画像步骤的所在城市也从这里预填 | `preferences.yaml` 的 `market`、`home_city`、`places`；`schedule.yaml` 的 `timezone` |
 | 画像 | 给 AI 的简介、技能和年限、语言和 CEFR 等级（会加上市场本地语言一行）、工作年限、签证、所在城市 | `me.yaml`（保留画像历史快照） |
 | 目标 | 岗位名、级别、工作方式、薪资底线（市场货币）、合同类型、要排除的公司 / 关键词 / 学生岗 | `preferences.yaml`；`search.yaml` 的 `keyword_groups`（见下） |
 | 来源 | 你所在市场的渠道（市场包自己的招聘网站带"本地"标记；抓取类和账号类渠道永远不预选，需要确认，见下）、要添加的公司招聘页 | `sources.yaml` |
@@ -20,7 +20,7 @@
 | 检查 | 每一步的结果、就绪清单（画像、渠道、AI、runner 和 ai-worker）、"立即跑第一轮"、完成 | `setup.yaml` |
 
 "保存并继续"立即写入这一步的文件（文件里的注释会保留），并把这一步标为完成；文件不接受的值显示在对应字段旁边，什么都不写。
-"跳过"只把这一步标为跳过，不写任何配置；Telegram 例外：跳过时如果没有设置 `TELEGRAM_BOT_TOKEN` 或 `TELEGRAM_CHAT_ID`，会把 `telegram.enabled` 关掉，推送就不会每一轮都报错。在 `/me` 改了地点，页面会提示把它们同步到搜索城市（`search.yaml` 的 `locations`，是单独的一份清单）。步骤条上任何一步都能点回去，显示的是文件里现在的值。
+"跳过"只把这一步标为跳过，不写任何配置；Telegram 例外：跳过时如果没有设置 `TELEGRAM_BOT_TOKEN` 或 `TELEGRAM_CHAT_ID`，会把 `telegram.enabled` 关掉，推送就不会每一轮都报错。步骤条上任何一步都能点回去，显示的是文件里现在的值。
 
 **搜索关键词。** `search.yaml` 还是随产品发布的示例组时，整体换成一个组 `targets`，内容是你的岗位名。你自己改过的组保留，
 只新增或替换 `targets`。目标这一步在保存前先显示结果。
@@ -91,8 +91,10 @@ market:
   country: NL                   # ISO 代码；省略则用市场包的
   currency: EUR
   home_language: nl
-  locations: [Amsterdam, Utrecht]
-  remote_scope: home_country    # none | home_country | worldwide | {region: [eu, CH]}
+  home_city: Amsterdam
+  places:                       # relocate: true = 愿意搬去；false = 仅远程
+    - { place: Utrecht, relocate: true }
+    - { place: eu, relocate: false }
   timezone: Europe/Amsterdam
 profile:
   summary: Backend engineer moving into applied machine learning.

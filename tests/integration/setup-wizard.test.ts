@@ -3,7 +3,9 @@ import path from "node:path";
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
-import { ensureProfileFiles, reloadConfig, setOnProfileSaved } from "@/lib/config";
+import { buildQueries } from "@/lib/channels/query";
+import { loadQueryPlaces } from "@/lib/channels/query-places";
+import { ensureProfileFiles, getConfigPath, mutateConfig, reloadConfig, setOnProfileSaved } from "@/lib/config";
 import { closeDb, getDb, listControlRequests, listProfileSnapshots, writeHeartbeat } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { requestTestTelegram } from "@/lib/control/service";
@@ -13,6 +15,7 @@ import { readSetupState, resetSetupStateCache } from "@/lib/setup/state";
 import { saveMarketStep } from "@/lib/setup/steps/market";
 import { saveProfileStep } from "@/lib/setup/steps/profile";
 import { requestFirstCycle } from "@/lib/setup/steps/review";
+import { loadSetupView } from "@/lib/setup/view";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 
@@ -45,10 +48,41 @@ afterEach(() => temp.cleanup());
 describe("setup steps against the database", () => {
   it("profile and market saves record profile snapshots", async () => {
     expect(await saveProfileStep({ ...meConfigToDraft(reloadConfig("me")), summary: "Data engineer." })).toEqual({ status: "saved", step: "profile" });
-    expect(await saveMarketStep({ market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, locations: ["Amsterdam"], remote_scope: "home_country", timezone: "Europe/Amsterdam" })).toEqual({ status: "saved", step: "market" });
+    expect(await saveMarketStep({ market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, home_city: "Amsterdam", places: [], timezone: "Europe/Amsterdam" })).toEqual({ status: "saved", step: "market" });
     const db = getDb();
     expect((await listProfileSnapshots(db, "me", 10)).length).toBeGreaterThan(0);
     expect((await listProfileSnapshots(db, "preferences", 10)).length).toBeGreaterThan(0);
+  });
+
+  it("the market step stores each place under its stored name with its id, and refuses one nothing knows", async () => {
+    const market = { pack: "generic", country: "DE", currency: "EUR", home_language: "de" };
+    expect(await saveMarketStep({ market, home_city: "munich", places: [{ place: "amsterdam", relocate: true }, { place: "eu", relocate: false }], timezone: "Europe/Berlin" })).toEqual({ status: "saved", step: "market" });
+    const saved = reloadConfig("preferences");
+    expect(saved).toMatchObject({ home_city: "München", places: [{ place: "Amsterdam", relocate: true }, { place: "eu", relocate: false, id: "eu" }] });
+    expect(typeof saved.home_city_id).toBe("number");
+    expect(typeof saved.places[0]?.id).toBe("number");
+
+    const before = fs.readFileSync(getConfigPath("preferences"), "utf8");
+    const refused = await saveMarketStep({ market, home_city: "München", places: [{ place: "Qwxzyville", relocate: true }], timezone: "Europe/Berlin" });
+    expect(refused).toMatchObject({ status: "error", step: "market", fieldErrors: [{ path: "places", ns: "profile", key: "unknownPlace", params: { name: "Qwxzyville" } }] });
+    expect(fs.readFileSync(getConfigPath("preferences"), "utf8")).toBe(before);
+  });
+
+  it("an upgraded profile with remote collection off keeps it off when only the time zone is saved", async () => {
+    fs.writeFileSync(
+      getConfigPath("preferences"),
+      "config_version: 2\nmarket: {pack: generic, country: NL, currency: EUR, home_language: nl}\ntarget_titles: [Engineer]\nlocations: [Amsterdam, Utrecht]\nworkplace: [onsite, hybrid]\nremote_scope: none\nseniority: all\nsalary_floor_year: 0\ncontracts: {allow: [permanent], exclude: []}\nexclude_student_roles: true\nexclude_companies: []\nexclude_keywords: []\n",
+    );
+    await mutateConfig("search", (current) => ({ ...current, locations: ["Amsterdam", "Utrecht"], remote_scope: "none" }));
+    const draft = (await loadSetupView({ locale: "en", acceptLanguage: null })).market.draft;
+    expect(draft).toMatchObject({ home_city: "Amsterdam", places: [{ place: "Utrecht", relocate: true }] });
+    if (draft === null) return;
+
+    expect(await saveMarketStep({ ...draft, timezone: "Europe/Berlin" })).toEqual({ status: "saved", step: "market" });
+    expect(reloadConfig("schedule").timezone).toBe("Europe/Berlin");
+    expect(fs.readFileSync(getConfigPath("preferences"), "utf8")).toMatch(/^config_version: 3$/m);
+    expect(reloadConfig("preferences").workplace).toEqual(["onsite", "hybrid"]);
+    expect(buildQueries(reloadConfig("search"), loadQueryPlaces(), "manual").some((query) => query.remote)).toBe(false);
   });
 
   it("the first cycle and the Telegram test are queued as control requests (they run while the setup is pending)", async () => {
@@ -63,6 +97,16 @@ describe("setup steps against the database", () => {
 });
 
 describe("pnpm run setup against the database", () => {
+  it("--answers with a place nothing knows saves nothing and says how to fix it", async () => {
+    const answers = path.join(temp.root, "answers.yaml");
+    fs.writeFileSync(answers, fs.readFileSync(ANSWERS, "utf8").replace("{place: Utrecht, relocate: true}", "{place: Qwxzyville, relocate: true}"));
+    const run = io();
+    expect(await runSetupCli(["--answers", answers, "--lang", "en"], run)).not.toBe(0);
+    expect(run.errors.join("\n")).toMatch(/places: "Qwxzyville" isn't a known place\. Pick it from the suggestions/);
+    expect(reloadConfig("preferences").places.map((entry) => entry.place)).not.toContain("Qwxzyville");
+  });
+
+
   it("--answers with run_first_cycle queues a cycle, and --status --json reports the runner", async () => {
     const answers = path.join(temp.root, "answers.yaml");
     fs.writeFileSync(answers, fs.readFileSync(ANSWERS, "utf8").replace("run_first_cycle: false", "run_first_cycle: true"));

@@ -1,7 +1,13 @@
 // @vitest-environment node
 import { Client } from "@modelcontextprotocol/client";
-import { InMemoryTransport } from "@modelcontextprotocol/server";
+import { InMemoryTransport, McpServer } from "@modelcontextprotocol/server";
 import { afterEach, describe, expect, it } from "vitest";
+import { z } from "zod";
+
+import { DEFAULT_PERMISSIONS, PERMISSIONS, type Permission } from "@/lib/agent-access/permissions";
+import { blockList, blockShape, includeInput, loadBlocks, type FieldBlock } from "@/lib/capabilities/blocks";
+import { CAPABILITIES } from "@/lib/capabilities/registry";
+import { defineCapability, READ_ONLY, type Capability } from "@/lib/capabilities/types";
 
 import { writerSchema } from "@/lib/config";
 import { mcpSchema, type McpConfig } from "@/lib/config/schemas/mcp";
@@ -22,9 +28,11 @@ const untouchable = new Proxy({} as Db, {
 });
 
 function context(settings: Partial<McpConfig> = {}, lines: string[] = []): McpContext {
+  const parsed = mcpSchema.parse({ enabled: true, ...settings });
   return {
     db: untouchable,
-    settings: mcpSchema.parse({ enabled: true, ...settings }),
+    settings: parsed,
+    readSettings: () => parsed,
     now: () => new Date("2026-10-11T10:00:00Z"),
     timezone: () => "Europe/Berlin",
     traps: () => trapSettings(),
@@ -43,8 +51,8 @@ afterEach(async () => {
   close = null;
 });
 
-async function connect(ctx: McpContext): Promise<Client> {
-  const server = buildServer(ctx, { version: "9.9.9" });
+async function connect(ctx: McpContext, capabilities?: readonly Capability[]): Promise<Client> {
+  const server = buildServer(ctx, { version: "9.9.9", capabilities });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
   const client = new Client({ name: "test", version: "1.0.0" });
@@ -58,6 +66,90 @@ async function connect(ctx: McpContext): Promise<Client> {
 
 const textOf = (result: { content?: unknown }): string => ((result.content as Array<{ text?: string }> | undefined) ?? []).map((c) => c.text ?? "").join("\n");
 
+describe("caller-specific output blocks", () => {
+  const blocks: readonly FieldBlock<{ id: number }>[] = [
+    { key: "plain", permission: "match:read", schema: z.strictObject({ score: z.number() }), onRequest: false, load: async () => ({ score: 80 }) },
+    { key: "requested", permission: "notes:read", schema: z.strictObject({ text: z.string() }), onRequest: true, load: async () => ({ text: "private block value" }) },
+  ];
+  const outputFor = (permissions: ReadonlySet<Permission>) => z.strictObject({ notices: z.array(z.string()), ...blockShape(blocks, permissions) });
+  const fake = defineCapability({
+    id: "block_probe",
+    kind: "read",
+    permission: "jobs:read",
+    input: () => z.strictObject({ include: includeInput(blocks, "Requested blocks") }),
+    output: outputFor(new Set<Permission>(["match:read", "notes:read"])),
+    outputFor,
+    blocks: blockList(blocks),
+    handler: async (ctx, args) => ({ notices: [], ...await loadBlocks(blocks, ctx, { id: 7 }, args.include) }),
+    count: () => 1,
+    annotations: READ_ONLY,
+    text: { title: "tools.search_jobs.title", description: "tools.search_jobs.description" },
+  });
+
+  it("passes the authorization decision's effective permissions without rereading settings", async () => {
+    const ctx = context();
+    let reads = 0;
+    ctx.readSettings = () => {
+      reads++;
+      return mcpSchema.parse({ enabled: true, permissions: ["jobs:read", "match:read", "notes:read"], stdio: { permissions: ["jobs:read", "match:read"] } });
+    };
+    let received: ReadonlySet<Permission> | undefined;
+    const client = await connect(ctx, [{ ...fake, handler: async (callCtx, args) => {
+      received = callCtx.permissions;
+      return fake.handler(callCtx, args);
+    } }]);
+    const before = reads;
+    const result = await client.callTool({ name: fake.id, arguments: { include: ["requested"] } });
+    expect(received).toEqual(new Set(["jobs:read", "match:read"]));
+    expect(reads - before).toBe(1);
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({ notices: [], plain: { score: 80 } });
+  });
+
+  it("returns an internal error without data when a handler returns an unpermitted block", async () => {
+    const lines: string[] = [];
+    const ctx = context({}, lines);
+    const client = await connect(ctx, [{ ...fake, handler: async () => ({ notices: [], requested: { text: "private block value" } }) }]);
+    const result = await client.callTool({ name: fake.id, arguments: {} });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toBeUndefined();
+    expect(textOf(result)).toBe(ctx.text("errors.failed", { category: "internal" }));
+    expect(JSON.stringify(result)).not.toContain("private block value");
+    expect(lines).toEqual([expect.stringMatching(/^\[mcp\] block_probe fail internal items=0 ms=\d+$/)]);
+  });
+
+  it("returns automatic blocks with permission and requested blocks only when included", async () => {
+    const grants: Permission[] = ["jobs:read", "match:read", "notes:read"];
+    const client = await connect(context({ permissions: grants, stdio: { permissions: grants } }), [fake]);
+    const automatic = await client.callTool({ name: fake.id, arguments: {} });
+    expect(automatic.isError).not.toBe(true);
+    expect(automatic.structuredContent).toEqual({ notices: [], plain: { score: 80 } });
+    const requested = await client.callTool({ name: fake.id, arguments: { include: ["requested"] } });
+    expect(requested.isError).not.toBe(true);
+    expect(requested.structuredContent).toEqual({ notices: [], plain: { score: 80 }, requested: { text: "private block value" } });
+  });
+
+  it("lists only effective block keys using one fresh settings read for the entire list", async () => {
+    const ctx = context();
+    let reads = 0;
+    let granted: Permission[] = ["jobs:read", "match:read"];
+    ctx.readSettings = () => {
+      reads++;
+      return mcpSchema.parse({ enabled: true, permissions: ["jobs:read", "match:read", "notes:read"], stdio: { permissions: granted } });
+    };
+    const client = await connect(ctx, [...CAPABILITIES, fake]);
+    for (const keys of [["notices", "plain"], ["notices", "requested"]]) {
+      const before = reads;
+      const { tools } = await client.listTools();
+      const listed = tools.find((tool) => tool.name === fake.id);
+      const schema = z.object({ properties: z.record(z.string(), z.unknown()), additionalProperties: z.literal(false) }).parse(listed?.outputSchema);
+      expect(Object.keys(schema.properties)).toEqual(keys);
+      expect(reads - before).toBe(1);
+      granted = ["jobs:read", "notes:read"];
+    }
+  });
+});
+
 describe("tools/list", () => {
   it("offers the three read-only tools with titles, descriptions and schemas", async () => {
     const client = await connect(context());
@@ -69,15 +161,28 @@ describe("tools/list", () => {
       expect(tool.outputSchema).toBeDefined();
     }
     const search = tools.find((t) => t.name === "search_jobs");
-    expect(Object.keys((search?.inputSchema as { properties: object }).properties)).toEqual(["query", "search_in", "country", "city", "workplace", "min_rank", "min_annual_salary", "since", "until", "application_status", "sort", "limit"]);
+    expect(Object.keys((search?.inputSchema as { properties: object }).properties)).toEqual(["query", "search_in", "country", "city", "workplace", "min_rank", "min_annual_salary", "since", "until", "application_status", "scope", "unseen_only", "favorites_only", "visa", "ghost", "sort", "limit"]);
     expect((search?.inputSchema as { additionalProperties?: unknown }).additionalProperties).toBe(false);
   });
+  it.each<Permission[]>([
+    ["jobs:read"], ["jobs:read", "tracking:read"], ["jobs:read", "tracking:read", "match:read"], [...PERMISSIONS],
+  ])("lists search card blocks only within the item schema for %j", async (...permissions) => {
+    const client = await connect(context({ permissions, stdio: { permissions } }));
+    const search = (await client.listTools()).tools.find((tool) => tool.name === "search_jobs");
+    const object = z.object({ properties: z.record(z.string(), z.unknown()), additionalProperties: z.literal(false) });
+    const output = object.parse(search?.outputSchema);
+    const jobs = z.object({ items: object }).parse(output.properties.jobs);
+    expect(Object.keys(output.properties).sort()).toEqual(["jobs", "notices", "returned", "total", "truncated"]);
+    expect("match" in jobs.items.properties).toBe(permissions.includes("match:read"));
+    expect("tracking" in jobs.items.properties).toBe(permissions.includes("tracking:read"));
+    expect("notes" in jobs.items.properties).toBe(false);
+  });
   describe("the writer tools", () => {
-    const on = { tools: { search_jobs: true, get_job: true, list_applications: true, get_application_context: true, save_application_answer: true } };
-    const withWriter = (enabled: boolean) => ({ ...context(on), writer: { inputs: () => ({ writer: writerSchema.parse({ enabled }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: null } });
+    const on = { permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"] as Permission[], stdio: { permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"] as Permission[] } };
+    const withWriter = (enabled: boolean, writeDb: Db | null = untouchable) => ({ ...context(on), writer: { inputs: () => ({ writer: writerSchema.parse({ enabled }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb } });
     const names = async (ctx: McpContext) => (await (await connect(ctx)).listTools()).tools;
 
-    it("are offered with their switch and the writer on; only the save tool says it writes, and that it destroys nothing", async () => {
+    it("are offered with their permission and the writer on; only the save tool says it writes, and that it destroys nothing", async () => {
       const tools = await names(withWriter(true));
       expect(tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_application_context", "save_application_answer"]);
       expect(tools.find((t) => t.name === "get_application_context")?.annotations).toMatchObject({ readOnlyHint: true });
@@ -86,19 +191,29 @@ describe("tools/list", () => {
       expect(Object.keys((save?.inputSchema as { properties: object }).properties).sort()).toEqual(["job_id", "question_id", "sentences", "text"]);
       expect((save?.inputSchema as { additionalProperties?: unknown }).additionalProperties).toBe(false);
     });
-    it("are not offered while the writer is off, or without their switch", async () => {
+    it("are not offered while the writer is off, or without their permission", async () => {
       expect((await names(withWriter(false))).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications"]);
-      expect((await names({ ...withWriter(true), settings: context().settings })).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications"]);
+      expect((await names({ ...withWriter(true), settings: context().settings, readSettings: context().readSettings })).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications"]);
     });
     it("a save without a writable connection is refused before anything is read", async () => {
-      const client = await connect(withWriter(true));
+      const client = await connect(withWriter(true, null));
       const result = await client.callTool({ name: "save_application_answer", arguments: { job_id: 1, question_id: 1, text: "An answer." } });
       expect(result.isError).toBe(true);
     });
+    it("a save granted after start, with no write connection opened, is not listed and a direct call is refused", async () => {
+      const lines: string[] = [];
+      const ctx = { ...withWriter(true, null), log: (line: string) => lines.push(line) };
+      const client = await connect(ctx);
+      expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_application_context"]);
+      const result = await client.callTool({ name: "save_application_answer", arguments: { job_id: 1, question_id: 1, text: "An answer." } });
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toBe(ctx.text("errors.writerDisabled"));
+      expect(lines).toEqual([expect.stringMatching(/^\[mcp\] save_application_answer fail disabled items=0 ms=\d+$/)]);
+    });
   });
-  it("leaves out a tool mcp.yaml switches off", async () => {
-    const client = await connect(context({ tools: { search_jobs: true, get_job: false, list_applications: true, get_application_context: false, save_application_answer: false } }));
-    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["search_jobs", "list_applications"]);
+  it("leaves out both jobs tools without jobs:read", async () => {
+    const client = await connect(context({ permissions: ["tracking:read"] }));
+    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["list_applications"]);
   });
 });
 
@@ -132,8 +247,8 @@ describe("invalid arguments", () => {
     expect(textOf(result)).toContain(field);
     expect(lines).toEqual([expect.stringMatching(new RegExp(`^\\[mcp\\] ${tool} fail invalid_input items=0 ms=\\d+$`))]);
   });
-  it("a switched-off tool cannot be called", async () => {
-    const client = await connect(context({ tools: { search_jobs: true, get_job: false, list_applications: true, get_application_context: false, save_application_answer: false } }));
+  it("a tool without its permission cannot be called", async () => {
+    const client = await connect(context({ permissions: ["tracking:read"] }));
     const result = await client.callTool({ name: "get_job", arguments: { job_id: 1 } }).catch((error: unknown) => ({ isError: true, content: [{ type: "text", text: String(error) }] }));
     expect(result.isError).toBe(true);
   });
@@ -186,5 +301,174 @@ describe("the call log", () => {
   });
   it("formats a line", () => {
     expect(formatCallLine({ tool: "list_applications", ok: true, count: 0, ms: 12.6 })).toBe("[mcp] list_applications ok items=0 ms=13");
+  });
+});
+
+describe("tools come from the registry", () => {
+  const fake = defineCapability({
+    id: "registry_probe",
+    kind: "read",
+    permission: "jobs:read",
+    input: () => z.strictObject({ value: z.string().trim().transform((value) => value.toUpperCase()) }),
+    output: z.strictObject({ notices: z.array(z.string()), value: z.string(), limit: z.number() }),
+    handler: async (ctx, args) => ({ notices: [], value: args.value, limit: ctx.settings.limits.max_results }),
+    count: () => 1,
+    annotations: READ_ONLY,
+    text: { title: "tools.search_jobs.title", description: "tools.search_jobs.description" },
+  });
+
+  async function connectCapabilities(ctx: McpContext, capabilities: readonly Capability[]): Promise<Client> {
+    const server = buildServer(ctx, { capabilities });
+    return connectServer(server);
+  }
+
+  async function connectServer(server: McpServer): Promise<Client> {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    const client = new Client({ name: "registry-test", version: "1.0.0" });
+    await client.connect(clientTransport);
+    const previousClose = close;
+    close = async () => {
+      await client.close();
+      await server.close();
+      await previousClose?.();
+    };
+    return client;
+  }
+
+  it("offers and calls an injected capability using its schema and the settings just read", async () => {
+    const ctx = context();
+    ctx.readSettings = () => mcpSchema.parse({ enabled: true, limits: { max_results: 4 } });
+    const client = await connectCapabilities(ctx, [...CAPABILITIES, fake]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["search_jobs", "get_job", "list_applications", "registry_probe"]);
+    const result = await client.callTool({ name: fake.id, arguments: { value: " hello " } });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({ notices: [], value: "HELLO", limit: 4 });
+  });
+
+  it("hides the injected capability and refuses a direct call without its permission", async () => {
+    const lines: string[] = [];
+    const client = await connectCapabilities(context({ permissions: ["tracking:read"] }, lines), [...CAPABILITIES, fake]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).not.toContain(fake.id);
+    const result = await client.callTool({ name: fake.id, arguments: { value: "hello" } });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("jobs:read");
+    expect(lines).toEqual([expect.stringMatching(/^\[mcp\] registry_probe fail not_permitted items=0 ms=\d+$/)]);
+  });
+
+  it("validates output against the base schema when no caller-specific schema is defined", async () => {
+    const lines: string[] = [];
+    const ctx = context({}, lines);
+    const client = await connectCapabilities(ctx, [{ ...fake, handler: async () => ({ notices: [], value: "hello", limit: 4, secret: "private output" }) }]);
+    const result = await client.callTool({ name: fake.id, arguments: { value: "hello" } });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toBeUndefined();
+    expect(textOf(result)).toBe(ctx.text("errors.failed", { category: "internal" }));
+    expect(JSON.stringify(result)).not.toContain("private output");
+    expect(lines).toEqual([expect.stringMatching(/^\[mcp\] registry_probe fail internal items=0 ms=\d+$/)]);
+  });
+
+  it("applies a capability's availability to the call as well as the list, before its handler runs", async () => {
+    const lines: string[] = [];
+    let ran = false;
+    const unavailable = { ...fake, handler: async () => { ran = true; return { notices: [], value: "", limit: 0 }; }, availability: { available: () => false, category: "disabled", message: "errors.writerDisabled" as const } };
+    const ctx = context({}, lines);
+    const client = await connectCapabilities(ctx, [...CAPABILITIES, unavailable]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).not.toContain(fake.id);
+    const result = await client.callTool({ name: fake.id, arguments: { value: "hello" } });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toBe(ctx.text("errors.writerDisabled"));
+    expect(ran).toBe(false);
+    expect(lines).toEqual([expect.stringMatching(/^\[mcp\] registry_probe fail disabled items=0 ms=\d+$/)]);
+  });
+
+  it("lists byte-identical tool definitions to the SDK for all five tools", async () => {
+    const ctx = context({ permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"], stdio: { permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"] } });
+    ctx.writer = { inputs: () => ({ writer: writerSchema.parse({ enabled: true }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: untouchable };
+    const reference = new McpServer({ name: "reference", version: "1" }, { capabilities: { tools: {} } });
+    for (const cap of CAPABILITIES) {
+      reference.registerTool(cap.id, { title: ctx.text(cap.text.title), description: ctx.text(cap.text.description), inputSchema: cap.input(ctx), outputSchema: cap.outputFor?.(new Set(ctx.settings.permissions)) ?? cap.output, annotations: cap.annotations }, async () => ({ content: [], isError: true }));
+    }
+    const sdk = await connectServer(reference);
+    const client = await connectCapabilities(ctx, CAPABILITIES);
+    expect(JSON.stringify(await client.listTools())).toBe(JSON.stringify(await sdk.listTools()));
+  });
+});
+
+describe("permissions decide visibility", () => {
+  const cases = [
+    { name: "search_jobs", permission: "jobs:read", args: {} },
+    { name: "get_job", permission: "jobs:read", args: { job_id: 1 } },
+    { name: "list_applications", permission: "tracking:read", args: {} },
+    { name: "get_application_context", permission: "writer:read", args: { job_id: 1 } },
+    { name: "save_application_answer", permission: "writer:write", args: { job_id: 1, question_id: 1, text: "An answer." } },
+  ];
+
+  it.each(cases)("hides and refuses $name without $permission before touching the database", async ({ name, permission, args }) => {
+    const lines: string[] = [];
+    const ctx = context({ permissions: DEFAULT_PERMISSIONS.filter((granted) => granted !== permission) }, lines);
+    ctx.writer = { inputs: () => ({ writer: writerSchema.parse({ enabled: true }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: untouchable };
+    const client = await connect(ctx);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).not.toContain(name);
+    const result = await client.callTool({ name, arguments: args });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain(permission);
+    expect(lines).toEqual([expect.stringMatching(new RegExp(`^\\[mcp\\] ${name} fail not_permitted items=0 ms=\\d+$`))]);
+  });
+
+  it("refuses both jobs tools when their shared permission is absent", async () => {
+    const lines: string[] = [];
+    const ctx = context({ permissions: ["tracking:read"] }, lines);
+    const client = await connect(ctx);
+    for (const name of ["search_jobs", "get_job"]) {
+      const result = await client.callTool({ name, arguments: name === "get_job" ? { job_id: 1 } : {} });
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toBe(ctx.text("errors.notPermitted", { permission: "jobs:read" }));
+    }
+    expect(lines).toEqual([
+      expect.stringMatching(/^\[mcp\] search_jobs fail not_permitted items=0 ms=\d+$/),
+      expect.stringMatching(/^\[mcp\] get_job fail not_permitted items=0 ms=\d+$/),
+    ]);
+  });
+});
+
+describe("authorization on every call", () => {
+  it("applies changed grants, server disablement and unreadable settings to the same connection", async () => {
+    const lines: string[] = [];
+    const ctx = context({}, lines);
+    let current = ctx.settings;
+    let unreadable = false;
+    ctx.readSettings = () => {
+      if (unreadable) throw new Error("cannot read /private/config/mcp.yaml");
+      return current;
+    };
+    const client = await connect(ctx);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toContain("list_applications");
+
+    current = mcpSchema.parse({ enabled: true, permissions: ["jobs:read"] });
+    const tracking = await client.callTool({ name: "list_applications", arguments: {} });
+    expect(tracking.isError).toBe(true);
+    expect(textOf(tracking)).toBe(ctx.text("errors.notPermitted", { permission: "tracking:read" }));
+    expect(lines).toEqual([expect.stringMatching(/^\[mcp\] list_applications fail not_permitted items=0 ms=\d+$/)]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["search_jobs", "get_job"]);
+
+    await client.callTool({ name: "search_jobs", arguments: {} });
+    expect(lines.at(-1)).toMatch(/^\[mcp\] search_jobs fail internal items=0 ms=\d+$/);
+
+    current = mcpSchema.parse({ enabled: false });
+    const disabled = await client.callTool({ name: "search_jobs", arguments: {} });
+    expect(disabled.isError).toBe(true);
+    expect(textOf(disabled)).toBe(ctx.text("errors.serverOff"));
+    expect(lines.at(-1)).toContain("fail not_permitted");
+    expect((await client.listTools()).tools).toEqual([]);
+
+    unreadable = true;
+    const broken = await client.callTool({ name: "search_jobs", arguments: {} });
+    expect(broken.isError).toBe(true);
+    expect(textOf(broken)).toBe(ctx.text("errors.settingsUnreadable", { problem: "unreadable" }));
+    expect(textOf(broken)).not.toContain("/private");
+    expect(lines.at(-1)).toContain("fail settings_unreadable");
+    expect(lines).toHaveLength(4);
+    expect((await client.listTools()).tools).toEqual([]);
   });
 });

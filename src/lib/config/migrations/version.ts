@@ -4,6 +4,8 @@
  * a file newer than the code (a downgrade) is refused. The key is handled here, outside the zod schemas: the loader
  * strips it before validation and the writer keeps / stamps it.
  */
+import { isDeepStrictEqual } from "node:util";
+
 import { isMap, isScalar, type Document } from "yaml";
 
 import { ConfigError } from "../errors";
@@ -106,6 +108,14 @@ export function withoutConfigVersion(value: unknown): unknown {
   return copy;
 }
 
+/**
+ * How a migration changes a file, for command output: the format version step, or, for a whole file that a `wholeFiles` step
+ * reshaped, that the shape was updated while the format version stays.
+ */
+export function describeConfigVersionChange(from: number, to: number): string {
+  return from === to ? `shape updated, config_version ${from} unchanged` : `config_version ${from} -> ${to}`;
+}
+
 export interface DocumentMigrationResult {
   /** Version the document had. */
   from: number;
@@ -113,6 +123,8 @@ export interface DocumentMigrationResult {
   to: number;
   /** The steps that ran (empty = it was current already). */
   applied: readonly ConfigMigration[];
+  /** One-line changes in meaning reported by the applied steps, never file values. */
+  notices: readonly string[];
 }
 
 export interface MigrateOptions {
@@ -122,7 +134,9 @@ export interface MigrateOptions {
 
 /**
  * Bring a parsed document up to the code's version, in place, stopping before a `convertOnly` step: a whole file stays a
- * whole file (`files.ts` crosses that step, and only for `--convert-overlays`). Throws ConfigError when `config_version` is not a positive
+ * whole file (`files.ts` crosses that step, and only for `--convert-overlays`). Later `wholeFiles` steps run without
+ * stamping the version, and count as applied only when the document value changes. The returned version is the document
+ * version, including for a whole file. Throws ConfigError when `config_version` is not a positive
  * whole number (`schema`) or is newer than the code supports (`version`: a downgrade, never silently accepted).
  */
 export function migrateConfigDocument(name: ConfigName, doc: Document, filePath: string, steps: readonly ConfigMigration[] = configMigrations(name), options: MigrateOptions = {}): DocumentMigrationResult {
@@ -141,12 +155,21 @@ export function migrateConfigDocument(name: ConfigName, doc: Document, filePath:
     });
   }
   const applied: ConfigMigration[] = [];
+  const notices: string[] = [];
+  let wholeFile = false;
   for (const step of steps) {
     if (step.from < from) continue;
-    if (step.convertOnly === true) break;
-    step.migrate(doc, options.context);
-    stampConfigVersion(doc, step.to);
+    if (step.convertOnly === true) {
+      wholeFile = true;
+      continue;
+    }
+    if (wholeFile && !step.wholeFiles) continue;
+    const before: unknown = wholeFile ? doc.toJS() : undefined;
+    const reported = step.migrate(doc, options.context);
+    if (wholeFile && isDeepStrictEqual(before, doc.toJS())) continue;
+    if (!wholeFile) stampConfigVersion(doc, step.to);
     applied.push(step);
+    notices.push(...(reported ?? []));
   }
-  return { from, to: applied.at(-1)?.to ?? from, applied };
+  return { from, to: documentConfigVersion(doc) ?? from, applied, notices };
 }

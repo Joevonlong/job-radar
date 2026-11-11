@@ -143,7 +143,7 @@ export type AppendAnswerVersionResult = { state: "added"; id: number } | { state
  * stays as it is. A question already holding `maxVersions` versions besides its final one refuses (`full`), so whoever calls
  * this as often as it likes can neither push out the user's versions nor grow the table without bound.
  */
-export async function appendAnswerVersion(db: Executor, input: { jobId: number; questionId: number; version: AnswerVersionInput; maxVersions: number }): Promise<AppendAnswerVersionResult> {
+export async function appendAnswerVersion(db: Executor, input: { jobId: number; questionId: number; version: AnswerVersionInput; maxVersions: number; onAdded?: (tx: Executor, id: number) => Promise<void> }): Promise<AppendAnswerVersionResult> {
   return db.transaction(async (tx) => {
     const [question] = await tx
       .select({ id: applicationQuestions.id, finalVersionId: applicationQuestions.finalVersionId })
@@ -161,6 +161,7 @@ export async function appendAnswerVersion(db: Executor, input: { jobId: number; 
       .values({ ...input.version, questionId: input.questionId })
       .returning({ id: applicationAnswerVersions.id });
     if (!row) throw new Error("appendAnswerVersion: insert returned no row");
+    await input.onAdded?.(tx, row.id);
     return { state: "added", id: row.id };
   });
 }

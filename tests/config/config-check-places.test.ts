@@ -1,0 +1,62 @@
+// @vitest-environment node
+import fs from "node:fs";
+import path from "node:path";
+
+import { parse, stringify } from "yaml";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { makeTempConfig, writeLocationSettings, type TempConfig } from "./helpers";
+import { runConfigScript } from "./run-script";
+
+/** `pnpm config:check` names what search.yaml's old keys and the location settings disagree on, in both directions. */
+describe("pnpm config:check on the location settings", () => {
+  let tmp: TempConfig;
+  beforeEach(() => {
+    tmp = makeTempConfig();
+    writeLocationSettings(tmp, { home_city: "Testhome", places: [{ place: "Addedtown", relocate: true }], workplace: ["onsite"] });
+  });
+  afterEach(() => tmp.cleanup());
+
+  it("warns about what search.yaml lists and places lack, and what places add", () => {
+    const file = path.join(tmp.configDir, "search.yaml");
+    const search = parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+    fs.writeFileSync(file, stringify({ ...search, locations: ["Testhome", "Oldtown"] }));
+    const run = runConfigScript(tmp, "config-check.ts");
+    expect(run.out).toContain("Oldtown not in preferences.yaml places");
+    expect(run.out).toContain("Addedtown searched now");
+  });
+
+  it("does not call the home country unsearched when there is no home city", () => {
+    writeLocationSettings(tmp, { home_city: "", places: [], workplace: ["onsite"] });
+    const file = path.join(tmp.configDir, "search.yaml");
+    const search = parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+    fs.writeFileSync(file, stringify({ ...search, locations: ["Germany", "Oldtown"] }));
+    const run = runConfigScript(tmp, "config-check.ts");
+    expect(run.out).toContain("Oldtown not in preferences.yaml places");
+    expect(run.out).toContain(": Oldtown not in");
+  });
+
+  it("names the places the dictionary does not know, and asks to pick them again", () => {
+    writeLocationSettings(tmp, { home_city: "Berlin", places: [{ place: "Qwxzyville", relocate: true }, { place: "Amsterdam", relocate: true }], workplace: ["onsite"] });
+    fs.mkdirSync(path.join(tmp.defaultsDir, "geo"), { recursive: true });
+    fs.copyFileSync(path.resolve(import.meta.dirname, "../../config/geo/places.json.gz"), path.join(tmp.defaultsDir, "geo", "places.json.gz"));
+    const run = runConfigScript(tmp, "config-check.ts");
+    expect(run.out).toContain("! preferences.yaml: Qwxzyville not in the place dictionary; still searched and matched as written. Pick each again");
+    expect(run.out).not.toMatch(/Amsterdam[^\n]*not in the place dictionary/);
+  });
+
+  it("says Arbeitsagentur's old location_names list is no longer read", () => {
+    const file = path.join(tmp.configDir, "sources.yaml");
+    const shipped = parse(fs.readFileSync(path.join(tmp.defaultsDir, "sources.yaml"), "utf8")) as { config_version: number };
+    fs.writeFileSync(file, stringify({ config_version: shipped.config_version, sources: { arbeitsagentur: { location_names: { munich: "München" } } } }));
+    const run = runConfigScript(tmp, "config-check.ts");
+    expect(run.out).toContain("sources.arbeitsagentur.location_names: no longer read");
+  });
+
+  it("stays quiet about it without the old keys", () => {
+    const run = runConfigScript(tmp, "config-check.ts");
+    expect(run.out).not.toContain("searched now");
+    expect(run.out).not.toContain("not in preferences.yaml places");
+    expect(run.out).not.toContain("location_names");
+  });
+});

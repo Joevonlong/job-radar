@@ -26,6 +26,8 @@ import { atsContext, response, routedFetch, type RecordedRequest } from "../ats/
 import { channelsWith, shippedSearch } from "../helpers";
 import { shippedYaml } from "../../config/helpers";
 
+const CITIES = ["Berlin", "München"];
+
 const fixture = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, "../../fixtures/discovery/tavily-search.json"), "utf8")) as unknown;
 
 const companies = companiesSchema.parse({
@@ -37,7 +39,7 @@ const EXPECTED_BOARDS = ["ashby:examplelabs", "greenhouse:delta", "lever:gamma",
 function deps(overrides: Partial<TavilyDeps> = {}) {
   const store = createMemoryDiscoveryStore();
   const value: TavilyDeps = {
-    inputs: () => ({ search: shippedSearch(), companies, queryRotation: true }),
+    inputs: () => ({ search: shippedSearch(), cities: CITIES, companies, queryRotation: true }),
     store: () => store,
     environment: { TAVILY_API_KEY: "tvly-test-key-not-real" },
     ...overrides,
@@ -60,7 +62,7 @@ function rotationSetup(overrides: Partial<TavilyDeps> = {}) {
   const raw = structuredClone(shippedYaml("sources.yaml")) as { sources: { tavily: Record<string, unknown> } };
   raw.sources.tavily.max_queries_per_run = 12;
   const channels = configRegistry.channels.schema.parse(raw);
-  const queries = buildTavilyQueries(d.inputs().search, channels.sources.tavily.keywords_per_query);
+  const queries = buildTavilyQueries(d.inputs().search, CITIES, channels.sources.tavily.keywords_per_query);
   const channel = createTavilyChannel(d);
   const pass = (options: Parameters<typeof atsContext>[2] = {}, answer: Parameters<typeof routedFetch>[0][number][1] = response(200, fixture)) => {
     const { fetch, requests } = routedFetch([["api.tavily.com/search", answer]]);
@@ -86,18 +88,18 @@ function creditBudget(left: number, options: { canAfford?: boolean } = {}) {
 
 describe("tavily queries", () => {
   it("builds one query per ATS x keyword group x city, with the ATS hosts as include_domains", () => {
-    const queries = buildTavilyQueries(shippedSearch(), 2);
+    const queries = buildTavilyQueries(shippedSearch(), CITIES, 2);
     expect(queries).toHaveLength(5 * 3 * 2);
     const german = queries.find((q) => q.group === "german" && q.ats === "lever" && q.city === "München");
     expect(german?.q).toBe("KI Engineer OR KI-Entwickler jobs München");
     expect(german?.domains).toEqual(["jobs.lever.co", "jobs.eu.lever.co"]);
     // A listed sub-domain does not cover `acme.jobs.personio.de` on Tavily, so Personio is searched as personio.de
     expect(queries.find((q) => q.ats === "personio")?.domains).toEqual(["personio.de"]);
-    expect(buildTavilyQueries(shippedSearch(), 1).find((q) => q.group === "german")?.q).toBe("KI Engineer jobs Berlin");
+    expect(buildTavilyQueries(shippedSearch(), CITIES, 1).find((q) => q.group === "german")?.q).toBe("KI Engineer jobs Berlin");
   });
 
   it("skips groups without usable keywords", () => {
-    expect(buildTavilyQueries({ keyword_groups: { empty: [], blank: ['""', "  "] }, locations: ["Berlin"] }, 2)).toEqual([]);
+    expect(buildTavilyQueries({ keyword_groups: { empty: [], blank: ['""', "  "] } }, ["Berlin"], 2)).toEqual([]);
   });
 });
 
@@ -135,16 +137,16 @@ describe("discovery query ids and turns", () => {
   });
 
   it("gives each ATS its own id for a Tavily group and city, and every Brave query a unique id", () => {
-    expect(new Set(buildTavilyQueries(shippedSearch(), 2).slice(0, 5).map((q) => q.id)).size).toBe(5);
-    const brave = buildDiscoveryQueries(shippedSearch());
+    expect(new Set(buildTavilyQueries(shippedSearch(), CITIES, 2).slice(0, 5).map((q) => q.id)).size).toBe(5);
+    const brave = buildDiscoveryQueries(shippedSearch(), CITIES);
     expect(brave).toHaveLength(30);
     expect(new Set(brave.map((q) => q.id)).size).toBe(30);
   });
 
   it("changes Tavily ids only when keywords_per_query changes the query text", () => {
-    const two = buildTavilyQueries(shippedSearch(), 2);
-    const one = buildTavilyQueries(shippedSearch(), 1);
-    const three = buildTavilyQueries(shippedSearch(), 3);
+    const two = buildTavilyQueries(shippedSearch(), CITIES, 2);
+    const one = buildTavilyQueries(shippedSearch(), CITIES, 1);
+    const three = buildTavilyQueries(shippedSearch(), CITIES, 3);
     expect(one).toHaveLength(30);
     expect(three).toHaveLength(30);
     for (const [index, query] of two.entries()) {
@@ -155,7 +157,7 @@ describe("discovery query ids and turns", () => {
   });
 
   it("retains current queries' old turns, updates attempted ones and drops removed queries", () => {
-    const all = buildTavilyQueries(shippedSearch(), 2).slice(0, 3);
+    const all = buildTavilyQueries(shippedSearch(), CITIES, 2).slice(0, 3);
     const old = new Date("2026-10-01T10:00:00.123Z");
     const now = new Date("2026-10-02T11:00:00.456Z");
     const previous = new Map([[all[0]!.id, old], [all[1]!.id, old], ["removed", old]]);
@@ -258,7 +260,7 @@ describe("tavily channel", () => {
   it("keeps what it found when the credits run out part-way", async () => {
     const { deps: d, store } = deps();
     const { fetch, requests } = search();
-    const queries = buildTavilyQueries(d.inputs().search, 2);
+    const queries = buildTavilyQueries(d.inputs().search, CITIES, 2);
     const { consumed, budget: inner } = creditBudget(1000);
     let left = 2;
     const budget: ChannelBudget = { ...inner, snapshot: () => ({ ...inner.snapshot(), freeRecordsLeft: left }), consume: async (n, o) => { left -= n; return inner.consume(n, o); } };
@@ -287,7 +289,7 @@ describe("tavily channel", () => {
         return raw;
       })(),
     );
-    const queries = buildTavilyQueries(d.inputs().search, channels.sources.tavily.keywords_per_query)
+    const queries = buildTavilyQueries(d.inputs().search, CITIES, channels.sources.tavily.keywords_per_query)
       .map((q) => `${q.q}|${(q.domains ?? []).join(",")}`);
     expect(queries).toHaveLength(30);
     const { budget } = creditBudget(1000);
@@ -405,7 +407,7 @@ describe("tavily channel", () => {
 
 describe("tavily discovery rotation", () => {
   it("keeps config order with rotation off but still records turns", async () => {
-    const { store, queries, pass, advance } = rotationSetup({ inputs: () => ({ search: shippedSearch(), companies, queryRotation: false }) });
+    const { store, queries, pass, advance } = rotationSetup({ inputs: () => ({ search: shippedSearch(), cities: CITIES, companies, queryRotation: false }) });
     for (let run = 0; run < 3; run += 1) {
       const current = pass();
       await current.collect();
@@ -446,7 +448,7 @@ describe("tavily discovery rotation", () => {
 
   it("ties new queries with other unattempted queries in config order and prunes deleted queries", async () => {
     const search = shippedSearch();
-    const { store, queries, pass, advance } = rotationSetup({ inputs: () => ({ search, companies, queryRotation: true }) });
+    const { store, queries, pass, advance } = rotationSetup({ inputs: () => ({ search, cities: CITIES, companies, queryRotation: true }) });
     await pass().collect();
     delete search.keyword_groups.engineering;
     search.keyword_groups.extra = ["Extra Engineer", "Extra Developer"];
@@ -459,7 +461,7 @@ describe("tavily discovery rotation", () => {
 
   it("serves new queries first after all earlier queries have had a turn", async () => {
     const search = shippedSearch();
-    const { store, queries, pass, advance } = rotationSetup({ inputs: () => ({ search, companies, queryRotation: true }) });
+    const { store, queries, pass, advance } = rotationSetup({ inputs: () => ({ search, cities: CITIES, companies, queryRotation: true }) });
     for (let run = 0; run < 3; run += 1) {
       await pass().collect();
       advance();
@@ -467,7 +469,7 @@ describe("tavily discovery rotation", () => {
     expect(store.turns.size).toBe(30);
     delete search.keyword_groups.engineering;
     search.keyword_groups.extra = ["Extra Engineer", "Extra Developer"];
-    const extra = buildTavilyQueries(search, 2).filter((q) => q.group === "extra");
+    const extra = buildTavilyQueries(search, CITIES, 2).filter((q) => q.group === "extra");
     const next = pass();
     await next.collect();
     expect(next.requests.map(requestedQuery)).toEqual([...extra, ...queries.slice(10, 12)].map(queryText));
@@ -476,11 +478,12 @@ describe("tavily discovery rotation", () => {
 
   it("preserves ids and turns when cities are reordered and follows the new order for ties", async () => {
     const search = shippedSearch();
-    const { store, queries, pass, advance } = rotationSetup({ inputs: () => ({ search, companies, queryRotation: true }) });
+    const cities = [...CITIES];
+    const { store, queries, pass, advance } = rotationSetup({ inputs: () => ({ search, cities, companies, queryRotation: true }) });
     await pass().collect();
     const previous = new Map(store.turns);
-    search.locations.reverse();
-    expect(new Set(buildTavilyQueries(search, 2).map((q) => q.id))).toEqual(new Set(queries.map((q) => q.id)));
+    cities.reverse();
+    expect(new Set(buildTavilyQueries(search, cities, 2).map((q) => q.id))).toEqual(new Set(queries.map((q) => q.id)));
     advance();
     const next = pass();
     await next.collect();

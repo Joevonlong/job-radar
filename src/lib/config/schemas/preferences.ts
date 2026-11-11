@@ -1,8 +1,9 @@
 import { z } from "zod";
 
+import { normalizePlaces } from "@/lib/market/places";
 import { marketSettingsSchema } from "@/lib/market/schema";
 
-import { nonEmptyString, nonNegativeInt, regexString, remoteScope, slowPatternReason, stringList } from "./common";
+import { nonEmptyString, nonNegativeInt, regexString, slowPatternReason, stringList } from "./common";
 
 const contractKind = z.enum(["permanent", "fixed_term", "freelance", "temp_agency"]);
 const workplace = z.enum(["onsite", "hybrid", "remote"]);
@@ -90,14 +91,33 @@ export const dealBreakersSchema = z
     });
   });
 
+/**
+ * A place a job can be based, picked from the place list (`id`), or an older or hand-written name in any spelling. A name neither
+ * the market's tables nor the place dictionary know still loads and is matched as written; the pages and `config:check` ask to
+ * pick it again, and a save refuses a new one. No length or count limit: the file format before `places` had none, and its
+ * upgrade must stay readable.
+ */
+const placeEntry = z.strictObject({
+  place: nonEmptyString,
+  /** true: I'd move here. false: remote only. */
+  relocate: z.boolean(),
+  /** The picked place: a city's or country's GeoNames id, a region's id, or `worldwide`. */
+  id: z.union([z.number().int().positive(), z.string().trim().min(1).max(40)]).optional(),
+});
+
 /** data/profile/preferences.yaml — what I want. */
 export const preferencesSchema = z.strictObject({
   /** The market (pack, home country, base currency, local language); omitted values come from the pack. */
   market: marketSettingsSchema,
   target_titles: stringList.min(1),
-  locations: stringList.min(1),
+  /** Where a job counts as local. It is sent to your AI provider with every job. */
+  /** Empty: anywhere in the home country. */
+  home_city: z.string().trim().default(""),
+  /** The home city's GeoNames id once it was picked from the place list. */
+  home_city_id: z.number().int().positive().optional(),
+  /** Other places a job can be based; read through `normalizePlaces` (Worldwide remote only, one entry per place). */
+  places: z.array(placeEntry).default([]),
   workplace: uniqueEnumList(workplace).refine((w) => w.length > 0, "needs at least one workplace type"),
-  remote_scope: remoteScope,
   seniority: z.enum(["all", "entry", "mid", "senior", "lead"]),
   /** Annual gross salary floor in the market's base currency (was `salary_floor_eur_year`); postings with a stated maximum below it are filtered out. */
   salary_floor_year: nonNegativeInt,
@@ -115,6 +135,6 @@ export const preferencesSchema = z.strictObject({
   exclude_keywords: z.array(nonEmptyString),
   /** Rules that veto a job before any AI call (the hard filter); optional, absent = none. */
   deal_breakers: dealBreakersSchema.default([]),
-});
+}).overwrite((value) => normalizePlaces(value));
 
 export type PreferencesConfig = z.infer<typeof preferencesSchema>;

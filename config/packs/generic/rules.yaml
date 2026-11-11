@@ -130,6 +130,40 @@ filter:
       - \bglobal(?:ly)?\b
       - \banywhere\b
 
+    # Check 2: where a job may be done from. Each phrase captures the place; every part must be a place the tables know, or the job only gets a note. A phrase here can hide a job, so it has to start the sentence and be about the person hired, not the company, a benefit or the data, and only an ending listed below may follow the place.
+    work_area:
+      patterns:
+        - ^\W*(?:for\s+this\s+(?:role|position|job|opportunity|opening|vacancy),?\s+)?(?:(?:you|candidates?|applicants?|employees|team\s+members|all\s+(?:candidates|applicants|employees|staff|team\s+members))\s+)?(?:must|need\s+to|needs\s+to|have\s+to|has\s+to|(?:is|are)\s+required\s+to)\s+(?:currently\s+)?(?:be\s+)?(?:live|living|reside|residing|based|located)\s+(?:in|within)\s+(?<place>[^:()|]{2,120})
+        - ^\W*(?:(?:this|the)\s+(?:role|position|job|opportunity|opening|vacancy)\s+is\s+)?(?:only\s+)?(?:open|available)\s+(?:only\s+)?to\s+(?:candidates|applicants|residents|professionals)\s+(?:(?:based|located|living|residing)\s+)?(?:in|from|of|across|within)\s+(?<place>[^:()|]{2,120})
+        - ^\W*remote\W+(?<place>(?:(?!\b(?:in|within|from|is|are|be|to|remote)\b)[^-–—|(:]){2,60}?)(?<!residents|citizens|candidates|applicants)[\s-]only\W*$
+        - ^\W*(?:(?:applicants\s+)?must\s+be\s+|(?:this\s+(?:role|position|job|opportunity|opening|vacancy)\s+is\s+)?open\s+to\s+)?(?<place>(?:(?!\b(?:in|within|from|is|are|be|to|remote)\b)[^-–—|(:]){2,60}?)[\s-](?:residents|citizens|based\s+(?:candidates|applicants))\s+only\W*$
+        - ^\W*(?:this|the)\s+(?:role|position|job|opportunity|opening|vacancy)\s+is\s+(?:fully\s+)?remote\s+(?:from|within|in|across|throughout)\s+(?!anywhere\b)(?<place>[^:()|]{2,120})
+        - ^\W*(?:you\s+(?:can|may)\s+)?(?:work(?:ing)?\s+(?:remotely\s+)?from|live|be\s+based)\s+anywhere\s+(?:in|within|across)\s+(?!the\s+world\b)(?<place>[^:()|]{2,120})
+        - ^\W*(?:for\s+this\s+(?:role|position|job|opportunity|opening|vacancy),?\s+)?(?:(?:you|candidates?|applicants?)\s+)?(?:must|need\s+to)\s+(?:be\s+|have\s+(?:the\s+)?)(?:legally\s+)?(?:authori[sz]ed|eligible|able|right)\s+to\s+work\s+in\s+(?<place>[^:()|]{2,120})
+        - ^\W*(?:(?:at\s+this\s+time|for\s+now),?\s+)?we(?:['’]re|\s+are|\s+can)?\s+(?:currently\s+)?only\s+(?:able\s+to\s+)?(?:hir(?:e|ing)|recruit(?:ing)?)\s+(?:(?:engineers|people|talent|candidates)\s+)?(?:in|from|within)\s+(?!anywhere\b)(?<place>[^:()|]{2,120})
+        - ^\W*(?:this|the)\s+(?:role|position|job|opportunity|opening|vacancy)\s+is\s+(?:(?:only\s+)?(?:restricted|limited)\s+to|only\s+available\s+(?:to|in))\s+(?:(?:candidates|applicants)\s+(?:(?:based|located)\s+)?in\s+)?(?<place>[^:()|]{2,120})
+      title_patterns:
+        - (?:^|[-–—|(:]\s*)(?<place>(?:(?!\b(?:in|within|from|is|are|be|to|remote)\b)[^-–—|(:]){2,60}?)(?<!residents|citizens|candidates|applicants)[\s-]only(?:\W*$|\s*\))
+        - (?:^|[-–—|(:]\s*)(?<place>(?:(?!\b(?:in|within|from|is|are|be|to|remote)\b)[^-–—|(:]){2,60}?)[\s-](?:residents|citizens|based\s+(?:candidates|applicants))\s+only(?:\W*$|\s*\))
+        - (?:^|[-–—|(:]\s*)remote\s+(?:from|within|in|across|throughout)\s+(?!anywhere\b)(?<place>[^:()|]{2,120})
+      anywhere:
+        - \bwork(?:ing)?\s+(?:remotely\s+)?from\s+anywhere\b(?!\s+(?:within|across|for)\b)(?!\s+in\s+(?!the\s+world\b))
+        - \bremote\W+(?:worldwide|anywhere|global(?:ly)?)\b(?!\s+(?!in\s+the\s+world\b)\p{L})
+        - \bglobally\s+remote\b(?!\s+\p{L})
+        - \b(?:hir(?:e|ing)|recruit(?:ing)?)\s+(?:(?:engineers|people|talent)\s+)?(?:from\s+)?(?:anywhere|worldwide|globally)\b(?!\s+(?:within|across)\b)(?!\s+in\s+(?!the\s+world\b))
+        - \bno\s+(?:location|geographic(?:al)?)\s+restrictions?\b(?!\s+(?:in|within)\b)
+      negation:
+        - \b(?:not|no need|cannot|without|never)\b
+      continuations:
+        - \b(?:other|elsewhere|also|exceptions?|flexible|preference|preferred|more\s+countries|as\s+well)\b
+      connectors:
+        - \s+and\s+
+        - \s+or\s+
+      endings:
+        - to\s+apply
+      articles:
+        - the
+
 # A posting page that says it no longer takes applications (the recheck of starred / followed jobs reads only the page's visible text;
 # a hit marks the job "possibly closed" with the phrase and a quote, you confirm). Regex, case-insensitive.
 closed_posting:

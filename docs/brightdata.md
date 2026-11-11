@@ -17,7 +17,7 @@ The `linkedin-brightdata` channel fetches LinkedIn jobs through the Bright Data 
 | `dataset_id` | Bright Data dataset ID (`gd_lpfll7v5hcqtkxl6l`) |
 | `poll_interval_ms` / `timeout_ms` | Snapshot progress poll interval / the longest total wait from trigger to download complete (snapshot build + download), default 600000 (10 minutes). A timeout is recorded as a retryable failure, and the snapshot id is written to the log (the vendor keeps it for 30 days, so it can be retrieved later) |
 | `country` | Country code for city queries |
-| `remote_locations` | The locations remote queries use per `search.yaml: remote_scope` |
+| `remote_locations` | The location a remote search of a scope uses (home country, region, worldwide). A remote search for a city or country abroad uses that place's name |
 | `max_results` | Maximum results per query (at most 100 per input, Bright Data's limit) |
 
 ## How it works

@@ -10,14 +10,11 @@ import { z } from "zod";
 
 import type { MeConfig } from "@/lib/config/schemas/me";
 import type { DealBreaker, PreferencesConfig } from "@/lib/config/schemas/preferences";
-import { parseRemoteScopeKey, remoteScopeKey } from "@/lib/market/remote-scope";
 
 // Option lists mirror the zod enums in the config schemas; tests/profile/draft.test.ts compares them.
 export const LANGUAGE_LEVEL_OPTIONS = ["A1", "A2", "B1", "B2", "C1", "C2", "native"] as const satisfies readonly MeLevel[];
 export const WORKPLACE_OPTIONS = ["onsite", "hybrid", "remote"] as const satisfies readonly PreferencesConfig["workplace"][number][];
 /** The kinds of remote scope; `region` comes with a list of regions / countries. */
-export const REMOTE_SCOPE_KINDS = ["none", "home_country", "worldwide", "region"] as const;
-export type RemoteScopeKind = (typeof REMOTE_SCOPE_KINDS)[number];
 export const SENIORITY_OPTIONS = ["all", "entry", "mid", "senior", "lead"] as const satisfies readonly PreferencesConfig["seniority"][];
 export const CONTRACT_OPTIONS = ["permanent", "fixed_term", "freelance", "temp_agency"] as const satisfies readonly PreferencesConfig["contracts"]["allow"][number][];
 export const CONTRACT_MODES = ["none", "allow", "exclude"] as const;
@@ -69,13 +66,22 @@ export interface DealBreakerDraft {
 
 export const DEAL_BREAKER_SCOPES = ["any", "title", "description"] as const;
 
+/** One entry of `places`: where a job can be based, and whether the user would move there. */
+export interface PlaceDraft {
+  place: string;
+  relocate: boolean;
+  /** The picked place (see `PlaceId`); null or missing for an older entry that was never picked. */
+  id?: number | string | null;
+}
+
 export interface PreferencesDraft {
   market: MarketDraft;
   target_titles: string[];
-  locations: string[];
+  home_city: string;
+  /** The picked home city's GeoNames id; null or missing when none was picked. */
+  home_city_id?: number | null;
+  places: PlaceDraft[];
   workplace: string[];
-  /** `remoteScopeKey`: `none`, `home_country`, `worldwide` or `region:eu,CH`. */
-  remote_scope: string;
   seniority: string;
   salary_floor_year: string;
   /** Contract kind -> allow / exclude / none. */
@@ -110,12 +116,15 @@ export const meDraftSchema = z.strictObject({
   summary: z.string(),
 });
 
+const placeDraftIdSchema = z.number().int().positive();
+
 export const preferencesDraftSchema = z.strictObject({
   market: z.strictObject({ pack: z.string(), country: z.string(), currency: z.string(), home_language: z.string() }),
   target_titles: z.array(z.string()),
-  locations: z.array(z.string()),
+  home_city: z.string(),
+  home_city_id: placeDraftIdSchema.nullable().optional(),
+  places: z.array(z.strictObject({ place: z.string(), relocate: z.boolean(), id: z.union([placeDraftIdSchema, z.string().max(40)]).nullable().optional() })),
   workplace: z.array(z.string()),
-  remote_scope: z.string(),
   seniority: z.string(),
   salary_floor_year: z.string(),
   contracts: z.record(z.string(), z.string()),
@@ -178,9 +187,10 @@ export function preferencesConfigToDraft(prefs: PreferencesConfig): PreferencesD
   return {
     market: { pack: prefs.market.pack, country: prefs.market.country ?? "", currency: prefs.market.currency ?? "", home_language: prefs.market.home_language ?? "" },
     target_titles: [...prefs.target_titles],
-    locations: [...prefs.locations],
+    home_city: prefs.home_city,
+    home_city_id: prefs.home_city_id ?? null,
+    places: prefs.places.map((entry) => ({ place: entry.place, relocate: entry.relocate, id: entry.id ?? null })),
     workplace: [...prefs.workplace],
-    remote_scope: remoteScopeKey(prefs.remote_scope),
     seniority: prefs.seniority,
     salary_floor_year: String(prefs.salary_floor_year),
     contracts,
@@ -229,9 +239,10 @@ export function preferencesDraftToCandidate(draft: PreferencesDraft): unknown {
   return {
     market: marketCandidate(draft.market),
     target_titles: draft.target_titles,
-    locations: draft.locations,
+    home_city: draft.home_city,
+    ...(draft.home_city_id == null || draft.home_city.trim() === "" ? {} : { home_city_id: draft.home_city_id }),
+    places: draft.places.map((entry) => ({ place: entry.place.trim(), relocate: entry.relocate, ...(entry.id == null ? {} : { id: entry.id }) })),
     workplace: WORKPLACE_OPTIONS.filter((option) => draft.workplace.includes(option)),
-    remote_scope: parseRemoteScopeKey(draft.remote_scope) ?? draft.remote_scope,
     seniority: draft.seniority,
     salary_floor_year: toNumber(draft.salary_floor_year, false),
     contracts: {
@@ -260,6 +271,7 @@ export type FieldErrorKey =
   | "invalidChoice"
   | "contractConflict"
   | "slowPattern"
+  | "unknownPlace"
   | "invalid";
 
 export interface FieldError {
@@ -272,7 +284,7 @@ export interface FieldError {
 type Issue = z.core.$ZodIssue;
 
 /** Lists of plain strings are edited as one control: item errors belong to the list itself. */
-const STRING_LISTS = new Set(["target_titles", "locations", "workplace", "exclude_companies", "exclude_keywords"]);
+const STRING_LISTS = new Set(["target_titles", "places", "workplace", "exclude_companies", "exclude_keywords"]);
 
 function draftPath(path: ReadonlyArray<PropertyKey>): string {
   const [head, index, field] = path;

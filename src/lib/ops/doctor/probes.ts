@@ -32,7 +32,8 @@ import { readReleasesLock } from "../releases-lock";
 import { redact } from "./helpers";
 import { resolveHostDatabaseUrl } from "./database-url";
 import { probeDeliveries } from "./deliveries";
-import { enabledTools, readMcpSettings } from "@/lib/mcp/settings";
+import { effectivePermissions } from "@/lib/agent-access/permissions";
+import { readMcpSettings } from "@/lib/mcp/settings";
 import { countStalePendingReplies, countPendingReplies } from "@/lib/db/repos/replies";
 import { getRuntimeState } from "@/lib/db/repos/runtime-state";
 import { mailboxCredentials, REPLIES_LAST_READ_KEY } from "@/lib/replies/step";
@@ -313,11 +314,11 @@ export async function createRealContext(env: Readonly<Record<string, string | un
   };
 }
 
-/** `data.mcp`: the switch and the tools of mcp.yaml (a file missing from both layers means the defaults: off). */
+/** `data.mcp`: the switch, global matrix and effective stdio permissions of mcp.yaml (a file missing from both layers means the defaults: off). */
 function probeMcp(): McpProbe {
   try {
     const settings = readMcpSettings();
-    return { state: "ok", enabled: settings.enabled, tools: enabledTools(settings) };
+    return { state: "ok", enabled: settings.enabled, permissions: settings.permissions, effective: [...effectivePermissions(settings.stdio.permissions, settings.permissions)], auditRetentionDays: settings.audit.retention_days };
   } catch (error) {
     return { state: "config_error", problem: error instanceof ConfigError ? firstConfigProblem(error) : "unreadable" };
   }

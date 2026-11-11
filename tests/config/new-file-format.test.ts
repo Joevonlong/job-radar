@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { ensureConfigFiles, hasOverlayFormat, legacyFormatVersion, loadConfig, newFileFormat, overlayFormatVersion, parseConfigText, resetConfigCache, type ConfigName } from "@/lib/config";
+import { currentConfigVersion, ensureConfigFiles, hasOverlayFormat, legacyFormatVersion, loadConfig, newFileFormat, overlayFormatVersion, parseConfigText, resetConfigCache, type ConfigName } from "@/lib/config";
 import { configRegistry } from "@/lib/config/registry";
 import { saveAdvanced } from "@/lib/settings/advanced/service";
 import { loadAdvancedFile } from "@/lib/settings/advanced/view";
@@ -65,11 +65,11 @@ describe("a file created now", () => {
     }
   });
 
-  it("config:init with no whole file: overlay stubs at the overlay version", async () => {
+  it("config:init with no whole file: overlay stubs at the current version", async () => {
     const names = created(await ensureConfigFiles());
     expect(names.length).toBeGreaterThan(2);
     for (const name of names) {
-      expect(versionOf(name), name).toBe(overlayFormatVersion(name));
+      expect(versionOf(name), name).toBe(currentConfigVersion(name));
       expect(Object.keys(parseConfigYaml(fs.readFileSync(userFile(name), "utf8"), { unset: "overlay" }) as object), name).toEqual(["config_version"]);
     }
   });

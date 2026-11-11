@@ -49,6 +49,8 @@ export const arbeitsagenturSettingsSchema = z.strictObject({
   api_key: z.string().trim().min(1, "must not be empty"),
   /** Search radius around each configured city, in km. */
   radius_km: positiveInt,
+  /** Removed: the German names come from the place dictionary. Still accepted from older files, and not read. */
+  location_names: z.record(z.string(), z.string()).optional(),
   /** Postings per search page. */
   page_size: positiveInt,
   /** Fetch each posting's detail record (job description) after the search. */
@@ -587,7 +589,7 @@ export const channelsSchema = z
           poll_interval_ms: positiveInt,
           /** Give up on a snapshot after this long; covers the whole trigger -> build -> download span. */
           timeout_ms: positiveInt,
-          /** ISO 3166-1 alpha-2 country sent with every located query (all `search.yaml: locations`); empty or missing = the market's. */
+          /** ISO 3166-1 alpha-2 country sent with every located query at home; a place abroad sends its own. Empty or missing = the market's. */
           country: z.string().regex(/^(?:[A-Z]{2})?$/, "must be an ISO 3166-1 alpha-2 code, upper case, or empty").optional(),
           /** `location` sent for the remote query per remote scope kind; a missing key follows the market. */
           remote_locations: remoteLocations,

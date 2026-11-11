@@ -68,6 +68,7 @@ export function createBrightDataChannel(options: BrightDataChannelOptions): Chan
     // Return true only after exact second-level requests and newest-first results under current settings have been measured.
     supportsCatchUp: () => false,
     estimateCost: (paidRecords) => (paidRecords * options.costPer1kUsd()) / 1000,
+    requestKey: (query, settings) => JSON.stringify([buildDiscoveryInputs(query, brightDataSettingsSchema.parse(settings.extra), marketForChannel()), query.maxResults]),
     // no API key: "not configured", skipped by the cascade without a request, a failed run or a breaker strike
     isConfigured: () => ((options.environment ?? process.env)[BRIGHTDATA_API_KEY_ENV] ?? "").trim() !== "",
 

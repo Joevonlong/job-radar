@@ -2,7 +2,7 @@
  * The registered config migrations, per config name, oldest first. A config's current version is the `to` of
  * its last step (1 when it has none). See `types.ts` for the contract and where the step files go.
  *
- * Every layered file except models.yaml (which has its own by-id overlay) ends in an `overlay-format` step, marked
+ * Every layered file except models.yaml (which has its own by-id overlay) has an `overlay-format` step, marked
  * `convertOnly` (`overlay-format.ts`): it is crossed only by `config:migrate --write --convert-overlays`.
  */
 import type { ConfigName } from "../registry";
@@ -22,6 +22,7 @@ import { interestsOverlayFormat } from "./interests/004-overlay-format";
 import { jobArchiveOverlayFormat } from "./job-archive/002-overlay-format";
 import { jobSearchOverlayFormat } from "./job-search/002-overlay-format";
 import { languageOverlayFormat } from "./language/002-overlay-format";
+import { mcpPermissions } from "./mcp/003-permissions";
 import { mcpOverlayFormat } from "./mcp/002-overlay-format";
 import { notify002 } from "./notify/002-high-value";
 import { notifyOverlayFormat } from "./notify/003-overlay-format";
@@ -32,6 +33,7 @@ import { pipeline004 } from "./pipeline/004-handpicked-priority";
 import { pipeline005 } from "./pipeline/005-berlinstartupjobs-priority";
 import { pipelineOverlayFormat } from "./pipeline/006-overlay-format";
 import { preferences002 } from "./preferences/002-market";
+import { preferences003 } from "./preferences/003-places";
 import { repliesOverlayFormat } from "./replies/002-overlay-format";
 import { researchOverlayFormat } from "./research/002-overlay-format";
 import { resumeOverlayFormat } from "./resume/002-overlay-format";
@@ -73,11 +75,11 @@ export const CONFIG_MIGRATIONS: Readonly<Partial<Record<ConfigName, readonly Con
   jobArchive: [jobArchiveOverlayFormat],
   jobSearch: [jobSearchOverlayFormat],
   language: [languageOverlayFormat],
-  mcp: [mcpOverlayFormat],
+  mcp: [mcpOverlayFormat, mcpPermissions],
   notify: [notify002, notifyOverlayFormat],
   pipeline: [pipeline002, pipeline003, pipeline004, pipeline005, pipelineOverlayFormat],
   pipelineBoard: [pipelineBoardOverlayFormat],
-  preferences: [preferences002],
+  preferences: [preferences002, preferences003],
   replies: [repliesOverlayFormat],
   research: [researchOverlayFormat],
   resume: [resumeOverlayFormat],

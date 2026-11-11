@@ -1,11 +1,15 @@
 import { arbeitsagenturSettingsSchema, type ArbeitsagenturSettings } from "@/lib/config";
+import { loadPipeline } from "@/lib/market/effective";
+import { placeDictionary } from "@/lib/market/geo";
+import { placeGeo, type PlaceGeo } from "@/lib/market/places";
+import { MarketUnresolvedError } from "@/lib/market/resolve";
 
 import { detailLayoutError } from "../details";
 import { ChannelError, settlePostings } from "../errors";
 import { loadKnownDetails, storedDetailOf } from "../known";
-import { searchKind } from "../query";
+import { placeFreeRequestKey, searchKind } from "../query";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
-import { COMPANY_PARAMS, fetchDetail, fetchSearchPage, type CompanyParam } from "./client";
+import { COMPANY_PARAMS, fetchDetail, fetchSearchPage, germanLocation, type CompanyParam } from "./client";
 import { JOB_PAGE_URL, parseArbeitsagenturPayload, toDate } from "./parse";
 import { redactContacts } from "./redact";
 import { payloadSchema, type BaDetail, type BaPayload, type BaSearchItem } from "./schema";
@@ -55,7 +59,7 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
   const kind = searchKind(query);
   const remote = kind === "remote";
   const filterRemote = remote && settings.remote_requires_home_office;
-  const location = kind === "city" ? query.location : null;
+  const location = kind === "city" && query.location !== null ? germanLocation(query.location, placeGeoForChannel()) : null;
   // when filtering, most of a page is dropped: read full pages instead of only what is still missing
   const size = filterRemote ? settings.page_size : Math.min(settings.page_size, query.maxResults);
   const maxPages = filterRemote ? settings.remote_max_pages : Number.POSITIVE_INFINITY;
@@ -165,9 +169,21 @@ export const arbeitsagenturChannel: Channel = {
   kind: "api",
   usesQueries: true,
   supportsCompanyQueries: true,
+  supportsRemotePlaces: false,
+  requestKey: placeFreeRequestKey,
   // the ghost job check: the Referenznummer is stable and the detail's full text is stored
   stableExternalIds: true,
   fullDescription: true,
   collect,
   parse: parseArbeitsagenturPayload,
 };
+
+/** The market's place tables with the place dictionary, for the German names of the places searched; an unresolved market fails the run like `marketForChannel`. */
+export function placeGeoForChannel(): PlaceGeo {
+  try {
+    return placeGeo(loadPipeline(), placeDictionary());
+  } catch (error) {
+    if (error instanceof MarketUnresolvedError) throw new ChannelError("unknown", error.message, { retryable: false });
+    throw error;
+  }
+}

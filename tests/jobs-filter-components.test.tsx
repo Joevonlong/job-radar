@@ -112,6 +112,13 @@ describe("row filter notes", () => {
     expect(screen.getByText(/关注公司：Hamburg 不在目标城市，但在本国，按关注公司保留/)).toBeInTheDocument();
   });
 
+  it("leaves the note about where a remote job can be done to the job page", () => {
+    render(wrap(<FilterNotice rank={{ filterResult: "passed", filterReasons: ["remote_area_unknown"] }} />));
+    expect(screen.getByTestId("filter-note")).toHaveTextContent("the posting does not say for sure where you can work from");
+    const { container } = render(wrap(<MainCell job={item(["remote_area_unknown"])} />));
+    expect(container.querySelector("[data-slot=filter-notes]")).toBeNull();
+  });
+
   it("shows no note for a clean job and the rule reasons for a filtered one", () => {
     const { container, rerender } = render(wrap(<MainCell job={item([])} />));
     expect(container.querySelector("[data-slot=filter-notes]")).toBeNull();

@@ -4,6 +4,8 @@
  * pnpm smoke:monid --discover   (discover + inspect only; no billable run)
  * The package command loads .env. MONID_API_KEY is never printed and requests never follow redirects.
  */
+import { onsiteSearchTexts } from "../src/lib/channels/query";
+import { loadQueryPlaces } from "../src/lib/channels/query-places";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -133,11 +135,11 @@ async function main(): Promise<number> {
   const schedule = loadConfig("schedule");
   const group = values.group ?? Object.keys(search.keyword_groups)[0];
   const keywords = group ? search.keyword_groups[group] : undefined;
-  const location = values.location ?? search.locations[0];
+  const location = values.location ?? onsiteSearchTexts(loadQueryPlaces())[0];
   if (!group || !keywords?.length || !location) throw new Error("Unknown keyword group or no location configured");
   const query: SearchQuery = {
     id: queryId({ keywords, keywordGroup: group, location, remote: false, remoteScope: null }),
-    keywords: [...keywords], keywordGroup: group, location, remote: false, remoteScope: null, company: null, windowHours, maxResults: limit,
+    keywords: [...keywords], keywordGroup: group, location, remote: false, remoteScope: null, country: null, company: null, windowHours, maxResults: limit,
   };
   const inputs = buildActorInputs(query, block, limit, marketForChannel());
   if (inputs.length !== 1) throw new Error("Choose a shorter keyword group: smoke permits exactly one run");

@@ -12,7 +12,7 @@ import { stepError, type SetupFieldError, type SetupStepResult } from "../types"
 import { editable, profileFieldErrors, profileSaveProblem, readFresh, zodSetupErrors, setupWriteError, withStepWrite } from "./common";
 
 /** The market step owns these preferences fields; their errors are not this step's. */
-const NOT_MINE = /^(market(\.|$)|locations$|remote_scope$)/;
+const NOT_MINE = /^(market(\.|$)|home_city$|places$)/;
 
 /** The shipped default `keyword_groups` (null when the defaults directory has no readable search.yaml). */
 export function shippedKeywordGroups(): KeywordGroups | null {

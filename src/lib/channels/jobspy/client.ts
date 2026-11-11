@@ -1,10 +1,10 @@
 import { z } from "zod";
 
 import type { ChannelsConfig } from "@/lib/config";
-import { remoteLocationFor } from "@/lib/market/remote-scope";
+import { remoteQueryLocation } from "@/lib/market/remote-scope";
 
 import { ChannelError } from "../errors";
-import { searchKind } from "../query";
+import { foreignCountry, searchKind } from "../query";
 import { indeedCountryOf, marketForChannel, type ChannelMarket } from "../market";
 import type { ChannelContext, RawPostingInput, SearchQuery } from "../types";
 
@@ -70,18 +70,25 @@ export function searchTermFor(keywords: readonly string[]): string {
   return terms.map((t) => `"${t}"`).join(" OR ");
 }
 
-/** Where a query searches: the city, or for remote queries the location configured for its `remote_scope`. */
+/** Where a query searches: the place, or for a remote search of a scope the location configured for it. */
 export function locationFor(query: SearchQuery, settings: JobspySettings): string | null {
   if (searchKind(query) === "company") return settings.market.countryName;
   if (!query.remote) return query.location;
-  const configured = remoteLocationFor(query.remoteScope ?? "worldwide", settings.remote_location, settings.market, { worldwideText: "", emptyMeansNoLocation: true });
+  const configured = remoteQueryLocation(query, settings.remote_location, settings.market, { worldwideText: "", emptyMeansNoLocation: true });
   return configured.trim() === "" ? null : configured.trim();
+}
+
+/** The Indeed site of a query: the configured one at home, the country's own abroad; empty when Indeed has none. */
+function indeedCountryFor(query: SearchQuery, settings: JobspySettings): string {
+  const abroad = foreignCountry(query, settings.market);
+  return abroad === null ? settings.country_indeed : (settings.market.countries.find((country) => country.code === abroad)?.indeed ?? "");
 }
 
 export function buildSearchRequest(site: JobspySite, query: SearchQuery, settings: JobspySettings): JobspySearchRequest {
   const searchTerm = searchTermFor(query.keywords);
   if (searchTerm === "") throw new ChannelError("unknown", "jobspy search needs at least one keyword", { retryable: false });
-  if (site === "indeed" && settings.country_indeed === "") {
+  const countryIndeed = indeedCountryFor(query, settings);
+  if (site === "indeed" && countryIndeed === "") {
     throw new ChannelError("unknown", `Indeed does not serve ${settings.market.countryName}: set jobspy.country_indeed`, { retryable: false });
   }
   return {
@@ -91,7 +98,7 @@ export function buildSearchRequest(site: JobspySite, query: SearchQuery, setting
     hours_old: Math.max(1, Math.ceil(query.windowHours)),
     results_wanted: Math.max(1, query.maxResults),
     is_remote: searchKind(query) === "remote",
-    ...(settings.country_indeed === "" ? {} : { country_indeed: settings.country_indeed }),
+    ...(countryIndeed === "" ? {} : { country_indeed: countryIndeed }),
     linkedin_fetch_description: site === "linkedin" && settings.linkedin_fetch_description,
     proxies: [...settings.proxies],
   };
@@ -234,13 +241,14 @@ export function rawPostingsFromJobs(jobs: readonly Record<string, unknown>[], ct
   return out;
 }
 
-/** The common `collect`: build the request, call the sidecar, return raw postings. */
+/** The common `collect`: build the request, call the sidecar, return raw postings. A place abroad that Indeed has no site for finds nothing, and is no failure of the channel. */
 export async function collectFromJobspy(
   site: JobspySite,
   query: SearchQuery,
   ctx: ChannelContext,
   settings: JobspySettings,
 ): Promise<RawPostingInput[]> {
+  if (site === "indeed" && foreignCountry(query, settings.market) !== null && indeedCountryFor(query, settings) === "") return [];
   const request = buildSearchRequest(site, query, settings);
   const response = await searchJobspy(ctx, settings, request);
   return rawPostingsFromJobs(response.jobs, ctx, site).slice(0, query.maxResults);

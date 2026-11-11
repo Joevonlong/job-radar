@@ -187,9 +187,15 @@ direction. Pagination uses `ui.yaml: companies.page_size` (50 by default).
 
 ### Remote jobs and watched companies
 
-Two rules decide where a job may be, besides your cities (`/me` → What I want).
+Where a job may be is set on `/me` → What I want and in the Market step of the setup wizard. `preferences.yaml` holds it as `home_city` and `places: [{place, relocate}]`. A place is a city, a country, a region such as `eu`, or Worldwide. `home_city` goes to your AI provider with every job, like the rest of your preferences.
 
-**Remote scope** (the select on `/me`, `/settings` and in the setup wizard; a hint under it explains the chosen kind). For the Germany pack, `home_country` reads "Remote from Germany (incl. EU / Europe / EMEA / worldwide remote)":
+Places come from an offline place dictionary that ships with Job Radar (GeoNames cities of 15,000 people or more, plus countries and regions; no network lookup). Type a few letters and pick one from the list, with the arrow keys and Enter or a click; the list shows each city's region and country, so `Cambridge` in the UK and in Massachusetts are two entries. The home city is picked the same way. A picked place is saved with its dictionary `id` next to the name, and the name stays what you saw. A name without an `id`, as an older file or an answers file has it, means the place of that name in your home country, and the largest one elsewhere only when there is none at home. A name the dictionary doesn't know can't be added or saved; one already in an older file stays, gets a warning, and is matched as written. You can keep it that way, for example for a town under 15,000 people, or pick the place again.
+
+On the form, "Locations outside home city" shows each place as "✈ I'd move here" (solid) or "Remote only" (dashed), and a click switches it. A city you add starts as ✈, a country or region as remote only, and Worldwide is always remote only. 
+
+**On-site and hybrid jobs.** They count in the home city and its metro area, and in ✈ places: a ✈ city in its own country and, under the same name, in the home country (✈ `Cambridge` for a home in the US keeps Cambridge, MA, even if the table has it in the UK), any location in a ✈ country or region, and a name the tables don't know in any country. Remote-only places never count for them. With no home city, a location that states your home country counts; `San Francisco` with no readable country doesn't. A miss is hidden as `location_not_allowed`.
+
+**Remote jobs.** A remote job passes when it is based in the home country, in a listed country or region, or in a listed city, whether ✈ or remote only, or when its label names a wide area that covers one of those. Worldwide lets every location pass. A miss is hidden as `remote_out_of_scope`. With no places listed in the Germany pack, that reads as remote from Germany, including EU, Europe, EMEA and worldwide remote:
 
 | Remote job | Result |
 |---|---|
@@ -203,12 +209,40 @@ Two rules decide where a job may be, besides your cities (`/me` → What I want)
 | a title such as "AI Engineer - US" or "(Americas)" | excluded; the description cannot rescue it. A title that also names EMEA or Europe is not excluded |
 | "Remote" without a place, or no location | kept, noted that it does not say where it hires |
 
-`none` drops remote jobs unless the posting names one of your cities, `worldwide` keeps all of them, and `region` keeps the places of the regions and countries you pick (plus worldwide). The scope in `/settings` decides where the remote searches look; the filter uses the one in My profile.
+Worldwide keeps all of them, as far as their location goes. Listed places add to home and never replace it. To stop seeing remote jobs, take Remote out of Workplace. A place named twice counts once, and ✈ wins ([details](market-packs.md#the-location-settings-migration)).
+
+**What the posting says about where you can work from.** Every remote job that passes reads its title and description again, on each filter pass, for a clear statement such as "You must live in France" or "Open to candidates in Spain or Portugal":
+
+| What the posting says | Result |
+|---|---|
+| A place in your home country or a ✈ place | Passes |
+| Anywhere in the world | Passes |
+| Clearly somewhere else, with no mention of your home country or a ✈ place | Hidden as `remote_out_of_scope`, with the phrase as the reason |
+| Nothing clear: no phrase, a bare place name, a statement naming a city (the same name may be a town near you), a negation, a place the tables don't know, statements that disagree, or a statement elsewhere that also names your home country or a ✈ place | Kept, with a note on the job page saying so. The note doesn't lower its rank |
+
+Only where you'd live counts here, so a remote-only place doesn't cover such a statement, and a remote-only Worldwide doesn't either: it opens the job's location, not a posting that says you must live in France. With Worldwide or a name the tables don't know as a ✈ place, such a job keeps the note instead. The phrases are in the market pack, see [Market packs](market-packs.md).
+
+**Searches.** The same settings decide what is searched, once for each keyword group. There is one on-site search for the home city (the country's name without one) and one for each ✈ place. With Remote in Workplace, there is also one remote search for home and one for each listed place:
+
+| Place | Remote search |
+|---|---|
+| Home | The home country. Left out when a listed country, region or Worldwide already covers home |
+| Worldwide | Everywhere |
+| A region or country code (`eu`, `CH`) | That scope |
+| A city or country name abroad | Its name |
+| A city in the home country, or a ✈ name the tables don't know | None |
+| A remote-only name the tables don't know | That name, with no country |
+
+The form shows how many searches each place adds per cycle. A search abroad goes to the board with that place's own country. Boards that can't send a place on a remote search (JSearch, Arbeitsagentur, StepStone, XING) skip these searches and keep the others, and Sources shows how many they skipped. Two searches a board would send the same way, such as two remote places Apify sends to the same `remote_locations`, run once. Arbeitsagentur reads only German place names, so a place abroad finds nothing there. A ✈ city searches the country the tables give it: ✈ `Cambridge` searches the UK ([known limits](market-packs.md#the-location-settings-migration)). Discovery of company boards uses the on-site searches only.
+
+A home city outside the home country (the first of old `locations` could be one) gets a warning on `/me` and from `pnpm config:check`: jobs there are compared with the home country. Set a home city at home and list the other city as ✈.
+
+The old `locations` and `remote_scope` keys in `search.yaml` are ignored. When they name something your places don't list, `/me` and `pnpm config:check` tell you, and you can add it to your places.
 
 **Watched companies keep their on-site and hybrid jobs in any city of your country.** For a company on the watch list (`/interests`, **Watch** on `/companies`, or the database flag), a job that is not remote passes the location check when at least one of its places is in your home country, whatever the city; the job is noted "Watched company: Hamburg is not one of your cities but is in your home country, so the job is kept". Only the location check is relaxed:
 
 - A place the source does not tie to your country does not count: "San Francisco", "Bengaluru" or a small town the city table does not know, with no country given by the source. Such a job is still excluded as "Location not on your list". Most sources give the country (Arbeitsagentur always, LinkedIn writes "…, Germany").
-- Remote jobs follow the remote scope above. Work mode, contract, student roles, salary floor, seniority, excluded keywords and companies, deal-breakers and your own keep / exclude decisions are unchanged, and so are scoring and the push rules.
+- Remote jobs follow the rules above. Work mode, contract, student roles, salary floor, seniority, excluded keywords and companies, deal-breakers and your own keep / exclude decisions are unchanged, and so are scoring and the push rules.
 - The list is read on every filter run, so adding or removing a company changes its jobs on the next cycle. If `interests.yaml` cannot be read, the list counts as empty (a warning is logged) and only the database flag applies.
 - A company is only collected in every city when it has an ATS board (below) or a source returns its jobs: otherwise only the searches for your cities find them. `/interests` marks watched companies without a board.
 

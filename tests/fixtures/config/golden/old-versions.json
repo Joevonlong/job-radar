@@ -54,7 +54,7 @@
     },
     "pipeline": {
       "layer": "user",
-      "hash": "1660f570442987b14b328ae91429b0ac3ed568a0fc1ea33dc3daf86d8fb6a196",
+      "hash": "8954cb9819582847ed56f69e07cccc2dd3ea3b1961915f37ac9d960fa311ba59",
       "valid": true
     },
     "pipelineBoard": {
@@ -74,7 +74,7 @@
     },
     "ui": {
       "layer": "default",
-      "hash": "3fe0199c482735cfa6464c94b38302b56d24a09be53971e3acf7bf0e6f43d2f5",
+      "hash": "22c8631986c59f0e301cf33f4ee3ca36d237ece3137011631a0c94a8cde89bc5",
       "valid": true
     },
     "language": {
@@ -114,7 +114,7 @@
     },
     "mcp": {
       "layer": "default",
-      "hash": "8c677480ee42a1e90b63d0b817bfed77947c73cf5facf0be0d893c43d674262d",
+      "hash": "9854a1b6f4b71a9be17a814010b9db5c667a3757980dacfc5bb5fc399aeb59d0",
       "valid": true
     },
     "activityLog": {
@@ -144,7 +144,7 @@
     },
     "preferences": {
       "layer": "user",
-      "hash": "ec1351bc4a1f9742ff4bf987f8b7e3032bc9519c32e7a80578d1808164c1f1ec",
+      "hash": "5b46b879e650dc7c5f4291d72baf7e56af9e854d9fcc85a38911b227ee708bce",
       "valid": true
     },
     "stories": {

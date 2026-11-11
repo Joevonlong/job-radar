@@ -17,7 +17,7 @@ The `linkedin-apify` channel takes over the main LinkedIn search after the Brigh
 | `price_per_1k_usd` / `run_start_usd` | For accounting: price per 1000 results, and the start fee charged once per run. Use the price for your plan under Pricing on the actor page |
 | `memory_mb` / `timeout_secs` | Memory and timeout of one run; the synchronous endpoint caps at 300 seconds, and a timeout is recorded as a retryable failure |
 | `country_name` | Location of city queries = `<city>, <country name>` |
-| `remote_locations` | The location used by remote queries per `search.yaml: remote_scope` |
+| `remote_locations` | The location a remote search of a scope uses (home country, region, worldwide). A remote search for a city or country abroad uses that place's name |
 | `date_posted` | Value of `{date_posted}` for a template that uses the actor's coarse filter: window <=24 hours / <=7 days / <=30 days / longer (empty = omit this key). The default template does not use it |
 | `input_template` | The actor input template; strings may use `{keywords}` `{location}` `{date_posted}` `{posted_within_seconds}` `{limit}` (when the whole string is `"{limit}"` it becomes a number); keys with empty values are omitted |
 | `remote_input` | Keys layered onto the template by remote queries (default empty: LinkedIn's `f_WT=2` has no effect through this actor, so remote queries are not filtered to remote by the provider; they are searches at the `remote_locations` place, and the pipeline decides remote from the posting); a key replaces the template's, except that two `{key, value}` lists merge by `key` with the remote entry winning, and an empty list changes nothing. A list of any other shape replaces the template's list, which drops its `f_TPR` |

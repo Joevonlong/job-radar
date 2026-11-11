@@ -25,6 +25,7 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 | 职业档案提取草稿，含建议字段和原文引用 | `data/profile/career/drafts/` 和配置归档 | 直到采用、丢弃或按 `career.yaml: import.draft_ttl_days` 过期；备份可能继续保留 |
 | 从画像、文字或简历提取的素材草稿，以及它们引用的片段 | 数据库表 `profile_story_drafts` | 采用或丢弃草稿时清除文字；这一行在 `writer.yaml: import.draft_ttl_days` 天后删除。见[提取素材](#提取素材) |
 | runner 心跳 | 数据库 | 24 小时 |
+| MCP 调用元数据：调用方、传输方式、capability、可选目标 id、结果或错误类别、条数和耗时；从不存参数、返回内容或消息文字 | 数据库表 `agent_calls` | `mcp.yaml: audit.retention_days`（默认 90 天），由 runner 清理；旧备份可能保留已删的行。见 [MCP 调用审计](mcp.zh.md#调用审计) |
 | 数据库备份 | `data/backups/` | 自动：14 份日备、8 份周备；手动备份不会被清理。已删除的记录在旧备份里还会留着，直到这些备份被删掉 |
 | 给 resume-kit 的 JD 导出 | `data/exports/jd/` | 直到你删除 |
 | 日志 | 容器日志（轮转）、`data/logs/`（轮转）、macOS 上的 `~/Library/Logs/job-radar/` | 轮转 |
@@ -45,17 +46,19 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 
 | 谁 | 发什么 | 何时 | 怎么停止 |
 |---|---|---|---|
-| 你使用的 AI 提供方：OpenAI（`codex` 命令行或 API）、Anthropic（`claude` 命令行或 API）、OpenRouter 及它转发到的上游提供方（API）、DeepSeek 或小米 MiMo（API，**默认关闭**）。API 提供方在 `.env` 里填了 key 之前什么都不发 | **评分：** 画像摘要、技能和年限、语言等级、**目标职位、目标城市、工作方式、远程范围、级别、薪资底线、合同偏好、排除的公司、排除的关键词、你自己的评分标准**，加上岗位描述。**每周建议：** 你标记过的岗位（感兴趣、准备中、已申请、面试中、offer、忽略）**及其状态**，加上你的偏好。**翻译、拆解、信号、陷阱检查：** 只有岗位文本。**公司背景**（默认关闭）：只发送公司名和你确认过的官网域名，在你按按钮时发送，之后由提供方搜索网页。绝不发送岗位标题、地点、JD、你的画像或从岗位推断出的域名（[详情](research.zh.md)）。**申请写作**（默认关闭）：只发送“生成”上方披露框列出的素材：问题及其设置、职位名称和公司、勾选的 JD 要点或一段 JD 原文、画像简介、技能和语言、勾选的经历素材和你的强调说明，在你按**生成**时发送。**优化我自己的稿**发送你贴的文字（加上同样的素材；选“只改语言”时不带素材），**审阅**发送该版本的文字和同样的素材。你的居住城市和签证状态（`me.yaml`）、备注和申请备注不会发送。 | 每一轮；申请写作只在你点击时 | 关掉该提供方（`ai.yaml` 里 `enabled: false`，或"设置 → AI"），不安装它的命令行、不填它的 key；每周建议用 `schedule.yaml` 的 `suggest.enabled` 关掉；`writer.yaml: enabled` 和 `research.yaml: enabled` 保持 `false` |
+| 你使用的 AI 提供方：OpenAI（`codex` 命令行或 API）、Anthropic（`claude` 命令行或 API）、OpenRouter 及它转发到的上游提供方（API）、DeepSeek 或小米 MiMo（API，**默认关闭**）。API 提供方在 `.env` 里填了 key 之前什么都不发 | **评分：** 画像摘要、技能和年限、语言等级、**目标职位、常住城市和其他地点、工作方式、远程范围、级别、薪资底线、合同偏好、排除的公司、排除的关键词、你自己的评分标准**，加上岗位描述。**每周建议：** 你标记过的岗位（感兴趣、准备中、已申请、面试中、offer、忽略）**及其状态**，加上你的偏好。**翻译、拆解、信号、陷阱检查：** 只有岗位文本。**公司背景**（默认关闭）：只发送公司名和你确认过的官网域名，在你按按钮时发送，之后由提供方搜索网页。绝不发送岗位标题、地点、JD、你的画像或从岗位推断出的域名（[详情](research.zh.md)）。**申请写作**（默认关闭）：只发送“生成”上方披露框列出的素材：问题及其设置、职位名称和公司、勾选的 JD 要点或一段 JD 原文、画像简介、技能和语言、勾选的经历素材和你的强调说明，在你按**生成**时发送。**优化我自己的稿**发送你贴的文字（加上同样的素材；选“只改语言”时不带素材），**审阅**发送该版本的文字和同样的素材。你的居住城市和签证状态（`me.yaml`）、备注和申请备注不会发送。 | 每一轮；申请写作只在你点击时 | 关掉该提供方（`ai.yaml` 里 `enabled: false`，或"设置 → AI"），不安装它的命令行、不填它的 key；每周建议用 `schedule.yaml` 的 `suggest.enabled` 关掉；`writer.yaml: enabled` 和 `research.yaml: enabled` 保持 `false` |
 | 职业档案提取的 AI 服务商 | 确认后的预览文字；见[职业档案提取](#职业档案提取) | 功能开启且确认提取时 | 不发送预览，或关闭职业档案 |
 | 自动调研（[research.zh.md](research.zh.md#自动调研)）：任务的 AI provider，它会搜索网页 | 公司名和你确认过的域名；查薪资还有标题、城市、国家和资历；JD 发给拆解的 provider。请求的时间反映出你收藏和投递了什么 | 收藏岗位时，可选地在状态变化时或高分新岗位时，只在调研打开时 | `research.yaml` 里设 `auto.trigger: manual` 或 `enabled: false` |
-| 招聘网站与 API：Arbeitsagentur、Indeed、LinkedIn、StepStone、XING、JSearch 的 Google Jobs、公司招聘看板、Bright Data、Apify、Monid | 搜索关键词、搜索城市或本国名、关注名单里的公司名，以及来自你的 IP 的请求（LinkedIn session 以你自己登录的账号发出） | 每轮采集；公司查询仅发给支持且已启用的通道 | 在来源页关闭通道；公司查询可在 `search.yaml` 设 `watched_company_queries.enabled: false` 全部关闭，或在 `sources.yaml` 的通道块设 `company_queries: false` 单独关闭 |
+| 招聘网站与 API：Arbeitsagentur、Indeed、LinkedIn、StepStone、XING、JSearch 的 Google Jobs、公司招聘看板、Bright Data、Apify、Monid | 搜索关键词、常住城市（没有设置时是本国名）、你列出的地点、关注名单里的公司名，以及来自你的 IP 的请求（LinkedIn session 以你自己登录的账号发出） | 每轮采集；公司查询仅发给支持且已启用的通道 | 在来源页关闭通道；公司查询可在 `search.yaml` 设 `watched_company_queries.enabled: false` 全部关闭，或在 `sources.yaml` 的通道块设 `company_queries: false` 单独关闭 |
 | Arbeitnow（免费招聘板接口）、Berlin Startup Jobs（公开岗位接口）、Handpicked Berlin（公开岗位索引，默认关闭）、Berlin Design Network（每天一次岗位列表页，默认关闭） | 只有来自你 IP 地址的请求（它们不收关键词和地点） | 每一轮 | 在"来源"页关掉该通道 |
 | Tavily 或 Brave（招聘页发现） | 形如"关键词 jobs 城市"的搜索词 | 每天，且仅在有 key 时 | 不设置 key |
 | Google（Gmail，IMAP） | 用应用密码登录并读取一个标签 | 每一轮 | 关掉 Gmail 通道；撤销应用密码 |
 | Telegram | 职位名、公司、分数、AI 一句话摘要、提醒、健康告警，以及用"定制简历"按钮时的命令文本 | 推送时 | Telegram 默认关闭（`notify.yaml`），保持关闭即可 |
 | 简历定制的 AI 服务商 | 预览里显示的内容块和 JD；见[简历定制](#简历定制) | 开启职业档案后你确认定制预览时 | 不确认预览，或关闭职业档案 |
 | 终端里的 `claude`（resume-kit `/tailor`） | **你的完整简历**和岗位描述，仅当你自己运行这条命令时 | 只在你运行时 | 不运行它 |
-| 你自己配置的 MCP 客户端（Claude Desktop、Claude Code 等）所用的模型服务商（**默认关闭**） | 你提问时工具返回的内容：岗位事实字段、来源链接、分数与排名、带 JD 引用的信号、经 AI 陷阱清洗的 JD、申请的状态 / 日期 / 下一步 / 面试轮数。**永远不给：** 画像、匹配理由和差距、过滤原因、薪资底线、备注、邮件、本机路径、密钥。**只有你打开 `get_application_context` 时才给：** 岗位的申请问题和答案版本，以及你为每道题选的材料（画像摘要、技能、语言、选中的故事、强调说明）。见 [mcp.zh.md](mcp.zh.md) | 只在你向客户端提问时 | 保持 `mcp.yaml: enabled: false`，或从客户端里删掉这个服务 |
+| 你自己配置的 MCP 客户端（Claude Desktop、Claude Code 等）所用的模型服务商（**默认关闭**） | 你提问时工具返回的内容：岗位事实字段、来源链接、分数与排名、带 JD 引用的信号、经 AI 陷阱清洗的 JD、申请的状态 / 日期 / 下一步 / 面试轮数。`jobs:read` 下通过 `include` 可请求翻译、职位拆解、薪资背景、公司研究、幽灵职位检查和生命周期；有效的 `match:read` 增加摘要、匹配理由 / 差距 / 过滤原因和匹配检查；`tracking:read` 增加申请历史、收藏时间、已读和关闭状态；`notes:read` 增加申请、事件和收藏备注，按你写的原文给出。字段清单只拦结构化的值：AI 写的匹配理由和差距是根据你的画像写成的自由文本，可能提到你的语言等级或期望薪资；过滤原因带硬性筛选规则的 id 和命中的黑名单关键词。**作为字段永远不给：** 画像文件 / 快照、薪资底线、你的语言等级、硬性筛选规则的显示名称、关闭备注、邮件、本机路径、密钥、AI 服务商 / 模型 / 用量和运行记录。**只有你打开 `get_application_context` 时才给：** 岗位的申请问题和答案版本，以及你为每道题选的材料（画像摘要、技能、语言、选中的故事、强调说明）。见 [mcp.zh.md](mcp.zh.md) | 只在你向客户端提问时 | 保持 `mcp.yaml: enabled: false`，或从客户端里删掉这个服务 |
+
+搜索卡片在有效 `tracking:read` 下只增加状态、收藏标记和已读标记；在有效 `match:read` 下只增加经清理的单行摘要及语言、扣留原因和过滤结果及原因。摘要要求陷阱配置可读且启用，且扫描匹配当前 JD、源载荷和规则；不满足时扣留。卡片始终不给收藏备注或 signal bonus。
 
 不会向项目维护者或任何统计服务发送任何东西。
 

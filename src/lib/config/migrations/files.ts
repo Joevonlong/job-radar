@@ -25,6 +25,7 @@ import { restoreFlowPadding, syncNode, withFileLock } from "../write";
 import { stringifyConfigYaml } from "../yaml-options";
 
 import { convertLegacy } from "./overlay-convert";
+import type { ConfigMigration } from "./types";
 import { CONFIG_VERSION_KEY, documentConfigVersion, hasOverlayFormat, isOverlayVersion, migrateConfigDocument, overlayFormatVersion, withoutConfigVersion } from "./version";
 
 export interface FileMigration {
@@ -35,6 +36,8 @@ export interface FileMigration {
   to: number;
   /** The steps that run, oldest first. */
   steps: { from: number; to: number; description: string | null }[];
+  /** Per-file meaning changes reported by the steps. */
+  notices: readonly string[];
   /** File text now and after the migration (comments kept). */
   before: string;
   after: string;
@@ -54,7 +57,7 @@ export interface ConversionKeys {
 }
 
 export interface PlanMigrationOptions {
-  /** Also turn whole files into overlays. Without it a file stops at the last version before the overlay format. */
+  /** Also turn whole files into overlays. Without it a file keeps the whole format version; flagged later steps may still update its shape. */
   convertOverlays?: boolean;
 }
 
@@ -91,7 +94,7 @@ function writeDocument(before: string, doc: Document): string {
  * A whole file (migrated) as an overlay: only the keys `convertLegacy` keeps stay in the document, with their comments, and
  * the check is the one that matters: the new text, merged over the shipped file, gives exactly what the old text gave.
  */
-function convertDocument(name: ConfigName, before: string, doc: Document, file: string): { after: string; keys: ConversionKeys; to: number } {
+function convertDocument(name: ConfigName, before: string, doc: Document, file: string): { after: string; keys: ConversionKeys; to: number; applied: readonly ConfigMigration[]; notices: readonly string[] } {
   const shippedText = readShippedText(name);
   const shippedFile = getDefaultConfigPath(name) ?? file;
   if (shippedText === null) throw new ConfigError({ configName: name, filePath: shippedFile, kind: "missing", layer: "shipped" });
@@ -103,9 +106,10 @@ function convertDocument(name: ConfigName, before: string, doc: Document, file: 
   const to = overlayFormatVersion(name) as number;
   doc.contents = syncNode(doc, doc.contents, { [CONFIG_VERSION_KEY]: to, ...overlay }, { omitNewEmpty: false }) as Document["contents"];
   doc.commentBefore = ` Your changes to the shipped file: only the keys written here override it; everything else follows the product.\n Remove a shipped key with \`key: !unset\`. See docs/configuration.md.`;
+  const migration = migrateConfigDocument(name, doc, file);
   const after = writeDocument(before, doc);
   if (!isDeepStrictEqual(parseConfigText(name, after, file), legacyValue)) throw new Error("the converted file would give a different value");
-  return { after, keys: { dropped, kept, filled, unset }, to };
+  return { after, keys: { dropped, kept, filled, unset }, to: migration.to, applied: migration.applied, notices: migration.notices };
 }
 
 /** Look at every config file in the user and profile directories and work out what `--write` would change. Reads only. */
@@ -127,9 +131,11 @@ export function planConfigMigrations(names: readonly ConfigName[] = CONFIG_NAMES
       const steps = result.applied.map((step) => ({ from: step.from, to: step.to, description: step.description ?? null }));
       if (options.convertOverlays && hasOverlayFormat(name) && !isOverlayVersion(name, documentConfigVersion(doc))) {
         const converted = convertDocument(name, before, doc, file);
-        const last = result.to;
-        steps.push({ from: last, to: converted.to, description: "overlay format" });
-        plan.pending.push({ name, path: file, from: result.from, to: converted.to, steps, before, after: converted.after, conversion: converted.keys });
+        const overlayVersion = overlayFormatVersion(name) as number;
+        steps.splice(0, steps.length, ...result.applied.filter((step) => !step.wholeFiles).map((step) => ({ from: step.from, to: step.to, description: step.description ?? null })));
+        steps.push({ from: result.to, to: overlayVersion, description: "overlay format" });
+        steps.push(...converted.applied.map((step) => ({ from: step.from, to: step.to, description: step.description ?? null })));
+        plan.pending.push({ name, path: file, from: result.from, to: converted.to, steps, before, after: converted.after, conversion: converted.keys, notices: [...result.notices, ...converted.notices] });
         continue;
       }
       if (result.applied.length === 0) {
@@ -138,7 +144,7 @@ export function planConfigMigrations(names: readonly ConfigName[] = CONFIG_NAMES
       }
       const after = writeDocument(before, doc);
       parseConfigText(name, after, file);
-      plan.pending.push({ name, path: file, from: result.from, to: result.to, steps, before, after });
+      plan.pending.push({ name, path: file, from: result.from, to: result.to, steps, before, after, notices: result.notices });
     } catch (err) {
       plan.problems.push({ name, path: file, message: firstLine(err) });
     }

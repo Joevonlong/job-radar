@@ -19,6 +19,8 @@ import { atsContext, response, routedFetch, type RecordedRequest } from "../ats/
 import { shippedSearch } from "../helpers";
 import { shippedYaml } from "../../config/helpers";
 
+const CITIES = ["Berlin", "München"];
+
 const fixture = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, "../../fixtures/discovery/brave-search.json"), "utf8")) as unknown;
 
 const companies = companiesSchema.parse({
@@ -28,7 +30,7 @@ const companies = companiesSchema.parse({
 function deps(overrides: Partial<BraveDeps> = {}) {
   const store = createMemoryDiscoveryStore();
   const value: BraveDeps = {
-    inputs: () => ({ search: shippedSearch(), companies, queryRotation: true }),
+    inputs: () => ({ search: shippedSearch(), cities: CITIES, companies, queryRotation: true }),
     store: () => store,
     environment: { BRAVE_SEARCH_API_KEY: "test-key-not-real" },
     ...overrides,
@@ -77,7 +79,7 @@ describe("boardFromUrl", () => {
 
 describe("discovery queries", () => {
   it("builds one query per ATS x keyword group x city from search.yaml", () => {
-    const queries = buildDiscoveryQueries(shippedSearch());
+    const queries = buildDiscoveryQueries(shippedSearch(), CITIES);
     expect(queries).toHaveLength(5 * 3 * 2);
     expect(queries.map((q) => q.ats)).toEqual(expect.arrayContaining(["greenhouse", "lever", "ashby", "personio", "smartrecruiters"]));
     const german = queries.find((q) => q.group === "german" && q.ats === "lever" && q.city === "München");
@@ -179,7 +181,7 @@ describe("brave channel", () => {
         return raw;
       })(),
     );
-    const queries = buildDiscoveryQueries(d.inputs().search).map((q) => q.q);
+    const queries = buildDiscoveryQueries(d.inputs().search, CITIES).map((q) => q.q);
     expect(queries).toHaveLength(30);
     const channel = createBraveChannel(d);
     const runs: (string | null)[][] = [];

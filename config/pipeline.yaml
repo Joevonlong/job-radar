@@ -482,12 +482,12 @@ filter:
     onsite_policy: keep_note
   # Location text doesn't point to a specific place ("Home Office", "multiple locations"): such jobs may be in an allowed city, so they are kept and tagged "location unclear". A specific place ("Bochum") that isn't an allowed city is filtered out
   generic_location_patterns: []
-  # Member states (ISO codes) added to the eu region of the generic pack, used when remote_scope is {region: [eu]}; the region itself is in config/packs/generic/geography.yaml
+  # Member states (ISO codes) added to the eu region of the generic pack, used when your places list eu; the region itself is in config/packs/generic/geography.yaml
   eu_countries: []
   remote:
-    # Remote job location says "EU / Europe-wide" (phrases added to the eu region): in scope when the home country's region is eu or remote_scope lists eu
+    # Remote job location says "EU / Europe-wide" (phrases added to the eu region): in scope when the home country's region is eu or your places list eu or a place in it
     eu_wide_patterns: []
-    # Remote job location says "worldwide": in scope unless remote_scope is none
+    # Remote job location says "worldwide": in scope
     worldwide_patterns: []
     # No country code, but the text clearly points to regions or places outside the EU / Europe: out of scope (US states and cities, Canada, LatAm, APAC, Middle East, Africa)
     outside_patterns: []
@@ -498,6 +498,16 @@ filter:
     outside_state_codes: []
     # The body states the job can be hired in the home country / region (the market pack provides the home country's phrases): remote jobs with an out-of-scope location are kept and tagged too (words like "remote / hire / based / work" must be close to the region, to avoid false matches like "customers across Europe")
     description_in_scope_patterns: []
+    # Check 2: where a remote job may be done from, in the posting's own words (the market pack provides the phrases; lists here add to them, see docs/market-packs.md). Sure and not your home country or a place you'd move to: hidden. Not sure: kept with a note
+    work_area:
+      patterns: []        # each with a (?<place>...) capture
+      title_patterns: []  # the same, read in the title only
+      anywhere: []        # anywhere in the world
+      negation: []        # a sentence with one of these is not sure
+      continuations: []   # a next sentence with one of these widens or softens the statement before it, so it is not sure
+      connectors: []      # what separates the places of a list
+      endings: []         # what may follow the place
+      articles: []        # words left off the front of a place
   # seniority in preferences.yaml (when not all) -> matching job levels; jobs with no stated level (unknown) are kept
   seniority_map:
     entry: [intern, junior]

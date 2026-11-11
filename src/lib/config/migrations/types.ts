@@ -23,7 +23,8 @@ export interface MigrationContext {
  *
  * The `overlay-format` step (`convertOnly`) splits a chain in two. Steps before it edit a whole file. Steps after it edit
  * an overlay, which holds only the user's changes, so a key may be absent because it follows the shipped file: they get
- * the shipped document read-only (`context.shipped`) to tell the two apart, and they must not write to it.
+ * the shipped document read-only (`context.shipped`) to tell the two apart, and they must not write to it. A later step
+ * marked `wholeFiles` also runs on whole files, without advancing their format version.
  */
 export interface ConfigMigration {
   /** Version the document has before this step. */
@@ -37,6 +38,11 @@ export interface ConfigMigration {
    * and the file stays in the whole-file format at the step's `from`.
    */
   readonly convertOnly?: boolean;
-  /** Rewrite the document in place (see the contract above). */
-  migrate(doc: Document, context?: MigrationContext): void;
+  /**
+   * Also run after the whole-file runner stops at the overlay format, without stamping a version. Must accept the new
+   * shape unchanged; counted as applied only when the document value changes. No shipped defaults may be assumed.
+   */
+  readonly wholeFiles?: boolean;
+  /** Rewrite in place; optional one-line notices explain meaning changes, never containing values from the file. */
+  migrate(doc: Document, context?: MigrationContext): readonly string[] | void;
 }

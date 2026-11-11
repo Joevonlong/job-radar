@@ -5,7 +5,9 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { arbeitsagenturChannel, interleave } from "@/lib/channels/arbeitsagentur";
-import { detailUrl, publishedDays, searchUrl } from "@/lib/channels/arbeitsagentur/client";
+import { detailUrl, germanLocation, publishedDays, searchUrl } from "@/lib/channels/arbeitsagentur/client";
+import { createPlaceSource } from "@/lib/market/geo/dictionary";
+import type { PlaceGeo } from "@/lib/market/places";
 import { redactContacts } from "@/lib/channels/arbeitsagentur/redact";
 import { parseArbeitsagenturPayload } from "@/lib/channels/arbeitsagentur/parse";
 import { employerMatcher } from "@/lib/channels/company-match";
@@ -105,7 +107,8 @@ function query(overrides: Partial<SearchQuery> = {}): SearchQuery {
     keywordGroup: "engineering",
     location: "Berlin",
     remote: false,
-    remoteScope: null, company: null,
+    remoteScope: null,
+    country: "DE", company: null,
     windowHours: 24,
     maxResults: 25,
     ...overrides,
@@ -164,6 +167,31 @@ describe("request building", () => {
     expect(url.searchParams.get("umkreis")).toBe("12");
     expect(url.searchParams.get("veroeffentlichtseit")).toBe("2");
     expect(detailUrl(s, REF_MULTI)).toBe(`https://example.test/svc/pc/v4/jobdetails/${Buffer.from(REF_MULTI).toString("base64")}`);
+  });
+});
+
+describe("germanLocation", () => {
+  const munich = { id: 2867714, kind: "city" as const, name: "Munich", names: { en: "Munich", de: "München", zh: null }, localName: "München", searchName: "München", countryCode: "DE", countryName: "Germany", admin1: "Bavaria", population: 1_260_000, spellings: ["Munich", "München"] };
+  const paris = { ...munich, id: 2988507, name: "Paris", names: { en: "Paris", de: null, zh: null }, localName: null, searchName: "Paris", countryCode: "FR", spellings: ["Paris"] };
+  const geo: PlaceGeo = {
+    cityAliases: {},
+    cities: {},
+    countries: [{ code: "DE", name: "Germany", aliases: ["Deutschland"] }, { code: "FR", name: "France", aliases: [] }],
+    regions: {},
+    dictionary: createPlaceSource([munich, paris]),
+  };
+
+  it("translates a country name, whichever spelling the place has", () => {
+    expect(germanLocation("Germany", geo)).toBe("Deutschland");
+    expect(germanLocation("deutschland", geo)).toBe("Deutschland");
+    expect(germanLocation("France", geo)).toBe("Frankreich");
+  });
+
+  it("searches a city under the dictionary's German name, in any spelling, and keeps any other place as written", () => {
+    expect(germanLocation("MUNICH", geo)).toBe("München");
+    expect(germanLocation("München", geo)).toBe("München");
+    expect(germanLocation("Paris", geo)).toBe("Paris");
+    expect(germanLocation("Atlantis", geo)).toBe("Atlantis");
   });
 });
 
@@ -883,6 +911,12 @@ describe("registration and configuration", () => {
     bad((b) => delete b.max_details_per_query);
     bad((b) => (b.unknown_key = 1));
   });
+});
+
+it("a search of the home country goes out under its German name", async () => {
+  const { ctx, calls } = makeContext(api({ pages: [SEARCH_REMOTE] }), { fetch_details: false });
+  await arbeitsagenturChannel.collect(query({ location: "Germany" }), ctx);
+  expect(calls[0]!.url.searchParams.get("wo")).toBe("Deutschland");
 });
 
 it("company searches are nationwide and keep onsite results even with home-office filtering enabled", async () => {

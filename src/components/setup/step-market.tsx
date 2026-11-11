@@ -4,9 +4,11 @@ import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 
-import { MarketFields, draftCountryName, draftHomeRegion } from "@/components/profile/market-fields";
-import { Field, TagInput, describedBy } from "@/components/profile/fields";
-import { RemoteScopeField } from "@/components/profile/remote-scope-field";
+import { MarketFields } from "@/components/profile/market-fields";
+import { Field, describedBy } from "@/components/profile/fields";
+import { HomeCityField } from "@/components/profile/home-city-field";
+import { usePlaceGeo } from "@/components/profile/place-picker";
+import { PlacesField } from "@/components/profile/places-field";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import type { MarketView } from "@/lib/market/view";
@@ -28,9 +30,10 @@ interface StepMarketProps {
   market: MarketView;
 }
 
-/** Step 2: market pack, country, currency, local language (the /me market block), cities, remote scope and time zone. */
+/** Step 2: market pack, country, currency, local language (the /me market block), home city, places and time zone. */
 export function StepMarket({ view, done, market }: StepMarketProps) {
   const t = useTranslations("setup.market");
+  const tProfile = useTranslations("profile.fields");
   const { pending, save, skip, errors, formError } = useStep("market");
   const browserZone = useBrowserTimeZone();
   const zones = useTimeZones();
@@ -39,7 +42,8 @@ export function StepMarket({ view, done, market }: StepMarketProps) {
   // What was chosen per pack, so switching away and back keeps the country / currency / language
   const packChoices = useRef(new Map<string, MarketInput["market"]>());
   // Whether the user set the currency / the cities themselves: until then a new country brings its own (a saved step counts as set)
-  const [edited, setEdited] = useState({ currency: done, locations: done });
+  const [edited, setEdited] = useState({ currency: done, homeCity: done });
+  const { geo, remember } = usePlaceGeo(market.placeGeo, market.placeRecords);
 
   if (draft === null || view.saved === null) {
     return (
@@ -54,20 +58,21 @@ export function StepMarket({ view, done, market }: StepMarketProps) {
   const zone = zoneChoice ?? (!done && browserZone !== null ? browserZone : draft.timezone);
   const pack = market.packs.find((p) => p.id === draft.market.pack);
   const country = draft.market.country !== "" ? draft.market.country : (pack?.country ?? "");
-  const suggestions = (view.cities[country] ?? []).filter((city) => !draft.locations.some((l) => l.toLowerCase() === city.toLowerCase())).slice(0, MAX_SUGGESTIONS);
+  const suggestions = (view.cities[country] ?? []).filter((city) => city.toLowerCase() !== draft.home_city.trim().toLowerCase()).slice(0, MAX_SUGGESTIONS);
   const profileErrors = new Map<string, FieldError>();
   for (const path of ["market.pack", "market.country", "market.currency", "market.home_language"]) {
     const error = errors.profile(path);
     if (error) profileErrors.set(path, error);
   }
   const zoneOptions = zones.includes(zone) || zone === "" ? zones : [zone, ...zones];
-  const ids = { cities: "setup-market-cities", remote: "setup-market-remote", zone: "setup-market-zone" };
-  const locationsError = errors.profile("locations");
-  const remoteError = errors.profile("remote_scope");
+  const ids = { city: "setup-market-city", places: "setup-market-places", zone: "setup-market-zone" };
+  const cityError = errors.profile("home_city");
+  const sameMarket = draft.market.pack === market.packId && market.error === null;
+  const placesError = errors.profile("places");
 
-  const setLocations = (locations: string[]): void => {
-    setEdited({ ...edited, locations: true });
-    setDraft({ ...draft, locations });
+  const setHomeCity = (home_city: string, home_city_id: number | null = null): void => {
+    setEdited({ ...edited, homeCity: true });
+    setDraft({ ...draft, home_city, home_city_id });
   };
 
   const changeMarket = (next: MarketInput["market"]): void => {
@@ -78,7 +83,8 @@ export function StepMarket({ view, done, market }: StepMarketProps) {
         setDraft({
           ...draft,
           market: edited.currency ? next : { ...next, currency: defaults?.currency ?? "" },
-          locations: edited.locations ? draft.locations : defaults?.city ? [defaults.city] : [],
+          home_city: edited.homeCity ? draft.home_city : (defaults?.city ?? ""),
+          home_city_id: edited.homeCity ? (draft.home_city_id ?? null) : null,
         });
         return;
       }
@@ -94,8 +100,18 @@ export function StepMarket({ view, done, market }: StepMarketProps) {
     <StepFrame step="market" pending={pending} formError={formError} onSkip={skip} onSubmit={() => save({ ...draft, timezone: zone })}>
       <MarketFields baseId="setup-market" value={draft.market} saved={view.saved} onChange={changeMarket} market={market} errors={profileErrors} />
 
-      <Field id={ids.cities} label={t("cities")} hint={t("citiesHint")} error={locationsError} errorText={errors.text("locations")}>
-        <TagInput id={ids.cities} values={draft.locations} onChange={setLocations} invalid={errors.has("locations")} describedBy={describedBy(ids.cities, true, locationsError ?? errors.text("locations"))} />
+      <Field id={ids.city} label={tProfile("home_city.label")} hint={tProfile("home_city.hint")} error={cityError} errorText={errors.text("home_city")}>
+        <HomeCityField
+          id={ids.city}
+          value={{ home_city: draft.home_city, home_city_id: draft.home_city_id ?? null }}
+          onChange={(next) => setHomeCity(next.home_city, next.home_city_id)}
+          geo={geo}
+          onPick={remember}
+          known={sameMarket}
+          testId="setup-home-city"
+          invalid={errors.has("home_city")}
+          describedBy={describedBy(ids.city, true, cityError ?? errors.text("home_city"))}
+        />
       </Field>
       <div className="flex flex-col gap-sp-2" data-testid="setup-city-suggestions">
         <p className="font-mono text-data-sm font-semibold tracking-wider text-ink-2 uppercase">{t("suggestions")}</p>
@@ -105,7 +121,7 @@ export function StepMarket({ view, done, market }: StepMarketProps) {
           <ul className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto p-0.5">
             {suggestions.map((city) => (
               <li key={city}>
-                <Button type="button" size="xs" variant="default" aria-label={t("addCity", { city })} onClick={() => setLocations([...draft.locations, city])}>
+                <Button type="button" size="xs" variant="default" aria-label={t("addCity", { city })} onClick={() => setHomeCity(city)}>
                   <Plus aria-hidden />
                   {city}
                 </Button>
@@ -115,20 +131,22 @@ export function StepMarket({ view, done, market }: StepMarketProps) {
         )}
       </div>
 
+      <Field id={ids.places} label={tProfile("places.label")} hint={tProfile("places.hint")} error={placesError} errorText={errors.text("places")}>
+        <PlacesField
+          id={ids.places}
+          value={draft.places}
+          onChange={(places) => setDraft({ ...draft, places })}
+          geo={geo}
+          onPick={remember}
+          options={market.scopeOptions}
+          known={sameMarket}
+          search={{ homeCity: draft.home_city, homeCityId: draft.home_city_id ?? null, workplace: view.workplace, home: { country: market.country, countryName: market.countryName } }}
+          invalid={errors.has("places")}
+          describedBy={describedBy(ids.places, true, placesError ?? errors.text("places"))}
+        />
+      </Field>
+
       <div className="grid gap-sp-4 sm:grid-cols-2">
-        <Field id={ids.remote} label={t("remote")} error={remoteError} errorText={errors.text("remote_scope")}>
-          <RemoteScopeField
-            id={ids.remote}
-            value={draft.remote_scope}
-            onChange={(next) => setDraft({ ...draft, remote_scope: next })}
-            options={market.scopeOptions}
-            countryName={draftCountryName(market, draft.market)}
-            homeRegion={draftHomeRegion(market, draft.market)}
-            invalid={errors.has("remote_scope")}
-            describedBy={describedBy(ids.remote, false, remoteError ?? errors.text("remote_scope"))}
-            namespace="profile"
-          />
-        </Field>
         <Field id={ids.zone} label={t("timezone")} hint={t("timezoneHint")} errorText={errors.text("timezone")}>
           <Select id={ids.zone} value={zone} aria-invalid={errors.has("timezone") || undefined} aria-describedby={describedBy(ids.zone, true, errors.text("timezone"))} onChange={(event) => setZoneChoice(event.target.value)} data-testid="setup-timezone">
             {zoneOptions.length === 0 ? <option value={zone}>{zone}</option> : null}

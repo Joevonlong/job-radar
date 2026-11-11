@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { meSchema } from "@/lib/config/schemas/me";
 import { preferencesSchema } from "@/lib/config/schemas/preferences";
+import { searchSchema } from "@/lib/config/schemas/search";
 import {
   CONTRACT_OPTIONS,
   LANGUAGE_LEVEL_OPTIONS,
-  REMOTE_SCOPE_KINDS,
   SENIORITY_OPTIONS,
   WORKPLACE_OPTIONS,
   meConfigToDraft,
@@ -33,9 +33,10 @@ const ME: MeDraft = {
 const PREFS: PreferencesDraft = {
   market: { pack: "de", country: "", currency: "", home_language: "" },
   target_titles: ["AI Engineer"],
-  locations: ["Berlin"],
+  home_city: "Berlin",
+  home_city_id: null,
+  places: [],
   workplace: ["hybrid", "remote"],
-  remote_scope: "home_country",
   seniority: "all",
   salary_floor_year: "70000",
   contracts: { permanent: "allow", fixed_term: "allow", freelance: "none", temp_agency: "exclude" },
@@ -59,9 +60,6 @@ describe("option lists mirror the config schemas", () => {
     expect([...LANGUAGE_LEVEL_OPTIONS]).toEqual(["A1", "A2", "B1", "B2", "C1", "C2", "native"]);
     const prefs = preferencesSchema.shape;
     expect([...SENIORITY_OPTIONS]).toEqual(prefs.seniority.options);
-    // the kinds of remote scope: the three plain values of the schema plus `region` (a list)
-    const plain = (prefs.remote_scope.options[0] as { options: readonly string[] }).options;
-    expect([...REMOTE_SCOPE_KINDS]).toEqual([...plain, "region"]);
     expect([...WORKPLACE_OPTIONS]).toEqual(prefs.workplace.element.options);
     expect([...CONTRACT_OPTIONS]).toEqual(prefs.contracts.shape.allow.element.options);
   });
@@ -110,6 +108,15 @@ describe("preferences draft", () => {
     expect(preferencesConfigToDraft(parsed)).toEqual(PREFS);
   });
 
+  it("round-trips the ids of picked places, and writes none for a place never picked", () => {
+    const draft: PreferencesDraft = { ...PREFS, home_city_id: 2950159, places: [{ place: "Amsterdam", relocate: true, id: 2759794 }, { place: "eu", relocate: false, id: "eu" }, { place: "Atlantis", relocate: true, id: null }] };
+    const candidate = preferencesDraftToCandidate(draft);
+    expect(candidate).toMatchObject({ home_city_id: 2950159, places: [{ place: "Amsterdam", relocate: true, id: 2759794 }, { place: "eu", relocate: false, id: "eu" }, { place: "Atlantis", relocate: true }] });
+    expect((candidate as { places: object[] }).places[2]).not.toHaveProperty("id");
+    expect(preferencesConfigToDraft(preferencesSchema.parse(candidate))).toEqual(draft);
+    expect(preferencesDraftToCandidate({ ...draft, home_city: "" })).not.toHaveProperty("home_city_id");
+  });
+
   it("derives contract allow/exclude lists from the per-kind modes", () => {
     const parsed = preferencesSchema.parse(preferencesDraftToCandidate(PREFS));
     expect(parsed.contracts).toEqual({ allow: ["permanent", "fixed_term"], exclude: ["temp_agency"] });
@@ -126,17 +133,16 @@ describe("preferences draft", () => {
   });
 
   it("attributes list errors to the list, not the item", () => {
-    const errors = prefErrors({ ...PREFS, target_titles: [], locations: ["a", "a"], workplace: [], exclude_companies: [" "] });
+    const errors = prefErrors({ ...PREFS, target_titles: [], home_city: " ", workplace: [], exclude_companies: [" "] });
     const by = Object.fromEntries(errors.map((e) => [e.path, e.key]));
     expect(by["target_titles"]).toBe("atLeastOne");
-    expect(by["locations"]).toBe("duplicates");
+    expect(by["home_city"]).toBeUndefined();
     expect(by["workplace"]).toBe("atLeastOne");
     expect(by["exclude_companies"]).toBe("required");
   });
 
   it("reports an invalid select value", () => {
-    const by = Object.fromEntries(prefErrors({ ...PREFS, remote_scope: "mars", seniority: "god" }).map((e) => [e.path, e.key]));
-    expect(by["remote_scope"]).toBe("invalidChoice");
+    const by = Object.fromEntries(prefErrors({ ...PREFS, seniority: "god" }).map((e) => [e.path, e.key]));
     expect(by["seniority"]).toBe("invalidChoice");
   });
 });

@@ -12,6 +12,7 @@
  *   - the deal-breakers of preferences.yaml must keep to the limits of pipeline.yaml (a language gate in a market without a
  *     local-language step is only a warning: it does nothing).
  *
+ *   - search.yaml's old `locations` and `remote_scope` name nothing preferences.yaml `places` lacks (only a warning: they are ignored);
  *   - the commented title_guard block of the shipped pipeline.yaml must equal the schema's defaults (a warning when the
  *     same-title limit is below the compatible limit or above the related-company limit);
  *   - the identity of the shipped defaults directory is printed (12 characters); a directory that cannot be identified (a
@@ -35,6 +36,7 @@ import path from "node:path";
 
 import {
   ConfigError,
+  describeConfigVersionChange,
   CONFIG_NAMES,
   checkAiAgainstCatalog,
   configLayer,
@@ -74,6 +76,8 @@ import { shippedConfigId, shortShippedConfigId } from "../src/lib/config/shipped
 import { dealBreakerLimitProblems, slowPatternProblems } from "../src/lib/filter/deal-breakers";
 import { vmTimeBox } from "../src/lib/filter/time-box";
 import { listPackIds, loadMarket, loadPipeline, packDirs, readPackDir } from "../src/lib/market";
+import { placeDictionary, placeDictionaryPath } from "../src/lib/market/geo";
+import { homeCityAbroad, placeGeo, placesBeyondSearchEntries, searchEntriesOutsidePlaces, unknownPlaces } from "../src/lib/market/places";
 import { compileGhostRules } from "../src/lib/ghost/rules";
 import { compileVisaRules } from "../src/lib/visa/rules";
 
@@ -179,7 +183,7 @@ for (const name of CONFIG_NAMES) {
     if (migration.applied.length === 0) return;
     if (layer === "default") throw new Error(`the shipped default is at config_version ${migration.from}, the code expects ${migration.to}: ship it migrated`);
     pendingMigrations.push(rel(file));
-    return `config_version ${migration.from} -> ${migration.to} applied in memory: run pnpm config:migrate --write`;
+    return `${describeConfigVersionChange(migration.from, migration.to)}, applied in memory: run pnpm config:migrate --write`;
   });
 }
 
@@ -328,6 +332,46 @@ report("preferences.yaml market", () => {
   } catch {
     // reported by the lines above
   }
+}
+
+/** The place dictionary, or null (said once) when its file cannot be read: the other location checks then use the tables alone. */
+function readPlaceDictionaryOrNull(): ReturnType<typeof placeDictionary> | null {
+  try {
+    return placeDictionary();
+  } catch (error) {
+    console.log(`! place dictionary (${rel(placeDictionaryPath())}) cannot be read, so unknown places are not checked: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+// places the dictionary does not know (written by hand or before the picker); search.yaml's old location keys are ignored: warn
+// about what they name that the location settings lack; and about a home city abroad
+if (fs.existsSync(path.join(getProfileDir(), "preferences.yaml"))) {
+  try {
+    const preferences = parseConfigText("preferences", readConfigText("preferences"));
+    const pipeline = loadPipeline();
+    const dictionary = readPlaceDictionaryOrNull();
+    const geo = placeGeo(pipeline, dictionary);
+    const unknown = dictionary === null ? [] : unknownPlaces(preferences, geo);
+    if (unknown.length > 0) console.log(`! preferences.yaml: ${unknown.join(", ")} not in the place dictionary; still searched and matched as written. Pick each again from the list on /me (or run pnpm setup)`);
+    const added = placesBeyondSearchEntries(readEffectiveConfig("search"), preferences, geo, { country: pipeline.market.country, countryName: pipeline.market.countryName });
+    if (added.length > 0) console.log(`! preferences.yaml: ${added.join(", ")} searched now, though search.yaml's old locations, remote_scope did not list them`);
+    const names = searchEntriesOutsidePlaces(readEffectiveConfig("search"), preferences, geo, { country: pipeline.market.country, countryName: pipeline.market.countryName });
+    if (names.length > 0) console.log(`! search.yaml locations, remote_scope: ${names.join(", ")} not in preferences.yaml places; these keys are ignored, so they are not searched`);
+    const abroad = homeCityAbroad(preferences.home_city, geo, pipeline.market.country, preferences.home_city_id ?? null);
+    if (abroad !== null) console.log(`! preferences.yaml home_city: ${preferences.home_city} is in ${abroad.name}, not in the home country ${pipeline.market.countryName}; on-site jobs are looked for there inside ${pipeline.market.countryName}. Set a city in ${pipeline.market.countryName} as home_city and list ${preferences.home_city} under places`);
+  } catch {
+    // an unreadable file is reported by its own check above
+  }
+}
+
+// sources.yaml: Arbeitsagentur's German city names come from the place dictionary now; an old list is accepted and not read
+try {
+  if (readEffectiveConfig("channels").sources.arbeitsagentur.location_names !== undefined) {
+    console.log("! sources.yaml sources.arbeitsagentur.location_names: no longer read; German city names come from the place dictionary. The list can be deleted");
+  }
+} catch {
+  // an unreadable file is reported by its own check above
 }
 
 // preferences.yaml deal_breakers: the limits of pipeline.yaml filter.deal_breakers, and a language gate needs the language step

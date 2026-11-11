@@ -19,6 +19,19 @@ export function visibleText(text: string): string {
   return stripInvisible(text).replace(TAG_CHARS, "");
 }
 
+/** Source URLs are withheld when their raw, decoded or word-separated form carries an instruction to an AI. */
+export function safeSourceUrl(url: string | null, clean: CleanText): string | null {
+  if (url === null) return null;
+  let decoded = url;
+  try {
+    decoded = decodeURIComponent(url);
+  } catch {
+    decoded = url;
+  }
+  const spaced = decoded.replace(/[-_+/?&=.]+/g, " ");
+  return [url, decoded, spaced].every((form) => clean(form) === visibleText(form)) ? url : null;
+}
+
 /**
  * The cleaner of short third-party fields (title, company, locations, salary text, signal quotes, links). Without readable trap
  * settings only the invisible characters go (no instruction patterns to look for).

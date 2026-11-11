@@ -4,10 +4,9 @@ import fs from "node:fs";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { isNode, parseDocument } from "yaml";
 
-import { ensureProfileFiles, getUserConfigPath, reloadConfig, type ConfigName } from "@/lib/config";
+import { mutateConfig, ensureProfileFiles, getUserConfigPath, reloadConfig, type ConfigName } from "@/lib/config";
 import { withFileLock } from "@/lib/config/write";
 import { preferencesConfigToDraft } from "@/lib/profile/draft";
-import { syncSearchLocations } from "@/lib/profile/search-locations";
 import { completeSetup, markStep, resetSetupStateCache } from "@/lib/setup/state";
 import { saveAiStep } from "@/lib/setup/steps/ai";
 import { saveLanguageStep, writeNotifyLocale } from "@/lib/setup/steps/language";
@@ -27,7 +26,7 @@ beforeEach(async () => {
 });
 afterEach(() => tmp.cleanup());
 
-const market = { market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, locations: ["Amsterdam"], remote_scope: "home_country", timezone: "Europe/Amsterdam" };
+const market = { market: { pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }, home_city: "Amsterdam", places: [], timezone: "Europe/Amsterdam" };
 function targets() {
   const { seniority, workplace, salary_floor_year, contracts, exclude_student_roles, exclude_companies, exclude_keywords } = preferencesConfigToDraft(reloadConfig("preferences"));
   return { target_titles: ["Data Engineer"], seniority, workplace, salary_floor_year, contracts, exclude_student_roles, exclude_companies, exclude_keywords };
@@ -65,15 +64,15 @@ it("keeps cities synced by another tab while the targets profile save is waiting
   const saving = saveTargetsStep({ ...targets(), target_titles: ["Platform Engineer"] });
   try {
     await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(await syncSearchLocations(["Austin"])).toMatchObject({ status: "done" });
+    await mutateConfig("search", (current) => ({ ...current, max_per_group_per_location: 7 }));
   } finally { release(); }
   await writer;
   expect(await saving).toMatchObject({ status: "saved" });
-  expect(reloadConfig("search")).toMatchObject({ locations: ["Austin"], keyword_groups: { targets: ["Platform Engineer"] } });
+  expect(reloadConfig("search")).toMatchObject({ max_per_group_per_location: 7, keyword_groups: { targets: ["Platform Engineer"] } });
 });
 
 it.each([
-  { name: "preferences" as const, run: () => saveTargetsStep(targets()), key: ["locations"], value: ["Austin"] },
+  { name: "preferences" as const, run: () => saveTargetsStep(targets()), key: ["home_city"], value: "Austin" },
   { name: "preferences" as const, run: () => saveMarketStep(market), key: ["target_titles"], value: ["Platform Engineer"] },
   { name: "search" as const, run: () => saveMarketStep(market), key: ["keyword_groups"], value: { custom: ["Platform Engineer"] } },
   { name: "schedule" as const, run: () => saveMarketStep(market), key: ["manual_triggers", "min_interval_seconds"], value: 77 },

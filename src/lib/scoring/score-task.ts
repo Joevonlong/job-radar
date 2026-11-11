@@ -1,3 +1,5 @@
+import { placeGeo } from "@/lib/market/places";
+import { placeDictionary } from "@/lib/market/geo";
 import { scoreTransaction } from "@/lib/db/repos/current-scores";
 import { activityErrorCode, noopSpan } from "@/lib/activity";
 import type { SpanHandle } from "@/lib/activity/types";
@@ -173,6 +175,8 @@ async function scoreCandidate(deps: ScoringDeps, ctx: ScoreContext, candidate: S
     glossary: config.translation.glossary,
     language: ctx.language,
     currency: ctx.pipeline.market.currency,
+    geo: placeGeo(ctx.pipeline, placeDictionary()),
+    homeCountry: ctx.pipeline.market.country,
     output: ctx.output,
     criteria: config.scoring.criteria,
     evidence: ctx.evidence,
@@ -225,7 +229,7 @@ async function scoreCandidate(deps: ScoringDeps, ctx: ScoreContext, candidate: S
 }
 
 /** Filter notes that mean "could not place the posting" for the priority's location part. */
-const UNCLEAR_LOCATION_NOTES: ReadonlySet<string> = new Set(["remote_scope_unknown", "location_unknown"]);
+export const UNCLEAR_LOCATION_NOTES: ReadonlySet<string> = new Set(["remote_scope_unknown", "location_unknown"]);
 
 export type QueuedJob = { jobId: number; title: string; company: string; firstSeenAt: Date; hasScore: boolean; breakdown: PriorityBreakdown };
 

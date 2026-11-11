@@ -1,17 +1,21 @@
 import { z } from "zod";
 
+import { includeInput, loadBlocks } from "@/lib/capabilities/blocks";
 import { getJobDetail } from "@/lib/db/queries/job-detail";
 import { loadTrapCounts } from "@/lib/db/repos/traps";
 import { cleanDescriptionStrict } from "@/lib/traps/clean";
+import { getJobBlocks } from "@/lib/mcp/job-blocks";
+import type { JobBlockSource } from "@/lib/mcp/job-blocks/source";
 
 import { ToolFailure, type McpContext } from "../context";
-import { getJobOutput, toJobDetailDto, type DescriptionDto, type GetJobOutput } from "../dto";
-import { availableDescription, quoteGuard, shortFieldCleaner, unavailableDescription } from "../guard";
+import { getJobOutput, getJobOutputFor, toJobDetailDto, type DescriptionDto, type GetJobOutput } from "../dto";
+import { availableDescription, jdQuoteGuard, quoteGuard, shortFieldCleaner, unavailableDescription } from "../guard";
 import { readTraps } from "./shared";
 
 export function getJobInput(ctx: Pick<McpContext, "text">) {
   return z.strictObject({
     job_id: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).describe(ctx.text("params.jobId")),
+    include: includeInput(getJobBlocks, ctx.text("params.include")),
   });
 }
 
@@ -41,6 +45,15 @@ export async function getJob(ctx: McpContext, args: GetJobArgs): Promise<GetJobO
   notices.push(ctx.text("notice.thirdParty"));
 
   const clean = shortFieldCleaner(readTraps(ctx));
+  const guard = jdQuoteGuard(strict, detail.description);
+  const source: JobBlockSource = { detail, strict, clean, quote: (quote, offset) => {
+    const guarded = guard(quote, offset);
+    return guarded === null ? null : clean(guarded);
+  } };
   const job = toJobDetailDto(detail, { traps: counts.get(detail.id) ?? null, description, quote: quoteGuard(strict, detail.description) }, clean);
-  return getJobOutput.parse({ notices, job } satisfies GetJobOutput);
+  const blocks = await loadBlocks(getJobBlocks, ctx, source, args.include);
+  const derived = getJobOutput.parse({ notices, job, ...blocks });
+  if ((derived.translation?.items.length ?? 0) > 0 || derived.breakdown?.content != null || (derived.company?.fields.length ?? 0) > 0 || derived.salary?.lookup?.available || (derived.match?.fit_reasons.length ?? 0) > 0 || (derived.match?.gaps.length ?? 0) > 0 || Object.keys(derived.match?.summaries ?? {}).length > 0) notices.push(ctx.text("notice.derived"));
+  if ([derived.translation, derived.breakdown, derived.company, derived.salary?.lookup, derived.match].some((block) => block?.available === false && block.reason !== null)) notices.push(ctx.text("notice.derivedWithheld"));
+  return getJobOutputFor(ctx.permissions ?? new Set()).parse({ notices, job, ...blocks });
 }

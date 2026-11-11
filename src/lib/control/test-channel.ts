@@ -8,6 +8,8 @@ import { createChannelContext, httpSettingsFromConfig, NO_KNOWN_POSTINGS } from 
 import { isAbortError, toChannelError } from "@/lib/channels/errors";
 import type { FetchLike, SleepFn } from "@/lib/channels/http";
 import { buildQueries, buildSweepQuery, capQuery } from "@/lib/channels/query";
+import { loadQueryPlaces } from "@/lib/channels/query-places";
+import type { QueryPlaces } from "@/lib/channels/query";
 import { defaultRegistry, type ChannelRegistry } from "@/lib/channels/registry";
 import { createDbStateStore, createMemoryStateStore } from "@/lib/channels/store";
 import { normalizedPostingDraftSchema, rawPostingInputSchema, type RawPostingInput } from "@/lib/channels/types";
@@ -35,7 +37,7 @@ export type TestChannelError =
 export interface TestChannelDeps {
   registry?: ChannelRegistry;
   /** Config overrides (defaults: the loaded files). */
-  config?: Partial<{ channels: ChannelsConfig; search: SearchConfig; schedule: ScheduleConfig }>;
+  config?: Partial<{ channels: ChannelsConfig; search: SearchConfig; schedule: ScheduleConfig; places: QueryPlaces | null }>;
   /** Whether a cycle runs now (default: the `cycles` table). */
   cycleRunning?: (db: Db) => Promise<boolean>;
   /** Budget state; default: the database (read only, through an in-memory overlay). */
@@ -78,7 +80,7 @@ export function createTestChannelHandler(deps: TestChannelDeps = {}): ControlHan
     if (!budget.hasHeadroom(channel)) return failed("budget_exceeded", { channelId });
 
     const maxResults = Math.min(settings.maxResults, test.max_results);
-    const planned = channel.usesQueries ? buildQueries(search, "manual")[0] : buildSweepQuery(search, "manual");
+    const planned = channel.usesQueries ? buildQueries(search, deps.config?.places !== undefined ? deps.config.places : loadQueryPlaces(), "manual")[0] : buildSweepQuery(search, "manual");
     if (!planned) return failed("channel_test_failed", { channelId, errorCode: "unknown" });
     const query = capQuery({ ...planned, maxResults: Math.min(planned.maxResults, maxResults) }, maxResults);
 

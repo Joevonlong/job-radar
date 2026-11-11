@@ -8,8 +8,9 @@ market:
   country: NL
   currency: EUR
   home_language: nl
-  locations: [Amsterdam, Utrecht]
-  remote_scope: home_country
+  home_city: Amsterdam
+  places:
+    - {place: Utrecht, relocate: true}
   timezone: Europe/Amsterdam
 profile:
   summary: Backend engineer moving into applied machine learning.

@@ -28,7 +28,7 @@ export function settings(overrides: Partial<MonidSettings> = {}): MonidSettings 
 
 export function query(overrides: Partial<SearchQuery> = {}): SearchQuery {
   return { id: "query-example", keywords: ["Platform Engineer", "Infrastructure Engineer"], keywordGroup: "engineering",
-    location: "Example City", remote: false, remoteScope: null, company: null, windowHours: 24, maxResults: 10, ...overrides };
+    location: "Example City", remote: false, remoteScope: null, country: "DE", company: null, windowHours: 24, maxResults: 10, ...overrides };
 }
 
 export function response(status: number, body: unknown): HttpResponse {

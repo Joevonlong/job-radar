@@ -1,26 +1,33 @@
 /**
  * The MCP server over stdio (docs/mcp.md): an MCP client you configure (Claude Desktop, Claude Code, ...) starts this as a child
- * process and talks to it on stdin / stdout. No port is opened. Nothing is written to the database, except that the tool
- * `save_application_answer`, when switched on, adds answer versions over a connection of its own.
+ * process and talks to it on stdin / stdout. No port is opened. Tool calls write metadata-only audit rows; the tool
+ * `save_application_answer`, when granted writer:write, adds answer versions over a connection of its own.
  *
  *   pnpm --silent mcp:serve
  *
- * Off by default: with mcp.yaml `enabled: false` (or every tool switched off, or an unreadable mcp.yaml) it says why on stderr and
+ * Off by default: with mcp.yaml `enabled: false` (or no available tool permissions, or an unreadable mcp.yaml) it says why on stderr and
  * exits with 1, which the client shows in its log. stdout carries protocol messages only; every other line goes to stderr.
+ * Settings are re-read on every call: disabling mcp.yaml (or removing a permission, or breaking the file) refuses the next call without a restart.
+ * When the client goes away it waits at most mcp.yaml `audit.write_timeout_ms` for running calls and their audit rows, then closes
+ * the database connections, giving a query that is still running at most 5 seconds.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
+import { authorize, liveMcpSettings } from "../src/lib/agent-access/authorize";
+import { createAuditRecorder } from "../src/lib/agent-access/audit";
+import { CAPABILITIES, visibleCapabilities } from "../src/lib/capabilities/registry";
 import { createConnection } from "../src/lib/db/client";
 import { createReadOnlyDb } from "../src/lib/db/read-only-client";
+import { openAgentCallsConnection } from "../src/lib/db/repos/agent-calls";
 import { loadDatabaseEnv } from "../src/lib/env";
 import { stderrLine } from "../src/lib/mcp/call-log";
 import { buildServer, defaultContext } from "../src/lib/mcp/server";
-import { configProblem, offeredTools, readMcpSettings } from "../src/lib/mcp/settings";
+import { configProblem, readMcpSettings } from "../src/lib/mcp/settings";
 import { mcpTranslator } from "../src/lib/mcp/text";
-import { readWriterEnabled } from "../src/lib/writer/settings";
+import { readWriterEnabled, readWriterInputs } from "../src/lib/writer/settings";
 
 // stdout belongs to the protocol: anything a library logs goes to stderr instead
 console.log = console.error;
@@ -36,6 +43,10 @@ function packageVersion(): string {
   }
 }
 
+/**
+ * The write connection is decided before the offered list, because the writing tool is offered only when it has one: it is opened
+ * when a writing capability is permitted at startup and writer.yaml is on. Switching it on later needs a restart.
+ */
 function main(): void {
   const text = mcpTranslator();
   let settings;
@@ -49,16 +60,28 @@ function main(): void {
     stderrLine(text("serve.disabled"));
     process.exit(1);
   }
-  const tools = offeredTools(settings, readWriterEnabled());
+  const writes = readWriterEnabled() && CAPABILITIES.some((capability) => capability.kind === "write" && authorize(capability, liveMcpSettings).allowed);
+  const writable = writes ? createConnection(loadDatabaseEnv().DATABASE_URL, { max: 1 }) : null;
+  const tools = visibleCapabilities(CAPABILITIES, { readSettings: liveMcpSettings, writer: { inputs: readWriterInputs, writeDb: writable?.db ?? null } }).map(
+    (capability) => capability.id,
+  );
   if (tools.length === 0) {
     stderrLine(text("serve.noTools"));
     process.exit(1);
   }
 
   const database = createReadOnlyDb();
-  // the one connection that can write, and only for the tool that adds answer versions
-  const writable = tools.includes("save_application_answer") ? createConnection(loadDatabaseEnv().DATABASE_URL, { max: 1 }) : null;
-  const context = defaultContext(database.db, settings, { text, writeDb: writable?.db ?? null });
+  const { audit: auditSettings } = settings;
+  const openAudit = () => {
+    const connection = openAgentCallsConnection(loadDatabaseEnv().DATABASE_URL, {
+      connectTimeoutSeconds: auditSettings.connect_timeout_seconds,
+      statementTimeoutMs: auditSettings.statement_timeout_ms,
+      lockTimeoutMs: auditSettings.lock_timeout_ms,
+    });
+    return { db: connection.db, end: (options: { timeout: number }) => connection.sql.end(options) };
+  };
+  const audit = createAuditRecorder(openAudit, { text, log: stderrLine, writeTimeoutMs: auditSettings.write_timeout_ms });
+  const context = defaultContext(database.db, settings, { text, writeDb: writable?.db ?? null, audit });
   const version = packageVersion();
   const handle = serveStdio(() => buildServer(context, { version }), {
     onerror: (error) => stderrLine(`[mcp] transport error: ${error.name}`),
@@ -69,14 +92,13 @@ function main(): void {
   const stop = (code: number) => {
     if (stopping) return;
     stopping = true;
-    void Promise.allSettled([handle.close(), database.close(), ...(writable ? [writable.sql.end({ timeout: 5 })] : [])]).then(() => {
+    void Promise.allSettled([handle.close()]).then(() => Promise.allSettled([audit.close()])).then(() => Promise.allSettled([database.close(), ...(writable ? [writable.sql.end({ timeout: 5 })] : [])])).then(() => {
       stderrLine(text("serve.stopped"));
       process.exit(code);
     });
   };
   process.on("SIGINT", () => stop(0));
   process.on("SIGTERM", () => stop(0));
-  // the client closed its end of the pipe: the session is over
   process.stdin.on("end", () => stop(0));
   process.stdin.on("close", () => stop(0));
   process.on("uncaughtException", (error) => {

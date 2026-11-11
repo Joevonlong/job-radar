@@ -3,7 +3,7 @@ import { z } from "zod";
 import { CHANNEL_FAMILIES, SALARY_PERIODS } from "@/lib/channels/types";
 import { SENIORITIES } from "@/lib/domain/types";
 
-import { languageRequirementSchema, type GhostPack, type LanguageRequirement, type VisaPack } from "@/lib/market/schema";
+import { languageRequirementSchema, workAreaSchema, type GhostPack, type LanguageRequirement, type VisaPack } from "@/lib/market/schema";
 import type { Market } from "@/lib/market/types";
 
 import { nonEmptyString, nonNegativeInt, nonNegativeNumber, positiveInt, regexString } from "./common";
@@ -405,7 +405,7 @@ export const pipelineSchema = z.strictObject({
     remote: z.strictObject({
       /** Added to the location texts of the region `eu` (generic pack). Kept for files from before the market packs. */
       eu_wide_patterns: extraRegexList,
-      /** Location text that says "anywhere in the world" (counts as in scope unless remote_scope is none). */
+      /** Location text that says "anywhere in the world" (counts as in scope). */
       worldwide_patterns: extraRegexList,
       /** Location text of regions outside the home region where no country code was found (USA, APAC ...): out of scope. */
       outside_patterns: extraRegexList,
@@ -422,6 +422,8 @@ export const pipelineSchema = z.strictObject({
        * location is outside the scope is kept (with a note) when the description matches one of them.
        */
       description_in_scope_patterns: extraRegexList,
+      /** Check 2's phrases, added to the market pack's: where a remote job may be done from, in the posting's own words. */
+      work_area: workAreaSchema,
     }),
     /** preferences.yaml `seniority` -> job seniorities that match it (a posting that does not state one is kept). */
     seniority_map: z.strictObject({

@@ -23,7 +23,7 @@ describe("shipped files are released at the code's version", () => {
 });
 
 describe("the overlay format step", () => {
-  it("is the last step of every layered file but models.yaml, which has its own overlay by id", () => {
+  it("is the format boundary of every layered file but models.yaml, which has its own overlay by id", () => {
     for (const name of LAYERED_CONFIG_NAMES) {
       const steps = configMigrations(name);
       if (name === "models") {
@@ -31,10 +31,10 @@ describe("the overlay format step", () => {
         expect(overlayFormatVersion(name)).toBeNull();
         continue;
       }
-      expect([name, steps.at(-1)?.convertOnly]).toEqual([name, true]);
+      expect(steps.some((step) => step.convertOnly)).toBe(true);
       expect(steps.filter((step) => step.convertOnly)).toHaveLength(1);
       expect(legacyFormatVersion(name) + 1).toBe(overlayFormatVersion(name));
-      expect(overlayFormatVersion(name)).toBe(currentConfigVersion(name));
+      expect(overlayFormatVersion(name)).toBeLessThanOrEqual(currentConfigVersion(name));
     }
   });
 });

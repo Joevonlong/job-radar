@@ -136,7 +136,7 @@ it("distinguishes a missing description from an empty description in remote-scop
   const { rows, options } = await fixture();
   const pipeline = structuredClone(options.pipeline);
   pipeline.filter.remote.description_in_scope_patterns = ["^$"];
-  const preferences = prefs((raw) => { raw.remote_scope = "home_country"; });
+  const preferences = prefs((raw) => { raw.places = []; });
   const input = { ...options, pipeline, preferences, jobIds: undefined };
   await db.update(schema.jobs).set({ description: null, locationsJson: [{ label: "Tokyo", city: "Tokyo", countryCode: "JP", isPrimary: true }] }).where(eq(schema.jobs.id, rows[0]!.id));
   await runFilter(db, input);

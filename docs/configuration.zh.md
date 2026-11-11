@@ -376,7 +376,7 @@ web 和 runner 以 `0600`（仅属主）写配置文件：`data/config/*.yaml` �
 
 解析器不认识的标签（`!foo`、拼错的 `!unset`、`!!int x`）在所有读配置文件的地方都是错误，并指出行号：加载器、设置页和高级编辑器、迁移、示例配置、来源导入。以前的版本只警告，并把值当字符串读。我们自己的标签只有 `!unset`（见[你的文件是一个叠加层](#你的文件是一个叠加层)）；在它没有意义的地方，会被拒绝并说明原因。
 
-写迁移（开发者）：在 `src/lib/config/migrations/<文件名>/NNN-slug.ts` 导出一个 `{ from, to, description?, migrate(doc) }`（`to = from + 1`，`migrate` 原地改 yaml 的 `Document`，保留注释，不做 I/O），在 `migrations/index.ts` 的 `CONFIG_MIGRATIONS` 里按顺序登记，同时把默认目录里那份文件改成新格式并写上新的 `config_version`。契约见 `src/lib/config/migrations/types.ts`。
+写迁移（开发者）：在 `src/lib/config/migrations/<文件名>/NNN-slug.ts` 导出一个 `{ from, to, description?, migrate(doc) }`（`to = from + 1`，`migrate` 原地改 yaml 的 `Document`，保留注释，不做 I/O），在 `migrations/index.ts` 的 `CONFIG_MIGRATIONS` 里按顺序登记，同时把默认目录里那份文件改成新格式并写上新的 `config_version`。契约见 `src/lib/config/migrations/types.ts`。叠加层格式之后的步骤可设 `wholeFiles: true`，让整份文件也更新结构，但保留整份格式的版本；已是新结构时必须不做改动。步骤可以返回说明语义变化的单行提示（不得包含文件值），预览和写入时都会按文件打印。`mcp.yaml` 的权限步骤就是这样的步骤，因此整份文件的 `config_version` 不再固定它的结构：`config:migrate --to-full` 写出当前结构，而引入权限列表之前的代码会拒绝它。
 
 ## 出厂配置标识
 

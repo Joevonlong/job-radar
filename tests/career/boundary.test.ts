@@ -559,6 +559,6 @@ test("the resume-kit import is reachable only from web routes and pages, never f
 test("MCP modules never import career modules and the tool list is unchanged", async () => {
   const career = importedTargets("src/lib/mcp").filter(({ to }) => CAREER.some((directory) => to.startsWith(`${directory}/`)));
   expect(career).toEqual([]);
-  const { MCP_TOOL_NAMES } = await import("@/lib/config/schemas/mcp");
-  expect(MCP_TOOL_NAMES).toEqual(["search_jobs", "get_job", "list_applications", "get_application_context", "save_application_answer"]);
+  const { CAPABILITIES } = await import("@/lib/capabilities/registry");
+  expect(CAPABILITIES.map((capability) => capability.id)).toEqual(["search_jobs", "get_job", "list_applications", "get_application_context", "save_application_answer"]);
 });

@@ -5,7 +5,7 @@ import path from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
-import { getConfigPath, loadConfig, ensureProfileFiles, reloadConfig, setOnProfileSaved } from "@/lib/config";
+import { getConfigPath, loadConfig, ensureProfileFiles, mutateConfig, reloadConfig, setOnProfileSaved } from "@/lib/config";
 import { closeDb, countStaleScores, getDb, hashProfileYaml, listProfileSnapshots, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { meConfigToDraft, preferencesConfigToDraft, type MeDraft, type PreferencesDraft } from "@/lib/profile/draft";
@@ -122,6 +122,30 @@ describe("saving the profile", () => {
     const ok = await saveProfile("preferences", { ...prefsDraft(), market: { pack: "generic", country: "US", currency: "USD", home_language: "en" } });
     expect(ok).toMatchObject({ status: "saved" });
     expect(reloadConfig("preferences").market).toEqual({ pack: "generic", country: "US", currency: "USD", home_language: "en" });
+  });
+
+  it("refuses a place nothing knows, says which, and leaves the file alone", async () => {
+    const before = readFile("preferences");
+    const result = await saveProfile("preferences", { ...prefsDraft(), home_city: "Qwxzyville", home_city_id: null, places: [{ place: "Zzyzx Flats", relocate: true, id: null }] });
+    expect(result).toMatchObject({ status: "error", formError: null });
+    expect(result.status === "error" ? result.fieldErrors : []).toEqual([
+      { path: "home_city", key: "unknownPlace", params: { name: "Qwxzyville" } },
+      { path: "places", key: "unknownPlace", params: { name: "Zzyzx Flats" } },
+    ]);
+    expect(readFile("preferences")).toBe(before);
+  });
+
+  it("saves a picked place with its id, and keeps a name the file already held", async () => {
+    const picked = await saveProfile("preferences", { ...prefsDraft(), places: [{ place: "Amsterdam", relocate: true, id: null }] });
+    expect(picked).toMatchObject({ status: "saved" });
+    const amsterdam = reloadConfig("preferences").places.find((entry) => entry.place === "Amsterdam");
+    expect(typeof amsterdam?.id).toBe("number");
+
+    await mutateConfig("preferences", (current) => ({ ...current, places: [{ place: "Qwxzyville", relocate: true }] }));
+    expect(reloadConfig("preferences").places).toEqual([{ place: "Qwxzyville", relocate: true }]);
+    const kept = await saveProfile("preferences", { ...prefsDraft(), salary_floor_year: "1" });
+    expect(kept).toMatchObject({ status: "saved" });
+    expect(reloadConfig("preferences").places).toEqual([{ place: "Qwxzyville", relocate: true }]);
   });
 
   it("rejects a payload that is not a draft", async () => {

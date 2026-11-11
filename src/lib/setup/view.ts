@@ -8,8 +8,9 @@ import { AI_PROVIDER_CONFIG_KEYS, AI_PROVIDER_IDS, AI_PROVIDER_KIND, type AiProv
 import { ATS_KINDS, type AiConfig, type ChannelsConfig } from "@/lib/config";
 import { getDb, getDbNow, getLatestHeartbeat } from "@/lib/db";
 import type { Locale } from "@/i18n/locale";
-import { GENERIC_PACK_ID, listPackIds, loadMarket, loadPack } from "@/lib/market";
-import { remoteScopeKey } from "@/lib/market/remote-scope";
+import { GENERIC_PACK_ID, listPackIds, loadMarket, loadPack, loadPipeline } from "@/lib/market";
+import { placeGeo, wantedCities, type PlacePreferences } from "@/lib/market/places";
+import { placeDictionary } from "@/lib/market/geo";
 import { loadAiWorkerStatus } from "@/lib/ops/ai-worker";
 import { loadTelegramStatus, type TelegramStatusView } from "@/lib/notify/telegram-status";
 import type { Db } from "@/lib/db/client";
@@ -82,6 +83,8 @@ export interface SetupView {
   market: {
     /** null when preferences.yaml or search / schedule cannot be read. */
     draft: MarketInput | null;
+    /** preferences.yaml `workplace`: the count of searches per place depends on it. Empty when unreadable. */
+    workplace: readonly string[];
     saved: MarketDraft | null;
     /** Pack's city names per country (candidates; free text is fine too). */
     cities: Record<string, string[]>;
@@ -184,15 +187,24 @@ export function profileDraft(draft: MeDraft, locations: readonly string[] | null
   return { ...draft, city: locations[0] ?? draft.city };
 }
 
+/** The cities the market step chose, for the profile step's city; none while the market cannot be read. */
+function chosenCities(places: PlacePreferences): readonly string[] | null {
+  try {
+    return wantedCities(places, placeGeo(loadPipeline(), placeDictionary()));
+  } catch {
+    return null;
+  }
+}
+
 function marketPart(): SetupView["market"] {
   const preferences = readFresh("preferences");
   const search = readFresh("search");
   const schedule = readFresh("schedule");
   const cities = cityCandidates();
   const defaults = countryDefaults();
-  if (preferences === null || search === null || schedule === null) return { draft: null, saved: preferences === null ? null : preferencesConfigToDraft(preferences).market, cities, countryDefaults: defaults };
+  if (preferences === null || search === null || schedule === null) return { draft: null, workplace: [], saved: preferences === null ? null : preferencesConfigToDraft(preferences).market, cities, countryDefaults: defaults };
   const prefs = preferencesConfigToDraft(preferences);
-  return { draft: { market: prefs.market, locations: [...prefs.locations], remote_scope: remoteScopeKey(preferences.remote_scope), timezone: schedule.timezone }, saved: prefs.market, cities, countryDefaults: defaults };
+  return { draft: { market: prefs.market, home_city: prefs.home_city, places: prefs.places.map((entry) => ({ ...entry })), timezone: schedule.timezone }, workplace: prefs.workplace, saved: prefs.market, cities, countryDefaults: defaults };
 }
 
 function targetsPart(): SetupView["targets"] {
@@ -337,7 +349,7 @@ export async function loadSetupView(options: { locale: Locale; acceptLanguage: L
       translationTarget: languageDefaults.translationTarget ?? options.locale,
     },
     market,
-    profile: { draft: me === null ? null : profileDraft(meConfigToDraft(me), steps.profile.status === null ? (market.draft?.locations ?? null) : null), localLanguage },
+    profile: { draft: me === null ? null : profileDraft(meConfigToDraft(me), steps.profile.status === null ? (market.draft === null ? null : chosenCities(market.draft)) : null), localLanguage },
     targets: targetsPart(),
     sources: sourcesPart(channels),
     ai: {

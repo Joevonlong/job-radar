@@ -325,7 +325,7 @@ export const regionToken = z.union([
 ]);
 
 /**
- * Remote scope shared by search.yaml and preferences.yaml: `none` (no remote jobs), `home_country` (remote jobs
+ * Remote scope as old files and the query of a scope write it: `none` (no remote jobs), `home_country` (remote jobs
  * that hire in the market's country), `worldwide`, or `{ region: [eu | ISO …] }` (remote jobs that hire in one of these
  * regions or countries). Before the market packs: `eu_hire_in_de` (= home_country for Germany) and `eu_any` (= `{ region: [eu] }`).
  */

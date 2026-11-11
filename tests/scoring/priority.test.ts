@@ -70,6 +70,12 @@ describe("title match", () => {
 });
 
 describe("the other components", () => {
+  it("location: a wanted city by a spelling only the city table knows", () => {
+    const base = inputs();
+    const noAliases = inputs({ pipeline: { ...base.pipeline, filter: { ...base.pipeline.filter, city_aliases: {} } } });
+    expect(score({ locations: [place("Munich")] }, noAliases).location).toBe(1);
+  });
+
   it("location: a wanted city (also by alias) beats a nearby place, remote and the rest", () => {
     const exact = score({ locations: [place("Munich")] }).location;
     const nearby = score({ locations: [place("Potsdam")] }).location;
@@ -92,6 +98,13 @@ describe("the other components", () => {
     expect(score({ locations: [{ label: "Germany", city: null, countryCode: "DE", isPrimary: true }], workplace: "hybrid", countryLevel: true }).location).toBe(0.5);
     // a Munich elsewhere is not the wanted one
     expect(score({ locations: [label("Munich", "US")] }).location).toBe(0.3);
+  });
+
+  it("a metro key is read like the filter reads it: letter case does not matter", () => {
+    const pipeline = shippedPipeline();
+    const metro = inputs({ preferences: { ...examplePreferences(), home_city: "testville", places: [] }, pipeline: { ...pipeline, filter: { ...pipeline.filter, metro_areas: { Testville: ["Nearton"] } } } });
+    const nearby = score({ locations: [place("Nearton")] }, metro).location;
+    expect(nearby).toBeGreaterThan(score({ locations: [place("Farton")] }, metro).location);
   });
 
   it("signals: the stored bonus as a share of the cap, never above 1", () => {
@@ -191,5 +204,29 @@ describe("the priority", () => {
     ];
     const ordered = orderByPriority(rows, (row) => scorer(row.j));
     expect(ordered.map((r) => r.jobId)).toEqual([4, 3, 2, 1]);
+  });
+});
+
+describe("the location fit of the location settings", () => {
+  const base = shippedPipeline();
+  const pipeline = { ...base, market: { ...base.market, cities: { ...base.market.cities, amsterdam: ["Amsterdam", "NL"] as [string, string] } } };
+  const fit = (home_city: string, places: { place: string; relocate: boolean }[], over: Partial<PriorityJob>) => score(over, inputs({ pipeline, preferences: { ...examplePreferences(), home_city, places } })).location;
+
+  it("a place to move to is an exact fit in its country, not another", () => {
+    const wanted = [{ place: "Amsterdam", relocate: true }];
+    const exact = fit("Berlin", [], { locations: [place("Berlin")] });
+    expect(fit("Berlin", wanted, { locations: [place("Amsterdam", "NL")] })).toBe(exact);
+    expect(fit("Berlin", wanted, { locations: [place("Amsterdam", "US")] })).toBeLessThan(exact);
+  });
+
+  it("a remote-only place is no fit for a job at a place", () => {
+    const exact = fit("Berlin", [], { locations: [place("Berlin")] });
+    expect(fit("Berlin", [{ place: "Amsterdam", relocate: false }], { locations: [place("Amsterdam", "NL")] })).toBeLessThan(exact);
+  });
+
+  it("a whole country to move to, and home without a home city, fit jobs at a place", () => {
+    const exact = fit("Berlin", [], { locations: [place("Berlin")] });
+    expect(fit("Berlin", [{ place: "NL", relocate: true }], { locations: [place("Utrecht", "NL")] })).toBe(exact);
+    expect(fit("", [], { locations: [place("Stuttgart", "DE")] })).toBe(exact);
   });
 });

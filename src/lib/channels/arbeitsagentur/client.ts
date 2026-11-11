@@ -1,4 +1,5 @@
 import type { ArbeitsagenturSettings } from "@/lib/config";
+import { lookupPlace, type PlaceGeo } from "@/lib/market/places";
 
 import { ChannelError } from "../errors";
 import type { ChannelContext } from "../types";
@@ -42,6 +43,18 @@ export interface SearchParams {
   kind?: "city" | "remote" | "company";
   /** Which parameter carries the term of a company lookup; default `arbeitgeber`. Other kinds always use `was`. */
   companyParam?: CompanyParam;
+}
+
+/**
+ * The name to search a place under: the API matches German names, so `Germany` and `Munich` find nothing where `Deutschland`
+ * and `München` do. A country gets its German name from `Intl`, a city the place dictionary's German name; any other place is
+ * searched as written.
+ */
+export function germanLocation(location: string, geo: PlaceGeo): string {
+  const place = lookupPlace(location, geo);
+  const code = place?.kind === "country" ? place.countries[0] : undefined;
+  if (code !== undefined) return new Intl.DisplayNames(["de"], { type: "region" }).of(code) ?? location;
+  return place?.kind === "city" ? (place.geoname?.names.de ?? location) : location;
 }
 
 /** `veroeffentlichtseit` for a look-back window: whole days, rounded up, within what the API accepts. */

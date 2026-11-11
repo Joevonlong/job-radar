@@ -6,7 +6,7 @@ import type { Locale } from "@/i18n/locale";
 import { scopeLocale, translatorFor } from "@/lib/i18n/node";
 
 export function mcpTranslator(locale: Locale = scopeLocale("cli")) {
-  return translatorFor(locale, "mcp");
+  return Object.assign(translatorFor(locale, "mcp"), { locale });
 }
 
 export type McpTranslator = ReturnType<typeof mcpTranslator>;

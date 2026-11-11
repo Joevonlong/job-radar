@@ -110,6 +110,7 @@ JD 翻译成的语言、Telegram 和命令行的语言（选"跟界面默认语�
 | `trend_cycles` | 7 | 汇总块的趋势线取最近几轮 | 2 – 60 |
 | `health_cycles` | 14 | 来源页每个通道的健康方块取最近几轮；不够的几轮画虚线空格 | 1 – 60 |
 | `ticker_max_items` | 8 | 顶部跑马灯最多滚动几条 | 1 – 50 |
+| `place_picker.candidates` | 8 | `/me` 和设置向导的地点选择器按输入最多列出几个地点（表单上没有，直接改文件） | 1 – 50 |
 
 - 薪资轴里的红线（底线）来自 `data/profile/preferences.yaml: salary_floor_year`，红三角（分数电量格的推送线）来自 `notify.yaml: push_min_score`；它们不在 `ui.yaml` 里，改了会同时影响图形。
 - 写明的区间超出轴的范围时，色块被截在轴的两端（轴本身不会自动伸缩）：要看到更高的薪资，把 `max_k` 调大。
@@ -126,6 +127,7 @@ freshness: { decay_hours: 72, warn_hours: 24 }
 trend_cycles: 7
 health_cycles: 14
 ticker_max_items: 8
+place_picker: { candidates: 8 }
 ```
 
 ## 推送标签：Telegram

@@ -14,6 +14,7 @@ import { runMaintenance } from "@/lib/pipeline";
 
 import { config, pinnedSearch, quietLogger } from "../cycle/helpers";
 import { pipelineWith } from "../pipeline/helpers";
+import { oneCityPlaces } from "../channels/helpers";
 
 const url = inject("testDatabaseUrl");
 const NOW = new Date("2026-11-01T10:00:00Z");
@@ -73,9 +74,9 @@ describe("absence evidence from search windows", () => {
     });
     const missing = await addJob("Missing posting", [fixture.id]);
     const returned = await addJob("Returned posting", [fixture.id]);
-    const cfg = config({ search: {
-      ...pinnedSearch(), keyword_groups: { engineering: ["Platform Engineer"] }, locations: ["Test City"],
-      remote_scope: "none", window_hours: { morning: 24, evening: 24, weekend: 24 },
+    const cfg = config({ places: oneCityPlaces(), search: {
+      ...pinnedSearch(), keyword_groups: { engineering: ["Platform Engineer"] },
+      window_hours: { morning: 24, evening: 24, weekend: 24 },
     } });
     cfg.channels.collect.max_catch_up_hours = 0;
     const maintenanceConfig = pipelineWith((raw) => {

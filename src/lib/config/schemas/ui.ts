@@ -17,6 +17,9 @@ const COMPANY_OPTIONS_DEFAULTS = { company_options_max: 500, company_options_vis
 /** The date filter of /jobs when ui.yaml does not say: the quick ranges it offers and the date it compares by default. */
 export const DATE_FILTER_DEFAULTS = { date_quick_ranges: DEFAULT_DATE_QUICK_RANGES, date_default_field: DEFAULT_DATE_FIELD } as const;
 
+/** The place picker (/me, setup) when ui.yaml does not say: candidates listed at most. */
+export const PLACE_PICKER_DEFAULTS = { candidates: 8 } as const;
+
 /** Rows per page of /companies when a user ui.yaml predates the company overview. */
 export const COMPANIES_PAGE_DEFAULTS = { page_size: 50 } as const;
 
@@ -119,6 +122,10 @@ export const uiSchema = z
     companies: z
       .strictObject({ page_size: positiveInt.max(500).default(COMPANIES_PAGE_DEFAULTS.page_size) })
       .default(COMPANIES_PAGE_DEFAULTS),
+    /** The place picker of /me and the setup wizard. */
+    place_picker: z
+      .strictObject({ candidates: positiveInt.max(50).default(PLACE_PICKER_DEFAULTS.candidates) })
+      .default(PLACE_PICKER_DEFAULTS),
     /** The advanced config editor (/settings?tab=advanced). */
     config_editor: z
       .strictObject({

@@ -1,4 +1,6 @@
 import type { AiConfig, PipelineConfig, PreferencesConfig, MeConfig } from "@/lib/config";
+import { canonicalCity, citySpellings, placeAreas, placeGeo, type PlaceGeo } from "@/lib/market/places";
+import { placeDictionary } from "@/lib/market/geo";
 import { foldText, wholeWordPattern } from "@/lib/filter/rules";
 import type { GermanLevel, JobLocation } from "@/lib/domain/types";
 
@@ -46,7 +48,7 @@ export interface PriorityInputs {
   priority: PriorityConfig;
   /** ai.yaml `scoring.language_penalty`, for the local-language gap. */
   languagePenalty: AiConfig["scoring"]["language_penalty"];
-  preferences: Pick<PreferencesConfig, "target_titles" | "locations"> & Partial<Pick<PreferencesConfig, "seniority">>;
+  preferences: Pick<PreferencesConfig, "target_titles" | "home_city" | "places"> & Partial<Pick<PreferencesConfig, "seniority">>;
   /** Terms of search.yaml `keyword_groups`, all groups together. */
   keywordGroupTerms: readonly string[];
   pipeline: Pick<PipelineConfig, "filter" | "market">;
@@ -107,49 +109,51 @@ function titleScore(title: string, terms: readonly Term[], generic: ReadonlySet<
   return clamp01(best);
 }
 
-interface LocationMatcher {
-  /** The market's home country: a target city is only there (or where no country is stated). */
-  homeCountry: string;
+/** One wanted place: the home city or a place I'd move to. */
+interface WantedPlace {
+  /** The countries it lies in (or no country stated); null: its text counts in any country. */
+  countries: ReadonlySet<string> | null;
   exact: ReadonlySet<string>;
   nearby: ReadonlySet<string>;
   exactLabels: readonly RegExp[];
   nearbyLabels: readonly RegExp[];
 }
 
-/** Spellings of the wanted cities (and of places near them) from preferences.yaml and pipeline.yaml's city tables. */
-function buildLocationMatcher(preferences: PriorityInputs["preferences"], filter: PriorityInputs["pipeline"]["filter"], homeCountry: string): LocationMatcher {
-  const canonicalOf = new Map<string, string>();
-  const spellingsOf = new Map<string, string[]>();
-  for (const [canonical, aliases] of Object.entries(filter.city_aliases)) {
-    const names = [canonical, ...aliases];
-    spellingsOf.set(canonical, names);
-    for (const name of names) canonicalOf.set(foldText(name), canonical);
-  }
-  const spellings = (name: string): string[] => spellingsOf.get(canonicalOf.get(foldText(name)) ?? "") ?? [name];
+interface LocationMatcher {
+  places: readonly WantedPlace[];
+  /** Countries that count as a whole for a job at a place: those I'd move to, and the home country without a home city. */
+  wholeCountries: ReadonlySet<string>;
+}
 
-  const exact = new Set<string>();
-  const nearby = new Set<string>();
-  for (const location of preferences.locations) {
-    for (const name of spellings(location)) exact.add(foldText(name));
-    const canonical = canonicalOf.get(foldText(location)) ?? location;
+/** Spellings of the wanted cities (and of places near them) from preferences.yaml and pipeline.yaml's city tables. */
+function buildLocationMatcher(preferences: PriorityInputs["preferences"], filter: PriorityInputs["pipeline"]["filter"], homeCountry: string, geo: PlaceGeo): LocationMatcher {
+  const spellings = (name: string): string[] => citySpellings(name, geo);
+  const areas = placeAreas(preferences, geo, homeCountry);
+  const wanted = areas.named.filter((place) => place.relocate);
+  const exactOf = (text: string): string[] => spellings(text).map((name) => foldText(name));
+  const everyExact = new Set(wanted.flatMap((place) => exactOf(place.text)));
+  const places = wanted.map((place): WantedPlace => {
+    const exact = new Set(exactOf(place.text));
+    const nearby = new Set<string>();
+    const canonical = foldText(canonicalCity(place.text, geo));
     for (const [city, near] of Object.entries(filter.metro_areas)) {
-      if ((canonicalOf.get(foldText(city)) ?? city) !== canonical) continue;
-      for (const place of near) for (const name of spellings(place)) nearby.add(foldText(name));
+      if (foldText(canonicalCity(city, geo)) !== canonical) continue;
+      for (const town of near) for (const name of spellings(town)) if (!everyExact.has(foldText(name))) nearby.add(foldText(name));
     }
-  }
-  for (const name of exact) nearby.delete(name);
-  return {
-    homeCountry,
-    exact,
-    nearby,
-    exactLabels: [...exact].map((name) => wholeWordPattern(name)),
-    nearbyLabels: [...nearby].map((name) => wholeWordPattern(name)),
-  };
+    return {
+      countries: place.countries === null ? null : new Set(place.countries),
+      exact,
+      nearby,
+      exactLabels: [...exact].map((name) => wholeWordPattern(name)),
+      nearbyLabels: [...nearby].map((name) => wholeWordPattern(name)),
+    };
+  });
+  return { places, wholeCountries: new Set([...areas.moveCountries, ...(areas.anywhereInHome ? [homeCountry] : [])]) };
 }
 
 /** Like the hard filter: the city or the label names the place as a word ("Greater Munich Metropolitan Area", "Berlin area"). */
-function placeMatches(location: JobLocation, names: ReadonlySet<string>, labels: readonly RegExp[], homeCountry: string): boolean {
-  if (location.countryCode !== null && location.countryCode !== homeCountry) return false;
+function placeMatches(location: JobLocation, names: ReadonlySet<string>, labels: readonly RegExp[], countries: ReadonlySet<string> | null): boolean {
+  if (countries !== null && location.countryCode !== null && !countries.has(location.countryCode)) return false;
   const city = location.city !== null ? foldText(location.city) : "";
   if (city !== "" && (names.has(city) || names.has(city.split(",", 1)[0]?.trim() ?? city))) return true;
   return [city, foldText(location.label)].some((text) => text !== "" && labels.some((p) => p.test(text)));
@@ -157,8 +161,11 @@ function placeMatches(location: JobLocation, names: ReadonlySet<string>, labels:
 
 function locationScore(job: PriorityJob, matcher: LocationMatcher, config: PriorityConfig): number {
   const fit = config.location_fit;
-  if (job.locations.some((l) => placeMatches(l, matcher.exact, matcher.exactLabels, matcher.homeCountry))) return fit.exact;
-  if (job.locations.some((l) => placeMatches(l, matcher.nearby, matcher.nearbyLabels, matcher.homeCountry))) return fit.nearby;
+  const inWanted = (names: (place: WantedPlace) => [ReadonlySet<string>, readonly RegExp[]]): boolean =>
+    job.locations.some((l) => matcher.places.some((place) => placeMatches(l, ...names(place), place.countries)));
+  if (inWanted((place) => [place.exact, place.exactLabels])) return fit.exact;
+  if (job.workplace !== "remote" && job.locations.some((l) => l.countryCode !== null && matcher.wholeCountries.has(l.countryCode))) return fit.exact;
+  if (inWanted((place) => [place.nearby, place.nearbyLabels])) return fit.nearby;
   if (job.locationUnclear) return fit.unclear;
   // in scope: remote in the home country / region, or a posting that names only the country
   if (job.workplace === "remote") return fit.remote;
@@ -203,7 +210,7 @@ export function createPriorityScorer(inputs: PriorityInputs): PriorityScorer {
     ...inputs.keywordGroupTerms.map((t) => ({ words: words(t), factor: config.keyword_group_factor })),
   ];
   const generic = new Set(config.generic_title_words.map((w) => foldText(w)));
-  const matcher = buildLocationMatcher(inputs.preferences, inputs.pipeline.filter, inputs.pipeline.market.country);
+  const matcher = buildLocationMatcher(inputs.preferences, inputs.pipeline.filter, inputs.pipeline.market.country, placeGeo(inputs.pipeline, placeDictionary()));
   const { weights } = config;
   const nowMs = inputs.now.getTime();
 

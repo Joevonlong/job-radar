@@ -122,13 +122,24 @@ describe("pnpm run setup", () => {
     const status = readSetupState();
     expect(status).toMatchObject({ pending: false, state: { completed_by: "cli" } });
     expect(Object.values(status.state?.steps ?? {}).every((s) => s?.status === "done")).toBe(true);
-    expect(reloadConfig("preferences")).toMatchObject({ market: { pack: "generic", country: "NL" }, locations: ["Amsterdam", "Utrecht"], target_titles: ["Machine Learning Engineer", "Data Engineer"], salary_floor_year: 65000 });
+    expect(reloadConfig("preferences")).toMatchObject({ market: { pack: "generic", country: "NL" }, home_city: "Amsterdam", places: [{ place: "Utrecht", relocate: true }], target_titles: ["Machine Learning Engineer", "Data Engineer"], salary_floor_year: 65000 });
     expect(reloadConfig("me")).toMatchObject({ summary: "Backend engineer moving into applied machine learning.", years_experience: 7, languages: [{ en: "C1" }, { nl: "A2" }] });
     expect(reloadConfig("search").keyword_groups).toEqual({ targets: ["Machine Learning Engineer", "Data Engineer"] });
     expect(reloadConfig("schedule").timezone).toBe("Europe/Amsterdam");
     expect(reloadConfig("channels").ats_boards.some((b) => b.token === "exampleco")).toBe(true);
     expect(reloadConfig("ai").order).toEqual(["claude-cli", "codex-cli", "api"]);
     expect(reloadConfig("notify").telegram.enabled).toBe(false);
+  });
+
+  it("Worldwide is remote only, typed at the prompt or written in an answers file", async () => {
+    const typed = io(["", "", "", "", "", "Worldwide, Utrecht", "Europe/Amsterdam", "y"]);
+    expect(await runSetupCli(["--step", "market", "--lang", "en"], typed)).toBe(0);
+    expect(reloadConfig("preferences").places).toEqual([{ place: "Worldwide", relocate: false, id: "worldwide" }, { place: "Utrecht", relocate: true, id: expect.any(Number) }]);
+
+    const answers = path.join(tmp.root, "worldwide.yaml");
+    fs.writeFileSync(answers, "market: { pack: generic, country: NL, currency: EUR, home_language: nl, home_city: Amsterdam, places: [{ place: Worldwide, relocate: true }], timezone: Europe/Amsterdam }\n");
+    expect(await runSetupCli(["--answers", answers, "--step", "market"], io())).toBe(0);
+    expect(reloadConfig("preferences").places).toEqual([{ place: "Worldwide", relocate: false, id: "worldwide" }]);
   });
 
   it("--step runs one step only; a missing section is recorded as skipped", async () => {
@@ -156,7 +167,7 @@ describe("pnpm run setup", () => {
 
   it("a step that fails is reported with its field and the setup is not completed", async () => {
     const bad = path.join(tmp.root, "bad-zone.yaml");
-    fs.writeFileSync(bad, "market: { pack: generic, country: NL, currency: EUR, home_language: nl, locations: [Amsterdam], timezone: Mars/Olympus }\n");
+    fs.writeFileSync(bad, "market: { pack: generic, country: NL, currency: EUR, home_language: nl, home_city: Amsterdam, timezone: Mars/Olympus }\n");
     const out = io();
     expect(await runSetupCli(["--answers", bad, "--lang", "en"], out)).toBe(1);
     expect(out.errors.join("\n")).toContain("timezone: Not a known time zone");

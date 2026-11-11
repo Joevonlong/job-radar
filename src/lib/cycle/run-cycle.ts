@@ -10,6 +10,8 @@ import type { ScheduledCycleKind } from "@/lib/channels/query";
 import { defaultRegistry, type ChannelRegistry } from "@/lib/channels/registry";
 import { createDbKnownPostings, createDbStateStore, createMemoryStateStore, type ChannelStateStore } from "@/lib/channels/store";
 import type { ChannelLogger, KnownPostings } from "@/lib/channels/types";
+import type { QueryPlaces } from "@/lib/channels/query";
+import { loadQueryPlaces } from "@/lib/channels/query-places";
 import { freshenConfig, loadConfig, type ChannelsConfig, type ScheduleConfig, type SearchConfig } from "@/lib/config";
 import { cycleCovers } from "@/lib/control/cycle-coverage";
 import { getDb, type Db } from "@/lib/db/client";
@@ -45,7 +47,7 @@ export interface RunCycleOptions {
   /** Cascade families; defaults to `linkedin.cascade` from sources.yaml. */
   cascades?: readonly CascadeSpec[];
   /** Config overrides (defaults to the loaded, hot-reloaded files). */
-  config?: Partial<{ channels: ChannelsConfig; search: SearchConfig; schedule: ScheduleConfig }>;
+  config?: Partial<{ channels: ChannelsConfig; search: SearchConfig; schedule: ScheduleConfig; places: QueryPlaces | null }>;
   logger?: ChannelLogger;
   now?: () => Date;
   fetch?: FetchLike;
@@ -134,12 +136,21 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
   // A change another process made (the web saving the market) counts from this cycle on, not from the next restart.
   // freshenConfig never throws (a bad file keeps its last good value), so the cycle always goes on.
   freshenConfig(logger);
-  // Only channels / search / schedule are snapshotted for the whole cycle; the steps read the other configs when they
+  // Only channels / search / schedule / the location settings are snapshotted for the whole cycle; the steps read the other configs when they
   // need them, so a change made mid-cycle can reach a later step of this cycle (accepted: the next cycle is consistent).
-  const config: { channels: ChannelsConfig; search: SearchConfig; schedule: ScheduleConfig } = {
+  const currentPlaces = (): QueryPlaces | null => {
+    try {
+      return loadQueryPlaces();
+    } catch (error) {
+      logger.warn("the location settings could not be read; this cycle runs no keyword searches", { error: error instanceof Error ? error.message : "unknown error" });
+      return null;
+    }
+  };
+  const config: { channels: ChannelsConfig; search: SearchConfig; schedule: ScheduleConfig; places: QueryPlaces | null } = {
     channels: options.config?.channels ?? loadConfig("channels"),
     search: options.config?.search ?? loadConfig("search"),
     schedule: options.config?.schedule ?? loadConfig("schedule"),
+    places: options.config?.places !== undefined ? options.config.places : currentPlaces(),
   };
   const channelIds = options.channelIds ? [...options.channelIds] : null;
   const baseSummary = {
@@ -334,6 +345,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
           config.channels = loadConfig("channels");
           config.search = loadConfig("search");
           config.schedule = loadConfig("schedule");
+          config.places = currentPlaces();
         }
         return execute(db, db, holder);
       }, { signal: options.signal });

@@ -12,19 +12,20 @@ import { visaFilterAvailable } from "@/lib/visa/filter";
 import { effectiveDateRange } from "./date-range";
 import { loadCityGroups } from "./cities";
 import type { CityGroup } from "./city-groups";
-import { resolveViewCompanyIds, toJobFilters } from "./job-filters";
+import { needsCityGroups, resolveViewCompanyIds, toJobFilters } from "./job-filters";
 import type { FilterVisibility, JobsSearchParams } from "./search-params";
 
 /**
  * The filters of `/jobs?<params>`; `cities` = the city groups and `visa` = `visaFilterAvailable` / `ghost` =
- * `ghostFilterAvailable` when the caller already has them; `companyIndex` reuses its company lookup.
+ * `ghostFilterAvailable` when the caller already has them; `companyIndex` reuses its company lookup. interests.yaml is read
+ * only for the high-value filter, so an unreadable file leaves every other list working.
  */
 export async function jobsListFilters(db: Db, params: JobsSearchParams, known: { cities?: readonly CityGroup[]; visa?: boolean; ghost?: boolean; companyIndex?: CompanyMatchIndex; listing?: boolean; now?: Date; badgeDays?: number } = {}): Promise<JobFilters> {
-  const highValue = loadHighValuePolicy();
+  const highValue = params.high === true ? loadHighValuePolicy() : null;
   const view = viewFiltersFromParams(params);
   const [companyIds] = await resolveViewCompanyIds(db, [view], { index: known.companyIndex });
   return {
-    ...toJobFilters(view, { cityGroups: known.cities ?? (await loadCityGroups(db)), visa: known.visa ?? (await visaFilterAvailable(db)), ghost: known.ghost ?? (await ghostFilterAvailable(db)), companyIds }),
+    ...toJobFilters(view, { cityGroups: known.cities ?? (needsCityGroups(view) ? await loadCityGroups(db) : null), visa: known.visa ?? (await visaFilterAvailable(db)), ghost: known.ghost ?? (await ghostFilterAvailable(db)), companyIds }),
     ...dateFilters(params, known.now),
     // URL-only scope and reasons never pass through saved-view conversion. Mark-all-seen shares this mapping.
     scope: params.scope,
@@ -37,7 +38,7 @@ export async function jobsListFilters(db: Db, params: JobsSearchParams, known: {
     filteredOnly: params.filteredOnly === true,
     hideGermanLevels: params.hideLang ? germanLevelsToHide() : null,
     // without any high-value category the filter has nothing to keep (its button is hidden): ignored
-    highValue: params.high === true && hasHighValueCategories(highValue) ? highValue : null,
+    highValue: hasHighValueCategories(highValue) ? highValue : null,
     favoritesOnly: params.fav === true,
     unseenOnly: params.unseen === true,
     // the salary filter and the salary sort compare in the market's base currency (left out, they would assume EUR)

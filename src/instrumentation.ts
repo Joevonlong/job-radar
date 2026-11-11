@@ -1,6 +1,7 @@
 /**
  * Next.js calls `register` once when the server starts (node runtime only: the filter patches `console`, the config
- * directory is on disk).
+ * directory is on disk). It also reads the place dictionary right after the start, so the first page that looks a place up
+ * does not wait for it.
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
@@ -19,4 +20,6 @@ export async function register(): Promise<void> {
   // database; a failed write is retried on the health checks.
   const { reportWebShippedConfig } = await import("@/lib/ops/shipped-config");
   void reportWebShippedConfig();
+  const { warmPlaceDictionary } = await import("@/lib/market/geo/warm");
+  setImmediate(warmPlaceDictionary);
 }

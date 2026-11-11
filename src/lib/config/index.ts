@@ -80,6 +80,7 @@ export {
   CONFIG_VERSION_KEY,
   configMigrations,
   currentConfigVersion,
+  describeConfigVersionChange,
   documentConfigVersion,
   hasOverlayFormat,
   isOverlayVersion,

@@ -14,8 +14,8 @@ const source = (locationLabel: string | null, priority: number, url = `https://x
 });
 
 const places = targetPlaceNames(
-  { locations: ["Berlin", "München"] },
-  { city_aliases: { Berlin: [], München: ["Munich", "Muenchen"] }, metro_areas: { München: ["Garching"] } },
+  { home_city: "Berlin", places: [{ place: "München", relocate: true }] },
+  { filter: { city_aliases: { Berlin: [], München: ["Munich", "Muenchen"] }, metro_areas: { München: ["Garching"] } }, market: { cities: {}, countries: [], regions: {} } },
 );
 
 describe("pickApplyTarget", () => {
@@ -35,3 +35,25 @@ describe("pickApplyTarget", () => {
     expect(pickApplyTarget([source("Berlin", 1, null as unknown as string), source("Amsterdam", 2)], places)?.locationLabel).toBe("Amsterdam");
   });
 });
+
+describe("the metro towns of a wanted city", () => {
+  const hurth = targetPlaceNames(
+    { home_city: "Cologne", places: [] },
+    { filter: { city_aliases: {}, metro_areas: { Koeln: ["Hürth"] } }, market: { cities: { "köln": ["Köln", "DE"], cologne: ["Köln", "DE"] }, countries: [], regions: {} } },
+  );
+
+  it("reads a metro key in any spelling of the city, so the Hürth link wins over another location's", () => {
+    expect(hurth).toEqual(expect.arrayContaining(["Hürth"]));
+    const sources = [source("Berlin", 1), source("Hürth", 5), source("Amsterdam", 2)];
+    expect(pickApplyTarget(sources, hurth)?.locationLabel).toBe("Hürth");
+  });
+
+  it("leaves another city's metro towns out", () => {
+    const names = targetPlaceNames(
+      { home_city: "Cologne", places: [] },
+      { filter: { city_aliases: {}, metro_areas: { Koeln: ["Hürth"], Munich: ["Garching"] } }, market: { cities: { "köln": ["Köln", "DE"], munich: ["München", "DE"] }, countries: [], regions: {} } },
+    );
+    expect(names).not.toContain("Garching");
+  });
+});
+

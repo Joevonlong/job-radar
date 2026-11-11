@@ -35,7 +35,7 @@ Replies from companies are a separate, optional feature with its own label: see 
 4. Tick "Also apply filter to N matching conversations" to put the historical alert emails into the label too.
 
 ## 3. Subscribe to alerts on the four platforms
-Keep keywords and cities consistent with `data/config/search.yaml` (keyword groups x `locations` + remote). Daily frequency is enough; real-time alerts produce too many emails, and `max_messages_per_cycle` defaults to reading only 50 per cycle.
+Keep keywords and cities consistent with your searches: the keyword groups of `data/config/search.yaml` x the home city and places on `/me`, plus remote. Daily frequency is enough; real-time alerts produce too many emails, and `max_messages_per_cycle` defaults to reading only 50 per cycle.
 
 | Platform | Where to subscribe |
 |---|---|

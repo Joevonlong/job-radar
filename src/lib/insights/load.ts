@@ -1,4 +1,7 @@
 /** Reads everything /insights shows (server only): the config, the aggregates, and the view model. */
+import { loadPipeline } from "@/lib/market";
+import { placeGeo, wantedCities } from "@/lib/market/places";
+import { placeDictionary } from "@/lib/market/geo";
 import { reloadConfig } from "@/lib/config";
 import { cityMembers } from "@/lib/jobs/city-groups";
 import { loadCityGroups } from "@/lib/jobs/cities";
@@ -11,7 +14,7 @@ import { dayInZone, previousWindow, resolveRangeDays, windowEnding } from "./ran
 import { readHiddenSettings } from "@/lib/applications/hidden";
 import { buildInsightsView, type InsightsView } from "./view";
 
-/** The cities with their own row: insights.yaml `cities`, or (empty list) the cities of preferences.yaml `locations`. */
+/** The cities with their own row: insights.yaml `cities`, or (empty list) the wanted cities of preferences.yaml. */
 export function insightsCities(configured: readonly string[], locations: () => readonly string[]): string[] {
   if (configured.length > 0) return [...configured];
   const seen = new Set<string>();
@@ -25,7 +28,7 @@ export function insightsCities(configured: readonly string[], locations: () => r
 
 function preferredLocations(): readonly string[] {
   try {
-    return reloadConfig("preferences").locations;
+    return wantedCities(reloadConfig("preferences"), placeGeo(loadPipeline(), placeDictionary()));
   } catch {
     return [];
   }

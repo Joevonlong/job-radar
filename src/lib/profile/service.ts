@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 
-import { ConfigError, mutateConfig, parseConfigText, readProfileText, reloadConfig, writeConfig, type ProfileName } from "@/lib/config";
+import { ConfigError, loadConfig, mutateConfig, parseConfigText, readProfileText, reloadConfig, writeConfig, type ProfileName } from "@/lib/config";
 import { meSchema } from "@/lib/config/schemas/me";
 import { storiesSchema } from "@/lib/config/schemas/stories";
 import { WRITER_STORIES_DEFAULTS, type WriterStoriesLimits } from "@/lib/config/schemas/writer";
@@ -14,7 +14,9 @@ import { getDb, getProfileSnapshot, hashProfileYaml } from "@/lib/db";
 import { dealBreakerLimitProblems, slowPatternProblems } from "@/lib/filter/deal-breakers";
 import { vmTimeBox } from "@/lib/filter/time-box";
 import { logActionFailure } from "@/lib/logging/action-failure";
-import { loadPipeline, marketSettingsProblems } from "@/lib/market";
+import { effectivePipeline, loadPipeline, marketSettingsProblems, resolveMarket } from "@/lib/market";
+import { placeDictionary } from "@/lib/market/geo";
+import { placeGeo, resolvePlaces, unknownPlaces, type PlaceGeo } from "@/lib/market/places";
 import { storiesDraftSchema, storiesDraftToCandidate, storiesLimitProblems } from "@/lib/stories/draft";
 
 import {
@@ -70,6 +72,38 @@ function preferencesProblems(value: PreferencesConfig): FieldError[] {
   return slow.map((p): FieldError => ({ path: ["deal_breakers", ...p.path.slice(0, 2)].join("."), key: "slowPattern", params: { kind: "probe" } }));
 }
 
+/** The tables and the place dictionary of the market a preferences value names; null when they cannot be read (the market's own problems say why). */
+function placeGeoOf(value: PreferencesConfig): PlaceGeo | null {
+  try {
+    return placeGeo(effectivePipeline(loadConfig("pipeline"), resolveMarket(value.market)), placeDictionary());
+  } catch {
+    return null;
+  }
+}
+
+/** The saved preferences, or null when the file cannot be read. */
+function savedPreferences(): PreferencesConfig | null {
+  try {
+    return reloadConfig("preferences");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The location settings as a save writes them, or the names it refuses: a place must be one the place list knows. A name the
+ * saved file already held is kept, so an old file stays savable; the page asks to pick it again.
+ */
+function placesToSave(value: PreferencesConfig, saved: PreferencesConfig | null): { value: PreferencesConfig; errors: FieldError[] } {
+  const geo = placeGeoOf(value);
+  if (geo === null) return { value, errors: [] };
+  const held = new Set(saved === null ? [] : [saved.home_city, ...saved.places.map((entry) => entry.place)].map((text) => text.trim()));
+  const fresh = unknownPlaces(value, geo).filter((text) => !held.has(text));
+  if (fresh.length === 0) return { value: resolvePlaces(value, geo, false), errors: [] };
+  const home = value.home_city.trim();
+  return { value, errors: fresh.map((name): FieldError => ({ path: name === home ? "home_city" : "places", key: "unknownPlace", params: { name } })) };
+}
+
 /**
  * Validate `candidate` against the config schema and write it. Invalid values come back as field
  * errors with the file untouched; a failed write is told apart from a written file whose snapshot
@@ -96,18 +130,21 @@ async function write(kind: ProfileName, candidate: unknown, baseHash: string | u
       await writeConfig("stories", result.data, options);
     } else {
       let errors: FieldError[] = [];
-      const validate = (value: unknown): PreferencesConfig | null => {
+      const validate = (value: unknown, saved: PreferencesConfig | null): PreferencesConfig | null => {
         const result = preferencesSchema.safeParse(value);
         errors = result.success ? preferencesProblems(result.data) : toFieldErrors(result.error);
-        return result.success && errors.length === 0 ? result.data : null;
+        if (!result.success || errors.length > 0) return null;
+        const placed = placesToSave(result.data, saved);
+        errors = placed.errors;
+        return errors.length === 0 ? placed.value : null;
       };
       if (update) {
         await mutateConfig("preferences", (current) => {
           before = hashProfileYaml(readProfileText(kind));
-          return validate(update(current));
+          return validate(update(current), current);
         });
       } else {
-        const value = validate(candidate);
+        const value = validate(candidate, savedPreferences());
         if (value !== null) await writeConfig("preferences", value, options);
       }
       if (errors.length > 0) return failed(kind, null, errors);

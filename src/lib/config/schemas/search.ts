@@ -1,15 +1,17 @@
 import { z } from "zod";
 
-import { positiveInt, remoteScope, stringList } from "./common";
+import { positiveInt, stringList } from "./common";
 
 /** config/search.yaml — what to search for. */
 export const searchSchema = z.strictObject({
-  /** Keyword groups; each group is OR-merged into one query per location. */
+  /** Keyword groups; each group is OR-merged into one query per search of the location settings in preferences.yaml. */
   keyword_groups: z
     .record(z.string().regex(/^[a-z][a-z0-9_]*$/, "group id must be snake_case"), stringList.min(1))
     .refine((groups) => Object.keys(groups).length > 0, "needs at least one keyword group"),
-  locations: stringList.min(1),
-  remote_scope: remoteScope,
+  /** Left over from an older install: accepted and ignored. `config:check` and /me warn about entries `places` lacks. */
+  locations: z.unknown().optional(),
+  /** Left over from an older install: accepted and ignored, like `locations`. */
+  remote_scope: z.unknown().optional(),
   /** Lookback window per cycle, in hours. Keys match the cycle kinds in schedule.yaml. */
   window_hours: z.strictObject({
     morning: positiveInt,

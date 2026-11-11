@@ -37,7 +37,7 @@ pnpm run doctor --only config.market
 | Area | Behaviour |
 |---|---|
 | Locations | A location that names a country gets that country's code (`Remote - USA` → US, `Dublin, CA` → US). The city before the home country's name (`Gütersloh, Germany`) is read only in the home market. |
-| Remote scope | `none`, `home_country`, `worldwide`, or `{region: [eu, CH, …]}` (named regions and ISO countries) in preferences.yaml and search.yaml. Old values: `eu_hire_in_de` = `home_country`, `eu_any` = `{region: [eu]}`. `home_country` keeps remote jobs located in the home country, those that name the pack's `region` (the Germany pack: EU, Europe, EMEA, EEA) or worldwide, and shows as "Remote from Germany (incl. EU / Europe / EMEA / worldwide remote)"; a market without a `region` shows "Remote from <country>". Row by row: [Remote jobs and watched companies](usage.md#remote-jobs-and-watched-companies). |
+| Remote scope | It follows from `places` in preferences.yaml: a remote job may be based in the home country and in every listed country, region or city, ✈ or remote only alike, or anywhere with Worldwide listed. A label that names the pack's `region` (the Germany pack: EU, Europe, EMEA, EEA) also counts, whatever else is listed, so `[DE, CH]` still keeps `Remote - EU`. The scoring prompt names it as `home_country`, `worldwide` or `{region: [eu, CH, …]}`, shown as "Remote from Germany (incl. EU / Europe / EMEA / worldwide remote)"; a market without a `region` shows "Remote from <country>". Old values: `eu_hire_in_de` = `home_country`, `eu_any` = `{region: [eu]}`. Row by row: [Remote jobs and watched companies](usage.md#remote-jobs-and-watched-companies). |
 | Local language | When the pack has requirement rules for its language and `home_language` is that language, the level a posting requires is read and a level above yours (me.yaml `languages`) costs points (ai.yaml `scoring.language_penalty`). Otherwise the step is off: no level is read, nothing is deducted, the scoring prompt does not ask for it, and the pages hide its filter and badges. |
 | Base currency | Salary floor, "minimum salary" filter, statistics and the high-pay threshold are in the market's currency. Amounts in other currencies are converted with pipeline.yaml `salary.fx_pivot` + `fx_rates`; an amount in a currency without a rate is never compared. |
 | Channels | A channel with `markets: [DE]` in sources.yaml runs only in those markets; elsewhere it is shown folded under "Other markets" and is not counted as a failure. Country parameters left empty (`country`, `country_name`, `country_indeed`) and remote-location keys left out follow the market. |
@@ -62,6 +62,24 @@ required. A list in your `data/config/pipeline.yaml` replaces the shipped `pipel
 The `generic` pack is always loaded: the world country table, the regions `eu`, `eea`, `europe`, `dach`, `nordics`,
 the city table, US state codes and English rules. The market's own pack is added on top.
 
+## How a place name is read
+
+The filter, the ranking, the city groups, the "View posting" link and the handpicked channel all read a place name with
+one lookup. A place can be Worldwide, a region, a country or a city; a name that is both a country and a city
+(Singapore) is read as the country.
+
+- **Any spelling in the market tables counts as the same city.** The `cities` table lists each spelling with its
+  canonical name and country, so `Munich`, `München` and `Muenchen` are one city, whichever of them you put in your
+  locations or a posting uses.
+- **Your `city_aliases` join that city; they do not split it.** Spellings you list for a canonical city are added to the
+  market's spellings of the same city (a `Hanover` alias with `Hannover City` still matches a `Hannover` posting), and
+  your canonical name is the one shown. Keys of `metro_areas` and `metro_regions` are read the same way, so
+  `Koeln: [Hürth]` applies to a `Cologne` preference.
+- **Distinct cities stay distinct.** A spelling exactly as written always wins. Accents and letter case never tell two cities apart (`Münster` and `Munster` are one key), but the umlaut spellings
+  (`ae`, `oe`, `ue` for `ä`, `ö`, `ü`) are only a fallback, and only when they lead to one city, so `Au` and `Aue`
+  never match each other when both are in the table.
+- A name no table knows is not an error: it matches only itself.
+
 ## How the effective pipeline config is built
 
 The code reads `pipeline.yaml` together with the packs (`loadPipeline()`):
@@ -78,6 +96,25 @@ The code reads `pipeline.yaml` together with the packs (`loadPipeline()`):
 
 So pipeline.yaml keeps only what you add yourself. The config migration of pipeline.yaml removed the entries that are
 now in the packs.
+
+## Where a remote job may be done from
+
+`rules.yaml` holds the phrases the filter reads in the title and description of a remote job, in one block, `filter.remote.work_area`. They are regexes, case-insensitive, and the same block in `pipeline.yaml` adds to them:
+
+| Key | What it holds |
+|---|---|
+| `patterns` | Phrases that state the area. Each must have a `(?<place>...)` capture, or the file is refused |
+| `title_patterns` | The same, read in the title only: `France only` in a description is as likely to be about a benefit |
+| `anywhere` | Phrases that say anywhere in the world |
+| `negation` | A sentence with one of these says something else, so it isn't sure |
+| `continuations` | A next sentence with one of these widens or softens the statement, so it isn't sure |
+| `connectors` | What separates the places of a list |
+| `endings` | What may follow the place, as in `Germany to apply`. Anything else there and the sentence isn't sure |
+| `articles` | Words left off the front of a place |
+
+Patterns come from a pack you can edit, so reading one posting is stopped after `filter.deal_breakers.match_ms`. A stopped posting keeps a hide it had, or else isn't sure. Its result is kept, so it isn't read again until the posting or the settings change, and a posting that is always slow doesn't take the time of the ones after it. Stopped readings share `filter.deal_breakers.rule_budget_ms` per run; once that's used up, the remaining postings aren't read in that run, get the note, and are read in the next one.
+
+A phrase can hide a job, so it should start the sentence and be about the person hired, not the company, a benefit or the data: `we are hiring in France` isn't one. A question never counts, for a phrase or for `anywhere`. Every part of a capture goes through the same lookup as the location settings, except that a bare ISO code or a short name not in capitals doesn't count: `hiring in IT` isn't Italy. One part the tables don't know, a city, or Worldwide makes the sentence not sure, so a job is hidden only on a phrase read in full. The same goes for a list that may carry on in the next sentence. A pack with no phrases hides nothing, and every remote job gets the note `remote_area_unknown`. A phrase with no place to capture, such as German `bundesweit`, stays silent unless the pack spells the country out. `description_in_scope_patterns` is separate: it can only rescue a job, for the home country and its region.
 
 ## Ghost job patterns
 
@@ -154,6 +191,25 @@ it reads the pattern, not what it matches). Leave `prefilter` empty to read ever
 After changing the patterns, `pnpm visa:scan` previews what would change and `pnpm visa:scan --write` stores it; the
 cycle also rechecks every job, because the patterns are part of each result's input.
 
+## Place dictionary
+
+The product ships an offline place dictionary, `config/geo/places.json.gz`: every city with at least 15 000
+inhabitants and every country from [GeoNames](https://www.geonames.org/), with English, German, Chinese and local names
+plus the other spellings in those languages. Any spelling finds the same place (`慕尼黑`, `Múnich`, `München` and `Munich`
+are one entry), ignoring case and accents; places that share a name (Cambridge in England and in Massachusetts) stay
+separate entries, told apart by country and first-level division. Nothing is looked up on the network.
+
+The current file holds 34 210 cities, 252 countries and 2 764 first-level divisions (0.95 MB compressed, 2.8 MB of
+JSON); 11 226 cities have a Chinese name, the others are shown in English. Chinese names come from GeoNames as they are,
+so some are written in Traditional characters.
+
+To regenerate it, `pnpm geo:build` downloads `cities15000.zip`, `countryInfo.txt`, `admin1CodesASCII.txt` and
+`alternateNamesV2.zip` (about 210 MB) into a cache directory outside the repository (`--cache <dir>`, default the
+system temp directory; `--refresh` downloads again) and rewrites the file. The same downloads give the same bytes; the
+file header records when they were fetched.
+
+GeoNames data is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the attribution is in `NOTICE`.
+
 ## Writing a pack
 
 1. Copy `config/packs/de/` to `data/config/packs/<id>/` and set `id`, `name`, `country`, `currency`, `language`,
@@ -185,6 +241,53 @@ The columns keep their names; their meaning is now "the local language of the ma
 Salaries in `jobs.salary_json` and T1 signals carry `basePerYear` + `baseCurrency`; rows written while the base was always
 EUR are read as EUR.
 
+## The location settings migration
+
+`preferences.yaml` converts itself from version 2 to 3, on read and with `pnpm config:migrate --write`. Scores don't go stale because of it:
+
+| Old | New |
+|---|---|
+| First of `locations` | `home_city` |
+| Other `locations` | Places with `relocate: true` |
+| `remote_scope: home_country` | Nothing to add |
+| `remote_scope: {region: [...]}` | Each token as written, as a remote-only place |
+| `remote_scope: worldwide` | `Worldwide` as a remote-only place |
+| `remote_scope: none` | `remote` removed from `workplace`, unless it's the only value |
+| A place in both `locations` and `remote_scope` | One ✈ entry: moving there includes working remotely there |
+
+Results that change: with `none`, a remote job in an allowed city was shown and is now hidden as `workplace_not_wanted`; with `none` and `workplace: [remote]`, remote jobs are now checked instead of hidden; with `{region: [...]}` that leaves out home, home-country remote jobs now show; a foreign city in `locations` becomes a ✈ place and starts matching. `locations: [Berlin, CH]` with `remote_scope: {region: [CH]}` now keeps German remote jobs next to Swiss ones. If the first of `locations` was a foreign city (`[Amsterdam, Berlin]` for a German market), it becomes the home city and a job there is compared with the home country; `config:check` and `/me` warn about a home city outside the home country, so you can set one at home and list the other as ✈.
+
+`search.yaml`'s `locations` and `remote_scope` are accepted and ignored, with no migration step: searches come from `places`, and `config:check` and `/me` warn about entries that `places` doesn't list, and about searches `places` adds that those keys didn't list. When the two files agreed, the upgrade keeps the same queries and query ids, so the rotation history carries over. These configs add or change a search:
+
+| Old config | Change |
+|---|---|
+| A scope with several tokens | One search per token, with new ids |
+| A scope that doesn't cover home | The home remote search is added |
+| `none` with `workplace: [remote]` | The home remote search is added |
+| A foreign city in `locations` | Its remote search is added |
+| `workplace` without `remote`, and a scope other than `none` | The remote search is dropped, because this can't be told apart from a migrated `none` |
+| `search.yaml` with `remote_scope: none` while the preferences' scope was not `none` | Remote searches come back, because `search.yaml`'s scope is no longer read. To stop them, take Remote out of Workplace |
+
+An on-site entry of the old `locations` counts as listed only when it is the home city or a ✈ place, since only those get an on-site search; a scope token counts when it is home or any listed place. So a remote-only `CH` doesn't hide the warning for an old on-site `Switzerland`.
+
+Searches that a board would send the same way run once a cycle. In the step that leaves out what a board can't send, two queries are merged when every enabled, configured channel of the unit would send the same request: Apify with `remote_locations.region: Europe` sends `{region: [eu]}` and `{region: [CH]}` to the same location, so it's one paid run, and Arbeitsagentur, StepStone, XING and JSearch, which send no place on a remote search, run one remote search per keyword group. A channel that can't tell (the LinkedIn session, Monid, jobspy) keeps every query apart, so a cascade with one of them enabled merges nothing.
+
+Known limits: a ✈ city searches in the country the tables give it, so ✈ `Cambridge` searches the UK even if the old config meant Cambridge, MA (the filter still keeps Cambridge at home); ✈ `Paris` for a US home also keeps `Paris, TX`. Arbeitsagentur finds only German place names (`München`, `Deutschland`; a city goes out under its German name from the place dictionary), so a place abroad returns nothing there; it is a free board, so it isn't skipped.
+
+Every read of `preferences.yaml`, whoever wrote it (the forms, the setup wizard, `pnpm run setup`, an answers file or an edit by hand), applies the same rules to `places`:
+
+- Worldwide is remote only.
+- A place that is the home city is dropped.
+- A place named twice is one entry, at its first position, and it is ✈ if any of them is. Names compare with case, accents and spaces ignored; where the market's tables are read, two spellings of one place (Munich, München) count as one too.
+
+There is no limit on the number of places or the length of a name, as there was none on `locations`.
+
+The remote scope the scoring prompt names follows from the places: Worldwide anywhere means worldwide; otherwise the countries and regions among them, remote-only and ✈ alike, with the home country added when none of them is remote-only; with no country or region it is the home country. The filter reads the places directly (above), with home always in.
+
+The setup wizard writes only preferences.yaml: search.yaml's old keys stay as they were and are ignored. To stop remote searches, take Remote out of Workplace.
+
+Older code can't read version 3. Before going back to it, put back the version 2 file saved before the upgrade: `pnpm config:migrate --write`, which a deploy runs, copies it to `data/config/.backup/<timestamp>/profile/preferences.yaml`, or take it from your own backup ([Backup and restore](backup-restore.md)). Restoring an older version from the profile history on `/me` doesn't help: the save converts it to version 3 again.
+
 ## Renamed configuration keys
 
 The config migrations (`pnpm config:migrate --write`) rename them; old files keep working in memory until then.
@@ -192,7 +295,7 @@ The config migrations (`pnpm config:migrate --write`) rename them; old files kee
 | File | Before | Now |
 |---|---|---|
 | preferences.yaml | `salary_floor_eur_year` | `salary_floor_year`, plus `market` |
-| preferences.yaml, search.yaml | `remote_scope: eu_hire_in_de / eu_any` | `home_country` / `{region: [eu]}` |
+| preferences.yaml, search.yaml | `remote_scope: eu_hire_in_de / eu_any` | `home_country` / `{region: [eu]}`, and in preferences.yaml on to places (above) |
 | sources.yaml | `remote_locations.eu_hire_in_de / eu_any` | `home_country` / `region`; German boards get `markets: [DE]` |
 | pipeline.yaml | `language.german_*`, `salary.fx_to_eur` | the DE pack's `requirement`; `salary.fx_pivot: EUR` + `fx_rates` |
 | ai.yaml | `scoring.german_penalty`, `priority.weights.german_gap` | `language_penalty`, `language_gap` |

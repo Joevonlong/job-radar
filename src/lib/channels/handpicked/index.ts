@@ -1,7 +1,7 @@
 import {
   handpickedSettingsSchema,
   loadCompanies,
-  loadConfig,
+  loadConfig, reloadConfig,
   type CompaniesConfig,
   type HandpickedSettings,
   type InterestsConfig,
@@ -9,6 +9,8 @@ import {
   type SearchConfig,
 } from "@/lib/config";
 import { getDb } from "@/lib/db/client";
+import { placeGeo, type PlacePreferences } from "@/lib/market/places";
+import { placeDictionary } from "@/lib/market/geo";
 import { loadPipeline } from "@/lib/market";
 
 import { issuePaths } from "../ats/envelope";
@@ -34,6 +36,8 @@ export { buildPlaces, discoveryLinks, matchesPlace, selectPostings } from "./sel
 /** The parts of the config a run reads besides its own block. */
 export interface HandpickedInputs {
   search: SearchConfig;
+  /** The location settings: which cities and remote areas to keep. */
+  preferences: PlacePreferences & { workplace: readonly string[] };
   interests: InterestsConfig;
   /** The effective pipeline (market packs merged): the city spellings and company-name rules. */
   pipeline: PipelineConfig;
@@ -53,6 +57,7 @@ export interface HandpickedDeps {
 export const defaultHandpickedDeps: HandpickedDeps = {
   inputs: () => ({
     search: loadConfig("search"),
+    preferences: reloadConfig("preferences"),
     interests: loadConfig("interests"),
     pipeline: loadPipeline(),
     companies: loadCompanies(),
@@ -103,7 +108,7 @@ export function createHandpickedChannel(deps: HandpickedDeps = defaultHandpicked
         watchedCompanies: inputs.interests.watched_companies,
         pipeline: inputs.pipeline,
       });
-      const places = buildPlaces({ locations: inputs.search.locations, cityAliases: inputs.pipeline.filter.city_aliases, remoteScope: inputs.search.remote_scope, country: inputs.country });
+      const places = buildPlaces({ preferences: inputs.preferences, geo: placeGeo(inputs.pipeline, placeDictionary()), country: inputs.country });
       const known = knownBoardKeys(inputs.companies);
 
       ctx.signal.throwIfAborted();

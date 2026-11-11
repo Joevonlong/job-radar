@@ -6,7 +6,7 @@ import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../t
 import { createCycleCache } from "../web/cache";
 import { createTitleFilter, interleave, isWithinWindow, parseDate, windowCutoff } from "../web/select";
 import { loadKnownDetails, storedDetailOf } from "../known";
-import { searchKind } from "../query";
+import { placeFreeRequestKey, searchKind } from "../query";
 import { fetchDetail, fetchSearchPage, PAGE_SIZE, postingId, postingUrl, searchUrl } from "./client";
 import { parseXingPayload } from "./parse";
 import { payloadSchema, type XingDetail, type XingListItem, type XingPayload } from "./schema";
@@ -173,6 +173,8 @@ export function createXingChannel(deps: XingDeps = {}): Channel {
     kind: "guest",
     usesQueries: true,
     supportsCompanyQueries: true,
+    supportsRemotePlaces: false,
+    requestKey: placeFreeRequestKey,
     // the ghost job check: XING ids are stable and the full text is stored
     stableExternalIds: true,
     fullDescription: true,

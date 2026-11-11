@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { remoteScope } from "@/lib/config/schemas/common";
 import type { RemoteScopeValue } from "@/lib/market/schema";
-import { migrateRemoteScope, parseRemoteScopeKey, remoteLocationFor, remoteScopeKey, scopeCountries, scopeWidePatterns } from "@/lib/market/remote-scope";
+import { migrateRemoteScope, parseRemoteScopeKey, remoteLocationFor, remoteScopeKey, scopeCountries } from "@/lib/market/remote-scope";
 
 import { filterWith, job, loc, prefs } from "../filter/helpers";
 import { fixtureMarket, shippedPipeline } from "../pipeline/helpers";
@@ -31,7 +31,7 @@ describe("values", () => {
   });
 });
 
-describe("countries and wide patterns", () => {
+describe("countries", () => {
   it("home_country is the market's country, a region its countries, an ISO code itself, worldwide all", () => {
     expect([...(scopeCountries("home_country", de) ?? [])]).toEqual(["DE"]);
     expect([...(scopeCountries("home_country", us) ?? [])]).toEqual(["US"]);
@@ -40,29 +40,39 @@ describe("countries and wide patterns", () => {
     expect(scopeCountries("worldwide", de)).toBeNull();
     expect(scopeCountries("none", de)?.size).toBe(0);
   });
-
-  it("a remote job 'anywhere in the EU' counts for home_country in an EU market, not in the US market", () => {
-    expect(scopeWidePatterns("home_country", de).length).toBeGreaterThan(0);
-    expect(scopeWidePatterns("home_country", us)).toEqual([]);
-  });
 });
 
 describe("the hard filter under each form", () => {
   it("home_country (DE) and {region: [eu]} behave like eu_hire_in_de and eu_any", async () => {
     const { evaluateJob } = await import("@/lib/filter");
     const remote = (label: string, country: string | null) => job({ workplace: "remote", locations: [loc(label, null, country)] });
-    const home = filterWith(prefs((raw) => void (raw.remote_scope = "home_country")));
-    const eu = filterWith(prefs((raw) => void (raw.remote_scope = { region: ["eu"] })));
+    const home = filterWith(prefs((raw) => void (raw.places = [])));
+    const eu = filterWith(prefs((raw) => void (raw.places = [{ place: "eu", relocate: false }])));
     expect(evaluateJob(remote("Remote, France", "FR"), home).result).toBe("filtered_out");
     expect(evaluateJob(remote("Remote, France", "FR"), eu).result).toBe("passed");
     expect(evaluateJob(remote("Remote - EU", null), home).result).toBe("passed");
     expect(evaluateJob(remote("Remote - United Kingdom", "GB"), eu).result).toBe("filtered_out");
   });
 
+  it("a list with the home country and another (DE, CH) keeps the home region's wide labels", async () => {
+    const { evaluateJob } = await import("@/lib/filter");
+    const homeAndSwiss = filterWith(prefs((raw) => void (raw.places = [{ place: "DE", relocate: false }, { place: "CH", relocate: false }])));
+    const verdict = evaluateJob(job({ workplace: "remote", locations: [loc("Remote - EU", null, null)] }), homeAndSwiss);
+    expect(verdict.result).toBe("passed");
+    expect(verdict.reasons.filter((reason) => reason !== "remote_area_unknown")).toEqual([]);
+  });
+
+  it("a list with the home country and another (DE, CH) does not hide a title naming the home region next to another", async () => {
+    const { evaluateJob } = await import("@/lib/filter");
+    const homeAndSwiss = filterWith(prefs((raw) => void (raw.places = [{ place: "DE", relocate: false }, { place: "CH", relocate: false }])));
+    const verdict = evaluateJob(job({ title: "Engineer - EU/US", workplace: "remote", locations: [loc("Remote", null, null)] }), homeAndSwiss);
+    expect(verdict.reasons.filter((reason) => reason.startsWith("remote_out_of_scope"))).toEqual([]);
+  });
+
   it("in the US market home_country takes US remote jobs and not German ones", async () => {
     const { evaluateJob } = await import("@/lib/filter");
     const usPipeline = shippedPipeline(us);
-    const home = filterWith(prefs((raw) => void (raw.remote_scope = "home_country")), usPipeline);
+    const home = filterWith(prefs((raw) => void (raw.places = [])), usPipeline);
     const remote = (label: string, country: string | null) => job({ workplace: "remote", locations: [loc(label, null, country)] });
     expect(evaluateJob(remote("Remote - USA", "US"), home).result).toBe("passed");
     expect(evaluateJob(remote("Remote, Germany", "DE"), home).result).toBe("filtered_out");

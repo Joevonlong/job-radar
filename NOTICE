@@ -28,3 +28,8 @@ licenses/fonts/ in the repository and in /app/licenses/fonts/ in the web image.
 Generated resume PDFs embed Inter, IBM Plex Sans, Newsreader and IBM Plex Mono, under the same SIL Open Font License 1.1.
 The web does not serve Inter, IBM Plex Sans or Newsreader. Their licence texts and copyright notices are also in
 licenses/fonts/.
+
+Place data. The place dictionary (config/geo/places.json.gz, in the repository and in /app/config/geo/ in both images)
+is derived from GeoNames (https://www.geonames.org/), licensed under the Creative Commons Attribution 4.0 License
+(https://creativecommons.org/licenses/by/4.0/). Changes: only cities with at least 15 000 inhabitants and countries are
+kept, with their English, German, Chinese and local names; historic, colloquial and abbreviated names are dropped.

@@ -186,9 +186,10 @@ describe.each([["preferences"], ["search"]] as const)("%s.yaml", (name) => {
   it.runIf(legacyText(name) !== null)("migrates to the DE market and the new scope words, nothing else changes", () => {
     const original = legacyValue(name);
     const migrated = migrateText(name, legacyText(name) ?? "");
-    expect(migrated.steps).toBe(1);
+    expect(migrated.steps).toBe(name === "preferences" ? 2 : 1);
     // `deal_breakers` came later with an empty default: the parsed value has it, the migrated file does not
-    const { market, salary_floor_year: floor, deal_breakers: dealBreakers, watched_company_queries: companyQueries, ...rest } = migrated.value;
+    const { market, salary_floor_year: floor, deal_breakers: dealBreakers, watched_company_queries: companyQueries, home_city: homeCity, places, ...others } = migrated.value;
+    const rest = name === "preferences" ? { ...others, locations: [homeCity, ...(places as Array<{ place: string }>).map((entry) => entry.place)], remote_scope: "home_country" } : others;
     if (name === "search") expect({ value: companyQueries, inFile: /^watched_company_queries:/m.test(migrated.text) })
       .toEqual({ value: searchSchema.shape.watched_company_queries.parse(undefined), inFile: false });
     if (name === "preferences") expect(market).toEqual({ pack: "de", country: "DE", currency: "EUR", home_language: "de" });
