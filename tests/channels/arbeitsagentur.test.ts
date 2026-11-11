@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { arbeitsagenturChannel, interleave } from "@/lib/channels/arbeitsagentur";
 import { detailUrl, germanLocation, publishedDays, searchUrl } from "@/lib/channels/arbeitsagentur/client";
+import { createPlaceSource } from "@/lib/market/geo/dictionary";
+import type { PlaceGeo } from "@/lib/market/places";
 import { redactContacts } from "@/lib/channels/arbeitsagentur/redact";
 import { parseArbeitsagenturPayload } from "@/lib/channels/arbeitsagentur/parse";
 import { employerMatcher } from "@/lib/channels/company-match";
@@ -169,17 +171,27 @@ describe("request building", () => {
 });
 
 describe("germanLocation", () => {
-  const countries = [{ code: "DE", name: "Germany", aliases: ["Deutschland"] }, { code: "FR", name: "France" }];
+  const munich = { id: 2867714, kind: "city" as const, name: "Munich", names: { en: "Munich", de: "München", zh: null }, localName: "München", searchName: "München", countryCode: "DE", countryName: "Germany", admin1: "Bavaria", population: 1_260_000, spellings: ["Munich", "München"] };
+  const paris = { ...munich, id: 2988507, name: "Paris", names: { en: "Paris", de: null, zh: null }, localName: null, searchName: "Paris", countryCode: "FR", spellings: ["Paris"] };
+  const geo: PlaceGeo = {
+    cityAliases: {},
+    cities: {},
+    countries: [{ code: "DE", name: "Germany", aliases: ["Deutschland"] }, { code: "FR", name: "France", aliases: [] }],
+    regions: {},
+    dictionary: createPlaceSource([munich, paris]),
+  };
 
   it("translates a country name, whichever spelling the place has", () => {
-    expect(germanLocation("Germany", {}, countries)).toBe("Deutschland");
-    expect(germanLocation("deutschland", {}, countries)).toBe("Deutschland");
-    expect(germanLocation("France", {}, countries)).toBe("Frankreich");
+    expect(germanLocation("Germany", geo)).toBe("Deutschland");
+    expect(germanLocation("deutschland", geo)).toBe("Deutschland");
+    expect(germanLocation("France", geo)).toBe("Frankreich");
   });
 
-  it("uses the configured name of a city, in any case, and keeps any other place as written", () => {
-    expect(germanLocation("TESTCITY", { Testcity: "Teststadt" }, countries)).toBe("Teststadt");
-    expect(germanLocation("Hamburg", { Testcity: "Teststadt" }, countries)).toBe("Hamburg");
+  it("searches a city under the dictionary's German name, in any spelling, and keeps any other place as written", () => {
+    expect(germanLocation("MUNICH", geo)).toBe("München");
+    expect(germanLocation("München", geo)).toBe("München");
+    expect(germanLocation("Paris", geo)).toBe("Paris");
+    expect(germanLocation("Atlantis", geo)).toBe("Atlantis");
   });
 });
 

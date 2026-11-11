@@ -1,4 +1,5 @@
 import type { ArbeitsagenturSettings } from "@/lib/config";
+import { lookupPlace, type PlaceGeo } from "@/lib/market/places";
 
 import { ChannelError } from "../errors";
 import type { ChannelContext } from "../types";
@@ -44,18 +45,19 @@ export interface SearchParams {
   companyParam?: CompanyParam;
 }
 
-/** `veroeffentlichtseit` for a look-back window: whole days, rounded up, within what the API accepts. */
-type CountryNames = { code: string; name: string; aliases?: readonly string[] };
-
-/** The name to search a place under: the API matches German names, so `Germany` finds nothing and `Deutschland` does. */
-export function germanLocation(location: string, names: Readonly<Record<string, string>>, countries: readonly CountryNames[]): string {
-  const key = location.trim().toLowerCase();
-  const named = Object.entries(names).find(([spelling]) => spelling.toLowerCase() === key);
-  if (named !== undefined) return named[1];
-  const country = countries.find((entry) => [entry.name, ...(entry.aliases ?? [])].some((name) => name.toLowerCase() === key));
-  return country === undefined ? location : (new Intl.DisplayNames(["de"], { type: "region" }).of(country.code) ?? location);
+/**
+ * The name to search a place under: the API matches German names, so `Germany` and `Munich` find nothing where `Deutschland`
+ * and `München` do. A country gets its German name from `Intl`, a city the place dictionary's German name; any other place is
+ * searched as written.
+ */
+export function germanLocation(location: string, geo: PlaceGeo): string {
+  const place = lookupPlace(location, geo);
+  const code = place?.kind === "country" ? place.countries[0] : undefined;
+  if (code !== undefined) return new Intl.DisplayNames(["de"], { type: "region" }).of(code) ?? location;
+  return place?.kind === "city" ? (place.geoname?.names.de ?? location) : location;
 }
 
+/** `veroeffentlichtseit` for a look-back window: whole days, rounded up, within what the API accepts. */
 export function publishedDays(windowHours: number): number {
   return Math.min(MAX_PUBLISHED_DAYS, Math.max(MIN_PUBLISHED_DAYS, Math.ceil(windowHours / 24)));
 }

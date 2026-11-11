@@ -39,6 +39,12 @@ describe("shipped place dictionary", () => {
     expect(searchPlaces("慕尼", { lang: "zh", limit: 5 })[0]?.id).toBe(munich);
   });
 
+  it("completes Au with places named so, not with one that only has an alias starting so", () => {
+    const names = searchPlaces("Au", { limit: 5 }).map((p) => p.name);
+    expect(names.slice(0, 2)).toEqual(expect.arrayContaining(["Australia", "Austria"]));
+    expect(names).not.toContain("Kosovo");
+  });
+
   it("does not take one place for another that only shares a prefix", () => {
     const aue = matchPlaceName("Aue", { country: "DE" });
     expect(aue).toHaveLength(1);
