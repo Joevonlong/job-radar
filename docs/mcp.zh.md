@@ -118,28 +118,28 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 
 | 工具 | 作用 |
 |---|---|
-| `search_jobs` | 按排名返回岗位卡片，过滤方式和岗位列表一样：`query`（标题、公司名与别名、城市/地点和国家）、`search_in`（默认 `summary`；`all` 加搜原始 JD 和有效译文）、`country`（1–20 个两字母国家代码，不区分大小写、精确匹配，OR）、`city`、`workplace`、`min_rank`、`min_annual_salary`（市场基准货币）、`since` / `until`（首次发现日期，`YYYY-MM-DD`）、`application_status`、`sort`（`relevance`、`rank`、`posted`、`first_seen`；有 query 默认 relevance，无 query 默认 rank）、`limit`。始终隐藏硬过滤排除的岗位；默认范围还隐藏关闭和休眠岗位，范围等新增参数见下文。不含 JD 正文。 |
-| `get_job` | 一个岗位（`job_id`）的详情：上面所有字段，加上资历、语言、带引用的信号、发现的 AI 陷阱数量、你的申请，以及清洗后的 JD。 |
+| `search_jobs` | 按排名返回岗位卡片，过滤方式和岗位列表一样：`query`（标题、公司名与别名、城市/地点和国家）、`search_in`（默认 `summary`；`all` 加搜原始 JD 和有效译文）、`country`（1–20 个两字母国家代码，不区分大小写、精确匹配，OR）、`city`、`workplace`、`min_rank`、`min_annual_salary`（市场基准货币）、`since` / `until`（首次发现日期，`YYYY-MM-DD`）、`application_status`（需要 `tracking:read`；没有时，设置它的调用按 `not_permitted` 拒绝）、`sort`（`relevance`、`rank`、`posted`、`first_seen`；有 query 默认 relevance，无 query 默认 rank）、`limit`。始终隐藏硬过滤排除的岗位；默认范围还隐藏关闭和休眠岗位，范围等新增参数见下文。不含 JD 正文。 |
+| `get_job` | 一个岗位（`job_id`）的详情：上面所有字段，加上资历、语言、带引用的信号、发现的 AI 陷阱数量、你的申请和关闭原因（这两项只在有 `tracking:read` 时给出），以及清洗后的 JD。 |
 | `get_job_raw` | **默认关闭，仅需 `raw:read`。** 参数 `job_id`：返回各来源的渠道 id、URL、ISO 抓取时间、解析状态/错误和原始 JSON 载荷字符串，按抓取时间倒序，同时间按原始记录 id 倒序。没有来源载荷时返回空列表；未知岗位返回 `not_found`。 |
 | `list_applications` | 你的申请，排名高的在前；`status` 过滤；`stale_only: true` 只列超过每日提醒阈值（`notify.yaml: reminders.interested_days` / `applied_days`）还没动静的，等得最久的在前。有效 `notes:read` 增加每项的 `notes.application_notes`；没有它时原字段集合不变。 |
 | `get_profile` | **默认关闭；`profile:read`。** 所选画像部分及网页表单的 `baseHash`。 |
 | `get_interests` | **默认关闭；`profile:read`。** 词表、保存的视图、关注公司和待处理建议。 |
 | `preview_deal_breakers` | **默认关闭；`profile:read`。** 对库内岗位只读试算草稿规则。 |
 | `preview_interest_category` | **默认关闭；`profile:read`。** 只读试算一个草稿信号类别。 |
-| `get_today` | `jobs:read`：今日岗位和 all/high/salary/following 的 `quick_counts`。参数：`view`（保存视图 id 或 `all`）、`quick`（`high`、`salary`、`following`）、`include_filtered`、`hide_language`、`high_value`、`limit`。复用页面视图、合格分数和高价值规则；选中保存视图时它优先于快捷视图。保存视图需要 `profile:read`；有此权限、没有显式开关且省略 view 时采用默认视图。申请状态筛选还需要 `tracking:read`。 |
-| `list_companies` | `jobs:read`：默认岗位列表中的公司、关注和黑名单标记、岗位数和最高分。参数：`query`（显示名称）、`sort`（`jobs`、`score`、`recent`）、`limit`。 |
-| `get_company` | `jobs:read`：参数 `company_id` 和可选 `limit`；返回别名、已存官网域名及用户确认或推断来源、关注和黑名单、带来源 URL 的已有背景研究，以及默认当前列表中的在招岗位。不会启动研究。 |
+| `get_today` | `jobs:read`：今日岗位和 all/high/salary/following 的 `quick_counts`。参数：`view`（保存视图 id 或 `all`）、`quick`（`high`、`salary`、`following`）、`include_filtered`、`hide_language`、`high_value`、`limit`。复用页面视图、合格分数和高价值规则；选中保存视图时它优先于快捷视图。保存视图需要 `profile:read`；有此权限、没有显式开关且省略 view 时采用默认视图。申请状态筛选和 `quick: following` 还需要 `tracking:read`，没有时 `quick_counts` 不含 `following`。 |
+| `list_companies` | `jobs:read`：默认岗位列表中的公司、岗位数和最高分；关注和黑名单标记只在有 `profile:read` 时给出。参数：`query`（显示名称）、`sort`（`jobs`、`score`、`recent`）、`limit`。 |
+| `get_company` | `jobs:read`：参数 `company_id` 和可选 `limit`；返回别名、已存官网域名及用户确认或推断来源、关注和黑名单（只在有 `profile:read` 时给出）、带来源 URL 的已有背景研究，以及默认当前列表中的在招岗位。不会启动研究。 |
 | `get_insights` | `jobs:read`：`range` 为 `insights.yaml: ranges_days` 提供的天数，省略用配置默认值；可选 `limit`。包含每日、来源、薪资和分数直方图、信号及转化统计。`profile:read` 增加城市和配置的信号类别。`tracking:read` 增加申请与漏斗汇总，`match:read` 增加过滤原因统计。不含个人薪资底线数值和页面跳转链接。 |
 | `get_application` | `tracking:read`：按 `job_id` 读取申请状态、日期、下一步、轮数、历史、收藏和已读、关闭与过滤覆盖。`notes:read` 增加申请和事件备注。可选 `limit` 限制历史和事件备注；不给关闭备注或简历路径。 |
 | `list_favorites` | `tracking:read`：全部收藏岗位，含已关闭、被过滤和忽略的岗位。`sort` 为默认的 `starred`（最新优先）或 `rank`，可传 `limit`；`notes:read` 增加每项的 `notes.favorite_note`。 |
 | `get_application_context` | **默认关闭。** 写一个岗位答案所需的全部材料（`job_id`）：岗位事实、清洗后的 JD、拆解要点、公司背景和契合要点、问题、每题选中的材料和已保存的版本（最新的在前，每题最多 `max_results` 个）。 |
 | `save_application_answer` | **默认关闭。** 新增一个答案版本（`job_id`、`question_id`、`text`，可选 `sentences`）。 |
 
-`search_jobs` 与 `/jobs` 共用 URL 状态筛选函数：未传 scope 沿用当前岗位规则，日期比较首次发现时间。与网页一样，`since` 晚于 `until` 时会交换两端；旧 MCP 路径对此返回空集。新增 `scope`（`current`、`archive`、`all`）、`unseen_only` 和 `favorites_only`（都需要 `tracking:read`；没有时，把任一个设为 `true` 的调用按 `invalid_input` 拒绝）、`visa`（`offered`、`not_denied`）、`ghost`（`only`、`hide`）；签证和幽灵岗位筛选仅在网页对应筛选可用时生效。所有范围始终隐藏硬过滤排除的岗位，默认还隐藏关闭和休眠岗位。MCP 的搜索计划仍容错读取 pipeline 配置，读取失败时按文本匹配，不使用市场词汇。四个显式排序都与网页对应；无搜索词时 MCP 默认按 rank 排序，归档范围也如此（网页归档默认按最后刊登时间）。
+`search_jobs` 与 `/jobs` 共用 URL 状态筛选函数：未传 scope 沿用当前岗位规则，日期比较首次发现时间。与网页一样，`since` 晚于 `until` 时会交换两端；旧 MCP 路径对此返回空集。新增 `scope`（`current`、`archive`、`all`）、`unseen_only` 和 `favorites_only`（都需要 `tracking:read`；没有时，把任一个设为 `true` 的调用按 `not_permitted` 拒绝）、`visa`（`offered`、`not_denied`）、`ghost`（`only`、`hide`）；签证和幽灵岗位筛选仅在网页对应筛选可用时生效。所有范围始终隐藏硬过滤排除的岗位，默认还隐藏关闭和休眠岗位。MCP 的搜索计划仍容错读取 pipeline 配置，读取失败时按文本匹配，不使用市场词汇。四个显式排序都与网页对应；无搜索词时 MCP 默认按 rank 排序，归档范围也如此（网页归档默认按最后刊登时间）。
 
-搜索卡片保留原字段，有效 `tracking:read`（包括默认权限）自动增加 `tracking: { status, favorite, seen }`；有效 `match:read` 自动增加 `match: { summary, summary_lang, summary_withheld, filter_result, filter_reasons }`。其他权限不增加卡片字段，搜索始终不给收藏备注和 signal bonus。单行摘要优先采用 MCP 文本语言，再选 AI 输出语言、英语或其他已存语言。只有陷阱配置可读且启用、岗位扫描与当前 JD、源载荷和规则匹配时才给摘要；否则摘要和语言为 null，`summary_withheld` 给出严格清理的失败原因。没有摘要时原因也为 null。匹配权限仍可读取过滤结果和原因。短文本均经清理。给出摘要和扣留摘要各最多增加一次对应提示，位置在第三方内容提示之后、截断提示之前。
+搜索卡片保留原字段。卡片的 `application_status` 属于追踪数据，只在有效 `tracking:read` 时出现；该权限还会自动增加 `tracking: { status, favorite, seen }`，默认权限下两者都有。有效 `match:read` 自动增加 `match: { summary, summary_lang, summary_withheld, filter_result, filter_reasons }`。其他权限不增加卡片字段，搜索始终不给收藏备注和 signal bonus。单行摘要优先采用 MCP 文本语言，再选 AI 输出语言、英语或其他已存语言。只有陷阱配置可读且启用、岗位扫描与当前 JD、源载荷和规则匹配时才给摘要；否则摘要和语言为 null，`summary_withheld` 给出严格清理的失败原因。没有摘要时原因也为 null。匹配权限仍可读取过滤结果和原因。短文本均经清理。给出摘要和扣留摘要各最多增加一次对应提示，位置在第三方内容提示之后、截断提示之前。
 
-`get_job` 返回 `{ notices, job, <获准字段块> }`。不请求可选职位块时，原来的 `job` 对象和提示保持一致。`include` 只接受 `translation`、`breakdown`、`salary`、`company`、`ghost`、`lifecycle`；其余块根据有效权限（全局与连接授权的交集）自动出现。即使传了 `include`，也不会返回未经授权的块键。
+`get_job` 返回 `{ notices, job, <获准字段块> }`。不请求可选职位块时，原来的 `job` 对象和提示保持一致。没有有效 `tracking:read` 时，`job` 不含 `application_status`、`closed_reason` 和 `application`。`include` 只接受 `translation`、`breakdown`、`salary`、`company`、`ghost`、`lifecycle`；其余块根据有效权限（全局与连接授权的交集）自动出现。即使传了 `include`，也不会返回未经授权的块键。
 
 | 字段块 | 有效权限 | 返回条件 / 内容 |
 |---|---|---|
@@ -167,7 +167,7 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 
 职位名、公司名、别名、域名、地点、来源标签和链接独立清理，不依赖陷阱扫描。`list_applications` 在没有备注权限时保持这些字段和原有回答。`get_company` 仅对研究文本检查生成该研究的岗位是否有当前、可读且启用的陷阱扫描；检查失败时研究文字为 null，并说明不可用原因，公司事实、经过清理的来源链接和岗位卡片仍正常提供。这些工具不返回原始载荷，不依赖 `raw:read`。
 
-`get_today` 的显式和默认保存视图都要求 `profile:read`。没有该权限时不应用也不返回默认视图；显式保存视图以 `not_permitted` 拒绝（`view: "all"` 仍可用）。有权限时，仅在未传任何开关且省略 view 时采用默认视图。解析出的视图若含申请状态筛选，还必须有 `tracking:read`；否则在查询岗位前以 `not_permitted` 拒绝整次调用。`get_insights` 的 `cities` 和 `signals.categories` 包含配置的目标城市、兴趣名称及零匹配类别，没有 `profile:read` 时省略这两块，其余岗位统计仍可提供。
+`get_today` 的显式和默认保存视图都要求 `profile:read`。没有该权限时不应用也不返回默认视图；显式保存视图以 `not_permitted` 拒绝（`view: "all"` 仍可用）。有权限时，仅在未传任何开关且省略 view 时采用默认视图。解析出的视图若含申请状态筛选，还必须有 `tracking:read`；否则在查询岗位前以 `not_permitted` 拒绝整次调用。`get_insights` 的 `cities` 和 `signals.categories` 包含配置的目标城市、兴趣名称及零匹配类别，没有 `profile:read` 时省略这两块，其余岗位统计仍可提供。同样的原因，没有 `profile:read` 时 `list_companies` 和 `get_company` 不给 `watched` 和 `blacklisted`：它们来自你的关注公司和公司黑名单。默认权限不含 `profile:read`，所以默认没有这两个字段。
 
 ## 原始招聘数据权限（`raw:read`）
 

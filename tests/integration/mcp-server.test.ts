@@ -252,14 +252,14 @@ describe("search_jobs", () => {
     }
   });
 
-  it("refuses the star and seen filters without tracking permission as invalid input", async () => {
+  it("refuses the tracking filters without tracking permission as not permitted", async () => {
     const permissions: Permission[] = ["jobs:read", "match:read"];
     const client = await connect({ mcp: settings({ permissions, stdio: { permissions } }) });
-    for (const args of [{ favorites_only: true }, { unseen_only: true }]) {
+    for (const args of [{ favorites_only: true }, { unseen_only: true }, { application_status: ["applied"] }]) {
       const result = await call<SearchJobsOutput>(client, "search_jobs", args);
       expect(result.isError).toBe(true);
       expect(result.text).toContain("tracking:read");
-      expect(lines.at(-1)).toContain("invalid_input");
+      expect(lines.at(-1)).toContain("not_permitted");
     }
     expect((await call<SearchJobsOutput>(client, "search_jobs", { favorites_only: false })).isError).toBe(false);
   });

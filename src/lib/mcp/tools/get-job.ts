@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { Permission } from "@/lib/agent-access/permissions";
 import { includeInput, loadBlocks } from "@/lib/capabilities/blocks";
 import { getJobDetail } from "@/lib/db/queries/job-detail";
 import { loadTrapCounts } from "@/lib/db/repos/traps";
@@ -8,7 +9,7 @@ import { getJobBlocks } from "@/lib/mcp/job-blocks";
 import type { JobBlockSource } from "@/lib/mcp/job-blocks/source";
 
 import { ToolFailure, type McpContext } from "../context";
-import { getJobOutput, getJobOutputFor, toJobDetailDto, type DescriptionDto, type GetJobOutput } from "../dto";
+import { getJobOutput, getJobOutputFor, releasedJobDetail, toJobDetailDto, type DescriptionDto, type GetJobOutput } from "../dto";
 import { availableDescription, jdQuoteGuard, quoteGuard, shortFieldCleaner, unavailableDescription } from "../guard";
 import { readTextCleaner } from "../read-guard";
 import { readTraps } from "./shared";
@@ -26,7 +27,8 @@ export type GetJobArgs = z.infer<ReturnType<typeof getJobInput>>;
  * One job in detail. The JD is given only after the AI-trap findings were removed (`cleanDescriptionStrict`): when trap detection
  * is off, traps.yaml cannot be read, the job was not scanned under the current rules or its findings cannot be read, the JD is
  * withheld and the result says why, and so are the signal quotes. A quote that overlaps a finding is that finding's marker. With
- * findings, the trap header comes first in the notices.
+ * findings, the trap header comes first in the notices. The application, its status and the closure reason are tracking data and are
+ * left out without tracking permission.
  */
 export async function getJob(ctx: McpContext, args: GetJobArgs): Promise<GetJobOutput> {
   const detail = await getJobDetail(ctx.db, args.job_id);
@@ -57,5 +59,6 @@ export async function getJob(ctx: McpContext, args: GetJobArgs): Promise<GetJobO
   const derived = getJobOutput.parse({ notices, job, ...blocks });
   if ((derived.translation?.items.length ?? 0) > 0 || derived.breakdown?.content != null || (derived.company?.fields.length ?? 0) > 0 || derived.salary?.lookup?.available || (derived.match?.fit_reasons.length ?? 0) > 0 || (derived.match?.gaps.length ?? 0) > 0 || Object.keys(derived.match?.summaries ?? {}).length > 0) notices.push(ctx.text("notice.derived"));
   if ([derived.translation, derived.breakdown, derived.company, derived.salary?.lookup, derived.match].some((block) => block?.available === false && block.reason !== null)) notices.push(ctx.text("notice.derivedWithheld"));
-  return getJobOutputFor(ctx.permissions ?? new Set()).parse({ notices, job, ...blocks });
+  const permissions: ReadonlySet<Permission> = ctx.permissions ?? new Set();
+  return getJobOutputFor(permissions).parse({ notices, job: releasedJobDetail(job, permissions), ...blocks });
 }
