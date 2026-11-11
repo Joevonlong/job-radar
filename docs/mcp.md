@@ -12,6 +12,8 @@ client starts `pnpm mcp:serve` as a local child process and talks to it over std
   `save_application_answer`, requires `writer:write`, and all it can do is add an answer version. The server never starts a
   collection or an AI call.
 
+The server also stores local call metadata in `agent_calls`, over a separate audit connection (see [Audit trail](#audit-trail)).
+
 ## What leaves your machine
 
 **Whatever the tools return is passed by your client to the model provider it uses** (Anthropic for Claude, and so on), under
@@ -169,6 +171,36 @@ Each call writes one line to stderr (your client keeps it in its log of the serv
 long it took, and whether it worked. Never the arguments or the results. Errors name a category only (`database`, `not_found`,
 `invalid_input`, ...), never an address or a path.
 
+## Audit trail
+
+Each tool call also adds one row to the local `agent_calls` table. `tools/list` adds none. A row holds only its numeric id,
+call time (`called_at`), caller and transport (both `stdio` today), nullable `token_id` (null today), capability id,
+optional target type and numeric id (`job`, `application` or `question`), outcome (`ok`, `not_permitted`, `invalid_input`
+or `error`), returned item count and duration in milliseconds. Only an `error` row has an `error_category`: a fixed
+category such as `database` or `not_found`. Invalid input has no target. No row holds arguments, returned content or
+message text, including error messages.
+
+Reads still use read-only sessions. Their audit rows use a dedicated connection with at most one session; the server
+awaits the bounded audit write before answering. If it fails, the read still answers normally and writes one additional
+stderr line with the failure category only. A saved answer version and its success audit row are written in the same
+transaction on the answer's write connection: both are saved or neither is. If that audit insert fails, the answer is
+rolled back, the call fails and the server attempts to record the error over the audit connection. The existing stderr
+call-log line is unchanged.
+
+In `mcp.yaml`, `audit.retention_days` defaults to **90** (1–3650). The runner periodically deletes older rows, including
+while MCP is off; without a running runner, they remain. Old database backups can still hold deleted rows. The other
+`audit` keys bound the dedicated connection's waits:
+
+| Key | Default | Bounds |
+|---|---|---|
+| `connect_timeout_seconds` | 2 seconds | 1–30 |
+| `statement_timeout_ms` | 1500 ms | 1–60000 |
+| `lock_timeout_ms` | 200 ms | 1–60000 |
+
+The idle-in-transaction timeout uses `statement_timeout_ms` too. Connection timeouts take effect on server restart;
+retention is read afresh by the runner. Existing config files get these defaults without a version change. `pnpm run
+doctor` reports the audit retention days in `data.mcp` when MCP is on.
+
 ## Optional: a database role that can only read
 
 The read-only sessions guard against a mistaken write, but they are not a security boundary. For a hard one, give the server
@@ -190,6 +222,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO job_radar_ro
 Then start the server with that role: add `"DATABASE_URL": "postgres://job_radar_ro:choose-a-password@127.0.0.1:5433/jobradar"`
 to the `env` of the client entry (a value in the client's environment wins over `.env`). The password then sits in the client's
 config file; keep that file private.
+
+With this SELECT-only role, audit inserts also fail: reads still answer with the extra stderr line described above.
 
 ## Troubleshooting
 

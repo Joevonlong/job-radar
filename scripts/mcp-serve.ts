@@ -1,6 +1,6 @@
 /**
  * The MCP server over stdio (docs/mcp.md): an MCP client you configure (Claude Desktop, Claude Code, ...) starts this as a child
- * process and talks to it on stdin / stdout. No port is opened. Nothing is written to the database, except that the tool
+ * process and talks to it on stdin / stdout. No port is opened. Tool calls write metadata-only audit rows; the tool
  * `save_application_answer`, when granted writer:write, adds answer versions over a connection of its own.
  *
  *   pnpm --silent mcp:serve
@@ -15,9 +15,11 @@ import path from "node:path";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
 import { authorize, liveMcpSettings } from "../src/lib/agent-access/authorize";
+import { createAuditRecorder } from "../src/lib/agent-access/audit";
 import { CAPABILITIES, visibleCapabilities } from "../src/lib/capabilities/registry";
 import { createConnection } from "../src/lib/db/client";
 import { createReadOnlyDb } from "../src/lib/db/read-only-client";
+import { openAgentCallsConnection } from "../src/lib/db/repos/agent-calls";
 import { loadDatabaseEnv } from "../src/lib/env";
 import { stderrLine } from "../src/lib/mcp/call-log";
 import { buildServer, defaultContext } from "../src/lib/mcp/server";
@@ -67,7 +69,13 @@ function main(): void {
   }
 
   const database = createReadOnlyDb();
-  const context = defaultContext(database.db, settings, { text, writeDb: writable?.db ?? null });
+  const auditConnection = openAgentCallsConnection(loadDatabaseEnv().DATABASE_URL, {
+    connectTimeoutSeconds: settings.audit.connect_timeout_seconds,
+    statementTimeoutMs: settings.audit.statement_timeout_ms,
+    lockTimeoutMs: settings.audit.lock_timeout_ms,
+  });
+  const audit = createAuditRecorder({ db: auditConnection.db, close: () => auditConnection.sql.end({ timeout: settings.audit.connect_timeout_seconds }) }, { text, log: stderrLine });
+  const context = defaultContext(database.db, settings, { text, writeDb: writable?.db ?? null, audit });
   const version = packageVersion();
   const handle = serveStdio(() => buildServer(context, { version }), {
     onerror: (error) => stderrLine(`[mcp] transport error: ${error.name}`),
@@ -78,7 +86,7 @@ function main(): void {
   const stop = (code: number) => {
     if (stopping) return;
     stopping = true;
-    void Promise.allSettled([handle.close(), database.close(), ...(writable ? [writable.sql.end({ timeout: 5 })] : [])]).then(() => {
+    void Promise.allSettled([handle.close()]).then(() => Promise.allSettled([audit.close()])).then(() => Promise.allSettled([database.close(), ...(writable ? [writable.sql.end({ timeout: 5 })] : [])])).then(() => {
       stderrLine(text("serve.stopped"));
       process.exit(code);
     });

@@ -27,6 +27,7 @@ description, not legal advice.
 | Career extraction drafts, with suggested fields and source quotes | `data/profile/career/drafts/` and configuration archives | until adopted, discarded, or expired under `career.yaml: import.draft_ttl_days`; backups can retain them |
 | Story drafts extracted from your profile, a text or a résumé, with the passages they quote | database table `profile_story_drafts` | the text is cleared when you adopt or discard a draft; the row goes after `writer.yaml: import.draft_ttl_days`. See [Story extraction](#story-extraction) |
 | Runner heartbeats | database | 24 hours |
+| MCP call metadata: caller, transport, capability, optional target id, outcome/category, count and duration; never arguments, returned content or message text | database table `agent_calls` | `mcp.yaml: audit.retention_days` (default 90 days), pruned by the runner; older backups can retain deleted rows. See [MCP audit trail](mcp.md#audit-trail) |
 | Database backups | `data/backups/` | automatic: 14 daily and 8 weekly dumps; manual backups are never removed. A deleted record stays in older backups until those are removed. |
 | Job description exports for resume-kit | `data/exports/jd/` | until you delete them |
 | Logs | container logs (rotated), `data/logs/` (rotated), `~/Library/Logs/job-radar/` on macOS | rotated |

@@ -22,6 +22,7 @@ describe("mcp.yaml schema", () => {
       enabled: false,
       permissions: ["jobs:read", "tracking:read"],
       stdio: { permissions: ["jobs:read", "tracking:read"] },
+      audit: { retention_days: 90, connect_timeout_seconds: 2, statement_timeout_ms: 1500, lock_timeout_ms: 200 },
       limits: { max_results: 20, max_description_chars: 12_000 },
     });
   });
@@ -30,6 +31,9 @@ describe("mcp.yaml schema", () => {
     expect(parsed.permissions).toEqual(["writer:read"]);
     expect(parsed.stdio.permissions).toEqual(["jobs:read", "tracking:read"]);
     expect(parsed.limits).toEqual({ max_results: 5, max_description_chars: 12_000 });
+  });
+  it("defaults missing audit keys without a configuration migration", () => {
+    expect(mcpSchema.parse({ audit: { retention_days: 7 } }).audit).toEqual({ retention_days: 7, connect_timeout_seconds: 2, statement_timeout_ms: 1500, lock_timeout_ms: 200 });
   });
   it.each(["permissions", "stdio"])("reports an unknown permission at its array path in %s", (key) => {
     const result = mcpSchema.safeParse(key === "permissions" ? { permissions: ["unknown:read"] } : { stdio: { permissions: ["unknown:read"] } });
@@ -46,6 +50,16 @@ describe("mcp.yaml schema", () => {
     ["the removed tools key", { tools: { search_jobs: true } }],
     ["an unknown key (no transport / http / include)", { transport: "http" }],
     ["enabled not a boolean", { enabled: "yes" }],
+    ["zero retention", { audit: { retention_days: 0 } }],
+    ["excessive retention", { audit: { retention_days: 3651 } }],
+    ["fractional retention", { audit: { retention_days: 1.5 } }],
+    ["zero connect timeout", { audit: { connect_timeout_seconds: 0 } }],
+    ["excessive connect timeout", { audit: { connect_timeout_seconds: 31 } }],
+    ["zero statement timeout", { audit: { statement_timeout_ms: 0 } }],
+    ["excessive statement timeout", { audit: { statement_timeout_ms: 60_001 } }],
+    ["zero lock timeout", { audit: { lock_timeout_ms: 0 } }],
+    ["excessive lock timeout", { audit: { lock_timeout_ms: 60_001 } }],
+    ["unknown audit key", { audit: { content: true } }],
   ])("rejects %s", (_name, raw) => {
     expect(mcpSchema.safeParse(raw).success).toBe(false);
   });

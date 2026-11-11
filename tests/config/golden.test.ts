@@ -25,7 +25,7 @@ import { fixtureText, migratedDocument, overlayDocument, plainValue, shippedValu
  * change that added them; see `scripts/dev/gen-config-golden.ts`). A config registered later has its own reference
  * entry frozen when its schema is registered; the older entries retain their original hashes except when schema defaults
  * evolve. Career hashes include document and preview defaults; the writer reference includes the shared preview vocabulary
- * fields; the MCP reference includes the global matrix and stdio permission grant. The current loader must
+ * fields; the MCP reference includes the global matrix, stdio permission grant and audit defaults. The current loader must
  * give the same canonical hashes for the same inputs, and converting each full copy to an overlay must not change them either.
  */
 interface Golden {
