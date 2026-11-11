@@ -27,8 +27,8 @@ describe("budget prechecks", () => {
     });
   });
 
-  it("refuses a disabled total with total usage", () => {
-    expect(checkAgentBudget({ ...input, totalCap: 0 })).toMatchObject({ reason: "not_allowed", cap: 0, used: 1, remaining: 0 });
+  it("refuses a disabled total with total usage, counted in requests", () => {
+    expect(checkAgentBudget({ ...input, totalCap: 0, units: 50 })).toMatchObject({ reason: "not_allowed", cap: 0, used: 1, remaining: 0, requested: 1 });
   });
 
   it("refuses an oversized batch with the remaining job allowance", () => {

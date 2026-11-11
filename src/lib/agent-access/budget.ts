@@ -7,6 +7,10 @@ import { addDays, dayInZone, startOfDayInZone } from "@/lib/insights/range";
 import { liveMcpSettings } from "./authorize";
 import { callerKey, type AgentCaller } from "./caller";
 
+/**
+ * `cap`, `used`, `remaining` and `requested` share the unit of the cap that refused: a caller cap counts its action's units
+ * (jobs for `score_jobs`), the total counts requests, so a total refusal always asks for one request.
+ */
 export type BudgetRefusal = {
   reason: "not_allowed" | "caller_cap" | "total_cap";
   action: AgentAction;
@@ -49,7 +53,7 @@ export function checkAgentBudget(input: {
 }): BudgetRefusal | null {
   const units = budgetUnits(input.units);
   if (input.cap === 0) return refusal("not_allowed", input.action, input.cap, input.used, units, input.resetsAt);
-  if (input.totalCap === 0) return refusal("not_allowed", input.action, input.totalCap, input.totalUsed, units, input.resetsAt);
+  if (input.totalCap === 0) return refusal("not_allowed", input.action, input.totalCap, input.totalUsed, 1, input.resetsAt);
   if (units > input.cap) return refusal("caller_cap", input.action, input.cap, input.used, units, input.resetsAt);
   return null;
 }
@@ -84,7 +88,7 @@ export async function takeAgentBudget(db: Db, input: { caller: AgentCaller; acti
       const totalUsed = await takeBudgetUnits(tx, { ...totalRow, units: 1, cap: budgets.total });
       if (totalUsed === null) {
         const [total] = await readBudgetUsage(tx, { day, keys: [totalRow] });
-        throw new TotalBudgetRefused(refusal("total_cap", input.action, budgets.total, total.used, units, resetsAt));
+        throw new TotalBudgetRefused(refusal("total_cap", input.action, budgets.total, total.used, 1, resetsAt));
       }
       const id = await recordBudgetTicket(tx, { ...callerRow, units });
       return { ok: true, ticket: { id, caller: input.caller, action: input.action, day, units } };

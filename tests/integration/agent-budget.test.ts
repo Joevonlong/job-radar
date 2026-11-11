@@ -189,7 +189,9 @@ describe("agent daily budgets", () => {
   it("rolls back a newly inserted caller row when the total refuses", async () => {
     const deps = settings({ total: 1 });
     ticket(await takeAgentBudget(db(), { caller: "stdio", action: "translate_job" }, deps));
-    expect(await takeAgentBudget(db(), { caller: 7, action: "score_jobs", units: 50 }, deps)).toMatchObject({ ok: false, refusal: { reason: "total_cap" } });
+    expect(await takeAgentBudget(db(), { caller: 7, action: "score_jobs", units: 50 }, deps)).toEqual({
+      ok: false, refusal: { reason: "total_cap", action: "score_jobs", cap: 1, used: 1, remaining: 0, requested: 1, resetsAt },
+    });
     expect(await db().select().from(schema.agentBudgetUsage).where(eq(schema.agentBudgetUsage.caller, "token:7"))).toHaveLength(0);
   });
 
