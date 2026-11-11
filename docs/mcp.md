@@ -21,12 +21,12 @@ that provider's terms. Turning the server on adds this exit to the ones listed i
 
 | Given (when you ask) | Never given (no setting turns them on) |
 |---|---|
-| Job facts: title, company, locations, work mode, contract, agency flag, required German level, status, dates, skills | Your profile files (`me`, `preferences`, `interests`) and their saved snapshots |
-| Source links (posting and apply links) | Private profile values as fields: salary floor, your language level, the labels of your deal-breakers |
-| The stated salary | AI provider/model/usage, signal bonus |
+| Job facts: title, company, locations, work mode, contract, agency flag, required German level, status, dates, skills | Profile snapshots and import drafts |
+| Source links (posting and apply links) | Career files, documents and contact details |
+| The stated salary | AI provider/model/usage |
 | Score and rank numbers | Local paths (tailored résumé files) |
 | Compensation and benefit signals with their JD quote and position | Emails and email replies |
-| The JD after AI-trap cleaning (see below) | `.env` and `.auth/` values, keys, AI usage, notifications, run records, config file contents |
+| The JD after AI-trap cleaning (see below) | `.env` and `.auth/` values, keys, AI usage, notifications, run records, raw configuration files |
 | Your applications: status, when it last changed, days in that status, next step and its date, interview rounds, the status history | |
 
 The career profile itself (its files, documents, contact details and drafts) is never given; no MCP tool reads it.
@@ -45,10 +45,23 @@ by itself.
 
 **Granting `writer:read`, which gives `get_application_context`, adds your own writing material to what leaves:** the job's breakdown points, its
 application questions and settings, the saved answer versions with their sentence statuses and evidence quotes, and for each
-question what you chose for it: your profile summary, skills and languages, the chosen stories, the emphasis note. Stories that **Apply to matching** wrote from the [career profile](career-profile.md) count like any other story: sent only when chosen. Stories you did
-not choose, the rest of your profile files, coach reviews and saved snapshots stay out. It also gives the company background (AI web search,
+question what you chose for it: your profile summary, skills and languages, the chosen stories, the emphasis note. Stories that **Apply to matching** wrote from the [career profile](career-profile.md) count like any other story: sent only when chosen. With writer:read alone, stories you did
+not choose and the rest of your profile files stay out. Coach reviews and saved snapshots always stay out. It also gives the company background (AI web search,
 unverified) and the fit note, with a notice that they are quoted data; the note keeps short quotes of the stories chosen when it was
 made, even if they are no longer chosen.
+
+## Profile and interests (off by default)
+
+Add `profile:read` to both permission lists to offer four read-only tools. `writer:read` alone and `career:read` alone do not grant them; `profile:read` does not grant writer or career tools.
+
+- `get_profile`: `parts` selects `me`, `preferences` and/or `stories` (all three when omitted). Each selected section returns `{ baseHash, data }` in the web form's draft format, using the same hash function as `/me`. This includes your summary, skills, language levels, visa sponsorship need, market, places, salary floor, exclusions, deal-breaker rules and saved experience stories. Numeric form values are strings; empty strings mean unset where the form allows it.
+- `get_interests`: active and retired signal-category vocabulary and bonus cap, saved views and their filters, watched company names, and pending suggestions. `limit` applies only to suggestions, bounded by `limits.max_results`; `total`, `returned` and `truncated` describe that list. Unreadable stored suggestion payloads are `null`.
+- `preview_deal_breakers`: pass `rules` in the `/me` draft format. The same web preview returns total jobs, partial status, rule counts, statuses, samples and elapsed milliseconds. Timing can vary between calls. `pipeline.yaml: filter.deal_breakers.preview_samples` controls samples per rule (default 3).
+- `preview_interest_category`: pass a complete vocabulary `draft` and `categoryId`. The `/interests` preview returns scanned/hit counts, samples, truncation and a review workload estimate, or validation/unavailable status. No AI runs.
+
+Profile and interest settings are your own text and are returned as written. Suggestion reasons/values and quoted job evidence, plus preview job titles, company names and quotes, use the existing third-party text cleaner and notice. Counts and matches remain the web preview's results; unsafe text can be replaced by the trap marker.
+
+These tools never read `contact.yaml` or career files, and omit profile snapshots, story-import drafts, suggestion history, collection metadata and provider/model settings. They do not save files or change business tables. The normal metadata-only audit row is still recorded: profile calls count returned sections, interest calls count categories (including retired), views, companies and suggestions, deal-breaker previews count rules, and category previews count returned samples. All four have a null audit target.
 
 ## Turning it on
 
@@ -121,6 +134,10 @@ Other MCP clients work the same way: a stdio server, command `pnpm`, arguments `
 | `search_jobs` | Ranked job cards, filtered like the jobs list: `query` (title, company name/aliases, city/location and country), `search_in` (`summary` by default; `all` adds the original JD and current translations), `country` (1–20 two-letter exact codes, case-insensitive, OR), `city`, `workplace`, `min_rank`, `min_annual_salary` (in the market's base currency), `since` / `until` (first seen, `YYYY-MM-DD`), `application_status`, `sort` (`relevance`, `rank`, `posted`, `first_seen`; default `relevance` with a query, `rank` without one), `scope` (`current` by default, `archive`, `all`), `unseen_only` and `favorites_only` (both need `tracking:read`; without it a call that sets either to `true` is refused as `invalid_input`), `visa` (`offered`, `not_denied`), `ghost` (`only`, `hide`), `limit`. Hard-filtered jobs stay hidden in every scope; current scope also hides closed and dormant jobs. Visa and ghost filters apply only when their web filters are available. No JD text. |
 | `get_job` | One job (`job_id`) in detail: everything above plus seniority, language, the signals with their quotes, the number of AI traps found, your application, and the cleaned JD. |
 | `list_applications` | Your applications, best rank first; `status` filters; `stale_only: true` lists only the ones waiting longer than the daily reminder's thresholds (`notify.yaml: reminders.interested_days` / `applied_days`), the longest waiting first. |
+| `get_profile` | **Off by default; `profile:read`.** Selected profile sections and their web form `baseHash`. |
+| `get_interests` | **Off by default; `profile:read`.** Vocabulary, saved views, watched companies and pending suggestions. |
+| `preview_deal_breakers` | **Off by default; `profile:read`.** Read-only trial of draft rules against stored jobs. |
+| `preview_interest_category` | **Off by default; `profile:read`.** Read-only trial of one draft signal category. |
 | `get_application_context` | **Off by default.** Everything to write one job's answers (`job_id`): job facts, the cleaned JD, breakdown points, the company background and fit note, the questions, the material chosen for each and the saved versions (newest first, at most `max_results` per question). |
 | `save_application_answer` | **Off by default.** Adds one answer version (`job_id`, `question_id`, `text`, optional `sentences`). |
 
@@ -144,7 +161,7 @@ Each search card keeps its existing facts. Effective `tracking:read` automatical
 
 Translations, breakdowns, company research, salary lookup content and the `match` block's AI summaries, fit reasons and gaps are withheld with the JD's failure reason whenever the JD cannot pass its safety check (the `match` block then has `available: false`; its numbers, filter result and checks remain). Empty research or lookup storage remains null. JD quotes use the same trap markers as the JD; a breakdown item, fit reason or gap whose quote becomes a marker uses that marker for its own text/name too. All text, including summaries, reasons and notes, goes through the text cleaner. Unsafe instruction-bearing source URLs become null. A derived-content notice follows the third-party notice when derived content is present; withholding adds one notice, regardless of how many blocks were withheld.
 
-No permission releases resume paths, closure notes, emails, secrets, profile files/snapshots or private profile values as fields (salary floor, your language level, deal-breaker labels), AI provider/model/usage or run records. The free text of `match:read` and `notes:read` is described under the table at the top of this page. The writer's explicitly selected material remains the separate exception described above.
+No permission releases resume paths, closure notes, emails, secrets, profile snapshots, import drafts, AI provider/model/usage or run records. Full matching-profile values require `profile:read`. The free text of `match:read` and `notes:read` is described under the table at the top of this page. The writer's explicitly selected material remains the separate exception described above.
 
 `get_job` still returns dormant jobs: `status` stays `possibly_closed`, and `closed_reason` is `dormant`.
 

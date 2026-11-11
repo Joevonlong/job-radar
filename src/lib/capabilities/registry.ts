@@ -4,6 +4,10 @@ import type { Permission } from "@/lib/agent-access/permissions";
 import type { McpConfig } from "@/lib/config/schemas/mcp";
 import type { McpContext } from "@/lib/mcp/context";
 
+import { get_profile } from "./profile/get-profile";
+import { get_interests } from "./profile/get-interests";
+import { preview_deal_breakers } from "./profile/preview-deal-breakers";
+import { preview_interest_category } from "./profile/preview-interest-category";
 import { get_job } from "./jobs/get-job";
 import { search_jobs } from "./jobs/search-jobs";
 import { list_applications } from "./tracking/list-applications";
@@ -15,6 +19,10 @@ export const CAPABILITIES: readonly Capability[] = [
   search_jobs,
   get_job,
   list_applications,
+  get_profile,
+  get_interests,
+  preview_deal_breakers,
+  preview_interest_category,
   get_application_context,
   save_application_answer,
 ];

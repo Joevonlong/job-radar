@@ -37,7 +37,12 @@ export function vocabularyHash(config: InterestsConfig): string {
     .slice(0, 16);
 }
 
-export async function loadInterestsPage(): Promise<InterestsPageData> {
+/** Settings-only reads omit database counts, trends, presets and collection metadata. */
+export type PersonalInterestsData = Pick<InterestsPageData, "vocabulary" | "views" | "loadError"> & { watched: Array<Pick<WatchedCompanyView, "name">> };
+
+export function loadInterestsPage(options: { personalOnly: true }): Promise<PersonalInterestsData>;
+export function loadInterestsPage(): Promise<InterestsPageData>;
+export async function loadInterestsPage(options?: { personalOnly: true }): Promise<InterestsPageData | PersonalInterestsData> {
   let config: InterestsConfig;
   try {
     config = reloadConfig("interests");
@@ -45,6 +50,12 @@ export async function loadInterestsPage(): Promise<InterestsPageData> {
     if (error instanceof ConfigError) return { vocabulary: null, signalCounts: null, views: [], watched: [], trends: {}, loadError: error.message, presets: [], aiReviewWithoutCandidates: true };
     throw error;
   }
+  if (options?.personalOnly) return {
+    vocabulary: { draft: configToDraft(config), hash: vocabularyHash(config) },
+    views: config.views,
+    watched: config.watched_companies.map((name) => ({ name })),
+    loadError: null,
+  };
   const trends = await loadTrends(config.views);
   return {
     vocabulary: { draft: configToDraft(config), hash: vocabularyHash(config) },
