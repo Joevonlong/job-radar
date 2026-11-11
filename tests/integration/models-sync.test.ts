@@ -62,6 +62,13 @@ describe("web side", () => {
     await getDb().update(schema.controlRequests).set({ status: "done", finishedAt: sql`now()` }).where(sql`id = ${first.request}`);
     expect(await requestModelsSync({ provider: "openrouter" })).toMatchObject({ status: "error", error: "tooSoon" });
   });
+
+  it("does not store a caller marker sent by the browser", async () => {
+    const queued = await requestModelsSync({ provider: "openrouter", caller: 7 });
+    if (queued.status !== "queued") throw new Error("not queued");
+    const [row] = await getDb().select().from(schema.controlRequests).where(sql`id = ${queued.request}`);
+    expect(row?.payload).toEqual({ provider: "openrouter" });
+  });
 });
 
 describe("who claims it", () => {

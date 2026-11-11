@@ -5,6 +5,7 @@ import type { SearchPlan } from "@/lib/jobs/search-query";
 import type { Db } from "@/lib/db/client";
 import type { WriterInputs } from "@/lib/writer/settings";
 import type { AuditEntry, AuditOutcome, AuditRecorder, AuditTarget } from "@/lib/agent-access/audit";
+import type { Grant, GrantReader } from "@/lib/agent-access/authorize";
 
 import { formatCallLine, type LogLine } from "./call-log";
 import { errorResult } from "./guard";
@@ -52,7 +53,11 @@ export interface McpContext {
   permissions?: ReadonlySet<Permission>;
   ops?: { doctor: () => Promise<import("@/lib/ops/doctor/types").DoctorReport> };
   audit?: AuditRecorder;
-  caller?: { caller: "stdio"; tokenId: number | null; transport: "stdio" };
+  caller?: { caller: "stdio" | "token"; tokenId: number | null; transport: "stdio" | "http" };
+  /** The permissions this connection was granted; absent = the local stdio process. */
+  grant?: Grant;
+  /** Re-reads a token grant before each call; a token grant without it is refused. */
+  readGrant?: GrantReader;
   auditCall?: { success: (count: number) => AuditEntry; committed: boolean };
 }
 

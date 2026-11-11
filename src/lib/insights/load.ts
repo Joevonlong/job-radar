@@ -5,7 +5,7 @@ import { placeDictionary } from "@/lib/market/geo";
 import { reloadConfig } from "@/lib/config";
 import { cityMembers } from "@/lib/jobs/city-groups";
 import { loadCityGroups } from "@/lib/jobs/cities";
-import { getDb, getDbNow, getInsightsData } from "@/lib/db";
+import { getDb, getDbNow, getInsightsData, type Db } from "@/lib/db";
 import { buildCatalog, toCategoryViews } from "@/lib/signals/catalog";
 import { highValuePolicy } from "@/lib/signals/bonus";
 import { loadBaseCurrency, loadSalaryFloor } from "@/lib/signals/floor";
@@ -35,12 +35,11 @@ function preferredLocations(): readonly string[] {
 }
 
 /** `requestedRange`: the `range` of the URL (days), `at` the instant "today" is taken from (default: the database clock); `locale` names the signal categories. */
-export async function loadInsightsView(requestedRange: number | null, at?: Date, locale = "en"): Promise<InsightsView> {
+export async function loadInsightsView(requestedRange: number | null, at?: Date, locale = "en", db: Db = getDb()): Promise<InsightsView> {
   // the web process has no config watcher and this file is meant to be edited while the page is open
   const config = reloadConfig("insights");
   const timezone = reloadConfig("schedule").timezone;
   const pushLine = reloadConfig("notify").push_min_score;
-  const db = getDb();
   // The categories of the signal card and the high-value rule come from interests.yaml
   const interests = reloadConfig("interests");
   const catalog = buildCatalog(interests);

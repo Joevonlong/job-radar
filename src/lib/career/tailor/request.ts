@@ -5,6 +5,7 @@ import { withConfigWriteLock } from "@/lib/config/write-lock";
 import { safeErrorCode } from "@/lib/activity/error-codes";
 import { expireScrubbedRequests } from "@/lib/control/expire";
 import { loadQueueView } from "@/lib/control/queue-view";
+import { withoutCaller } from "@/lib/agent-access/caller";
 import { careerTailorPayloadSchema } from "@/lib/control/types";
 import type { Db } from "@/lib/db/client";
 import { setApplicationStatus } from "@/lib/db/repos/applications";
@@ -19,8 +20,9 @@ import { z } from "zod";
 
 /** A newly queued tailoring run for a job moves its application to preparing; a status write failure never fails the request. */
 export async function requestCareerTailor(db: Db, raw: unknown) {
-  const result = await queueCareerTailor(db, raw);
-  const payload = careerTailorPayloadSchema.safeParse(raw).data;
+  const input = withoutCaller(raw);
+  const result = await queueCareerTailor(db, input);
+  const payload = careerTailorPayloadSchema.safeParse(input).data;
   if (result.state === "queued" && !result.existing && payload?.mode === "tailor" && payload.jobId !== null) {
     await setApplicationStatus(db, payload.jobId, "preparing", "career", { allowFrom: RESUME_ALLOW_FROM })
       .catch((error: unknown) => logActionFailure("careerTailorStatus", error));
@@ -38,7 +40,8 @@ async function queueCareerTailor(db: Db, raw: unknown) {
   return withFileLock(careerDocumentPath(payload.doc_id), () => withConfigWriteLock(async () => {
     const latest = await findLatestCareerTailorRequest(db, payload.doc_id);
     if (latest && ["pending", "running"].includes(latest.status)) {
-      const same = JSON.stringify(careerTailorPayloadSchema.safeParse(latest.payload).data) === JSON.stringify(payload);
+      const previous = careerTailorPayloadSchema.safeParse(latest.payload).data;
+      const same = previous && JSON.stringify({ ...previous, caller: undefined }) === JSON.stringify({ ...payload, caller: undefined });
       return same ? { state: "queued" as const, requestId: latest.id, existing: true } : { state: "error" as const, error: "busy" as const };
     }
     const { outbound } = await loadTailorContext(db, payload, settings);

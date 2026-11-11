@@ -1,3 +1,4 @@
+import { loadTodayData } from "@/lib/dashboard/today-data";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getFormatter, getLocale, getTranslations } from "next-intl/server";
@@ -27,21 +28,16 @@ import { countTodayScope } from "@/lib/dashboard/today-scope";
 import { loadListViz } from "@/lib/dashboard/list-viz";
 import { germanLevelsToHide } from "@/lib/dashboard/german";
 import { nextScheduledCycle } from "@/lib/dashboard/next-cycle";
-import { loadCityGroups } from "@/lib/jobs/cities";
-import { needsCityGroups, resolveViewCompanyIds, toJobFilters } from "@/lib/jobs/job-filters";
-import { loadHighValuePolicy, loadSignalCatalog } from "@/lib/signals/floor";
+import { loadSignalCatalog } from "@/lib/signals/floor";
 import { withLegacyKeys } from "@/lib/jobs/search-params";
-import { countTodayRelisted, countTodayJobs, countTodayQuickViews, countUnscoredJobs, getDb, getDbNow, getFilterFloors, getLatestCycleSummary, getOpenAiRun, getVisitState, hasHighValueCategories, listCycleNewJobs, listMonthSalaryFigures, listRecentCycleKpis, listTodayCycleSummaries, listTodayJobs, type QuickView } from "@/lib/db";
+import { countTodayRelisted, countUnscoredJobs, getDb, getDbNow, getFilterFloors, getOpenAiRun, getVisitState, listCycleNewJobs, listMonthSalaryFigures, listRecentCycleKpis, listTodayCycleSummaries, type QuickView } from "@/lib/db";
 import { processingFailed } from "@/lib/cycle/step-health";
-import { resolveTodayView, TODAY_ALL_VIEW, todayHref } from "@/lib/interests/view-filters";
-import { loadSavedViews } from "@/lib/interests/views";
+import { todayHref } from "@/lib/interests/view-filters";
 import { salaryFilteredIds } from "@/lib/jobs/filter-floors";
 import { effectiveSeenUpTo } from "@/lib/jobs/visit";
 import { readProfileReadiness } from "@/lib/scoring/profile";
 import { VisibilityScope } from "@/components/applications/visibility-scope";
 import { localLanguageName } from "@/lib/market/view";
-import { ghostFilterAvailable } from "@/lib/ghost/filter";
-import { visaFilterAvailable } from "@/lib/visa/filter";
 
 // `null` = not in the URL: an explicit value (also `false`) wins over the active saved view.
 const loadTodayParams = createLoader({
@@ -74,63 +70,22 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
     getLocale(),
   ]);
 
-  const views = loadSavedViews();
-  const { active, filters } = resolveTodayView(views, params.view, { filtered: params.filtered, hideLang: params.hideLang, high: params.high });
-  const filtered = filters.filtered === true;
-  // The local language of the market ("德语", "German"); null = no language step, nothing to hide
-  const languageName = localLanguageName(await getLocale());
-  const hideLang = languageName !== null && filters.hideLang === true;
-  // The high-value categories; without any the toggle is hidden and filters nothing
-  const highValue = loadHighValuePolicy();
-  const catalog = loadSignalCatalog();
-  const highValueNames = catalog ? catalog.highValueIds.map((id) => catalog.labelOf(id, locale)) : [];
-  const canFilterHigh = hasHighValueCategories(highValue);
-  const high = canFilterHigh && filters.high === true;
-  // With a default view, a bare `/` means that view: "all" has to say so.
-  const allView = views.some((view) => view.default) ? TODAY_ALL_VIEW : null;
-  const viewParam = active ? active.id : allView;
-  const hrefWith = (toggles: { filtered: boolean; hideLang: boolean; high: boolean }) => todayHref({ view: viewParam, toggles, ...(active ? { viewFilters: active.filters } : {}) });
-  const quick: Exclude<QuickView, "all"> | null = params.quick === "high" || params.quick === "salary" || params.quick === "following" ? params.quick : null;
   const schedule = getSchedule();
   const now = new Date();
   const db = getDb();
-  // the city groups are only needed when the shown view or one of the tab counts filters by city
-  const cityGroups = [filters, ...views.map((view) => view.filters)].some(needsCityGroups) ? await loadCityGroups(db) : null;
-  // the companies the shown view and each tab pick (one read of the companies table, only when one of them picks companies)
-  const [shownCompanyIds, ...viewCompanyIds] = await resolveViewCompanyIds(db, [filters, ...views.map((view) => view.filters)]);
-  // a saved view's visa filter applies only while the filter shows (me.yaml / ui.yaml) and its table exists
-  const visa = await visaFilterAvailable(db);
-  // and its ghost filter (and the list's marks) only while ui.yaml turns the ghost job check on and its table exists
-  const ghost = await ghostFilterAvailable(db);
-  const notify = loadConfig("notify");
-  // the same bar as the Telegram summary's "qualified"
-  const qualifiedMinRank = notify.push_min_score;
-  const qualifiedMinRankWithSignals = notify.push_min_score_high_value;
+  const languageName = localLanguageName(locale);
+  const { views, active, filtered, hideLang, highValue, canFilterHigh, high, allView, viewParam, quick, visa, ghost, qualifiedMinRank, qualifiedMinRankWithSignals, summary, cards, quickCounts, viewCounts } = await loadTodayData(db, params, { now, timezone: schedule.timezone, languageEnabled: languageName !== null });
+  const catalog = loadSignalCatalog();
+  const highValueNames = catalog ? catalog.highValueIds.map((id) => catalog.labelOf(id, locale)) : [];
+  const hrefWith = (toggles: { filtered: boolean; hideLang: boolean; high: boolean }) => todayHref({ view: viewParam, toggles, ...(active ? { viewFilters: active.filters } : {}) });
   const ui = loadConfig("ui");
   const relistBadgeDays = loadConfig("jobArchive").relist.badge_days;
-  // the list needs the latest cycle: its new jobs are listed with today's
-  const summary = await getLatestCycleSummary(db, { qualifiedMinRank, qualifiedMinRankWithSignals, highValue });
-  const [aiRun, dbNow, todayCycles, cycleKpis, salaryFigures, cards, visit, relistedCount] = await Promise.all([
+  const [aiRun, dbNow, todayCycles, cycleKpis, salaryFigures, visit, relistedCount] = await Promise.all([
     getOpenAiRun(db),
     getDbNow(db),
     listTodayCycleSummaries(db, { now, timezone: schedule.timezone, qualifiedMinRank, qualifiedMinRankWithSignals, highValue }),
     listRecentCycleKpis(db, { limit: ui.trend_cycles, qualifiedMinRank, qualifiedMinRankWithSignals, highValue }),
     listMonthSalaryFigures(db, { now, timeZone: schedule.timezone, currency: highValue.baseCurrency ?? "" }),
-    listTodayJobs(db, {
-      now,
-      timezone: schedule.timezone,
-      cycle: summary,
-      includeFiltered: filtered,
-      // a saved view and a quick view do not combine: the view's own filters win
-      quick: active ? null : quick,
-      quickLines: { qualifiedMinRank, qualifiedMinRankWithSignals },
-      hideGermanLevels: hideLang ? germanLevelsToHide() : [],
-      highValueOnly: high,
-      highValue,
-      extra: toJobFilters(filters, { cityGroups, visa, ghost, companyIds: shownCompanyIds }),
-      visa,
-      ghost,
-    }),
     getVisitState(db),
     countTodayRelisted(db, {
       now,
@@ -162,20 +117,6 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const next = nextScheduledCycle(schedule, now);
   const processingBroken = summary !== null && processingFailed(summary.steps) && summary.unprocessed > 0;
 
-  // the view switch: the built-in quick views and the saved views, each with the number of jobs it holds (the toggles are reset by a tab, so they are not counted)
-  const countBase = { now, timezone: schedule.timezone, cycle: summary, highValue };
-  const quickCounts = await countTodayQuickViews(db, { ...countBase, quickLines: { qualifiedMinRank, qualifiedMinRankWithSignals } });
-    const viewCounts = await Promise.all(
-    views.map((view, index) =>
-      countTodayJobs(db, {
-        ...countBase,
-        includeFiltered: view.filters.filtered === true,
-        hideGermanLevels: view.filters.hideLang === true ? germanLevelsToHide() : [],
-        highValueOnly: view.filters.high === true,
-        extra: toJobFilters(view.filters, { cityGroups, visa, ghost, companyIds: viewCompanyIds[index] }),
-      }),
-    ),
-  );
   const noToggles = { filtered: false, hideLang: false, high: false };
   const quickTab = (key: QuickView): ViewTab => ({
     key: key === "all" ? "all" : `quick-${key}`,

@@ -67,9 +67,9 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     getLocale(),
     getTranslations("dashboard.jobs.filters"),
   ]);
-  const highValue = loadHighValuePolicy();
+  const highValue = params.high === true ? loadHighValuePolicy() : null;
   const catalog = loadSignalCatalog();
-  const highValueNames = catalog && hasHighValueCategories(highValue) ? catalog.highValueIds.map((id) => catalog.labelOf(id, locale)) : [];
+  const highValueNames = catalog && (highValue === null || hasHighValueCategories(highValue)) ? catalog.highValueIds.map((id) => catalog.labelOf(id, locale)) : [];
 
   const hidden = readHiddenSettings();
   const { timezone } = getSchedule();
