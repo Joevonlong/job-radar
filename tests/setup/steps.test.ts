@@ -136,11 +136,12 @@ describe("market: places", () => {
     expect(reloadConfig("preferences").places).toEqual([{ place: "Worldwide", relocate: false }, { place: "Utrecht", relocate: true }]);
   });
 
-  it("keeps search.yaml's remote_scope: none when only the time zone changes", async () => {
+  it("keeps a workplace without remote when only the time zone changes", async () => {
     expect(await saveMarketStep(MARKET)).toEqual({ status: "saved", step: "market" });
-    await mutateConfig("search", (current) => ({ ...current, remote_scope: "none" }));
+    setOnProfileSaved(async () => ({}));
+    await mutateConfig("preferences", (current) => ({ ...current, workplace: ["onsite", "hybrid"] }));
     expect(await saveMarketStep({ ...MARKET, timezone: "Europe/Berlin" })).toEqual({ status: "saved", step: "market" });
-    expect(reloadConfig("search").remote_scope).toBe("none");
+    expect(reloadConfig("preferences").workplace).toEqual(["onsite", "hybrid"]);
     expect(reloadConfig("schedule").timezone).toBe("Europe/Berlin");
   });
 

@@ -498,6 +498,16 @@ filter:
     outside_state_codes: []
     # The body states the job can be hired in the home country / region (the market pack provides the home country's phrases): remote jobs with an out-of-scope location are kept and tagged too (words like "remote / hire / based / work" must be close to the region, to avoid false matches like "customers across Europe")
     description_in_scope_patterns: []
+    # Check 2: where a remote job may be done from, in the posting's own words (the market pack provides the phrases; lists here add to them, see docs/market-packs.md). Sure and not your home country or a place you'd move to: hidden. Not sure: kept with a note
+    work_area:
+      patterns: []        # each with a (?<place>...) capture
+      title_patterns: []  # the same, read in the title only
+      anywhere: []        # anywhere in the world
+      negation: []        # a sentence with one of these is not sure
+      continuations: []   # a next sentence with one of these widens or softens the statement before it, so it is not sure
+      connectors: []      # what separates the places of a list
+      endings: []         # what may follow the place
+      articles: []        # words left off the front of a place
   # seniority in preferences.yaml (when not all) -> matching job levels; jobs with no stated level (unknown) are kept
   seniority_map:
     entry: [intern, junior]

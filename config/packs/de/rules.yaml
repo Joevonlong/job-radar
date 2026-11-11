@@ -109,6 +109,34 @@ filter:
       - \b(?:deutschlandweit|bundesweit)\b[^.\n]{0,30}\b(?:remote|home ?office|mobil)
       - \bremote\b[^.\n]{0,15}\b(?:aus|in|innerhalb)\s+(?:deutschland|der eu|europa)\b
 
+    # Prüfung 2: wo die Stelle ausgeübt werden darf (check 2, German phrases). Each phrase captures the place.
+    work_area:
+      patterns:
+        - ^\W*(?:(?:nur\s+mit|dein|ihr|der)\s+)?(?:(?:haupt)?wohnsitz|lebensmittelpunkt)\s+(?:muss\s+|liegt\s+|sollte\s+)?(?:in|innerhalb)\s+(?<place>[^:()|]{2,120})
+        - ^\W*(?:du|sie|bewerber\w*|kandidat\w*|mitarbeiter\w*)\s+(?:musst|müssen)\s+(?:in|innerhalb)\s+(?<place>[^:()|]{2,120})
+        - ^\W*(?:mobiles\s+arbeiten|home-?\s?office|von\s+zu\s+hause|remote\s+arbeiten)\s+(?:aus|in|innerhalb)\s+(?<place>[^:()|]{2,120})
+        - ^\W*(?:remote|homeoffice|home office|mobiles arbeiten)\W+(?<place>deutschland)weit\W*$
+        - ^\W*(?<place>deutschland)weit\W+(?:im\s+)?(?:remote|homeoffice|home office|mobil)
+        - ^\W*nur\s+(?:für\s+)?(?:bewerber(?:innen)?|bewerbungen|kandidat\w*)\s+(?:aus|in|innerhalb)\s+(?<place>[^:()|]{2,120})
+        - ^\W*(?:remote|homeoffice|home office|mobiles arbeiten)\W+nur\s+(?:aus|in|innerhalb)\s+(?<place>[^:()|]{2,120})
+        - ^\W*(?:gültige\s+)?arbeits(?:erlaubnis|berechtigung)\s+(?:für|in)\s+(?<place>[^:()|]{2,120})
+        - ^\W*(?:du\s+)?(?:arbeit\w*|remote)\s+von\s+überall\s+in\s+(?<place>[^:()|]{2,120})
+      title_patterns:
+        - '[-–—|(]\s*nur\s+(?:in\s+|aus\s+)?(?<place>[^:()|]{2,120})'
+        - (?:^|[-–—|(:]\s*)remote\s+(?:aus|innerhalb)\s+(?<place>[^:()|]{2,120})
+      anywhere:
+        - \b(?:arbeit\w*|remote)\s+von\s+überall(?!\s+in\s)
+        - \bweltweit\W+(?:im\s+)?(?:remote|home\s?office|mobil)
+        - (?:remote|homeoffice|home office|mobiles arbeiten)\W+weltweit\b
+      continuations:
+        - \b(?:anderen?|weitere|ausnahmen?|flexibel|auch|ebenso|bevorzugt)\b
+      connectors:
+        - \s+oder\s+
+      endings:
+        - leben
+      articles:
+        - der
+
 # Stellenseite, die keine Bewerbungen mehr annimmt (German phrases for the recheck of starred / followed jobs; regex, case-insensitive)
 closed_posting:
   phrases:

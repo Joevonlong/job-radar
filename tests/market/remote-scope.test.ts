@@ -57,7 +57,9 @@ describe("the hard filter under each form", () => {
   it("a list with the home country and another (DE, CH) keeps the home region's wide labels", async () => {
     const { evaluateJob } = await import("@/lib/filter");
     const homeAndSwiss = filterWith(prefs((raw) => void (raw.places = [{ place: "DE", relocate: false }, { place: "CH", relocate: false }])));
-    expect(evaluateJob(job({ workplace: "remote", locations: [loc("Remote - EU", null, null)] }), homeAndSwiss)).toMatchObject({ result: "passed", reasons: [] });
+    const verdict = evaluateJob(job({ workplace: "remote", locations: [loc("Remote - EU", null, null)] }), homeAndSwiss);
+    expect(verdict.result).toBe("passed");
+    expect(verdict.reasons.filter((reason) => reason !== "remote_area_unknown")).toEqual([]);
   });
 
   it("a list with the home country and another (DE, CH) does not hide a title naming the home region next to another", async () => {

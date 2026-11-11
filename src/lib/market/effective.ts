@@ -9,7 +9,7 @@ import type { PipelineConfig, PipelineFileConfig } from "@/lib/config/schemas/pi
 
 import { GENERIC_PACK_ID, loadPack, type Pack } from "./load";
 import { loadMarket } from "./resolve";
-import type { GhostPack, VisaPack, VisaPatternEntry } from "./schema";
+import type { GhostPack, VisaPack, VisaPatternEntry, WorkAreaPhrases } from "./schema";
 import type { Market } from "./types";
 
 const union = (...lists: ReadonlyArray<readonly string[]>): string[] => [...new Set(lists.flat())];
@@ -193,6 +193,7 @@ export function buildEffectivePipeline(file: PipelineFileConfig, market: Market,
         outside_patterns: listOf(remote.outside_patterns, (r) => r.filter.remote.outside_patterns),
         title_outside_patterns: listOf(remote.title_outside_patterns, (r) => r.filter.remote.title_outside_patterns),
         description_in_scope_patterns: listOf(remote.description_in_scope_patterns, (r) => r.filter.remote.description_in_scope_patterns),
+        work_area: Object.fromEntries(Object.entries(remote.work_area).map(([key, list]) => [key, listOf(list, (r) => r.filter.remote.work_area[key as keyof WorkAreaPhrases])])) as WorkAreaPhrases,
       },
     },
     market: withUserGeography(market, file),
