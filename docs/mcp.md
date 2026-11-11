@@ -62,16 +62,20 @@ The server reads `mcp.yaml` again on every call. Disabling it, removing a permis
 refuses the next call of a client that is already connected, without a restart; granting access needs a client restart.
 
 `search_jobs` and `get_job` share `jobs:read`; `list_applications` needs `tracking:read`. Other ids from the permission catalog
-are accepted; `match:read` adds match blocks to cards and details, and `notes:read` adds a block to `get_job` as described below. Version-2 tool switches migrate to both permission lists; if only one jobs tool
-was off, `jobs:read` offers both and `config:migrate` prints a notice. Remove `jobs:read` to disable both. A permission
+are accepted; `match:read` adds match blocks to cards and details, and `notes:read` adds a block to `get_job` as described below.
+Version-2 tool switches migrate to both permission lists; if only one jobs tool was off, `jobs:read` offers both and
+`config:migrate` prints a notice. Remove `jobs:read` to disable both. A permission
 you write into `mcp.yaml` also covers tools that later versions add under it, so grant only what should be readable or
 writable.
 
-`budgets` reserves daily limits for future agent action tools; existing tools do not use these counters yet.
+`budgets` sets daily limits for agent actions.
 `per_caller` counts the local stdio connection and each token separately. It caps collection requests, job translations,
 breakdowns, salary lookups, company lookups, answer drafts and resume tailoring; `score_jobs` counts each job in a batch.
-Salary and company lookups also include automatic research started by an agent's write. An action cap of `0` forbids that
-action. `total` counts requests, not jobs, across all callers and actions: a `score_jobs` batch of 40 jobs uses 40 of the
+An agent write that queues automatic research uses one `research_company` unit per company lookup and one `research_salary`
+unit per salary lookup, only for work it newly queues. Reservations for each write are all-or-nothing: any refused bucket
+skips all research for that write (`research: "budget_skipped"`). Units for work not newly queued are returned; breakdowns
+started this way are not counted. An action cap of `0` forbids that action.
+`total` counts requests, not jobs, across all callers and actions: a `score_jobs` batch of 40 jobs uses 40 of the
 caller's `score_jobs` cap but only 1 of `total`. `0` forbids all agent actions.
 The day and next reset follow `schedule.yaml`'s time zone, including daylight saving changes. The runner prunes counter rows older
 than the current local day minus `audit.retention_days` once an hour. These settings have defaults and keep `config_version: 3`.
@@ -239,11 +243,13 @@ status. If the original write created the application, undo restores status `new
 There is no delete tool. The undo response names the restored field and audit ids, plus research outcome and notices; it
 never returns previous private text, even with read permissions. Owner activity-page undo controls are not included here.
 
-A qualifying status change, including restoration, may start automatic research under `research.yaml`. For an agent, the
-server first calls the shared daily budget gate for `research_company`. A refusal or unavailable budget leaves the tracking
-write successful, skips research, and returns `research: "budget_skipped"` with a notice. Owner/web clicks never spend agent
-budget. If a ticket was taken but nothing new was queued (including cached or merged work), it is returned. Existing research
-limits still apply. Agent budget reservations and queued work commit with the write and its audit; failures roll them back.
+A qualifying status change, including restoration, may start automatic research under `research.yaml`. An agent write uses
+one `research_company` unit per company lookup and one `research_salary` unit per salary lookup, only for work it newly queues.
+Before queuing, it reserves those units through the shared daily budget gate. Reservations for each write are all-or-nothing:
+any refused bucket or unavailable budget leaves the tracking write successful, skips all research for that write, and returns
+`research: "budget_skipped"` with a notice. Units for work not newly queued (including cached or merged work) are returned.
+Breakdowns started this way are not counted. Owner/web clicks never spend agent budget. Existing research limits still apply.
+Agent budget reservations and queued work commit with the write and its audit; failures roll them back.
 Undo does not cancel queued research, refund work already queued or spent, or retract content already sent to a model.
 
 A write-enabled agent that reads malicious text can still corrupt application tracking. Undo helps recover changes; it cannot

@@ -29,7 +29,7 @@ export async function writeApplicationStatus(ctx: McpContext, input: { job_id: n
 
 export const set_application_status = defineCapability({
   id: "set_application_status", kind: "write", permission: "tracking:write",
-  input: (ctx) => z.strictObject({ job_id: trackingJobId.describe(ctx.text("params.jobId")), status: z.enum(APPLICATION_STATUSES).describe(ctx.text("params.applicationStatus")) }),
+  input: (ctx) => z.strictObject({ job_id: trackingJobId.describe(ctx.text("params.jobId")), status: z.enum(APPLICATION_STATUSES).describe(ctx.text("params.targetApplicationStatus")) }),
   output: trackingWriteOutput,
   handler: (ctx, args) => writeApplicationStatus(ctx, args),
   count: () => 1,

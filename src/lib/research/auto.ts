@@ -3,7 +3,7 @@
  * and the salary lookup by itself, and what that run may do. Never throws: the user's click or the cycle must not depend on it.
  */
 import { newId } from "@/lib/activity/ids";
-import { giveBackAgentBudget, takeIndirectBudget } from "@/lib/agent-access/budget";
+import { giveBackAgentBudget, takeIndirectBudget, type BudgetTicket } from "@/lib/agent-access/budget";
 import type { AgentCaller } from "@/lib/agent-access/caller";
 import type { ActivityProcess } from "@/lib/activity/types";
 import { createDbHealthStore } from "@/lib/ai/health";
@@ -173,10 +173,17 @@ async function run(db: Db, input: { jobId: number; event: ResearchAutoTrigger; n
     return { outcome: states.includes("cached") ? "all_cached" : "nothing_to_run", items };
   }
 
-  const budget = input.caller === undefined ? null : await takeIndirectBudget(db, { caller: input.caller, action: "research_company" });
-  if (budget?.decision === "skip") return report("budget_skipped", items);
-  let added = 0;
+  const tickets = new Map<ResearchItem, BudgetTicket>();
+  const added = new Set<ResearchItem>();
   try {
+    if (input.caller !== undefined) {
+      for (const item of toQueue) {
+        if (item === "breakdown") continue;
+        const budget = await takeIndirectBudget(db, { caller: input.caller, action: item === "company" ? "research_company" : "research_salary" });
+        if (budget.decision === "skip") return report("budget_skipped", items);
+        tickets.set(item, budget.ticket);
+      }
+    }
     const cap = input.event === "high_score_new" ? research.auto.high_score.max_per_day : research.auto.max_per_day;
     const reserved = await reserveAutoResearchRun(db, { jobId: input.jobId, trigger: input.event, items, maxPerDay: cap, now: input.now });
     if (reserved.state === "recent") return report("recent", items);
@@ -194,14 +201,16 @@ async function run(db: Db, input: { jobId: number; event: ResearchAutoTrigger; n
       if (result.state === "queued") {
         items[item] = "queued";
         queued += 1;
-        if (!result.existing) added += 1;
+        if (!result.existing) added.add(item);
       } else items[item] = result.state === "cached" ? "cached" : "failed";
     }
     await updateAutoRunItems(db, reserved.runId, items);
     if (Object.values(items).includes("deferred_quota")) await record("deferred_quota", 0);
     return report("queued", items, queued);
   } finally {
-    if (budget?.decision === "go" && added === 0) await giveBackAgentBudget(db, budget.ticket);
+    for (const [item, ticket] of tickets) {
+      if (!added.has(item)) await giveBackAgentBudget(db, ticket);
+    }
   }
 }
 
@@ -219,7 +228,7 @@ export async function requestAutoResearch(db: Db, input: { jobId: number; event:
 /** For a process other than the web. */
 export const autoResearchDeps = defaultDeps;
 
-/** Fire and forget from a Server Action: the user's click does not wait for the checks, and nothing can reject. */
+/** Starts automatic research and returns its outcome for callers that await it. */
 export function triggerAutoResearch(db: Db, input: { jobId: number; event: ResearchAutoTrigger; caller?: AgentCaller }): Promise<AutoResearchResult> {
   return requestAutoResearch(db, input);
 }
