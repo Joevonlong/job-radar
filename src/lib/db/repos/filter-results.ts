@@ -81,6 +81,9 @@ export interface StoredFilterResult {
   jobId: number;
   filterResult: "passed" | "filtered_out";
   filterReasons: string[];
+  /** The posting and settings the result was judged on; null while it is not final. */
+  filterInputHash: string | null;
+  filterConfigHash: string | null;
 }
 
 /** The filter result already stored for these jobs under this profile snapshot. */
@@ -88,7 +91,7 @@ export async function getFilterResults(db: Executor, snapshotId: number, jobIds:
   const out = new Map<number, StoredFilterResult>();
   if (jobIds.length === 0) return out;
   const rows = await db
-    .select({ scoreId: scores.id, jobId: scores.jobId, filterResult: scores.filterResult, filterReasons: scores.filterReasons })
+    .select({ scoreId: scores.id, jobId: scores.jobId, filterResult: scores.filterResult, filterReasons: scores.filterReasons, filterInputHash: scores.filterInputHash, filterConfigHash: scores.filterConfigHash })
     .from(scores)
     .where(and(eq(scores.profileSnapshotId, snapshotId), inArray(scores.jobId, [...jobIds])));
   for (const row of rows) out.set(row.jobId, row);

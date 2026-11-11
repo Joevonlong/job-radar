@@ -6,10 +6,11 @@ import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
 import { compileFilter, evaluateJob } from "@/lib/filter";
-import { compileWorkArea, readWorkArea, type CompiledWorkArea, type WorkAreaPhrases } from "@/lib/filter/work-area";
+import { compileWorkArea, readWorkArea, type CompiledWorkArea } from "@/lib/filter/work-area";
 import { buildEffectivePipeline } from "@/lib/market/effective";
 import { readPackDir } from "@/lib/market/load";
 import { placeGeo } from "@/lib/market/places";
+import type { WorkAreaPhrases } from "@/lib/market/schema";
 import { resolveMarket } from "@/lib/market/resolve";
 
 import { job, loc, prefs } from "./helpers";
@@ -20,17 +21,7 @@ const LABELLED = parse(fs.readFileSync(path.join(import.meta.dirname, "../fixtur
 const shippedPack = (id: string) => readPackDir(id, path.join(import.meta.dirname, "../../config/packs", id), "shipped");
 const pipeline = buildEffectivePipeline(shippedPipelineFile(), resolveMarket({ pack: "de" }, shippedPack), shippedPack);
 const geo = placeGeo(pipeline);
-const { remote } = pipeline.filter;
-const phrases: WorkAreaPhrases = {
-  patterns: remote.work_area_patterns,
-  titlePatterns: remote.work_area_title_patterns,
-  anywhere: remote.work_area_anywhere_patterns,
-  negation: remote.work_area_negation_patterns,
-  continuations: remote.work_area_continuations,
-  connectors: remote.work_area_connectors,
-  endings: remote.work_area_endings,
-  articles: remote.work_area_articles,
-};
+const phrases: WorkAreaPhrases = pipeline.filter.remote.work_area;
 const area = compileWorkArea(phrases);
 
 /** What a label says, in the reader's terms. */
@@ -77,14 +68,14 @@ describe("the phrases on labelled made-up sentences", () => {
     expect(readOf(readable, "description") / readable.length).toBeGreaterThan(0.5);
   });
 
-  const onlyOne = (patterns: Partial<WorkAreaPhrases>) => compileWorkArea({ ...phrases, patterns: [], titlePatterns: [], anywhere: [], ...patterns });
+  const onlyOne = (patterns: Partial<WorkAreaPhrases>) => compileWorkArea({ ...phrases, patterns: [], title_patterns: [], anywhere: [], ...patterns });
   it.each(phrases.patterns)("description phrase %s: is measured, and right at least 95% of the time", (pattern) => {
     const one = onlyOne({ patterns: [pattern] });
     expect(readOf(WHOLE_SET, "description", one)).toBeGreaterThanOrEqual(5);
     expect(wrongOf(WHOLE_SET, "description", one).length).toBeLessThanOrEqual(allowedWrong(readOf(WHOLE_SET, "description", one)));
   });
-  it.each(phrases.titlePatterns)("title phrase %s: is measured, and right at least 95% of the time", (pattern) => {
-    const one = onlyOne({ titlePatterns: [pattern] });
+  it.each(phrases.title_patterns)("title phrase %s: is measured, and right at least 95% of the time", (pattern) => {
+    const one = onlyOne({ title_patterns: [pattern] });
     expect(readOf(TITLES, "title", one)).toBeGreaterThanOrEqual(5);
     expect(wrongOf(TITLES, "title", one).length).toBeLessThanOrEqual(allowedWrong(readOf(TITLES, "title", one)));
   });

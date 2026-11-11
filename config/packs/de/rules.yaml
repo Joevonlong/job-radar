@@ -110,49 +110,32 @@ filter:
       - \bremote\b[^.\n]{0,15}\b(?:aus|in|innerhalb)\s+(?:deutschland|der eu|europa)\b
 
     # Prüfung 2: wo die Stelle ausgeübt werden darf (check 2, German phrases). Each phrase captures the place.
-    work_area_patterns:
-      - ^\W*(?:(?:nur\s+mit|dein|ihr|der)\s+)?(?:(?:haupt)?wohnsitz|lebensmittelpunkt)\s+(?:muss\s+|liegt\s+|sollte\s+)?(?:in|innerhalb)\s+(?<place>[^:()|]{2,120})
-      - ^\W*(?:du|sie|bewerber\w*|kandidat\w*|mitarbeiter\w*)\s+(?:musst|müssen)\s+(?:in|innerhalb)\s+(?<place>[^:()|]{2,120})
-      - ^\W*(?:mobiles\s+arbeiten|home-?\s?office|von\s+zu\s+hause|remote\s+arbeiten)\s+(?:aus|in|innerhalb)\s+(?<place>[^:()|]{2,120})
-      - ^\W*(?:remote|homeoffice|home office|mobiles arbeiten)\W+(?<place>deutschland)weit\W*$
-      - ^\W*(?<place>deutschland)weit\W+(?:im\s+)?(?:remote|homeoffice|home office|mobil)
-      - ^\W*nur\s+(?:für\s+)?(?:bewerber(?:innen)?|bewerbungen|kandidat\w*)\s+(?:aus|in|innerhalb)\s+(?<place>[^:()|]{2,120})
-      - ^\W*(?:remote|homeoffice|home office|mobiles arbeiten)\W+nur\s+(?:aus|in|innerhalb)\s+(?<place>[^:()|]{2,120})
-      - ^\W*(?:gültige\s+)?arbeits(?:erlaubnis|berechtigung)\s+(?:für|in)\s+(?<place>[^:()|]{2,120})
-      - ^\W*(?:du\s+)?(?:arbeit\w*|remote)\s+von\s+überall\s+in\s+(?<place>[^:()|]{2,120})
-    work_area_title_patterns:
-      - '[-–—|(]\s*nur\s+(?:in\s+|aus\s+)?(?<place>[^:()|]{2,120})'
-      - (?:^|[-–—|(:]\s*)remote\s+(?:aus|innerhalb)\s+(?<place>[^:()|]{2,120})
-    work_area_anywhere_patterns:
-      - \b(?:arbeit\w*|remote)\s+von\s+überall(?!\s+in\s)
-      - \bweltweit\W+(?:im\s+)?(?:remote|home\s?office|mobil)
-      - (?:remote|homeoffice|home office|mobiles arbeiten)\W+weltweit\b
-    work_area_negation_patterns:
-      - \b(?:nicht|kein(?:e|en)?|ohne|nie)\b
-      - \b(?:wenn|falls|sofern)\b
-      - \b(?:kunden|dienstreisen?|reisen|workation)\b
-    work_area_continuations:
-      - \b(?:anderen?|weitere|ausnahmen?|flexibel|auch|ebenso|bevorzugt)\b
-    work_area_connectors:
-      - \s*,\s*
-      - \s+und\s+
-      - \s+oder\s+
-    work_area_endings:
-      - sein
-      - liegen
-      - wohnen
-      - leben
-      - ansässig\s+sein
-      - haben
-      - erforderlich
-      - vorausgesetzt
-      - notwendig
-      - \(?[mwfdx]/[mwfdx](?:/[mwfdx])?\)?
-    work_area_articles:
-      - der
-      - die
-      - das
-      - ganz
+    work_area:
+      patterns:
+        - ^\W*(?:(?:nur\s+mit|dein|ihr|der)\s+)?(?:(?:haupt)?wohnsitz|lebensmittelpunkt)\s+(?:muss\s+|liegt\s+|sollte\s+)?(?:in|innerhalb)\s+(?<place>[^:()|]{2,120})
+        - ^\W*(?:du|sie|bewerber\w*|kandidat\w*|mitarbeiter\w*)\s+(?:musst|müssen)\s+(?:in|innerhalb)\s+(?<place>[^:()|]{2,120})
+        - ^\W*(?:mobiles\s+arbeiten|home-?\s?office|von\s+zu\s+hause|remote\s+arbeiten)\s+(?:aus|in|innerhalb)\s+(?<place>[^:()|]{2,120})
+        - ^\W*(?:remote|homeoffice|home office|mobiles arbeiten)\W+(?<place>deutschland)weit\W*$
+        - ^\W*(?<place>deutschland)weit\W+(?:im\s+)?(?:remote|homeoffice|home office|mobil)
+        - ^\W*nur\s+(?:für\s+)?(?:bewerber(?:innen)?|bewerbungen|kandidat\w*)\s+(?:aus|in|innerhalb)\s+(?<place>[^:()|]{2,120})
+        - ^\W*(?:remote|homeoffice|home office|mobiles arbeiten)\W+nur\s+(?:aus|in|innerhalb)\s+(?<place>[^:()|]{2,120})
+        - ^\W*(?:gültige\s+)?arbeits(?:erlaubnis|berechtigung)\s+(?:für|in)\s+(?<place>[^:()|]{2,120})
+        - ^\W*(?:du\s+)?(?:arbeit\w*|remote)\s+von\s+überall\s+in\s+(?<place>[^:()|]{2,120})
+      title_patterns:
+        - '[-–—|(]\s*nur\s+(?:in\s+|aus\s+)?(?<place>[^:()|]{2,120})'
+        - (?:^|[-–—|(:]\s*)remote\s+(?:aus|innerhalb)\s+(?<place>[^:()|]{2,120})
+      anywhere:
+        - \b(?:arbeit\w*|remote)\s+von\s+überall(?!\s+in\s)
+        - \bweltweit\W+(?:im\s+)?(?:remote|home\s?office|mobil)
+        - (?:remote|homeoffice|home office|mobiles arbeiten)\W+weltweit\b
+      continuations:
+        - \b(?:anderen?|weitere|ausnahmen?|flexibel|auch|ebenso|bevorzugt)\b
+      connectors:
+        - \s+oder\s+
+      endings:
+        - leben
+      articles:
+        - der
 
 # Stellenseite, die keine Bewerbungen mehr annimmt (German phrases for the recheck of starred / followed jobs; regex, case-insensitive)
 closed_posting:

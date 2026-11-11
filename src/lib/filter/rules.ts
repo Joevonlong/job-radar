@@ -242,16 +242,7 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
     titleOutside: compilePatterns(cfg.remote.title_outside_patterns),
     outsideStateCode: outsideStateCodes(market, remoteCountries),
     descriptionInScope: compilePatterns(cfg.remote.description_in_scope_patterns),
-    workArea: compileWorkArea({
-      patterns: cfg.remote.work_area_patterns,
-      titlePatterns: cfg.remote.work_area_title_patterns,
-      anywhere: cfg.remote.work_area_anywhere_patterns,
-      negation: cfg.remote.work_area_negation_patterns,
-      continuations: cfg.remote.work_area_continuations,
-      connectors: cfg.remote.work_area_connectors,
-      endings: cfg.remote.work_area_endings,
-      articles: cfg.remote.work_area_articles,
-    }),
+    workArea: compileWorkArea(cfg.remote.work_area),
     geo,
     liveCountries: areas.liveCountries,
     liveOpen: areas.liveOpen,
@@ -374,28 +365,36 @@ export interface WorkAreaRun {
   readonly jobMs: number;
   /** Milliseconds of stopped readings left in this run; used up, postings are not read for the rest of it. */
   left: number;
-  /** Jobs whose posting was not read to its end: their verdicts must not be kept as final. */
+  /** Jobs whose posting was stopped: their verdict is final, so they are not read again until the posting or the settings change. */
+  readonly stopped: Set<number>;
+  /** Jobs not reached once the time was used up: their verdicts must not be kept as final, so a later run reads them. */
   readonly unread: Set<number>;
 }
 
-/** What one job's reading needs: the run, and the reasons stored for the job, so a posting not read now keeps a hide it had. */
+/**
+ * What one job's reading needs: the run, the reasons stored for the job, and whether they were judged on this posting and these settings
+ * (`settled`). A settled job keeps its stored reading without being read again, so postings that are always stopped never take the time
+ * of the ones after them; a posting not read now keeps a hide it had.
+ */
 export interface WorkAreaContext {
   run: WorkAreaRun;
   jobId: number;
   previous?: readonly string[] | undefined;
+  settled?: boolean;
 }
 
 /** Start a run with the deal-breakers' limits. */
 export function startWorkAreaRun(filter: CompiledFilter, timeBox: TimeBox): WorkAreaRun {
   const { match_ms: jobMs, rule_budget_ms: left } = filter.pipeline.filter.deal_breakers;
-  return { timeBox, jobMs, left, unread: new Set() };
+  return { timeBox, jobMs, left, stopped: new Set(), unread: new Set() };
 }
 
-/** The reading of a posting, or null when it was stopped or not reached. */
+/** The reading of a posting, or null when it was stopped, not reached or settled. */
 function readWithinBudget(job: FilterJob, filter: CompiledFilter, context?: WorkAreaContext): WorkAreaReading | null {
   const read = (): WorkAreaReading => readWorkArea(job.title, job.description, filter.workArea, filter.geo);
   if (context === undefined) return read();
   const { run, jobId } = context;
+  if (context.settled === true) return null;
   if (run.left <= 0) {
     run.unread.add(jobId);
     return null;
@@ -406,7 +405,7 @@ function readWithinBudget(job: FilterJob, filter: CompiledFilter, context?: Work
   }, run.jobMs);
   if (finished) return reading;
   run.left -= run.jobMs;
-  run.unread.add(jobId);
+  run.stopped.add(jobId);
   return null;
 }
 
@@ -416,6 +415,10 @@ function checkWorkArea(job: FilterJob, filter: CompiledFilter, out: PartialVerdi
   const hidden = reading === null ? context?.previous?.find((reason) => reason.startsWith("remote_out_of_scope")) : undefined;
   if (hidden !== undefined) {
     out.excluded.push(hidden);
+    return;
+  }
+  if (reading === null && context?.settled === true) {
+    if (context.previous?.includes(encodeReason("remote_area_unknown")) === true) out.notes.push(encodeReason("remote_area_unknown"));
     return;
   }
   if (reading === null || !reading.sure) {

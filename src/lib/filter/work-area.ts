@@ -4,22 +4,8 @@
  * is hidden only on a clear statement. The phrases are data, in the packs. Pure and free: it runs on every filter pass.
  */
 import { lookupPlace, type Place, type PlaceGeo } from "@/lib/market/places";
+import type { WorkAreaPhrases } from "@/lib/market/schema";
 import { QUOTE_MAX } from "@/lib/signals/quote";
-
-/** `filter.remote.work_area_*`: regex sources. Each of `patterns` has a `(?<place>...)` capture. */
-export interface WorkAreaPhrases {
-  patterns: readonly string[];
-  /** Read in the title only: `France only` in a description is as likely to be about a benefit. */
-  titlePatterns: readonly string[];
-  anywhere: readonly string[];
-  negation: readonly string[];
-  connectors: readonly string[];
-  /** A next sentence with one of these widens or softens the statement before it. */
-  continuations: readonly string[];
-  /** What may follow the place. Anything else after it, and the sentence says more than the phrase can read. */
-  endings: readonly string[];
-  articles: readonly string[];
-}
 
 export interface CompiledWorkArea {
   patterns: readonly RegExp[];
@@ -38,6 +24,7 @@ export type WorkAreaReading = { sure: true; countries: readonly string[] | null;
 const FLAGS = "iu";
 const either = (sources: readonly string[]): string | null => (sources.length === 0 ? null : sources.map((source) => `(?:${source})`).join("|"));
 
+/** Compile `filter.remote.work_area`. */
 export function compileWorkArea(phrases: WorkAreaPhrases): CompiledWorkArea {
   const compile = (sources: readonly string[]): RegExp[] => sources.map((source) => new RegExp(source, FLAGS));
   const connector = either(phrases.connectors);
@@ -45,7 +32,7 @@ export function compileWorkArea(phrases: WorkAreaPhrases): CompiledWorkArea {
   const article = either(phrases.articles);
   return {
     patterns: compile(phrases.patterns),
-    titlePatterns: compile(phrases.titlePatterns),
+    titlePatterns: compile(phrases.title_patterns),
     anywhere: compile(phrases.anywhere),
     negation: compile(phrases.negation),
     continuation: compile(phrases.continuations),
@@ -74,7 +61,7 @@ function writtenPlace(text: string, geo: PlaceGeo): Place | null {
 
 /**
  * The countries a captured list names. Null when any part cannot be placed: a part read wrongly could hide a job. A city is one of those, because
- * the same name may be a town at home, and the table only has one of them. An empty list means anywhere.
+ * the same name may be a town at home, and the table only has one of them.
  */
 function countriesOfList(capture: string, area: CompiledWorkArea, geo: PlaceGeo): readonly string[] | null {
   const list = area.ending === null ? capture : capture.replace(area.ending, "");
@@ -83,7 +70,6 @@ function countriesOfList(capture: string, area: CompiledWorkArea, geo: PlaceGeo)
   for (const token of tokens) {
     const place = writtenPlace(token, geo);
     if (place === null) return null;
-    if (place.kind === "worldwide") return [];
     if (place.kind === "city" || place.countries.length === 0) return null;
     countries.push(...place.countries);
   }
@@ -97,10 +83,8 @@ function carriesOn(sentence: string | undefined, area: CompiledWorkArea, geo: Pl
   const unmarked = ` ${sentence.replace(/^[^\p{L}]+/u, "")}`;
   const joined = area.connector?.exec(unmarked) ?? null;
   if (joined?.index === 0) return true;
-  const rest = unmarked.trim();
-  const [first = "", second = ""] = (area.article === null ? rest : rest.replace(area.article, "")).split(" ");
-  const bare = (text: string): string => text.replace(/[^\p{L}\p{N}]+$/u, "");
-  return writtenPlace(bare(`${first} ${second}`), geo) !== null || writtenPlace(bare(first), geo) !== null || writtenPlace(first.split("-")[0] ?? "", geo) !== null;
+  const [first = ""] = unmarked.trim().split(" ");
+  return writtenPlace(first.replace(/[^\p{L}\p{N}]+$/u, ""), geo) !== null;
 }
 
 const sameArea = (a: readonly string[] | null, b: readonly string[] | null): boolean => (a === null || b === null ? a === b : a.length === b.length && a.every((country, index) => country === b[index]));
@@ -131,7 +115,7 @@ function statementsOf(sentence: string, patterns: readonly RegExp[], next: strin
     if (match === null) continue;
     const countries = countriesOfList(match.groups?.place ?? "", area, geo);
     if (countries === null || saysMore(sentence, match, area) || carriesOn(next, area, geo)) unplaced = true;
-    else statements.push({ countries: countries.length === 0 ? null : countries, quote: bareQuote(match[0]) });
+    else statements.push({ countries, quote: bareQuote(match[0]) });
   }
   if (statements.length === 0 && !unplaced) return [];
   return unplaced || area.negation.some((pattern) => pattern.test(sentence)) ? null : statements;
@@ -156,11 +140,11 @@ export function readWorkArea(title: string, description: string | null, area: Co
 const escaped = (word: string): string => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const wholeWords = (words: readonly string[], flags: string): RegExp => new RegExp(`(?<![\\p{L}\\p{N}])(?:${words.map(escaped).join("|")})(?![\\p{L}\\p{N}])`, flags);
 
-/** The names of the places a posting may require, as whole-word patterns. A short name counts only in capitals ("UK", not "us"). A posting that hides on another country but names one of these elsewhere is a mixed signal. */
+/** The names of the places a posting may require, as whole-word patterns. A short name counts only as written ("UK", not "uk"). A posting that hides on another country but names one of these elsewhere is a mixed signal. */
 export function compileLivePlaces(spellings: readonly string[]): readonly RegExp[] {
   const words = [...new Set(spellings.map((spelling) => spelling.trim().replace(/\s+/g, " ")).filter((spelling) => spelling !== ""))];
   const long = words.filter((word) => word.length > 3);
-  const short = words.filter((word) => word.length <= 3 && word === word.toUpperCase());
+  const short = words.filter((word) => word.length <= 3);
   return [...(long.length > 0 ? [wholeWords(long, FLAGS)] : []), ...(short.length > 0 ? [wholeWords(short, "u")] : [])];
 }
 

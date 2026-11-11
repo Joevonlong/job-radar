@@ -61,13 +61,13 @@ async function main(): Promise<void> {
       if (batch.length === 0) break;
       afterId = batch[batch.length - 1]?.id ?? afterId;
       const overrides = await getFilterOverrides(db, batch.map((j) => j.id));
-      const verdicts = evaluateBatch(batch, compiled, dealBreakers, overrides, new Map(batch.flatMap((row) => { const was = stored.get(row.id); return was ? [[row.id, { filterReasons: was.reasons }] as const] : []; })), workAreaRun);
+      const verdicts = evaluateBatch(batch, compiled, dealBreakers, overrides, new Map(batch.flatMap((row) => { const was = stored.get(row.id); return was ? [[row.id, { filterReasons: was.reasons }] as const] : []; })), { run: workAreaRun });
       batch.forEach((row, i) => {
         const verdict = verdicts[i];
         if (verdict) now.set(row.id, { result: verdict.result, reasons: verdict.reasons });
       });
     }
-    if (workAreaRun.unread.size > 0) console.log(`work area phrases too slow: ${workAreaRun.unread.size} postings not read`);
+    if (workAreaRun.stopped.size + workAreaRun.unread.size > 0) console.log(`work area phrases too slow: ${workAreaRun.stopped.size} postings stopped, ${workAreaRun.unread.size} not reached`);
     for (const warning of [...compiled.dealBreakers.warnings, ...dealBreakers.warnings]) console.log(`deal-breaker ${warning.id} not applied: ${warning.code}`);
   } else {
     const run = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline, me });

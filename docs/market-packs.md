@@ -99,22 +99,22 @@ now in the packs.
 
 ## Where a remote job may be done from
 
-`rules.yaml` holds the phrases the filter reads in the title and description of a remote job, under `filter.remote`. They are regexes, case-insensitive, and `pipeline.yaml` can add to them:
+`rules.yaml` holds the phrases the filter reads in the title and description of a remote job, in one block, `filter.remote.work_area`. They are regexes, case-insensitive, and the same block in `pipeline.yaml` adds to them:
 
 | Key | What it holds |
 |---|---|
-| `work_area_patterns` | Phrases that state the area. Each must have a `(?<place>...)` capture, or the file is refused |
-| `work_area_title_patterns` | The same, read in the title only: `France only` in a description is as likely to be about a benefit |
-| `work_area_anywhere_patterns` | Phrases that say anywhere in the world |
-| `work_area_negation_patterns` | A sentence with one of these says something else, so it isn't sure |
-| `work_area_continuations` | A next sentence with one of these widens or softens the statement, so it isn't sure |
-| `work_area_connectors` | What separates the places of a list |
-| `work_area_endings` | What may follow the place, as in `Germany to apply`. Anything else there and the sentence isn't sure |
-| `work_area_articles` | Words left off the front of a place |
+| `patterns` | Phrases that state the area. Each must have a `(?<place>...)` capture, or the file is refused |
+| `title_patterns` | The same, read in the title only: `France only` in a description is as likely to be about a benefit |
+| `anywhere` | Phrases that say anywhere in the world |
+| `negation` | A sentence with one of these says something else, so it isn't sure |
+| `continuations` | A next sentence with one of these widens or softens the statement, so it isn't sure |
+| `connectors` | What separates the places of a list |
+| `endings` | What may follow the place, as in `Germany to apply`. Anything else there and the sentence isn't sure |
+| `articles` | Words left off the front of a place |
 
-Patterns come from a pack you can edit, so reading one posting is stopped after `filter.deal_breakers.match_ms`. A stopped posting keeps a hide it had, or else isn't sure, and is read again next cycle. Stopped readings share `filter.deal_breakers.rule_budget_ms` per run; once that's used up, postings aren't read for the rest of the run.
+Patterns come from a pack you can edit, so reading one posting is stopped after `filter.deal_breakers.match_ms`. A stopped posting keeps a hide it had, or else isn't sure. Its result is kept, so it isn't read again until the posting or the settings change, and a posting that is always slow doesn't take the time of the ones after it. Stopped readings share `filter.deal_breakers.rule_budget_ms` per run; once that's used up, the remaining postings aren't read in that run, get the note, and are read in the next one.
 
-A phrase can hide a job, so it should start the sentence and be about the person hired, not the company, a benefit or the data: `we are hiring in France` isn't one. A question never counts, for a phrase or for `work_area_anywhere_patterns`. Every part of a capture goes through the same lookup as the location settings, except that a bare ISO code or a short name not in capitals doesn't count: `hiring in IT` isn't Italy. One part the tables don't know makes the sentence not sure, so a job is hidden only on a phrase read in full. The same goes for a list that may carry on in the next sentence. A pack with no phrases hides nothing, and every remote job gets the note `remote_area_unknown`. A phrase with no place to capture, such as German `bundesweit`, stays silent unless the pack spells the country out. `description_in_scope_patterns` is separate: it can only rescue a job, for the home country and its region.
+A phrase can hide a job, so it should start the sentence and be about the person hired, not the company, a benefit or the data: `we are hiring in France` isn't one. A question never counts, for a phrase or for `anywhere`. Every part of a capture goes through the same lookup as the location settings, except that a bare ISO code or a short name not in capitals doesn't count: `hiring in IT` isn't Italy. One part the tables don't know, a city, or Worldwide makes the sentence not sure, so a job is hidden only on a phrase read in full. The same goes for a list that may carry on in the next sentence. A pack with no phrases hides nothing, and every remote job gets the note `remote_area_unknown`. A phrase with no place to capture, such as German `bundesweit`, stays silent unless the pack spells the country out. `description_in_scope_patterns` is separate: it can only rescue a job, for the home country and its region.
 
 ## Ghost job patterns
 
@@ -247,6 +247,7 @@ Results that change: with `none`, a remote job in an allowed city was shown and 
 | `none` with `workplace: [remote]` | The home remote search is added |
 | A foreign city in `locations` | Its remote search is added |
 | `workplace` without `remote`, and a scope other than `none` | The remote search is dropped, because this can't be told apart from a migrated `none` |
+| `search.yaml` with `remote_scope: none` while the preferences' scope was not `none` | Remote searches come back, because `search.yaml`'s scope is no longer read. To stop them, take Remote out of Workplace |
 
 An on-site entry of the old `locations` counts as listed only when it is the home city or a ✈ place, since only those get an on-site search; a scope token counts when it is home or any listed place. So a remote-only `CH` doesn't hide the warning for an old on-site `Switzerland`.
 

@@ -115,7 +115,7 @@ export function evaluateBatch(
   run: DealBreakerRun,
   overrides: ReadonlyMap<number, FilterOverride>,
   stored?: ReadonlyMap<number, { filterReasons: readonly string[] }>,
-  workAreaRun?: WorkAreaRun,
+  workArea?: { run: WorkAreaRun; settled?: ReadonlySet<number> },
 ): FilterVerdict[] {
   const jobs = rows.map(toFilterJob);
   const previous = rows.map((row) => {
@@ -125,7 +125,7 @@ export function evaluateBatch(
   const { vetoes } = dealBreakerVetoes(run, jobs, { previous });
   return jobs.map((job, i) => {
     const id = rows[i]?.id ?? 0;
-    return evaluateJob(job, compiled, overrides.get(id) ?? null, vetoes[i] ?? [], workAreaRun && { run: workAreaRun, jobId: id, previous: stored?.get(id)?.filterReasons });
+    return evaluateJob(job, compiled, overrides.get(id) ?? null, vetoes[i] ?? [], workArea && { run: workArea.run, jobId: id, previous: stored?.get(id)?.filterReasons, settled: workArea.settled?.has(id) });
   });
 }
 
@@ -175,7 +175,11 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
     const stored = await getFilterResults(db, options.snapshotId, ids);
     const overrides = new Map(batch.flatMap((row) => row.filterOverride ? [[row.id, row.filterOverride] as const] : []));
     const fresh: NewFilterResult[] = [];
-    const verdicts = evaluateBatch(batch, compiled, dealBreakers, overrides, stored, workAreaRun);
+    const settled = new Set(batch.flatMap((row) => {
+      const was = stored.get(row.id);
+      return was !== undefined && was.filterConfigHash === configHash && row.inputHash !== undefined && was.filterInputHash === row.inputHash ? [row.id] : [];
+    }));
+    const verdicts = evaluateBatch(batch, compiled, dealBreakers, overrides, stored, { run: workAreaRun, settled });
     // A timed-out rule preserves previous vetoes; retry those inputs next cycle instead of caching a partial judgement.
     const complete = !dealBreakers.warnings.some((warning) => warning.code === "too_slow");
     await scoreTransaction(db, async (tx) => {
@@ -210,7 +214,9 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
   }
   result.dealBreakerWarnings = [...compiled.dealBreakers.warnings, ...dealBreakers.warnings];
   for (const warning of result.dealBreakerWarnings) options.logger?.warn("deal-breaker not applied", { id: warning.id, reason: warning.code });
-  if (workAreaRun.unread.size > 0) options.logger?.warn("a filter.remote.work_area_* phrase is too slow: some postings were not read and are read again next cycle", { postings: workAreaRun.unread.size });
+  if (workAreaRun.stopped.size + workAreaRun.unread.size > 0) {
+    options.logger?.warn("a filter.remote.work_area phrase is too slow: stopped postings are read again when they or the settings change, postings not reached are read next cycle", { stopped: workAreaRun.stopped.size, notReached: workAreaRun.unread.size });
+  }
   options.logger?.info("hard filter done", { snapshotId: result.snapshotId, evaluated: result.evaluated, created: result.created, updated: result.updated, filteredOut: result.filteredOut });
   return result;
 }

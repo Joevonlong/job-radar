@@ -12,17 +12,23 @@ import { UNCLEAR_LOCATION_NOTES } from "@/lib/scoring/score-task";
 import { job, loc, prefs } from "./helpers";
 import { fixtureMarket, pipelineWith, shippedPipelineFile } from "../pipeline/helpers";
 
+/** pipeline.yaml's `filter.remote.work_area`, created when the file has none. */
+function workArea(raw: Record<string, unknown>): Record<string, unknown> {
+  const remote = (raw.filter as { remote: Record<string, unknown> }).remote;
+  remote.work_area ??= {};
+  return remote.work_area as Record<string, unknown>;
+}
+
 const market = fixtureMarket({ pack: "generic", country: "DE", currency: "EUR", home_language: "de" });
 const pipeline = pipelineWith((raw) => {
-  const remote = (raw.filter as { remote: Record<string, unknown> }).remote;
-  remote.work_area_patterns = ["\\bmust live in (?<place>[^:()|]{2,120})"];
-  remote.work_area_title_patterns = ["\\((?<place>[^)]{2,60}) only\\)"];
-  remote.work_area_anywhere_patterns = ["\\bwork from anywhere\\b"];
-  remote.work_area_negation_patterns = ["\\bnot\\b"];
-  remote.work_area_connectors = ["\\s+or\\s+"];
-  remote.work_area_endings = ["to\\s+apply"];
-  remote.work_area_continuations = ["\\bother\\b"];
-  remote.work_area_articles = ["the"];
+  workArea(raw).patterns = ["\\bmust live in (?<place>[^:()|]{2,120})"];
+  workArea(raw).title_patterns = ["\\((?<place>[^)]{2,60}) only\\)"];
+  workArea(raw).anywhere = ["\\bwork from anywhere\\b"];
+  workArea(raw).negation = ["\\bnot\\b"];
+  workArea(raw).connectors = ["\\s+or\\s+"];
+  workArea(raw).endings = ["to\\s+apply"];
+  workArea(raw).continuations = ["\\bother\\b"];
+  workArea(raw).articles = ["the"];
 }, market);
 
 type Place = { place: string; relocate: boolean };
@@ -150,7 +156,7 @@ describe("the phrase list", () => {
   });
 
   it("is refused in pipeline.yaml without a place capture", () => {
-    const parsed = configRegistry.pipeline.schema.safeParse({ ...shippedPipelineFile(), filter: { ...shippedPipelineFile().filter, remote: { ...shippedPipelineFile().filter.remote, work_area_patterns: ["\\bmust live in .+"] } } });
+    const parsed = configRegistry.pipeline.schema.safeParse({ ...shippedPipelineFile(), filter: { ...shippedPipelineFile().filter, remote: { ...shippedPipelineFile().filter.remote, work_area: { ...shippedPipelineFile().filter.remote.work_area, patterns: ["\\bmust live in .+"] } } } });
     expect(parsed.success).toBe(false);
   });
 });
@@ -165,8 +171,8 @@ describe("a statement naming a city", () => {
 describe("what a posting can cost", () => {
   it("keeps a quote short, whatever the phrase matched", () => {
     const long = pipelineWith((raw) => {
-      (raw.filter as { remote: Record<string, unknown> }).remote.work_area_patterns = ["must live in (?<place>France)[\\s\\S]*"];
-      (raw.filter as { remote: Record<string, unknown> }).remote.work_area_endings = [".*"];
+      workArea(raw).patterns = ["must live in (?<place>France)[\\s\\S]*"];
+      workArea(raw).endings = [".*"];
     }, market);
     const filter = compileFilter(prefs((raw) => (raw.home_city = "Berlin")), long, { me: null, watchedCompanies: [] });
     const { reasons } = evaluateJob(job({ workplace: "remote", locations: [loc("Germany", null, "DE")], description: `You must live in France ${"x".repeat(5000)}` }), filter);
@@ -177,7 +183,7 @@ describe("what a posting can cost", () => {
 
   describe("a phrase that is slow on a posting", () => {
     const slow = pipelineWith((raw) => {
-      (raw.filter as { remote: Record<string, unknown> }).remote.work_area_patterns = ["^(?<place>(a+)+)$"];
+      workArea(raw).patterns = ["^(?<place>(a+)+)$"];
     }, market);
     const filter = compileFilter(prefs((raw) => (raw.home_city = "Berlin")), slow, { me: null, watchedCompanies: [] });
     const posting = job({ workplace: "remote", locations: [loc("Germany", null, "DE")], description: `${"a".repeat(40)}b` });
@@ -185,21 +191,33 @@ describe("what a posting can cost", () => {
 
     const context = (run: WorkAreaRun, previous?: readonly string[]) => ({ run, jobId: 7, previous });
 
-    it("is stopped, leaves the job visible with a note, and marks that job's verdict as not final", () => {
+    it("is stopped and leaves the job visible with a note", () => {
       const run = startWorkAreaRun(filter, vmTimeBox);
       expect(area(evaluateJob(posting, filter, null, [], context(run)).reasons)).toEqual(["remote_area_unknown"]);
-      expect([...run.unread]).toEqual([7]);
+      expect([...run.stopped]).toEqual([7]);
+      expect(run.unread.size).toBe(0);
     });
 
-    it("uses up the run's budget, and later postings are not read at all", () => {
+    it("uses up the run's budget, and later postings are not read at all and not final", () => {
       let calls = 0;
-      const run: WorkAreaRun = { timeBox: () => { calls += 1; return false; }, jobMs: 60, left: 100, unread: new Set() };
-      for (let i = 0; i < 5; i += 1) expect(area(evaluateJob(posting, filter, null, [], context(run)).reasons)).toEqual(["remote_area_unknown"]);
+      const run: WorkAreaRun = { timeBox: () => { calls += 1; return false; }, jobMs: 60, left: 100, stopped: new Set(), unread: new Set() };
+      for (let i = 0; i < 5; i += 1) expect(area(evaluateJob(posting, filter, null, [], { run, jobId: i }).reasons)).toEqual(["remote_area_unknown"]);
       expect(calls).toBe(2);
+      expect([...run.stopped]).toEqual([0, 1]);
+      expect([...run.unread]).toEqual([2, 3, 4]);
+    });
+
+    it("keeps a settled job's stored reading without reading it or spending the run's time", () => {
+      const run: WorkAreaRun = { timeBox: () => { throw new Error("read"); }, jobMs: 60, left: 100, stopped: new Set(), unread: new Set() };
+      const settled = (previous: readonly string[]) => area(evaluateJob(posting, filter, null, [], { run, jobId: 7, previous, settled: true }).reasons);
+      expect(settled(["remote_out_of_scope:must live in France"])).toEqual(["remote_out_of_scope:must live in France"]);
+      expect(settled(["remote_area_unknown"])).toEqual(["remote_area_unknown"]);
+      expect(settled([])).toEqual([]);
+      expect(run).toMatchObject({ left: 100, stopped: new Set(), unread: new Set() });
     });
 
     it("keeps a hide the job had, so a slow machine never shows a hidden job", () => {
-      const run: WorkAreaRun = { timeBox: () => false, jobMs: 60, left: 100, unread: new Set() };
+      const run: WorkAreaRun = { timeBox: () => false, jobMs: 60, left: 100, stopped: new Set(), unread: new Set() };
       const verdict = evaluateJob(posting, filter, null, [], context(run, ["remote_out_of_scope:must live in France"]));
       expect(verdict).toEqual({ result: "filtered_out", reasons: ["remote_out_of_scope:must live in France"] });
     });
@@ -208,7 +226,7 @@ describe("what a posting can cost", () => {
       const fine = compileFilter(prefs((raw) => (raw.home_city = "Berlin")), pipeline, { me: null, watchedCompanies: [] });
       const run = startWorkAreaRun(fine, vmTimeBox);
       evaluateJob(job({ workplace: "remote", locations: [loc("Germany", null, "DE")], description: "You must live in France." }), fine, null, [], { run, jobId: 7 });
-      expect(run.unread.size).toBe(0);
+      expect(run.stopped.size + run.unread.size).toBe(0);
     });
   });
 });
