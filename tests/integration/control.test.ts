@@ -397,6 +397,11 @@ describe("web side: requestRunCycle / requestRescoreStale", () => {
     expect(await listControlRequests(getDb(), 10)).toHaveLength(1);
   });
 
+  it("does not store a caller marker sent by the browser", async () => {
+    expect(await requestRunCycle({ channelIds: ["indeed"], caller: 7 })).toMatchObject({ status: "queued", existing: false });
+    expect((await listControlRequests(getDb(), 10)).map((row) => row.payload)).toEqual([{ channelIds: ["indeed"] }]);
+  });
+
   it("re-scoring needs stale scores", async () => {
     expect(await requestRescoreStale()).toMatchObject({ status: "error", error: "nothingStale" });
     const db = getDb();

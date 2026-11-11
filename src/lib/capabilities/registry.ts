@@ -1,5 +1,6 @@
 /** Adding a tool means one definition file plus one line here. */
 import { authorize } from "@/lib/agent-access/authorize";
+import type { Permission } from "@/lib/agent-access/permissions";
 import type { McpConfig } from "@/lib/config/schemas/mcp";
 import type { McpContext } from "@/lib/mcp/context";
 
@@ -23,6 +24,11 @@ export const CAPABILITIES: readonly Capability[] = [
  * cannot be read), and available.
  */
 export function visibleCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer" | "grant">): readonly Capability[] {
+  return listedCapabilities(capabilities, ctx).map(({ capability }) => capability);
+}
+
+/** A list and its caller's effective permissions share one fresh settings read, including a failed read. */
+export function listedCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer" | "grant">): { capability: Capability; permissions: ReadonlySet<Permission> }[] {
   let read: { settings: McpConfig } | { error: unknown };
   try {
     read = { settings: ctx.readSettings() };
@@ -33,5 +39,8 @@ export function visibleCapabilities(capabilities: readonly Capability[], ctx: Pi
     if ("error" in read) throw read.error;
     return read.settings;
   };
-  return capabilities.filter((capability) => authorize(capability, once, ctx.grant).allowed && (capability.availability?.available(ctx) ?? true));
+  return capabilities.flatMap((capability) => {
+    const decision = authorize(capability, once, ctx.grant);
+    return decision.allowed && (capability.availability?.available(ctx) ?? true) ? [{ capability, permissions: decision.permissions }] : [];
+  });
 }

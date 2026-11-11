@@ -100,6 +100,14 @@ describe("asking for scores from the web side", () => {
     expect(rows.map((r) => r.payload).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))).toEqual([{ backlog: true }, { jobIds: [id] }]);
   });
 
+  it("does not store a caller marker sent by the browser", async () => {
+    const id = await addJob("Waiting");
+    expect(await requestScoreJobs({ jobIds: [id], caller: 7 })).toMatchObject({ status: "queued", existing: false });
+    expect(await requestScoreJobs({ backlog: true, caller: "stdio" })).toMatchObject({ status: "queued", existing: false });
+    const rows = await listControlRequests(getDb(), 10);
+    expect(rows.map((r) => r.payload).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))).toEqual([{ backlog: true }, { jobIds: [id] }]);
+  });
+
   it("reuses an open request with the same payload, but another job gets its own request", async () => {
     const a = await addJob("A");
     const b = await addJob("B");

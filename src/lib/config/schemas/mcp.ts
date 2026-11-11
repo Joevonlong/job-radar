@@ -5,11 +5,44 @@ import { DEFAULT_PERMISSIONS, permissionSchema } from "@/lib/agent-access/permis
 /** Bounds of the limits: a typo cannot turn a tool into a dump of the whole database. */
 export const MCP_MAX_RESULTS_CAP = 100;
 export const MCP_MAX_DESCRIPTION_CHARS_CAP = 100_000;
+export const MCP_MAX_DAILY_CAP = 100_000;
+
+export const AGENT_ACTIONS = [
+  "run_collection", "score_jobs", "translate_job", "breakdown_job",
+  "research_salary", "research_company", "draft_answer", "tailor_resume",
+] as const;
+export type AgentAction = typeof AGENT_ACTIONS[number];
+
+const cap = z.number().int().min(0).max(MCP_MAX_DAILY_CAP);
+const perCallerDefaults = (): Record<AgentAction, number> => ({
+  run_collection: 2, score_jobs: 100, translate_job: 20, breakdown_job: 20,
+  research_salary: 10, research_company: 10, draft_answer: 20, tailor_resume: 5,
+});
+
+/** Daily agent limits use the calendar day in schedule.yaml's time zone. */
+const budgetsSchema = z.strictObject({
+  /** Daily caps per caller: stdio and each token count separately; 0 forbids agents from triggering that action. */
+  per_caller: z.strictObject({
+    run_collection: cap.default(2),
+    /** Counts jobs: each job in a batch consumes one unit. */
+    score_jobs: cap.default(100),
+    translate_job: cap.default(20),
+    breakdown_job: cap.default(20),
+    /** Also counts automatic salary lookups started indirectly by an agent's write. */
+    research_salary: cap.default(10),
+    /** Also counts automatic company lookups started indirectly by an agent's write. */
+    research_company: cap.default(10),
+    draft_answer: cap.default(20),
+    tailor_resume: cap.default(5),
+  }).default(perCallerDefaults),
+  /** Requests, not jobs, per day across all agents and actions; a `score_jobs` batch counts once. 0 forbids all agent actions. */
+  total: cap.default(150),
+}).default(() => ({ per_caller: perCallerDefaults(), total: 150 }));
 
 /**
  * config/mcp.yaml: the optional MCP server (`pnpm mcp:serve`, docs/mcp.md) that lets an MCP client the user configured (Claude
  * Desktop, Claude Code, ...) query jobs and applications over stdio and, with writer permissions, add answer versions. Every key has a default, so a missing file means
- * "off" and the defaults below. What the server may return is fixed in code (`src/lib/mcp/dto.ts`), not here.
+ * "off" and the defaults below. What the server may return is fixed in code (`src/lib/mcp/dto/index.ts`), not here.
  */
 export const mcpSchema = z.strictObject({
   /** Off by default: `pnpm mcp:serve` refuses to start until this is true. */
@@ -39,6 +72,8 @@ export const mcpSchema = z.strictObject({
       max_description_chars: z.number().int().min(500).max(MCP_MAX_DESCRIPTION_CHARS_CAP).default(12_000),
     })
     .default({ max_results: 20, max_description_chars: 12_000 }),
+  budgets: budgetsSchema,
 });
 
 export type McpConfig = z.infer<typeof mcpSchema>;
+export type McpBudgets = McpConfig["budgets"];

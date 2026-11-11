@@ -4,7 +4,7 @@ import { z } from "zod";
 import { isDay } from "@/lib/ai-usage/range";
 import { loadConfig } from "@/lib/config";
 import { activityTablesReady, deleteActivityBatch, previewActivityDelete, type ActivityDeleteScope, type Db } from "@/lib/db";
-import { addDays, dayInZone } from "@/lib/insights/range";
+import { addDays, startOfDayInZone } from "@/lib/insights/range";
 
 const daySchema = z.string().refine((value) => {
   try { return isDay(value) && /^\d{4}-\d{2}-\d{2}$/.test(addDays(value, 1)); } catch { return false; }
@@ -23,27 +23,12 @@ export type ActivityDeleteExecuteInput = z.infer<typeof activityDeleteExecuteSch
 export type PreviewDeleteResult = { status: "ok"; asOf: string; roots: number; events: number; skippedActive: number } | { status: "not_ready" | "invalid" };
 export type ExecuteDeleteResult = { status: "done" | "partial"; roots: number; events: number } | { status: "not_ready" | "invalid" };
 
-/** First instant of a calendar day in an IANA zone, including offset changes at midnight and skipped days. */
-function startOfDay(day: string, timeZone: string): Date {
-  const target = Date.parse(`${day}T00:00:00Z`);
-  // Bracket the boundary using UTC day arithmetic, then find its first millisecond via the existing zone helper.
-  let low = Date.parse(`${addDays(day, -2)}T00:00:00Z`);
-  let high = Date.parse(`${addDays(day, 2)}T00:00:00Z`);
-  if (!Number.isFinite(target) || !Number.isFinite(low) || !Number.isFinite(high)) throw new RangeError("invalid calendar day");
-  while (low < high) {
-    const middle = low + Math.floor((high - low) / 2);
-    if (dayInZone(new Date(middle), timeZone) < day) low = middle + 1;
-    else high = middle;
-  }
-  return new Date(low);
-}
-
 /** Inclusive UI day range becomes [from, day-after-to) in schedule.yaml's timezone. */
 export function resolveActivityDeleteScope(input: ActivityDeleteInput, timeZone: string): ActivityDeleteScope {
   switch (input.scope) {
     case "root": return { kind: "root", rootId: input.rootId };
     case "all": return { kind: "all" };
-    case "range": return { kind: "range", from: input.from ? startOfDay(input.from, timeZone) : null, to: startOfDay(addDays(input.to, 1), timeZone) };
+    case "range": return { kind: "range", from: input.from ? startOfDayInZone(input.from, timeZone) : null, to: startOfDayInZone(addDays(input.to, 1), timeZone) };
   }
 }
 function settings() {

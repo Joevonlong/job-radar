@@ -89,6 +89,21 @@ export async function trapScanIsCurrent(db: Executor, jobId: number, rulesHash: 
   return row !== undefined;
 }
 
+/**
+ * The jobs of `jobIds` whose scan is current: the same comparison as `trapScanIsCurrent`, for a page of cards. Reads the findings
+ * of the page too, so it throws where the strict JD check would find them unreadable.
+ */
+export async function currentTrapScanJobIds(db: Executor, jobIds: readonly number[], rulesHash: string): Promise<Set<number>> {
+  if (jobIds.length === 0 || !(await trapTablesReady(db))) return new Set();
+  const [outdated, scanned] = await Promise.all([
+    listJobsToTrapScan(db, { rulesHash, limit: jobIds.length, jobIds }),
+    db.select({ jobId: trapScans.jobId }).from(trapScans).where(inArray(trapScans.jobId, [...jobIds])),
+    db.select({ jobId: jobTraps.jobId }).from(jobTraps).where(inArray(jobTraps.jobId, [...jobIds])).limit(1),
+  ]);
+  const stale = new Set(outdated.map((row) => row.jobId));
+  return new Set(scanned.map((row) => row.jobId).filter((id) => !stale.has(id)));
+}
+
 /** Every job id, oldest first (the `--all` run of `pnpm traps:scan` pages through it). */
 export async function listAllJobIds(db: Executor, options: { afterId: number; limit: number }): Promise<number[]> {
   const rows = await db.select({ id: jobs.id }).from(jobs).where(sql`${jobs.id} > ${options.afterId}`).orderBy(asc(jobs.id)).limit(options.limit);

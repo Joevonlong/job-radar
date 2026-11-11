@@ -2,6 +2,7 @@
  * Web side of the control channel: validates what the browser asks for and leaves a row in
  * `control_requests`. The runner does the work (see `poller.ts`); this module never runs a cycle.
  */
+import { withoutCaller } from "@/lib/agent-access/caller";
 import { logActionFailure } from "@/lib/logging/action-failure";
 import { isConfiguredChannelId } from "@/lib/channels/registry";
 import { loadConfig } from "@/lib/config";
@@ -61,7 +62,7 @@ function currentCascades(): CoverageCascade[] | null {
  * one inserted under one lock (`queueRunCycleRequest`), so two requests at once cannot both pass the busy check.
  */
 export async function requestRunCycle(rawPayload: unknown): Promise<ControlActionState> {
-  const payload = runCyclePayloadSchema.safeParse(rawPayload ?? {});
+  const payload = runCyclePayloadSchema.safeParse(withoutCaller(rawPayload ?? {}));
   if (!payload.success) return fail("invalidPayload");
   if (payload.data.channelIds?.some((id) => !isConfiguredChannelId(id))) return fail("unknownChannel");
   const backfillHours = payload.data.backfillHours;
@@ -123,7 +124,7 @@ const sameScorePayload = (a: ScoreJobsPayload, b: ScoreJobsPayload): boolean => 
  * scoring one job must not swallow the click on the next. Refused when there is nothing to score.
  */
 export async function requestScoreJobs(rawPayload: unknown): Promise<ControlActionState> {
-  const payload = scoreJobsPayloadSchema.safeParse(rawPayload);
+  const payload = scoreJobsPayloadSchema.safeParse(withoutCaller(rawPayload));
   if (!payload.success) return fail("invalidPayload");
   try {
     const db = getDb();
@@ -201,7 +202,7 @@ export async function requestTestAi(rawPayload: unknown): Promise<ControlActionS
  * provider id and a filter word pass, no address. An open request for the same provider and filter is reused.
  */
 export async function requestModelsSync(rawPayload: unknown): Promise<ControlActionState> {
-  const payload = modelsSyncPayloadSchema.safeParse(rawPayload);
+  const payload = modelsSyncPayloadSchema.safeParse(withoutCaller(rawPayload));
   if (!payload.success) return fail("invalidPayload");
   const { provider, filter } = payload.data;
   try {

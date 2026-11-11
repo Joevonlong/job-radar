@@ -1,5 +1,5 @@
 {
-  "id": "72fc5994-80ac-48f1-8909-62e7e62d59a8",
+  "id": "b631bd55-235e-4f38-8eb9-4ef2d4c32201",
   "prevId": "5533dd87-6c72-4b63-8f62-ad54afb9383e",
   "version": "7",
   "dialect": "postgresql",
@@ -403,6 +403,153 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.agent_budget_tickets": {
+      "name": "agent_budget_tickets",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "caller": {
+          "name": "caller",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day": {
+          "name": "day",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "units": {
+          "name": "units",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "agent_budget_tickets_day_idx": {
+          "name": "agent_budget_tickets_day_idx",
+          "columns": [
+            {
+              "expression": "day",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "agent_budget_tickets_units_positive": {
+          "name": "agent_budget_tickets_units_positive",
+          "value": "\"agent_budget_tickets\".\"units\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.agent_budget_usage": {
+      "name": "agent_budget_usage",
+      "schema": "",
+      "columns": {
+        "caller": {
+          "name": "caller",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day": {
+          "name": "day",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "used": {
+          "name": "used",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "agent_budget_usage_day_idx": {
+          "name": "agent_budget_usage_day_idx",
+          "columns": [
+            {
+              "expression": "day",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "agent_budget_usage_caller_action_day_pk": {
+          "name": "agent_budget_usage_caller_action_day_pk",
+          "columns": [
+            "caller",
+            "action",
+            "day"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "agent_budget_usage_used_nonnegative": {
+          "name": "agent_budget_usage_used_nonnegative",
+          "value": "\"agent_budget_usage\".\"used\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.agent_calls": {
       "name": "agent_calls",
       "schema": "",
@@ -500,21 +647,7 @@
           "with": {}
         }
       },
-      "foreignKeys": {
-        "agent_calls_token_id_agent_tokens_id_fk": {
-          "name": "agent_calls_token_id_agent_tokens_id_fk",
-          "tableFrom": "agent_calls",
-          "tableTo": "agent_tokens",
-          "columnsFrom": [
-            "token_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -528,133 +661,6 @@
           "value": "(\"agent_calls\".\"outcome\" = 'error' and \"agent_calls\".\"error_category\" is not null) or (\"agent_calls\".\"outcome\" <> 'error' and \"agent_calls\".\"error_category\" is null)"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.agent_tokens": {
-      "name": "agent_tokens",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "agent_tokens_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "2147483647",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token_prefix": {
-          "name": "token_prefix",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "permissions": {
-          "name": "permissions",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "auto_approve": {
-          "name": "auto_approve",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "last_used_at": {
-          "name": "last_used_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "revoked_at": {
-          "name": "revoked_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "agent_tokens_token_prefix_idx": {
-          "name": "agent_tokens_token_prefix_idx",
-          "columns": [
-            {
-              "expression": "token_prefix",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agent_tokens_active_name_uq": {
-          "name": "agent_tokens_active_name_uq",
-          "columns": [
-            {
-              "expression": "name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"agent_tokens\".\"revoked_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "agent_tokens_token_hash_uq": {
-          "name": "agent_tokens_token_hash_uq",
-          "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.ai_usage": {
