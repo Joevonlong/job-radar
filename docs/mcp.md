@@ -52,7 +52,9 @@ refuses the next call of a client that is already connected, without a restart; 
 
 `search_jobs` and `get_job` share `jobs:read`; `list_applications` needs `tracking:read`. Other ids from the permission catalog
 are accepted but do not expose tools yet. Version-2 tool switches migrate to both permission lists; if only one jobs tool
-was off, `jobs:read` offers both and `config:migrate` prints a notice. Remove `jobs:read` to disable both.
+was off, `jobs:read` offers both and `config:migrate` prints a notice. Remove `jobs:read` to disable both. A permission
+you write into `mcp.yaml` also covers tools that later versions add under it, so grant only what should be readable or
+writable.
 
 ```yaml
 config_version: 3

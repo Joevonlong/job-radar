@@ -37,7 +37,7 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 服务每次调用都重读 `mcp.yaml`。把它关掉、移除某个权限，或者文件读不出来，已经连上的客户端下一次调用就会被拒，不用重启；新增授权则要重启客户端。
 
-`search_jobs` 和 `get_job` 共用 `jobs:read`，`list_applications` 需要 `tracking:read`。权限目录中的其他 id 也能填写，但暂不提供工具。版本 2 的工具开关会迁移为两份权限列表；如果此前只关了一个岗位工具，`jobs:read` 会同时提供两个，`config:migrate` 会打印提示。移除 `jobs:read` 可以同时关闭两个。
+`search_jobs` 和 `get_job` 共用 `jobs:read`，`list_applications` 需要 `tracking:read`。权限目录中的其他 id 也能填写，但暂不提供工具。版本 2 的工具开关会迁移为两份权限列表；如果此前只关了一个岗位工具，`jobs:read` 会同时提供两个，`config:migrate` 会打印提示。移除 `jobs:read` 可以同时关闭两个。写进 `mcp.yaml` 的权限也适用于以后版本在它下面新增的工具，所以只授予应当可读或可写的权限。
 
 ```yaml
 config_version: 3

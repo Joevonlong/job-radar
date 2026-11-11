@@ -33,11 +33,11 @@ export const mcpPermissions: ConfigMigration = {
         const node = isAlias(pair.value) ? pair.value.resolve(doc) : pair.value;
         if (!isScalar(node)) return;
         const value: unknown = node.value;
-        if (typeof value !== "boolean" && value !== null && !isUnset(value)) return;
+        if (typeof value !== "boolean" && !isUnset(value)) return;
         const name = pair.key.value as OldTool;
         effective[name] = typeof value === "boolean" ? value : oldDefaults[name];
       }
-    } else if (!isScalar(tools) || (tools.value !== null && !isUnset(tools.value))) {
+    } else if (!isScalar(tools) || !isUnset(tools.value)) {
       return;
     }
     const granted = new Set<Permission>();
@@ -47,6 +47,7 @@ export const mcpPermissions: ConfigMigration = {
     if (effective.save_application_answer) granted.add("writer:write");
     const permissions = PERMISSIONS.filter((permission) => granted.has(permission));
     const index = map.items.findIndex((pair) => isScalar(pair.key) && pair.key.value === "tools");
+    const toolsKey = map.items[index]?.key;
     const replacements = [];
     if (!map.has("permissions")) replacements.push(doc.createPair("permissions", permissions));
     if (!map.has("stdio")) {
@@ -68,6 +69,12 @@ export const mcpPermissions: ConfigMigration = {
         return replacement;
       },
     });
+    const first = replacements[0]?.key;
+    if (isScalar(toolsKey) && isScalar(first)) {
+      first.commentBefore = toolsKey.commentBefore;
+      first.spaceBefore = toolsKey.spaceBefore;
+      first.comment = toolsKey.comment ?? (isMap(rawTools) && !rawTools.flow ? rawTools.commentBefore : isNode(rawTools) ? rawTools.comment : undefined);
+    }
     map.items.splice(index, 1, ...replacements);
     if (effective.search_jobs === effective.get_job) return;
     const off = effective.search_jobs ? "get_job" : "search_jobs";

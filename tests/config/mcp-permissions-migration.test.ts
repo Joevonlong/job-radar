@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { stringify } from "yaml";
 
+import { authorize, liveMcpSettings } from "@/lib/agent-access/authorize";
 import { DEFAULT_PERMISSIONS, effectivePermissions, PERMISSIONS, type Permission } from "@/lib/agent-access/permissions";
 import { CAPABILITIES } from "@/lib/capabilities/registry";
 import { applyConfigMigrations, ConfigError, parseConfigText, planConfigMigrations, writeConfig } from "@/lib/config";
@@ -20,6 +21,8 @@ const defaults = { search_jobs: true, get_job: true, list_applications: true, ge
 type OldTool = keyof typeof defaults;
 const names = Object.keys(defaults) as OldTool[];
 const notice = (off: string) => `search_jobs and get_job now share the permission jobs:read: ${off} was off and is offered again; remove jobs:read from permissions to switch both off`;
+const invalidBodies = ["tools: {typo: true}\n", "tools: {get_job: yes}\n", "tools: []\n", "tools: {search_jobs: false, list_applications: 1}\n"];
+const nullBodies = ["tools:\n", "tools: null\n", "tools:\n  list_applications:\n", "tools:\n  search_jobs: false\n  get_job: false\n  list_applications: null\n"];
 const formats = [
   { name: "overlay", prefix: "config_version: 2\n", version: 3 },
   { name: "unstamped whole file", prefix: "", version: 1 },
@@ -94,19 +97,15 @@ describe.each(formats)("permissions migration: $name", ({ prefix, version }) => 
     { body: "tools:\n  get_application_context: !unset\n", tools: defaults },
     { body: "tools: !unset\n", tools: defaults },
   ];
-  it.each([
-    ...(version === 3 ? unsetBodies : []),
-    { body: "tools:\n", tools: defaults },
-    { body: "tools:\n  list_applications:\n", tools: defaults },
-  ])("uses version-2 defaults for null and unset: $body", ({ body, tools }) => { verify(prefix + body, tools, version); });
-
-  if (version !== 3) {
+  if (version === 3) {
+    it.each(unsetBodies)("uses version-2 defaults for unset: $body", ({ body, tools }) => { verify(prefix + body, tools, version); });
+  } else {
     it.each(unsetBodies)("refuses !unset in a whole file, as before: $body", ({ body }) => {
       expect(() => parseConfigDocument("mcp", prefix + body, "mcp.yaml")).toThrow(ConfigError);
     });
   }
 
-  it.each(["tools: {typo: true}\n", "tools: {get_job: yes}\n", "tools: []\n", "tools: {search_jobs: false, list_applications: 1}\n"])("leaves invalid tools intact for validation: %s", (body) => {
+  it.each([...invalidBodies, ...nullBodies])("leaves invalid and null tools intact for validation: %s", (body) => {
     const doc = parseConfigDocument("mcp", prefix + body, "mcp.yaml");
     const before: unknown = doc.toJS();
     const result = migrateConfigDocument("mcp", doc, "mcp.yaml");
@@ -139,20 +138,30 @@ it.each([
   expect(value.stdio.permissions).toEqual(stdio);
 });
 
-it("keeps other keys' comments and inserts the grants where tools stood", () => {
-  const doc = parseConfigDocument("mcp", "config_version: 2\n# master\nenabled: true # enabled note\n# old tools\ntools: {get_job: false} # old note\n# limits note\nlimits: {max_results: 7}\n", "mcp.yaml");
+it.each([
+  "tools: {get_job: false} # old note\n",
+  "tools: # old note\n  get_job: false # switch note\n",
+])("keeps other keys' comments, moves the tools comments to permissions and inserts the grants where tools stood: %s", (tools) => {
+  const doc = parseConfigDocument("mcp", `config_version: 2\n# master\nenabled: true # enabled note\n\n# old tools\n# second line\n${tools}# limits note\nlimits: {max_results: 7}\n`, "mcp.yaml");
   migrateConfigDocument("mcp", doc, "mcp.yaml");
   const after = doc.toString();
   for (const comment of ["# master", "# enabled note", "# limits note"]) expect(after).toContain(comment);
-  expect(after).not.toContain("old tools");
-  expect(after).not.toContain("old note");
+  expect(after).toContain("\n\n# old tools\n# second line\npermissions: # old note\n");
+  expect(after).not.toContain("switch note");
   expect(after.indexOf("enabled:")).toBeLessThan(after.indexOf("permissions:"));
   expect(after.indexOf("stdio:")).toBeLessThan(after.indexOf("limits:"));
+  expect(parseConfigText("mcp", after).permissions).toEqual(["jobs:read", "tracking:read"]);
 });
 
 it("accepts every catalog id and keeps removed tools invalid in version 3", () => {
   expect(mcpSchema.parse({ permissions: [...PERMISSIONS], stdio: { permissions: [...PERMISSIONS] } }).permissions).toEqual(PERMISSIONS);
   expect(() => parseConfigText("mcp", "config_version: 3\ntools: {}\n")).toThrow(ConfigError);
+});
+
+it.each(formats.flatMap((format) => nullBodies.map((body) => ({ ...format, body }))))("refuses calls when a $name has null tools, read in memory: $body", ({ prefix, body }) => {
+  temp = makeTempConfig({ user: "empty" });
+  fs.writeFileSync(path.join(temp.configDir, "mcp.yaml"), `${prefix}enabled: true\n${body}`);
+  for (const capability of CAPABILITIES) expect(authorize(capability, liveMcpSettings)).toMatchObject({ allowed: false, reason: "unreadable" });
 });
 
 it("a missing file means off with default permissions", () => {
@@ -185,7 +194,7 @@ describe.each(formats)("migration files: $name", ({ prefix, version }) => {
   });
 });
 
-it.each(formats.flatMap((format) => [false, true].flatMap((convertOverlays) => ["tools: {unknown: true}\n", "tools: {get_job: invalid}\n"].map((body) => ({ ...format, convertOverlays, body })))))
+it.each(formats.flatMap((format) => [false, true].flatMap((convertOverlays) => ["tools: {unknown: true}\n", "tools: {get_job: invalid}\n", "tools:\n"].map((body) => ({ ...format, convertOverlays, body })))))
   ("reports invalid tools in planning: $name, convertOverlays=$convertOverlays, $body", ({ prefix, convertOverlays, body }) => {
     temp = makeTempConfig({ user: "empty" });
     fs.writeFileSync(path.join(temp.configDir, "mcp.yaml"), prefix + body);
@@ -213,6 +222,17 @@ it("prints the per-file notice once under the steps in preview and write mode", 
     expect(result.out).toContain(`    note: ${notice("search_jobs")}`);
     expect(result.out.indexOf("2 -> 3:")).toBeLessThan(result.out.indexOf("    note: "));
   }
+});
+
+it.each(["", "config_version: 1\n"])("says a whole file's shape was updated while its format version stays: %j", (prefix) => {
+  temp = makeTempConfig({ user: "empty" });
+  fs.writeFileSync(path.join(temp.configDir, "mcp.yaml"), `${prefix}enabled: true\ntools: {get_job: false}\n`);
+  const check = runConfigScript(temp, "config-check.ts", []);
+  expect(check.out).toContain("shape updated, config_version 1 unchanged, applied in memory: run pnpm config:migrate --write");
+  const migrate = runConfigScript(temp, "config-migrate.ts", []);
+  expect(migrate.status).toBe(0);
+  expect(migrate.out).toContain("mcp.yaml  shape updated, config_version 1 unchanged\n    2 -> 3: ");
+  expect(migrate.out).not.toContain("config_version 1 -> 1");
 });
 
 it("saving a legacy whole file keeps its format version and migrated permission meaning", async () => {

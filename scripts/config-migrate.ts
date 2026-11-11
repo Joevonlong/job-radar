@@ -20,7 +20,7 @@ import { parseArgs } from "node:util";
 
 import { createTwoFilesPatch } from "diff";
 
-import { applyConfigMigrations, applyToFull, ConfigError, displayConfigPath, planConfigMigrations, planToFull, pruneConfigBackups, restoreConfigBackup } from "../src/lib/config";
+import { applyConfigMigrations, applyToFull, ConfigError, describeConfigVersionChange, displayConfigPath, planConfigMigrations, planToFull, pruneConfigBackups, restoreConfigBackup } from "../src/lib/config";
 import { getTranslator } from "../src/lib/i18n/node";
 
 /** A refused write as the command's message; anything else stays an error. */
@@ -132,7 +132,7 @@ async function main(): Promise<number> {
   }
   for (const item of plan.pending) {
     const shown = displayConfigPath(item.path);
-    console.log(`\n~ ${shown}  config_version ${item.from} -> ${item.to}`);
+    console.log(`\n~ ${shown}  ${describeConfigVersionChange(item.from, item.to)}`);
     for (const step of item.steps) console.log(`    ${step.from} -> ${step.to}${step.description ? `: ${step.description}` : ""}`);
     for (const notice of item.notices) console.log(`    note: ${notice}`);
     if (item.conversion) {

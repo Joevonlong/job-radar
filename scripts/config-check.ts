@@ -36,6 +36,7 @@ import path from "node:path";
 
 import {
   ConfigError,
+  describeConfigVersionChange,
   CONFIG_NAMES,
   checkAiAgainstCatalog,
   configLayer,
@@ -182,7 +183,7 @@ for (const name of CONFIG_NAMES) {
     if (migration.applied.length === 0) return;
     if (layer === "default") throw new Error(`the shipped default is at config_version ${migration.from}, the code expects ${migration.to}: ship it migrated`);
     pendingMigrations.push(rel(file));
-    return `config_version ${migration.from} -> ${migration.to} applied in memory: run pnpm config:migrate --write`;
+    return `${describeConfigVersionChange(migration.from, migration.to)}, applied in memory: run pnpm config:migrate --write`;
   });
 }
 

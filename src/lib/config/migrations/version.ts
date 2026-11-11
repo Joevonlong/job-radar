@@ -108,6 +108,14 @@ export function withoutConfigVersion(value: unknown): unknown {
   return copy;
 }
 
+/**
+ * How a migration changes a file, for command output: the format version step, or, for a whole file that a `wholeFiles` step
+ * reshaped, that the shape was updated while the format version stays.
+ */
+export function describeConfigVersionChange(from: number, to: number): string {
+  return from === to ? `shape updated, config_version ${from} unchanged` : `config_version ${from} -> ${to}`;
+}
+
 export interface DocumentMigrationResult {
   /** Version the document had. */
   from: number;
