@@ -227,7 +227,7 @@ describe("a connection made with an agent token", () => {
 
   it("lists only what the token and the global matrix both allow, regardless of the stdio grant", async () => {
     const client = await connect(tokenContext(["tracking:read", "writer:read"], async () => null));
-    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["list_applications"]);
+    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["list_applications", "get_application", "list_favorites"]);
   });
 
   it("refuses a call once the token is no longer valid, before the tool runs", async () => {
