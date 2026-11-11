@@ -3,7 +3,7 @@ import { z } from "zod";
 import { categoryPreviewRequestSchema, previewCategory } from "@/lib/interests/preview";
 import { previewInterestCategoryOutput, toCategoryPreviewDto } from "@/lib/mcp/dto";
 import { shortFieldCleaner } from "@/lib/mcp/guard";
-import { readTraps } from "@/lib/mcp/tools/shared";
+import { loadJobQuoteGuard, readTraps } from "@/lib/mcp/tools/shared";
 
 import { defineCapability, READ_ONLY } from "../types";
 
@@ -18,7 +18,11 @@ export const preview_interest_category = defineCapability({
   output: previewInterestCategoryOutput,
   handler: async (ctx, args) => {
     const preview = await previewCategory(args, { db: ctx.db });
-    return previewInterestCategoryOutput.parse({ notices: [ctx.text("notice.thirdParty")], preview: toCategoryPreviewDto(preview, shortFieldCleaner(readTraps(ctx))) });
+    const quote = await loadJobQuoteGuard(ctx, preview.status === "ok" ? preview.samples.map((sample) => sample.jobId) : []);
+    return previewInterestCategoryOutput.parse({
+      notices: [ctx.text("notice.thirdParty")],
+      preview: toCategoryPreviewDto(preview, shortFieldCleaner(readTraps(ctx)), quote),
+    });
   },
   count: (output) => output.preview.status === "ok" ? output.preview.samples.length : 0,
   annotations: READ_ONLY,

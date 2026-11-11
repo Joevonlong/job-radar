@@ -10,10 +10,13 @@ import { stringify } from "yaml";
 import { PERMISSIONS, type Permission } from "@/lib/agent-access/permissions";
 import type { AuditEntry } from "@/lib/agent-access/audit";
 import { ensureProfileFiles, reloadConfig, resetConfigCache } from "@/lib/config";
+import { currentConfigVersion } from "@/lib/config/migrations/version";
 import { mcpSchema } from "@/lib/config/schemas/mcp";
+import type { TrapsConfig } from "@/lib/config/schemas/traps";
 import { closeDb, getDb, schema } from "@/lib/db";
 import { createReadOnlyDb, type ReadOnlyDb } from "@/lib/db/read-only-client";
 import { insertSuggestions } from "@/lib/db/repos/interest-suggestions";
+import { listJobsToTrapScan, saveTrapScan, type TrapInsert } from "@/lib/db/repos/traps";
 import { previewCategory } from "@/lib/interests/preview";
 import { configToDraft, newCategoryDraft } from "@/lib/interests/vocabulary-draft";
 import { loadProfilePage } from "@/lib/profile/view";
@@ -21,6 +24,7 @@ import { previewDealBreakersAction } from "@/app/me/actions";
 import { getProfileOutput, getInterestsOutput, previewDealBreakersOutput, previewInterestCategoryOutput } from "@/lib/mcp/dto";
 import { buildServer, defaultContext } from "@/lib/mcp/server";
 import { mcpTranslator } from "@/lib/mcp/text";
+import { rulesFingerprint } from "@/lib/traps/fingerprint";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 
@@ -54,6 +58,7 @@ beforeEach(async () => {
   const [company] = await db.insert(schema.companies).values({ name: "Fictional Observatory", nameNorm: "fictional observatory" }).returning();
   const [job] = await db.insert(schema.jobs).values({ companyId: company!.id, title: "Sales Engineer", titleNorm: "sales engineer", description: "We offer telescope training and remote work.", workplace: "remote" }).returning();
   jobId = job!.id;
+  await recordScan(jobId);
   await insertSuggestions(db, [
     { kind: "signal_word", dedupeKey: "word", payload: { kind: "signal_word", tier: "T1", term: "telescope", reasons: { en: "Useful telescope training." }, confidence: 0.9, evidence: [{ jobId, title: "Sales Engineer", company: "Fictional Observatory", quote: "telescope training" }] } },
     { kind: "watched_company", dedupeKey: "company", payload: { kind: "watched_company", company: instruction, reasons: { en: instruction }, confidence: 0.8, evidence: [{ jobId, title: instruction, company: instruction, quote: instruction }] } },
@@ -62,9 +67,18 @@ beforeEach(async () => {
   audit = [];
 });
 
-async function connect(permissions: Permission[] = ["profile:read"], maxResults = 100) {
+async function recordScan(id: number, findings: TrapInsert[] = []) {
+  const rulesHash = rulesFingerprint(reloadConfig("traps"));
+  const [candidate] = await listJobsToTrapScan(getDb(), { rulesHash, limit: 1, jobIds: [id], force: true });
+  if (!candidate) throw new Error("missing test job");
+  await saveTrapScan(getDb(), { ...candidate, rulesHash, findings, needsAi: false, spansHash: null });
+}
+
+async function connect(permissions: Permission[] = ["profile:read"], maxResults = 100, traps?: () => TrapsConfig) {
   const settings = mcpSchema.parse({ enabled: true, permissions, stdio: { permissions }, limits: { max_results: maxResults } });
-  server = buildServer(defaultContext(readonly.db, settings, { text: mcpTranslator("en"), readSettings: () => settings, log: () => {}, audit: { record: async (entry) => { audit.push(entry); }, inTransaction: async () => { throw new Error("unexpected write"); }, close: async () => {} } }));
+  const ctx = defaultContext(readonly.db, settings, { text: mcpTranslator("en"), readSettings: () => settings, log: () => {}, audit: { record: async (entry) => { audit.push(entry); }, inTransaction: async () => { throw new Error("unexpected write"); }, close: async () => {} } });
+  if (traps) ctx.traps = traps;
+  server = buildServer(ctx);
   const [a, b] = InMemoryTransport.createLinkedPair();
   await server.connect(b);
   client = new Client({ name: "personal-test", version: "1" });
@@ -99,6 +113,119 @@ function categoryRequest() {
 }
 
 describe("MCP personal reads", () => {
+  it.each([
+    { limits: {}, expected: 3 },
+    { limits: { preview_samples: 0 }, expected: 0 },
+    { limits: { preview_samples: 2 }, expected: 2 },
+  ])("uses preview_samples $limits in both web and MCP previews without changing counts", async ({ limits, expected }) => {
+    fs.writeFileSync(path.join(temp.configDir, "pipeline.yaml"), stringify({
+      config_version: currentConfigVersion("pipeline"),
+      filter: { deal_breakers: limits },
+    }));
+    resetConfigCache();
+    const [job] = await getDb().select().from(schema.jobs).where(eq(schema.jobs.id, jobId));
+    await getDb().insert(schema.jobs).values(Array.from({ length: 4 }, (_, index) => ({
+      companyId: job!.companyId,
+      title: `Sales Specialist ${index}`,
+      titleNorm: `sales specialist ${index}`,
+      description: "Fictional sales role.",
+    })));
+    await connect();
+    const web = await previewDealBreakersAction(rules);
+    const mcp = previewDealBreakersOutput.parse(await call("preview_deal_breakers", { rules }));
+    expect(web.status).toBe("done");
+    if (web.status !== "done") throw new Error("web preview failed");
+    for (const result of [web, mcp]) {
+      expect(result).toMatchObject({ total: 5, partial: false, rules: [{ status: "ok", count: 5 }] });
+      expect(result.rules[0]?.samples).toHaveLength(expected);
+    }
+    expect(mcp.rules[0]?.samples).toEqual(web.rules[0]?.samples);
+  });
+
+  it("guards each job's preview and suggestion quotes against stored hidden-text findings", async () => {
+    const quote = "telescope training";
+    const [job] = await getDb().select().from(schema.jobs).where(eq(schema.jobs.id, jobId));
+    await recordScan(jobId, [{
+      technique: "hidden_text",
+      method: "display_none",
+      severity: "trap",
+      quote,
+      quoteSource: "description",
+      quoteOffset: job!.description!.indexOf(quote),
+      location: "description",
+      rawPostingId: null,
+      evidence: null,
+      detail: {},
+      inDescription: true,
+    }]);
+    const [safeJob] = await getDb().insert(schema.jobs).values({
+      companyId: job!.companyId,
+      title: "Observatory Engineer",
+      titleNorm: "observatory engineer",
+      description: job!.description,
+    }).returning();
+    await recordScan(safeJob!.id);
+    await insertSuggestions(getDb(), [{
+      kind: "signal_word",
+      dedupeKey: "mixed-evidence",
+      payload: {
+        kind: "signal_word", tier: "T1", term: "observatory", reasons: { en: "Training offered." }, confidence: 0.9,
+        evidence: [jobId, safeJob!.id].map((id) => ({
+          jobId: id, title: "Observatory Engineer", company: "Fictional Observatory", quote,
+        })),
+      },
+    }]);
+    await connect();
+    const beforeDb = await database();
+    const preview = previewInterestCategoryOutput.parse(await call("preview_interest_category", categoryRequest())).preview;
+    expect(preview.status).toBe("ok");
+    if (preview.status !== "ok") throw new Error("preview failed");
+    expect(preview).toMatchObject({ hits: 2, scanned: 2, truncated: false });
+    expect(preview.samples).toHaveLength(2);
+    const marker = reloadConfig("traps").ai_input.hidden_marker;
+    expect(preview.samples.find((s) => s.jobId === jobId)?.quote).toBe(marker);
+    expect(preview.samples.find((s) => s.jobId === safeJob!.id)?.quote).toContain(quote);
+    const interests = getInterestsOutput.parse(await call("get_interests"));
+    expect(interests).toMatchObject({ total: 3, returned: 3, truncated: false });
+    const evidence = interests.pending_suggestions.find((s) =>
+      s.payload?.kind === "signal_word" && s.payload.term === "observatory",
+    )?.payload?.evidence;
+    expect(evidence).toEqual([
+      expect.objectContaining({ jobId, quote: marker }),
+      expect.objectContaining({ jobId: safeJob!.id, quote }),
+    ]);
+    expect(await database()).toEqual(beforeDb);
+  });
+
+  it.each(["missing scan", "stale description", "stale rules", "disabled settings", "unreadable settings"])(
+    "withholds preview and suggestion quotes with %s, preserving hits and counts",
+    async (state) => {
+      const settings = structuredClone(reloadConfig("traps"));
+      if (state === "missing scan") await getDb().delete(schema.trapScans).where(eq(schema.trapScans.jobId, jobId));
+      if (state === "stale description") {
+        await getDb().update(schema.jobs).set({ description: "We now offer telescope training." }).where(eq(schema.jobs.id, jobId));
+      }
+      if (state === "stale rules") settings.scan.min_hidden_chars += 1;
+      if (state === "disabled settings") settings.enabled = false;
+      await connect(["profile:read"], 100, () => {
+        if (state === "unreadable settings") throw new Error("unreadable test trap settings");
+        return settings;
+      });
+      const beforeDb = await database();
+      const preview = previewInterestCategoryOutput.parse(await call("preview_interest_category", categoryRequest()));
+      expect(preview.preview).toMatchObject({
+        status: "ok", hits: 1, scanned: 1, truncated: false,
+        samples: [{ jobId, title: "Sales Engineer", quote: null }],
+      });
+      const interests = getInterestsOutput.parse(await call("get_interests"));
+      expect(interests).toMatchObject({ total: 2, returned: 2, truncated: false });
+      for (const suggestion of interests.pending_suggestions) {
+        expect(suggestion.payload?.evidence).toEqual([expect.objectContaining({ jobId, quote: null })]);
+      }
+      expect(await database()).toEqual(beforeDb);
+    },
+  );
+
   it.each(([ ["profile:read"], [...PERMISSIONS] ] as Permission[][]).map((permissions) => ({ permissions })))("returns only allowed profile fields and the web hashes ($permissions)", async ({ permissions }) => {
     await connect(permissions);
     const page = await loadProfilePage();

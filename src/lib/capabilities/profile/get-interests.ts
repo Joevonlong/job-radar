@@ -3,10 +3,11 @@ import { z } from "zod";
 import { MCP_MAX_RESULTS_CAP } from "@/lib/config/schemas/mcp";
 import { countSuggestions, listSuggestions } from "@/lib/db/repos/interest-suggestions";
 import { loadInterestsPage } from "@/lib/interests/view";
+import { suggestionPayloadSchema } from "@/lib/interests/suggestion";
 import { ToolFailure } from "@/lib/mcp/context";
 import { getInterestsOutput, toInterestSettingsDto, toSuggestionDto } from "@/lib/mcp/dto";
 import { shortFieldCleaner } from "@/lib/mcp/guard";
-import { readTraps, resultLimit, truncationNotice } from "@/lib/mcp/tools/shared";
+import { loadJobQuoteGuard, readTraps, resultLimit, truncationNotice } from "@/lib/mcp/tools/shared";
 
 import { defineCapability, READ_ONLY } from "../types";
 
@@ -22,7 +23,12 @@ export const get_interests = defineCapability({
     const limit = resultLimit(ctx, args.limit);
     const [rows, total] = await Promise.all([listSuggestions(ctx.db, { status: "pending", limit }), countSuggestions(ctx.db, "pending")]);
     const clean = shortFieldCleaner(readTraps(ctx));
-    const pending = rows.map((row) => toSuggestionDto(row, clean));
+    const jobIds = rows.flatMap((row) => {
+      const payload = suggestionPayloadSchema.safeParse(row.payloadJson);
+      return payload.success ? payload.data.evidence.filter((e) => e.quote !== undefined).map((e) => e.jobId) : [];
+    });
+    const quote = await loadJobQuoteGuard(ctx, jobIds);
+    const pending = rows.map((row) => toSuggestionDto(row, clean, quote));
     const truncated = total > pending.length;
     return getInterestsOutput.parse({
       notices: [ctx.text("notice.thirdParty"), ...(truncated ? [truncationNotice(ctx, pending.length, total, limit)] : [])],

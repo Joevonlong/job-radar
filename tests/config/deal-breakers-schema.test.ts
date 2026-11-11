@@ -89,6 +89,19 @@ describe("pipeline.yaml filter.deal_breakers", () => {
     expect(result.success && result.data.filter.deal_breakers).toEqual(DEAL_BREAKER_DEFAULTS);
   });
 
+  it.each([
+    { limits: {}, expected: 3 },
+    { limits: { preview_samples: 0 }, expected: 0 },
+    { limits: { preview_samples: 7 }, expected: 7 },
+  ])("reads preview_samples from $limits as $expected", ({ limits, expected }) => {
+    const result = pipelineFile((filter) => void (filter.deal_breakers = limits));
+    expect(result.success && result.data.filter.deal_breakers.preview_samples).toBe(expected);
+  });
+
+  it.each([-1, 1.5, "3", null])("refuses invalid preview_samples: %j", (preview_samples) => {
+    expect(pipelineFile((filter) => void (filter.deal_breakers = { preview_samples })).success).toBe(false);
+  });
+
   it("defaults a missing value and refuses limits above the schema's", () => {
     const partial = pipelineFile((filter) => void (filter.deal_breakers = { max_rules: 5 }));
     expect(partial.success && partial.data.filter.deal_breakers).toEqual({ ...DEAL_BREAKER_DEFAULTS, max_rules: 5 });

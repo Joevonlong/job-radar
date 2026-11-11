@@ -49,8 +49,12 @@ function verify(text: string, tools: typeof defaults, version: number) {
   expect(value.permissions).toEqual(expected);
   expect(value.stdio.permissions).toEqual(expected);
   const effective = effectivePermissions(value.stdio.permissions, value.permissions);
-  for (const capability of CAPABILITIES) {
-    const old = tools[capability.id as OldTool];
+  expect(value.permissions).not.toContain("profile:read");
+  expect(value.stdio.permissions).not.toContain("profile:read");
+  expect(effective.has("profile:read")).toBe(false);
+  for (const name of names) {
+    const capability = CAPABILITIES.find((entry) => entry.id === name)!;
+    const old = tools[name];
     const expanded = capability.permission === "jobs:read" && tools.search_jobs !== tools.get_job;
     expect(effective.has(capability.permission)).toBe(expanded || old);
   }
