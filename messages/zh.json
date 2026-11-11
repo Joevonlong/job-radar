@@ -1928,7 +1928,8 @@
       "workflow": "申请流程",
       "advanced": "高级",
       "salary": "薪资",
-      "research": "调研"
+      "research": "调研",
+      "agents": "Agent 接入"
     },
     "ai": {
       "block": {
@@ -3819,7 +3820,8 @@
         "failed": "保存失败，文件没有改动。",
         "protected": "这段文本修改了受保护的键（命令、API 地址或凭据路径）。请手动编辑文件来改。",
         "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
-        "busy": "另一个进程正在保存配置，请稍后再试。"
+        "busy": "另一个进程正在保存配置，请稍后再试。",
+        "session_required": "改 mcp.yaml 要用网页口令登录，本机访问也一样。请在 Agent 接入页登录，或直接在那里改。"
       },
       "files": {
         "label": "配置文件",
@@ -3874,7 +3876,9 @@
         "working": "处理中…"
       },
       "protectedNote": "{file} 中受保护的键（命令、API 地址、凭据路径）只能手动编辑文件来改：",
-      "protectedUnlocked": "已设置 JOB_RADAR_ALLOW_WEB_EDIT_PROTECTED=1，{file} 中这些平时锁定的键可以在这里修改："
+      "protectedUnlocked": "已设置 JOB_RADAR_ALLOW_WEB_EDIT_PROTECTED=1，{file} 中这些平时锁定的键可以在这里修改：",
+      "agentsNote": "这个文件里的开关和权限在 Agent 接入页管理。设了网页口令时，在这里保存它也要登录，本机访问也一样。",
+      "agentsLink": "打开 Agent 接入"
     },
     "telegramStatus": {
       "title": "Telegram",
@@ -6386,7 +6390,8 @@
           "http": "HTTP 启用：{enabled}。有效 token：{count}；最近到期：{expiry}。",
           "unknown": "未知",
           "passwordRequired": "设置可用的 Web 密码前，HTTP 入口返回 503。",
-          "passwordHint": "运行 pnpm web:password，配置 Web 密码后重启 Web 进程。"
+          "passwordHint": "运行 pnpm web:password，配置 Web 密码后重启 Web 进程。",
+          "manage": "在 设置 → Agent 接入（/settings/agents）管理。"
         },
         "replies": {
           "title": "Gmail 回信",
@@ -9466,5 +9471,179 @@
     },
     "send": "确认并提取",
     "cancel": "返回原文"
+  },
+  "agents": {
+    "subnav": {
+      "label": "Agent 设置",
+      "access": "Agent 接入"
+    },
+    "page": {
+      "title": "Agent 接入",
+      "description": "AI agent 能读什么、改什么，以及怎么连进来"
+    },
+    "session": {
+      "title": "这页的修改要登录",
+      "body": "本机访问免登录，但改权限、建和吊销 token 要再输一次网页口令。",
+      "password": "网页口令",
+      "submit": "登录",
+      "submitting": "正在登录…"
+    },
+    "results": {
+      "saved": "已保存，agent 的下一次调用就按新设置判定。",
+      "session_required": "这项修改要用网页口令登录，本机访问也一样。",
+      "invalid": "请求无效，没有改动。",
+      "stale": "mcp.yaml 在别处改过了。页面已按文件现在的内容重载，请重新修改。",
+      "unreadable": "mcp.yaml 读不出来，请先在高级编辑器里修复。",
+      "password_required": "HTTP 接入要先设网页口令。",
+      "not_in_matrix": "本机权限只能选全局矩阵允许的项。",
+      "failed": "保存失败，mcp.yaml 没有改动。"
+    },
+    "status": {
+      "title": "状态",
+      "verdict": {
+        "on": "已打开",
+        "off": "已关闭",
+        "password_required": "HTTP 缺口令",
+        "config_error": "mcp.yaml 读不出"
+      },
+      "enabled": {
+        "label": "允许 agent 接入",
+        "hint": "agent 可以按下面的权限连进来。",
+        "off": "关着时任何连接都不能用；下面的设置照常保存。"
+      },
+      "http": {
+        "label": "HTTP 接入",
+        "hint": "让其他设备上的 agent 用 token 连进来。",
+        "noPassword": "要先设网页口令。<doc>HTTP 接入的说明</doc>",
+        "address": "地址",
+        "copy": "复制",
+        "copied": "已复制地址",
+        "copyFailed": "这里不能用剪贴板：地址已选中，请用键盘复制。"
+      },
+      "tokens": "{count, plural, =0 {没有有效 token} other {# 个有效 token}}",
+      "tokensUnknown": "有效 token：未知（数据库读不出）",
+      "lastCall": "最近一次调用：{time}",
+      "lastCallNever": "还没有调用记录"
+    },
+    "matrix": {
+      "title": "权限矩阵",
+      "description": "这是上限：每个连接得到的是它自己的权限和这里的交集。",
+      "presetsLabel": "预设",
+      "presets": {
+        "read_only": "只读",
+        "assistant": "助手",
+        "all": "全部"
+      },
+      "columns": {
+        "area": "数据区",
+        "read": "读",
+        "write": "写"
+      },
+      "missing": "没有这一项",
+      "cell": "{area}：{access}",
+      "access": {
+        "read": "读",
+        "write": "写",
+        "run": "允许"
+      },
+      "areas": {
+        "jobs": {
+          "name": "岗位",
+          "includes": "岗位事实、来源链接、分数和排名、带引用的信号、清洗后的 JD、翻译、拆解、薪资基准、公司和公司背景、今日视图、洞察"
+        },
+        "raw": {
+          "name": "原始内容",
+          "includes": "各来源抓回来的原始岗位内容，没经过陷阱清洗，带固定提示"
+        },
+        "tracking": {
+          "name": "申请追踪",
+          "includes": "申请状态和历史、下一步、面试轮次、收藏、已看、关闭判断、过滤覆盖"
+        },
+        "notes": {
+          "name": "备注",
+          "includes": "申请备注、事件备注、收藏备注"
+        },
+        "match": {
+          "name": "匹配理由",
+          "includes": "打分理由、缺口、过滤原因、一票否决命中、签证匹配、德语扣分"
+        },
+        "profile": {
+          "name": "画像和偏好",
+          "includes": "me、偏好（含薪资底线）、兴趣清单、经历素材"
+        },
+        "career": {
+          "name": "职业档案和简历",
+          "includes": "职业档案、简历和求职信文档及历史版本；不含联系方式"
+        },
+        "writer": {
+          "name": "申请写作",
+          "includes": "申请问题、回答版本，以及你为该题勾选的材料"
+        },
+        "replies": {
+          "name": "回信",
+          "includes": "回信的分类、匹配到的申请、状态；不含正文、主题、发件人"
+        },
+        "ops": {
+          "name": "运维",
+          "includes": "处理轮和运行记录、通道健康、采集日志、AI 用量、doctor 摘要"
+        },
+        "config": {
+          "name": "配置",
+          "includes": "只限白名单内的配置字段"
+        },
+        "actions": {
+          "name": "触发动作",
+          "includes": "启动一轮处理或其他手动操作"
+        },
+        "import": {
+          "name": "导入岗位",
+          "includes": "从配置的来源之外添加岗位"
+        }
+      },
+      "notes": {
+        "untrusted": "未清洗的第三方文本",
+        "approval": "写入要你批准",
+        "career": "文档草稿直接生效；改职业档案本身要你批准"
+      },
+      "tools": "{count, plural, =0 {暂无工具} other {# 个工具}}",
+      "bar": {
+        "dirty": "{count, plural, other {# 处改动}}",
+        "clean": "没有未保存的改动",
+        "save": "保存矩阵",
+        "saving": "正在保存…",
+        "revert": "撤销改动"
+      },
+      "impact": "保存后 {connections} 个连接失去 {permissions} 项权限"
+    },
+    "connections": {
+      "title": "连接",
+      "description": "本机 stdio 进程和各个 token。不在矩阵里的权限会保留，但不生效。",
+      "columns": {
+        "name": "名称",
+        "prefix": "前几位",
+        "permissions": "权限",
+        "created": "创建",
+        "lastUsed": "最后使用",
+        "expires": "到期"
+      },
+      "stdio": {
+        "name": "本机 stdio（没有 token）"
+      },
+      "none": "没有权限",
+      "noExpiry": "不过期",
+      "ineffective": "全局矩阵没开，不生效",
+      "edit": "改权限"
+    },
+    "stdioDialog": {
+      "title": "本机 stdio 的权限",
+      "description": "在本机启动的 MCP 客户端能用什么。这里只列全局矩阵允许的权限。",
+      "presetsLabel": "预设",
+      "permissions": "权限",
+      "outside": "mcp.yaml 里已有、但矩阵不允许的权限（保留，不生效）：",
+      "empty": "全局矩阵还什么都没允许：先在矩阵里勾选。",
+      "cancel": "取消",
+      "save": "保存",
+      "saving": "正在保存…"
+    }
   }
 }

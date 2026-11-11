@@ -22,6 +22,12 @@ export async function activeAgentTokenStats(db: Executor, now: Date): Promise<Ac
   return row ?? { activeTokens: 0, nearestExpiry: null };
 }
 
+/** The permission lists of the tokens that can still be used: what narrowing the global matrix would take from them. */
+export async function activeAgentTokenGrants(db: Executor, now: Date): Promise<{ permissions: string[] }[]> {
+  return db.select({ permissions: agentTokens.permissions })
+    .from(agentTokens).where(and(isNull(agentTokens.revokedAt), or(isNull(agentTokens.expiresAt), gt(agentTokens.expiresAt, now))));
+}
+
 const summaryColumns = {
   id: agentTokens.id,
   name: agentTokens.name,

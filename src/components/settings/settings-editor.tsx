@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, CircleDashed, Loader2, WifiOff } from "lucide-react";
+import { Bot, CheckCircle2, CircleDashed, Loader2, WifiOff } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import Link from "next/link";
 import { parseAsString, parseAsStringLiteral, useQueryState } from "nuqs";
@@ -8,10 +8,12 @@ import { useActionState, useEffect } from "react";
 import { toastTone } from "@/lib/toast";
 
 import { saveSettingsAction as rawSaveSettingsAction } from "@/app/settings/actions";
+import { LoadError, repairHref } from "@/components/settings/load-error";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AiDisclosureRow } from "@/lib/ai/disclosure";
 import type { ControlStatus } from "@/lib/settings/status-schema";
-import { ACTIONS_TAB, ADVANCED_TAB, CONFIG_PAGE_TABS, PAGE_TABS, SETTINGS_FILES, TAB_LAYOUT, WEB_ONLY_CONFIGS, isAckName, type PageTab } from "@/lib/settings/tabs";
+import { ACTIONS_TAB, ADVANCED_TAB, AGENTS_PAGE, CONFIG_PAGE_TABS, PAGE_TABS, SETTINGS_FILES, TAB_LAYOUT, WEB_ONLY_CONFIGS, isAckName, type PageTab } from "@/lib/settings/tabs";
 import type { QuietInput } from "@/lib/settings/timeline";
 import type { WorkflowView } from "@/lib/settings/workflow/types";
 import { IDLE_SETTINGS_STATE, type SaveSettingsRequest, type SettingsSection } from "@/lib/settings/types";
@@ -51,28 +53,6 @@ interface SettingsEditorProps {
   timezone: string;
   /** Server time at render (ISO): the first paint of the timeline's "now" line. */
   now: string;
-}
-
-/** The advanced editor's address for a config (`?tab=advanced&file=<file name without .yaml>`). */
-function repairHref(file: string): string {
-  return `/settings?tab=advanced&file=${encodeURIComponent(file.replace(/\.yaml$/, ""))}`;
-}
-
-function LoadError({ file, repair, message }: { file: string; repair: string; message: string }) {
-  const t = useTranslations("settings.loadError");
-  return (
-    <div role="alert" className="border-bad bg-card flex flex-col gap-1 rounded-card border-bw px-4 py-3 text-body">
-      <p className="text-bad flex items-center gap-2 font-bold [overflow-wrap:anywhere]">
-        <AlertTriangle aria-hidden className="size-4 shrink-0" />
-        {t("title", { file })}
-      </p>
-      <p className="text-ink-2">{t("hint")}</p>
-      <pre className="text-ink-2 mt-1 font-mono text-data break-words whitespace-pre-wrap">{message}</pre>
-      <Link href={repairHref(repair)} className="font-bold underline underline-offset-4 hover:bg-hi hover:text-hi-ink" data-testid="repair-link">
-        {t("repair")}
-      </Link>
-    </div>
-  );
 }
 
 const ACK_BASE = "flex items-center gap-1.5 font-mono text-data";
@@ -186,20 +166,25 @@ export function SettingsEditor({ sections, status: initialStatus, channelChoices
   return (
     <div className="flex flex-col gap-4">
       <Tabs value={tab} onValueChange={(next) => void setTab(next as PageTab)} className="gap-4">
-        <TabsList variant="segmented" aria-label={t("tabs.label")}>
-          {CONFIG_PAGE_TABS.map((name) => (
-            <TabsTrigger key={name} value={name} className="flex-none" data-testid={`tab-${name}`}>
-              {t(`tabs.${name}`)}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <TabsList variant="segmented" aria-label={t("tabs.label")} className="min-w-0">
+            {CONFIG_PAGE_TABS.map((name) => (
+              <TabsTrigger key={name} value={name} className="flex-none" data-testid={`tab-${name}`}>
+                {t(`tabs.${name}`)}
+              </TabsTrigger>
+            ))}
+            <span aria-hidden="true" className="bg-ink mx-1 w-[3px] shrink-0 self-stretch" />
+            <TabsTrigger value={ACTIONS_TAB} className="flex-none" data-testid={`tab-${ACTIONS_TAB}`}>
+              {t(`tabs.${ACTIONS_TAB}`)}
             </TabsTrigger>
-          ))}
-          <span aria-hidden="true" className="bg-ink mx-1 w-[3px] shrink-0 self-stretch" />
-          <TabsTrigger value={ACTIONS_TAB} className="flex-none" data-testid={`tab-${ACTIONS_TAB}`}>
-            {t(`tabs.${ACTIONS_TAB}`)}
-          </TabsTrigger>
-          <TabsTrigger value={ADVANCED_TAB} className="flex-none" data-testid={`tab-${ADVANCED_TAB}`}>
-            {t(`tabs.${ADVANCED_TAB}`)}
-          </TabsTrigger>
-        </TabsList>
+            <TabsTrigger value={ADVANCED_TAB} className="flex-none" data-testid={`tab-${ADVANCED_TAB}`}>
+              {t(`tabs.${ADVANCED_TAB}`)}
+            </TabsTrigger>
+          </TabsList>
+          <Link href={AGENTS_PAGE} className={buttonVariants({ variant: "default", size: "sm" })} data-testid="tab-agents-link">
+            <Bot aria-hidden /> {t("tabs.agents")}
+          </Link>
+        </div>
         {CONFIG_PAGE_TABS.map((pageTab) => (
           // Every panel stays mounted (just hidden) so unsaved edits survive a tab switch.
           <TabsContent key={pageTab} value={pageTab} forceMount className="flex flex-col gap-4 data-[state=inactive]:hidden">

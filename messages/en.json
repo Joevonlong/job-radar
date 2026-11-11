@@ -1928,7 +1928,8 @@
       "workflow": "Workflow",
       "advanced": "Advanced",
       "salary": "Salary",
-      "research": "Research"
+      "research": "Research",
+      "agents": "Agent access"
     },
     "ai": {
       "block": {
@@ -3819,7 +3820,8 @@
         "failed": "Could not save; the file is unchanged.",
         "protected": "This text changes a locked key (a command, an API host or a credential path). Edit the file by hand to change it.",
         "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
-        "busy": "Another process is saving settings. Try again shortly."
+        "busy": "Another process is saving settings. Try again shortly.",
+        "session_required": "Changing mcp.yaml needs a sign-in with the web password, even on this machine. Sign in on the agent access page, or make the change there."
       },
       "files": {
         "label": "Config files",
@@ -3874,7 +3876,9 @@
         "working": "Working…"
       },
       "protectedNote": "Locked keys in {file} (commands, API hosts, credential paths) can only be changed by editing the file by hand:",
-      "protectedUnlocked": "JOB_RADAR_ALLOW_WEB_EDIT_PROTECTED=1 is set, so these normally locked keys of {file} can be changed here:"
+      "protectedUnlocked": "JOB_RADAR_ALLOW_WEB_EDIT_PROTECTED=1 is set, so these normally locked keys of {file} can be changed here:",
+      "agentsNote": "Switches and permissions in this file are managed on the agent access page. When a web password is set, saving this file needs a sign-in, even on this machine.",
+      "agentsLink": "Open agent access"
     },
     "telegramStatus": {
       "title": "Telegram",
@@ -6386,7 +6390,8 @@
           "http": "HTTP enabled: {enabled}. Active tokens: {count}; nearest expiry: {expiry}.",
           "unknown": "unknown",
           "passwordRequired": "HTTP answers 503 until a usable web password is set.",
-          "passwordHint": "Run pnpm web:password and configure the web password, then restart the web process."
+          "passwordHint": "Run pnpm web:password and configure the web password, then restart the web process.",
+          "manage": "Manage it in Settings → Agent access (/settings/agents)."
         },
         "replies": {
           "title": "Gmail replies",
@@ -9466,5 +9471,179 @@
     },
     "send": "Confirm and extract",
     "cancel": "Back to source"
+  },
+  "agents": {
+    "subnav": {
+      "label": "Agent settings",
+      "access": "Agent access"
+    },
+    "page": {
+      "title": "Agent access",
+      "description": "What AI agents may read and change, and how they connect"
+    },
+    "session": {
+      "title": "Changes on this page need a sign-in",
+      "body": "Visits from this machine skip the login, but changing permissions and creating or revoking tokens needs the web password once more.",
+      "password": "Web password",
+      "submit": "Sign in",
+      "submitting": "Signing in…"
+    },
+    "results": {
+      "saved": "Saved. The next agent call uses it.",
+      "session_required": "This change needs a sign-in with the web password, even on this machine.",
+      "invalid": "The request was not valid; nothing was changed.",
+      "stale": "mcp.yaml was changed elsewhere. The page now shows the file as it is: make your change again.",
+      "unreadable": "mcp.yaml cannot be read. Repair it in the advanced editor first.",
+      "password_required": "HTTP access needs a web password. Set one first.",
+      "not_in_matrix": "The local grant can only hold permissions the global matrix allows.",
+      "failed": "Could not save; mcp.yaml is unchanged."
+    },
+    "status": {
+      "title": "Status",
+      "verdict": {
+        "on": "On",
+        "off": "Off",
+        "password_required": "HTTP needs a password",
+        "config_error": "mcp.yaml unreadable"
+      },
+      "enabled": {
+        "label": "Allow agent access",
+        "hint": "Agents can connect with the permissions below.",
+        "off": "While this is off no connection works; the settings below are still saved."
+      },
+      "http": {
+        "label": "HTTP access",
+        "hint": "Lets agents on other devices connect with a token.",
+        "noPassword": "Needs a web password: set one first. <doc>How HTTP access works</doc>",
+        "address": "Address",
+        "copy": "Copy",
+        "copied": "Address copied",
+        "copyFailed": "Copying is not available here: the address is selected, copy it with the keyboard."
+      },
+      "tokens": "{count, plural, =0 {No active tokens} one {# active token} other {# active tokens}}",
+      "tokensUnknown": "Active tokens: unknown (the database cannot be read)",
+      "lastCall": "Last call {time}",
+      "lastCallNever": "No calls recorded"
+    },
+    "matrix": {
+      "title": "Permission matrix",
+      "description": "This is the ceiling: each connection gets its own permissions intersected with these.",
+      "presetsLabel": "Presets",
+      "presets": {
+        "read_only": "Read only",
+        "assistant": "Assistant",
+        "all": "All"
+      },
+      "columns": {
+        "area": "Area",
+        "read": "Read",
+        "write": "Write"
+      },
+      "missing": "Not available",
+      "cell": "{area}: {access}",
+      "access": {
+        "read": "read",
+        "write": "write",
+        "run": "allow"
+      },
+      "areas": {
+        "jobs": {
+          "name": "Jobs",
+          "includes": "Job facts, source links, scores and ranking, cited signals, cleaned JDs, translations, breakdowns, salary benchmarks, companies and their background, the today view, insights"
+        },
+        "raw": {
+          "name": "Raw postings",
+          "includes": "Postings as each source returned them, not cleaned of AI traps, with a fixed warning"
+        },
+        "tracking": {
+          "name": "Application tracking",
+          "includes": "Application status and history, next steps, interview rounds, favorites, seen, closed judgements, filter overrides"
+        },
+        "notes": {
+          "name": "Notes",
+          "includes": "Notes on applications, events and favorites"
+        },
+        "match": {
+          "name": "Match reasons",
+          "includes": "Scoring reasons, gaps, filter reasons, deal-breaker hits, visa match, German-language deductions"
+        },
+        "profile": {
+          "name": "Profile and preferences",
+          "includes": "Me, preferences (with the salary floor), interests, story material"
+        },
+        "career": {
+          "name": "Career profile and résumés",
+          "includes": "The career profile, résumé and cover-letter documents with their history; not your contact details"
+        },
+        "writer": {
+          "name": "Application writer",
+          "includes": "Application questions, answer versions, and the material you ticked for each question"
+        },
+        "replies": {
+          "name": "Replies",
+          "includes": "Category, matched application and status of replies; not the body, subject or sender"
+        },
+        "ops": {
+          "name": "Operations",
+          "includes": "Cycles and runs, channel health, collection logs, AI usage, the doctor summary"
+        },
+        "config": {
+          "name": "Configuration",
+          "includes": "Allow-listed config fields only"
+        },
+        "actions": {
+          "name": "Run actions",
+          "includes": "Start a cycle or another manual action"
+        },
+        "import": {
+          "name": "Import jobs",
+          "includes": "Add jobs from outside the configured sources"
+        }
+      },
+      "notes": {
+        "untrusted": "Uncleaned third-party text",
+        "approval": "Writes need your approval",
+        "career": "Document drafts apply at once; changing the career profile itself needs your approval"
+      },
+      "tools": "{count, plural, =0 {No tools yet} one {# tool} other {# tools}}",
+      "bar": {
+        "dirty": "{count, plural, one {# change} other {# changes}}",
+        "clean": "No unsaved changes",
+        "save": "Save matrix",
+        "saving": "Saving…",
+        "revert": "Revert"
+      },
+      "impact": "After saving, {connections, plural, one {# connection loses} other {# connections lose}} {permissions, plural, one {# permission} other {# permissions}}"
+    },
+    "connections": {
+      "title": "Connections",
+      "description": "The local stdio process and the tokens. A permission the matrix does not allow is kept but gives nothing.",
+      "columns": {
+        "name": "Name",
+        "prefix": "Prefix",
+        "permissions": "Permissions",
+        "created": "Created",
+        "lastUsed": "Last used",
+        "expires": "Expires"
+      },
+      "stdio": {
+        "name": "This machine (stdio, no token)"
+      },
+      "none": "No permissions",
+      "noExpiry": "Never",
+      "ineffective": "Not in the global matrix: no effect",
+      "edit": "Edit permissions"
+    },
+    "stdioDialog": {
+      "title": "Local stdio permissions",
+      "description": "What an MCP client started on this machine may use. Only permissions the global matrix allows are listed.",
+      "presetsLabel": "Presets",
+      "permissions": "Permissions",
+      "outside": "Already in mcp.yaml but not allowed by the matrix (kept, no effect):",
+      "empty": "The global matrix allows nothing yet: tick permissions there first.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving…"
+    }
   }
 }

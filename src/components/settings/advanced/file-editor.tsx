@@ -2,6 +2,7 @@
 
 import { Eraser, Lock, Save, Undo2 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { resetAdvancedAction as rawResetAdvancedAction, saveAdvancedAction as rawSaveAdvancedAction, validateAdvancedAction as rawValidateAdvancedAction } from "@/app/settings/actions";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { SLOW_PATTERN_MESSAGE } from "@/lib/config/interests-lint";
 import { registerUnsaved } from "@/lib/shell/unsaved";
 import type { AdvancedFailure, AdvancedFileData, AdvancedLayer, TextIssue } from "@/lib/settings/advanced/types";
+import { AGENTS_PAGE } from "@/lib/settings/tabs";
 import { toastTone } from "@/lib/toast";
 
 import { ConflictBanner } from "./conflict-banner";
@@ -171,6 +173,14 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
         <span className="ml-auto">{ack}</span>
       </div>
       {stem === "models" ? <OverrideWarning /> : null}
+      {stem === "mcp" ? (
+        <p className="text-ink-2 text-body-sm" data-testid="agents-note">
+          {t("agentsNote")}{" "}
+          <Link href={AGENTS_PAGE} className="font-bold underline underline-offset-4 hover:bg-hi hover:text-hi-ink">
+            {t("agentsLink")}
+          </Link>
+        </p>
+      ) : null}
       <p className="text-ink-2 text-body-sm" data-testid="secrets-note">
         {t("secretsNote")}
       </p>
@@ -198,6 +208,14 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
       {failure ? (
         <p role="alert" data-testid="advanced-failure" className="border-bad bg-card text-bad rounded-tag border-bw px-3 py-2 text-body-sm font-bold">
           {failure.status === "too_large" ? t("failure.too_large", { max: data.maxBytes }) : t(`failure.${failure.status}`)}
+          {failure.status === "session_required" ? (
+            <>
+              {" "}
+              <Link href={AGENTS_PAGE} className="underline underline-offset-4 hover:bg-hi hover:text-hi-ink" data-testid="advanced-agents-link">
+                {t("agentsLink")}
+              </Link>
+            </>
+          ) : null}
         </p>
       ) : null}
 
