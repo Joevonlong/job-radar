@@ -119,8 +119,9 @@ it("upgrades the preceding enum migration preserving existing rows", async () =>
     fs.cpSync(path.resolve("drizzle"), directory, { recursive: true });
     const file = path.join(directory, "meta/_journal.json");
     const journal = JSON.parse(fs.readFileSync(file, "utf8")) as { entries: { tag: string }[] };
-    expect(journal.entries.at(-1)?.tag).toBe("0058_career_tailor_kind");
-    journal.entries.pop(); fs.writeFileSync(file, JSON.stringify(journal));
+    const tailorKind = journal.entries.findIndex((entry) => entry.tag === "0058_career_tailor_kind");
+    expect(tailorKind).toBeGreaterThan(0);
+    journal.entries = journal.entries.slice(0, tailorKind); fs.writeFileSync(file, JSON.stringify(journal));
     await runMigrations({ url: address.toString(), migrationsFolder: directory, currentScoresBackfill: backfill });
     expect(await findLatestCareerTailorRequest(connection.db, "doc_aaaaaaaaaa")).toBeNull();
     const previous = await insertControlRequest(connection.db, { kind: "career_extract", payload: { marker: "existing" } });
@@ -186,6 +187,8 @@ it.each(["tailor", "shrink"] as const)("scrubs sentinels through the real %s pat
 it("merges identical requests and refuses different content while busy", async () => {
   const { payload } = await setup(); const id = await queue(payload);
   expect(await requestCareerTailor(db(), payload)).toMatchObject({ state: "queued", requestId: id, existing: true });
+  expect(await requestCareerTailor(db(), { ...payload, caller: "stdio" })).toMatchObject({ state: "queued", requestId: id, existing: true });
+  expect(await requestCareerTailor(db(), { ...payload, caller: 7 })).toMatchObject({ state: "queued", requestId: id, existing: true });
   expect(await requestCareerTailor(db(), { ...payload, with_letter: true })).toMatchObject({ error: "busy" });
 });
 
