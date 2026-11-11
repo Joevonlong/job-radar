@@ -12,7 +12,7 @@ beforeEach(() => resetMcpThrottle());
 afterEach(async () => { await Promise.all(clients.splice(0).map((client) => client.close())); });
 
 describe("installed MCP SDK HTTP protocols", () => {
-  it.each(["2025-06-18", "2026-07-28"])("reuses a silent handler with isolated concurrent token contexts in %s", async (protocol) => {
+  it.each(["2025-06-18", "2026-07-28"])("builds a silent handler per request with isolated concurrent token contexts in %s", async (protocol) => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       const deps = fakeDeps();
@@ -58,27 +58,31 @@ describe("installed MCP SDK HTTP protocols", () => {
       expect(results[0]).not.toContain("list_applications");
       expect(results[1]).toContain("list_applications");
       expect(results[1]).not.toContain("get_job");
-      expect(createHandler).toHaveBeenCalledTimes(1);
+      expect(createHandler).toHaveBeenCalledTimes(2);
+      expect(createHandler.mock.results[0]!.value).not.toBe(createHandler.mock.results[1]!.value);
       expect(servers.size).toBe(2);
       expect(contexts[0]!.authInfo).not.toBe(contexts[1]!.authInfo);
-      const factory = createHandler.mock.calls[0]![0];
-      for (const context of contexts) expect(() => factory(context)).toThrow("Missing MCP request context");
       expect(warn).not.toHaveBeenCalled();
     } finally { warn.mockRestore(); }
   });
 
-  it("caches handlers by the current request body limit without warning on subsequent requests", async () => {
+  it("builds and closes every handler with the current request body limit without warning", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       const deps = fakeDeps();
-      const createHandler = vi.fn(deps.createHandler);
+      const close = vi.fn();
+      const createHandler = vi.fn<McpHttpDependencies["createHandler"]>((factory, options) => {
+        const real = deps.createHandler(factory, options);
+        return { ...real, close: async () => { close(); await real.close(); } };
+      });
       const dependencies = { ...deps, createHandler };
       for (const max_body_bytes of [1024, 1024, 2048, 1024]) {
         deps.readSettings.mockReturnValue(settings({ max_body_bytes }));
         expect((await snapshot(await handleMcpHttpRequest(rpcRequest(), dependencies))).status).toBe(200);
         expect(warn).not.toHaveBeenCalled();
       }
-      expect(createHandler.mock.calls.map((call) => call[1]?.maxRequestBodySize)).toEqual([1024, 2048]);
+      expect(createHandler.mock.calls.map((call) => call[1]?.maxRequestBodySize)).toEqual([1024, 1024, 2048, 1024]);
+      expect(close).toHaveBeenCalledTimes(4);
     } finally { warn.mockRestore(); }
   });
 

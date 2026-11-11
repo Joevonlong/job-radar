@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 import { stringify } from "yaml";
 
@@ -113,6 +113,55 @@ describe("HTTP MCP against PostgreSQL", () => {
     expect(used?.lastUsedAt).toEqual(NOW);
     const probes = createRealProbes({ commandTimeoutMs: 1, probeTimeoutMs: 1, now: () => NOW, migrationsDir: import.meta.dirname });
     expect(JSON.stringify([observed, rows, lines, await probes.mcp()])).not.toContain(secret);
+  });
+
+  it("keeps tool lists, results and audit rows apart for two tokens with interleaved requests", async () => {
+    saveSettings({ ...settings, permissions: ["jobs:read", "tracking:read"] });
+    const jobs = await token(`jobs-${crypto.randomUUID()}`, ["jobs:read"]);
+    const tracking = await token(`tracking-${crypto.randomUUID()}`, ["tracking:read"]);
+    const pending = 8;
+    let arrived = 0;
+    const allBuilt = Promise.withResolvers<void>();
+    const createHandler: McpHttpDependencies["createHandler"] = (factory, options) => realDeps().createHandler(async (context) => {
+      if (++arrived === pending) allBuilt.resolve();
+      await allBuilt.promise;
+      return factory(context);
+    }, options);
+    const interleaved = { ...deps, createHandler };
+    const call = async (secret: string, id: number, method: string, params: Record<string, unknown> = {}) => {
+      const response = await handleMcpHttpRequest(rpcRequest({ token: secret, headers: { "mcp-protocol-version": "2025-06-18" }, body: JSON.stringify({ jsonrpc: "2.0", id, method, params }) }), interleaved);
+      const body = await response.text();
+      expect(response.status).toBe(200);
+      const data = body.split("\n").find((line) => line.startsWith("data: "));
+      return JSON.parse(data!.slice(6)).result as { tools?: { name: string }[]; isError?: boolean; structuredContent?: unknown };
+    };
+    const getJob = { name: "get_job", arguments: { job_id: jobId } };
+    const listApplications = { name: "list_applications", arguments: {} };
+    const [jobsList, trackingList, jobsGet, trackingGet, jobsApps, trackingApps, jobsList2, trackingList2] = await Promise.all([
+      call(jobs.secret, 1, "tools/list"), call(tracking.secret, 2, "tools/list"),
+      call(jobs.secret, 3, "tools/call", getJob), call(tracking.secret, 4, "tools/call", getJob),
+      call(jobs.secret, 5, "tools/call", listApplications), call(tracking.secret, 6, "tools/call", listApplications),
+      call(jobs.secret, 7, "tools/list"), call(tracking.secret, 8, "tools/list"),
+    ]);
+    expect(arrived).toBe(pending);
+    for (const list of [jobsList, jobsList2]) {
+      expect(list.tools!.map((tool) => tool.name)).toContain("get_job");
+      expect(list.tools!.map((tool) => tool.name)).not.toContain("list_applications");
+    }
+    for (const list of [trackingList, trackingList2]) {
+      expect(list.tools!.map((tool) => tool.name)).toContain("list_applications");
+      expect(list.tools!.map((tool) => tool.name)).not.toContain("get_job");
+    }
+    expect(jobsGet.isError).not.toBe(true);
+    expect(JSON.stringify(jobsGet)).toContain(String(jobId));
+    expect(trackingGet.isError).toBe(true);
+    expect(jobsApps.isError).toBe(true);
+    expect(trackingApps.isError).not.toBe(true);
+    const rows = await getDb().select().from(schema.agentCalls).where(inArray(schema.agentCalls.tokenId, [jobs.id, tracking.id]));
+    const audited = (id: number) => rows.filter((row) => row.tokenId === id).map((row) => `${row.capability}:${row.outcome}`).sort();
+    expect(audited(jobs.id)).toEqual(["get_job:ok", "list_applications:not_permitted"]);
+    expect(audited(tracking.id)).toEqual(["get_job:not_permitted", "list_applications:ok"]);
+    for (const row of rows) expect(row).toMatchObject({ caller: "token", transport: "http" });
   });
 
   it("serves a raw legacy initialize with the requested protocol version and an SSE response", async () => {

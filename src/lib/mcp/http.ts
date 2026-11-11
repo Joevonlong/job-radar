@@ -1,7 +1,7 @@
 /** Token-authenticated, stateless HTTP serving. Preconditions run before credentials or pools are touched. */
 import { createHmac, randomBytes } from "node:crypto";
 
-import { createMcpHandler, type AuthInfo, type McpHttpHandler } from "@modelcontextprotocol/server";
+import { createMcpHandler } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
 import { authorize, liveMcpSettings } from "@/lib/agent-access/authorize";
@@ -16,7 +16,7 @@ import { readWriterEnabled } from "@/lib/writer/settings";
 
 import { version } from "../../../package.json";
 import { stderrLine } from "./call-log";
-import { errorCategory, type McpContext } from "./context";
+import { errorCategory } from "./context";
 import { buildServer, defaultContext } from "./server";
 
 export interface McpHttpDependencies {
@@ -115,6 +115,7 @@ export async function handleMcpHttpRequest(request: Request, deps: McpHttpDepend
   let release: (() => void) | undefined;
   let responseOwnsSlot = false;
   let input: ReturnType<typeof managedBody> | undefined;
+  let closeHandler: (() => void) | undefined;
   try {
     let settings: McpConfig;
     try { settings = deps.readSettings(); } catch { return refusal(404, "not_found"); }
@@ -137,6 +138,7 @@ export async function handleMcpHttpRequest(request: Request, deps: McpHttpDepend
     release = () => {
       if (!released) {
         released = true;
+        closeHandler?.();
         current.inFlight--;
         request.signal.removeEventListener("abort", abort);
       }
@@ -145,7 +147,7 @@ export async function handleMcpHttpRequest(request: Request, deps: McpHttpDepend
     request.signal.addEventListener("abort", abort, { once: true });
     request.signal.throwIfAborted();
     const forwarded = input ? new Request(request, { body: input.body, ...{ duplex: "half" } }) : request;
-    const response = hygiene(await authenticatedResponse(forwarded, deps, settings, key, current.throttle));
+    const response = hygiene(await authenticatedResponse(forwarded, deps, settings, key, current.throttle, (close) => { closeHandler = close; }));
     if (request.signal.aborted) {
       await response.body?.cancel();
       request.signal.throwIfAborted();
@@ -164,33 +166,12 @@ export async function handleMcpHttpRequest(request: Request, deps: McpHttpDepend
   }
 }
 
-const requestContexts = new WeakMap<AuthInfo, McpContext>();
-const handlerCache = new WeakMap<McpHttpDependencies["createHandler"], WeakMap<McpHttpDependencies["log"], Map<number, McpHttpHandler>>>();
-
-/** Only the transport is cached; the SDK passes AuthInfo by identity to a factory that builds a fresh server. */
-function httpHandler(deps: McpHttpDependencies, maxBodyBytes: number): McpHttpHandler {
-  let byLog = handlerCache.get(deps.createHandler);
-  if (!byLog) { byLog = new WeakMap(); handlerCache.set(deps.createHandler, byLog); }
-  let byLimit = byLog.get(deps.log);
-  if (!byLimit) { byLimit = new Map(); byLog.set(deps.log, byLimit); }
-  let handler = byLimit.get(maxBodyBytes);
-  if (!handler) {
-    handler = deps.createHandler(({ authInfo }) => {
-      const context = authInfo && requestContexts.get(authInfo);
-      if (!context) throw new Error("Missing MCP request context");
-      const server = buildServer(context, { version });
-      server.server.registerCapabilities({ tools: { listChanged: false } });
-      return server;
-    }, {
-      responseMode: "auto", maxRequestBodySize: maxBodyBytes, maxSubscriptions: 0,
-      onerror: (error) => deps.log(`[mcp] http transport error: ${errorCategory(error)}`),
-    });
-    byLimit.set(maxBodyBytes, handler);
-  }
-  return handler;
-}
-
-async function authenticatedResponse(request: Request, deps: McpHttpDependencies, settings: McpConfig, key: string, throttle: LoginThrottle): Promise<Response> {
+/**
+ * Builds a fresh SDK handler and server for every request, so one token's grant, results and audit context cannot reach
+ * another request; the handler is closed together with the request slot. The SDK constructor warns only in its "json"
+ * response mode; "auto" answers plain JSON unless a tool emits a notification before its result.
+ */
+async function authenticatedResponse(request: Request, deps: McpHttpDependencies, settings: McpConfig, key: string, throttle: LoginThrottle, adopt: (close: () => void) => void): Promise<Response> {
   const secret = bearerAgentToken(request.headers.get("authorization"));
   let verified: Awaited<ReturnType<typeof verifyAgentToken>> = { ok: false, reason: "malformed" };
   let readDb;
@@ -224,17 +205,21 @@ async function authenticatedResponse(request: Request, deps: McpHttpDependencies
     grant, readGrant: deps.readGrant(readDb, deps.now), writeDb: writes ? deps.writeDb(settings) : null,
   });
   context.now = deps.now;
-  const handler = httpHandler(deps, settings.http.max_body_bytes);
-  const authInfo: AuthInfo = { token: "", clientId: String(grant.tokenId), scopes: [...grant.permissions], expiresAt: 253402300799 };
-  requestContexts.set(authInfo, context);
-  try {
-    const response = await handler.fetch(request, { authInfo });
-    if (response.status === 413 || response.status >= 500) {
-      void response.body?.cancel().catch(() => undefined);
-      return response.status === 413 ? refusal(413, "payload_too_large") : refusal(500, "internal");
-    }
-    return response;
-  } finally {
-    requestContexts.delete(authInfo);
+  const handler = deps.createHandler(() => {
+    const server = buildServer(context, { version });
+    server.server.registerCapabilities({ tools: { listChanged: false } });
+    return server;
+  }, {
+    responseMode: "auto", maxRequestBodySize: settings.http.max_body_bytes, maxSubscriptions: 0,
+    onerror: (error) => deps.log(`[mcp] http transport error: ${errorCategory(error)}`),
+  });
+  adopt(() => { void handler.close().catch((error: unknown) => deps.log(`[mcp] http close error: ${errorCategory(error)}`)); });
+  const response = await handler.fetch(request, {
+    authInfo: { token: "", clientId: String(grant.tokenId), scopes: [...grant.permissions], expiresAt: 253402300799 },
+  });
+  if (response.status === 413 || response.status >= 500) {
+    void response.body?.cancel().catch(() => undefined);
+    return response.status === 413 ? refusal(413, "payload_too_large") : refusal(500, "internal");
   }
+  return response;
 }
