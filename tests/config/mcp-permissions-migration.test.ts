@@ -140,14 +140,14 @@ it.each([
 
 it.each([
   "tools: {get_job: false} # old note\n",
-  "tools: # old note\n  get_job: false # switch note\n",
-])("keeps other keys' comments, moves the tools comments to permissions and inserts the grants where tools stood: %s", (tools) => {
+  "tools: # old note\n  # switch note\n  get_job: false # switch note\n",
+])("keeps other keys' comments, drops the comments of tools and its switches and inserts the grants where tools stood: %s", (tools) => {
   const doc = parseConfigDocument("mcp", `config_version: 2\n# master\nenabled: true # enabled note\n\n# old tools\n# second line\n${tools}# limits note\nlimits: {max_results: 7}\n`, "mcp.yaml");
   migrateConfigDocument("mcp", doc, "mcp.yaml");
   const after = doc.toString();
   for (const comment of ["# master", "# enabled note", "# limits note"]) expect(after).toContain(comment);
-  expect(after).toContain("\n\n# old tools\n# second line\npermissions: # old note\n");
-  expect(after).not.toContain("switch note");
+  expect(after).toContain("enabled: true # enabled note\n\npermissions:\n");
+  for (const comment of ["old tools", "second line", "old note", "switch note"]) expect(after).not.toContain(comment);
   expect(after.indexOf("enabled:")).toBeLessThan(after.indexOf("permissions:"));
   expect(after.indexOf("stdio:")).toBeLessThan(after.indexOf("limits:"));
   expect(parseConfigText("mcp", after).permissions).toEqual(["jobs:read", "tracking:read"]);
