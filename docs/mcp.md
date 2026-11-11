@@ -8,7 +8,7 @@ client can start `pnpm mcp:serve` locally over stdin / stdout, or connect to the
 
 - **Off by default.** Nothing happens until you set `enabled: true` in `mcp.yaml`.
 - **Local stdio or optional HTTP.** Stdio opens no port and needs no token. HTTP uses the web port and requires an agent token on every POST request.
-- **Read-only, with one permission-controlled exception.** The tools read over read-only database sessions. The only tool that can write,
+- **Read-only, with one permission-controlled exception.** Database reads use read-only sessions; personal-data reads also read local profile files. The only tool that can write,
   `save_application_answer`, requires `writer:write`, and all it can do is add an answer version. The server never starts a
   collection or an AI call.
 
@@ -22,21 +22,21 @@ that provider's terms. Turning the server on adds this exit to the ones listed i
 | Given (when you ask) | Never given as metadata fields |
 |---|---|
 | Job facts: title, company, locations, work mode, contract, agency flag, required German level, status, dates, skills | Profile snapshots and import drafts |
-| Source links (posting and apply links) | Career files, documents and contact details |
+| Source links (posting and apply links) | Contact file, image content and PDFs |
 | The stated salary | AI provider/model/usage |
 | Score and rank numbers | Local paths (tailored résumé files) |
-| Compensation and benefit signals with their JD quote and position | Emails and email replies |
+| Compensation and benefit signals with their JD quote and position | Mail body, subject, sender, quotes and mail identifiers |
 | The JD after AI-trap cleaning (see below) | `.env` and `.auth/` values, keys, AI usage, notifications, run records, raw configuration files |
 | Your applications: status, when it last changed, days in that status, next step and its date, interview rounds, the status history | |
 
+With effective `career:read` and `career.yaml: enabled`, the tools below give redacted career profiles and documents. With effective `replies:read` and `replies.yaml: enabled`, they give reply classifications and linked application metadata. Both permissions are off by default.
+
 With explicit `raw:read`, `get_job_raw` also returns uncleaned raw payloads, including any recruiter contact data or AI instructions inside them; see the raw-posting permission and limits below.
 
-The career profile itself (its files, documents, contact details and drafts) is never given; no MCP tool reads it.
-
-These lists cover structured fields. Two permissions also give free text that no field list can hold back:
+The job tools can also return free text under these permissions:
 
 - With `match:read`, the AI-written summaries, fit reasons and gaps are free text written from your profile and the JD; they may
-  mention things such as your language level or your salary expectations. Filter reasons carry deal-breaker ids and matched blacklist keywords and can indirectly reveal other preferences, including excluded companies, places, seniority and contract types; these examples are not a complete list. The labels you gave your deal-breakers are not returned as fields.
+  mention things such as your language level or your salary expectations. Filter reasons carry deal-breaker ids and matched blacklist keywords and can indirectly reveal other preferences, including excluded companies, places, seniority and contract types; these examples are not a complete list. These job field blocks do not return your deal-breaker labels as fields.
 - With `notes:read`, your application, event and favorite notes are your own text, returned after cleaning.
 
 These texts pass the invisible-character and AI-instruction cleaner. `get_today`, `list_companies`, `get_company`, `get_insights`, `get_application`, `list_favorites` and `list_applications` redact recognizable email addresses, local paths and credential assignments in free text; `get_job` uses the same cleaning for notes and next actions. Cleaning is not a guarantee that every personal detail is removed; grant these permissions only if the remaining text may leave your machine.
@@ -63,6 +63,23 @@ Add `profile:read` to both permission lists to offer four read-only tools. `writ
 Profile and interest settings are your own text and are returned as written. Suggestion reasons/values and quoted job evidence, plus preview job titles, company names and quotes, use the existing third-party text cleaner and notice. Counts and matches remain the web preview's results; unsafe text can be replaced by the trap marker.
 
 These tools never read `contact.yaml` or career files, and omit profile snapshots, story-import drafts, suggestion history, collection metadata and provider/model settings. They do not save files or change business tables. The normal metadata-only audit row is still recorded: profile calls count returned sections, interest calls count categories (including retired), views, companies and suggestions, deal-breaker previews count rules, and category previews count returned samples. All four have a null audit target.
+
+## Career and replies (off by default)
+
+Grant `career:read` in the global permission list and the connection's grant, and enable `career.yaml: enabled`, to offer these four read-only tools. The stdio process reads the profile directory on its host (`JOB_RADAR_PROFILE_DIR`, or the normal profile directory); it uses the same handlers as a token connection. These permissions do not grant `profile:read` or writer access.
+
+| Tool | Input and output |
+|---|---|
+| `get_career_profile` | Optional `version` (a stored version id). Redacted structured profile, wordings and version list; `baseHash` and `updatedAt` match the values used by the web editor. An old version has a null `baseHash`; a missing current file gives an empty profile. Internal adoption bookkeeping is omitted. `hasPhoto` / `hasSignature` are presence flags only. |
+| `list_career_documents` | No arguments. Redacted titles, ids, kind, update time, language and nullable job id, plus `total`. Invalid files remain as `status: invalid` rows with null metadata. |
+| `get_career_document` | `id`, optional `version`. Redacted document with unchanged ids, fields and array lengths; file `baseHash` (null for an old version), versions and source-change status. `jdChanged` / `profileChanged` are null where not applicable. Open proposals are null when absent, or have `status`, `stale` and `items`; an unreadable proposal file has `status: unavailable`. Staleness compares its saved hash with the current document file, also when reading history. |
+| `check_career_document` | `id`, `doc: resume` or `letter`, optional `version`; accepts only stored documents. Returns `renderable`, path/code issues, scrubbed plain text, `pageBudget: {pages}`, findings, font-uncovered characters and the web preview's export hints. Non-renderable documents have null text, budget and export hints. The page budget is a target, not a measured PDF page count. No HTML or PDF is returned. |
+
+The contact file is read once per call to build the existing outbound scrub rules and, for document checks, to evaluate the same contact-related rules as the web preview. Neither the file nor its fields are returned. Recognized stored name, address, email, phone, work authorization, availability and links in **any free-text field**, including URLs, filenames, letter text and proposals, become `[name]`, `[address]`, `[email]`, `[phone]`, `[work_auth]`, `[availability]` or `[link]`. Email, phone and link patterns are also replaced. Location and very short work-authorization/availability values are not replaced, matching the existing outbound rules. Free-text job hashes and accent values are scrubbed too; only schema-constrained structural fields bypass text scrubbing. URL and accent fields in the redacted output accept bounded strings so placeholders are valid. Missing contact files use empty stored rules; unreadable or invalid contact files fail the entire career read with a generic unavailable error. Local paths are redacted, and image content and image filenames never leave. Document checks use the real contact details for finding codes and export findings, so a saved phone number or work authorization does not produce a false missing-field warning. Returned findings contain only the code, severity, field path and allow-listed numeric parameters (`count`, `max`, `min`, `months`, `total`, `years`, `pages`, `budget`); text excerpts and contact values are omitted. Returned plain text is rendered with empty contact and no images, then fully scrubbed before calculating either font-uncovered character list. Proposal JD quotes use the referenced job's current trap scan: hidden/instruction spans become markers, and unavailable scans withhold the quote as null. Third-party text is cleaned and marked as quoted data.
+
+Grant `replies:read` and enable `replies.yaml: enabled` for `list_replies`. Its optional filters are `state`, `category`, `since` (ISO datetime, inclusive) and `limit`. Rows are newest first and contain the internal database reply `id`, `receivedAt`, effective `category` (the user's correction wins), `match`, `state`, nullable `jobId`, company, job title and, with `tracking:read`, application status (without it the field is absent). `total`, `returned`, `truncated` and a truncation notice describe the configured `limits.max_results` cap. Company and title are cleaned third-party text; pasted email addresses, local paths and credential values are redacted. The query never selects mail subject, body, sender domain, quotes, message/thread ids, raw references, deduplication keys, candidate or suggestion JSON. A reply id is a Job Radar database id, not a mail id.
+
+Removing the permission hides the corresponding tools. Switching either feature off, breaking its config or removing its configuration from both layers hides its tools immediately; a direct call reports feature not enabled (`disabled`). These reads do not change files or business tables; normal metadata audit still applies. Profile/document/check calls count one result, document lists count their rows and replies count returned rows; all five audit targets are null.
 
 ## Turning it on
 
@@ -319,7 +336,7 @@ Each search card keeps its existing facts. Its `application_status` is tracking 
 
 Translations, breakdowns, company research, salary lookup content and the `match` block's AI summaries, fit reasons and gaps are withheld with the JD's failure reason whenever the JD cannot pass its safety check (the `match` block then has `available: false`; its numbers, filter result and checks remain). Empty research or lookup storage remains null. JD quotes use the same trap markers as the JD; a breakdown item, fit reason or gap whose quote becomes a marker uses that marker for its own text/name too. All text, including summaries, reasons and notes, goes through the text cleaner. Unsafe instruction-bearing source URLs become null. A derived-content notice follows the third-party notice when derived content is present; withholding adds one notice, regardless of how many blocks were withheld.
 
-No permission releases resume paths, closure notes, emails, secrets, profile snapshots, import drafts, AI provider/model/usage or run records. Full matching-profile values require `profile:read`. The free text of `match:read` and `notes:read` is described under the table at the top of this page. The writer's explicitly selected material remains the separate exception described above.
+No permission releases resume paths, closure notes, mail content and mail identifiers, secrets, profile snapshots, import drafts, AI provider/model/usage or run records. Full matching-profile values require `profile:read`. The free text of `match:read` and `notes:read` is described under the table at the top of this page. The writer's explicitly selected material remains the separate exception described above.
 
 `get_job` still returns dormant jobs: `status` stays `possibly_closed`, and `closed_reason` is `dormant`.
 

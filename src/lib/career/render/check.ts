@@ -60,6 +60,7 @@ export function documentExportHints(document: CareerDocument, options: {
   images: CareerImages;
   today: string;
   check: CareerConfig["check"];
+  scrubText?: (text: string) => string;
 }): { findings: DocumentFinding[]; uncovered: string[] } {
   const allFindings: DocumentFinding[] = [];
   const uncovered = new Set<string>();
@@ -74,7 +75,8 @@ export function documentExportHints(document: CareerDocument, options: {
       throw error;
     }
     allFindings.push(...checkWithoutPdf(resume, { doc, today: options.today, check: options.check }));
-    const text = doc === "letter" ? plainLetter(resume, options.today) : plainResume(resume);
+    const plain = doc === "letter" ? plainLetter(resume, options.today) : plainResume(resume);
+    const text = options.scrubText ? options.scrubText(plain) : plain;
     for (const character of uncoveredCharacters(text, options.check.uncovered_max_chars)) uncovered.add(character);
   }
   return {

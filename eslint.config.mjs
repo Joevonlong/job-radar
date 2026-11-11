@@ -13,6 +13,42 @@ const READONLY_PSQL_DYNAMIC = {
 };
 
 export const CORE_IMPORTING_CAREER = {
+  "src/lib/capabilities/career/check-career-document.ts": [
+    "src/lib/career/contact/store.ts",
+    "src/lib/career/render/check.ts",
+    "src/lib/career/render/preview.ts",
+    "src/lib/career/render/to-resume.ts",
+    "src/lib/career/schema/contact.ts",
+  ],
+  "src/lib/capabilities/career/get-career-document.ts": [
+    "src/lib/career/document/redact.ts",
+    "src/lib/career/document/resolve.ts",
+    "src/lib/career/store/documents.ts",
+    "src/lib/career/store/profile.ts",
+    "src/lib/career/tailor/proposals.ts",
+  ],
+  "src/lib/capabilities/career/get-career-profile.ts": [
+    "src/lib/career/contact/redact-profile.ts",
+    "src/lib/career/store/history.ts",
+    "src/lib/career/store/images.ts",
+    "src/lib/career/store/profile.ts",
+  ],
+  "src/lib/capabilities/career/list-career-documents.ts": [
+    "src/lib/career/store/documents.ts",
+  ],
+  "src/lib/capabilities/career/shared.ts": [
+    "src/lib/career/contact/errors.ts",
+    "src/lib/career/contact/scrub.ts",
+    "src/lib/career/schema/contact.ts",
+    "src/lib/career/schema/document.ts",
+    "src/lib/career/store/documents.ts",
+    "src/lib/career/store/history.ts",
+  ],
+  "src/lib/mcp/dto/career.ts": [
+    "src/lib/career/contact/redact-profile.ts",
+    "src/lib/career/document/redact.ts",
+    "src/lib/career/tailor/proposal-schema.ts",
+  ],
   "src/app/jobs/[id]/page.tsx": ["src/components/career/job-entry.tsx"],
   "src/app/me/page.tsx": ["src/components/career/career-card.tsx"],
   "src/lib/control/ai-handlers.ts": ["src/lib/career/extract/handler.ts", "src/lib/career/tailor/handler.ts"],
