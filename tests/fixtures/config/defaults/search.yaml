@@ -27,7 +27,6 @@ keyword_groups:
     - KI Engineer
     - KI-Entwickler
 
-
 # 各轮的回看时间窗（小时）。键对应 schedule.yaml：weekday_morning → morning，weekday_evening → evening，weekend → weekend
 window_hours:
   morning: 24

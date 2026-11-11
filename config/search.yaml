@@ -5,7 +5,6 @@ keyword_groups:
   targets:
     - Software Engineer
 
-
 # Lookback window per run (hours). Keys map to schedule.yaml: weekday_morning → morning, weekday_evening → evening, weekend → weekend
 window_hours:
   morning: 24
