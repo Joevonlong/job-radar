@@ -49,7 +49,12 @@ describe("shipped config report call sites", () => {
 
   it("web: reports at start-up and retries on each health check with a reachable database", () => {
     expect(code("src/instrumentation.ts")).toContain("void reportWebShippedConfig();");
-    const health = code("src/app/api/health/route.ts");
-    expect(between(health, "if (dbOk) {", "} catch")).toContain("void reportWebShippedConfig();");
+    const route = code("src/app/api/health/route.ts");
+    expect(route).toContain('import { loadHealth } from "@/lib/health";');
+    const handler = between(route, "export async function GET()", "return Response.json");
+    expect(handler).toMatch(/await loadHealth\(\{\s*onReachable: \(\) => \{\s*void reportWebShippedConfig\(\);\s*\}\s*\}\)/);
+    const health = code("src/lib/health.ts");
+    expect(health).toContain("dbOk = await pingDb(db);");
+    expect(between(health, "if (dbOk) {", "} catch")).toContain("options.onReachable?.();");
   });
 });

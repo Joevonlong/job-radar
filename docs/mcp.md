@@ -23,10 +23,10 @@ that provider's terms. Turning the server on adds this exit to the ones listed i
 |---|---|
 | Job facts: title, company, locations, work mode, contract, agency flag, required German level, status, dates, skills | Your profile files (`me`, `preferences`, `interests`) and their saved snapshots |
 | Source links (posting and apply links) | Private profile values as fields: salary floor, your language level, the labels of your deal-breakers |
-| The stated salary | AI provider/model/usage, signal bonus |
+| The stated salary | Signal bonus |
 | Score and rank numbers | Local paths (tailored résumé files) |
 | Compensation and benefit signals with their JD quote and position | Emails and email replies |
-| The JD after AI-trap cleaning (see below) | `.env` and `.auth/` values, keys, AI usage, notifications, run records, config file contents |
+| The JD after AI-trap cleaning (see below) | `.env` and `.auth/` values, keys, individual AI calls, notifications, raw run payloads, config file contents |
 | Your applications: status, when it last changed, days in that status, next step and its date, interview rounds, the status history | |
 
 The career profile itself (its files, documents, contact details and drafts) is never given; no MCP tool reads it.
@@ -50,6 +50,30 @@ not choose, the rest of your profile files, coach reviews and saved snapshots st
 unverified) and the fit note, with a notice that they are quoted data; the note keeps short quotes of the stories chosen when it was
 made, even if they are no longer chosen.
 
+## Operations access
+
+Grant `ops:read` in both `permissions` and `stdio.permissions` to offer these five tools. Removing it from either list hides
+all five and refuses subsequent calls. Default permissions remain `jobs:read` and `tracking:read`.
+
+| Tool | Fields and filters |
+|---|---|
+| `get_system_status` | Doctor check id, status and fixed safe summary; runner and ai-worker online flags, cycle-running flag, pending control-request count and disk level. No arguments. |
+| `list_cycles` | Recent cycles with kind, timestamps, status and allow-listed step counters. Optional `cycle_id` expands one cycle's channel runs: status, fetched/new counts, interrupted flag, usage units and look-back window. Optional `limit`. |
+| `list_channels` | Health, breaker state, current-month records/spend/budget and latest run per channel. Optional `limit` and `offset`. |
+| `get_activity_log` | Root records, or a `root_id` with span/event codes and counts. Filters: `scope`, `status`, paired inclusive `from`/`to`, `issues_only`; detail events accept `level`. `page` pages roots or detail events; `limit` caps each list. |
+| `get_ai_usage` | Calls, input/output tokens, total duration and cost, grouped by day, task and provider/model, plus full-window totals. Unknown token/duration/cost counts are explicit. Filters: `range` (`today`, `7d`, `30d`, `month`, `custom`), `provider`, `task`; custom requires inclusive `from`/`to`. No individual calls or job-id dimension, even with `jobs:read`. |
+
+Dates use the schedule time zone. AI custom ranges use the page's configured maximum in `ui.yaml: ai_usage.custom_max_days`;
+invalid ranges are refused. `limits.max_results` caps each list, expanded runs, detail spans/events and each usage grouping;
+`truncated` flags omitted rows. Activity detail also marks `spans_truncated`; only its first bounded set of spans is returned.
+Usage totals always cover the full selected window. These tools never start a cycle, change settings or call an AI provider.
+Doctor performs the existing read-only probes and returns fixed summaries rather than its command-line details.
+
+All outputs use strict field allow-lists in `src/lib/mcp/dto/ops.ts`. Error details are reduced to categories and known codes.
+Doctor titles, details and hints, commands, launchd labels, paths, hosts, database addresses, raw run errors, activity job links
+and arbitrary event parameters are withheld. Unrecognized codes become `unknown` or `other`. This permission exposes operational
+aggregates only; it does not grant configuration-file reads.
+
 ## Turning it on
 
 1. Open `mcp.yaml` (Settings → Advanced, or `data/config/mcp.yaml`) and set `enabled: true`. The global `permissions` matrix caps every connection; the local grant is
@@ -61,7 +85,7 @@ made, even if they are no longer chosen.
 The server reads `mcp.yaml` again on every call. Disabling it, removing a permission, or a file that can no longer be read
 refuses the next call of a client that is already connected, without a restart; granting access needs a client restart.
 
-`search_jobs` and `get_job` share `jobs:read`; `list_applications` needs `tracking:read`. Other ids from the permission catalog
+`search_jobs` and `get_job` share `jobs:read`; `list_applications` needs `tracking:read`. The five operations tools described above need `ops:read` in both permission lists; it stays off by default. Other ids from the permission catalog
 are accepted; `match:read` adds match blocks to cards and details, and `notes:read` adds a block to `get_job` as described below. Version-2 tool switches migrate to both permission lists; if only one jobs tool
 was off, `jobs:read` offers both and `config:migrate` prints a notice. Remove `jobs:read` to disable both. A permission
 you write into `mcp.yaml` also covers tools that later versions add under it, so grant only what should be readable or

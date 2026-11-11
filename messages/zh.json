@@ -7412,6 +7412,26 @@
       "save_application_answer": {
         "title": "新增答案版本",
         "description": "给一个申请问题新增一个答案版本。只会新增：原有版本和定稿都不变。传 sentences（text、about、从 get_application_context 逐字复制的证据引用）时，Job Radar 用自己的规则逐句核对；不传时每句都记为外部、未核对。你不能指定状态。"
+      },
+      "get_system_status": {
+        "title": "系统状态",
+        "description": "读取安全的诊断摘要、进程心跳、运行中的处理轮、待处理请求和磁盘等级。需要 ops:read。"
+      },
+      "list_cycles": {
+        "title": "最近处理轮",
+        "description": "读取最近处理轮及各步骤计数；可展开一轮的有限条通道运行记录。需要 ops:read。"
+      },
+      "list_channels": {
+        "title": "通道健康",
+        "description": "读取通道健康、熔断状态、当月预算用量和最近运行。需要 ops:read。"
+      },
+      "get_activity_log": {
+        "title": "操作日志",
+        "description": "读取根记录列表或单条详情，只提供代码和计数。需要 ops:read。"
+      },
+      "get_ai_usage": {
+        "title": "AI 用量",
+        "description": "按日、任务、模型读取调用数、token、耗时和费用聚合。不提供逐次调用或岗位标识。需要 ops:read。"
       }
     },
     "params": {
@@ -7439,6 +7459,33 @@
       "answerText": "完整答案的纯文本",
       "answerSentences": "可选：同一份答案逐句给出，并带逐字引用作证据，供 Job Radar 核对。source 取 jd、profile、story、user、draft、company；story 引用的 ref 是故事 id。about 取 user、company、role、framing。",
       "include": "按需返回的职位字段块：translation、breakdown、salary、company、ghost、lifecycle。match、tracking 和 notes 在有效权限允许时自动返回。"
+    },
+    "ops": {
+      "checkSummary": {
+        "ok": "检查通过。",
+        "warn": "检查需要关注。",
+        "fail": "检查失败。"
+      },
+      "params": {
+        "cycleId": "要展开通道运行的处理轮",
+        "rootId": "要查看的操作日志根记录",
+        "page": "页码（从 1 开始）",
+        "offset": "跳过的通道数量",
+        "scope": "操作日志范围",
+        "status": "操作日志状态筛选",
+        "from": "开始日期（含），使用调度时区",
+        "to": "结束日期（含），使用调度时区",
+        "level": "操作事件级别",
+        "issues": "只看有问题的操作",
+        "range": "用量时间范围；custom 需要 from 和 to",
+        "provider": "AI 服务商",
+        "task": "AI 任务"
+      },
+      "errors": {
+        "cycleNotFound": "not_found: cycle_not_found",
+        "range": "invalid_input: invalid_range",
+        "activityUnavailable": "database: activity_unavailable"
+      }
     }
   },
   "dealBreakers": {
