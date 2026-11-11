@@ -14,7 +14,10 @@ const READONLY_PSQL_DYNAMIC = {
 
 export const CORE_IMPORTING_CAREER = {
   "src/lib/capabilities/career/check-career-document.ts": [
+    "src/lib/career/contact/store.ts",
+    "src/lib/career/render/check.ts",
     "src/lib/career/render/preview.ts",
+    "src/lib/career/render/to-resume.ts",
     "src/lib/career/schema/contact.ts",
   ],
   "src/lib/capabilities/career/get-career-document.ts": [
@@ -36,6 +39,7 @@ export const CORE_IMPORTING_CAREER = {
   "src/lib/capabilities/career/shared.ts": [
     "src/lib/career/contact/errors.ts",
     "src/lib/career/contact/scrub.ts",
+    "src/lib/career/schema/contact.ts",
     "src/lib/career/schema/document.ts",
     "src/lib/career/store/documents.ts",
     "src/lib/career/store/history.ts",

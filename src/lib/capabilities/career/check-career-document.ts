@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { reloadConfig } from "@/lib/config";
+import { loadContact } from "@/lib/career/contact/store";
+import { checkWithoutPdf, documentExportHints } from "@/lib/career/render/check";
 import { previewDocument } from "@/lib/career/render/preview";
+import { toResume } from "@/lib/career/render/to-resume";
 import { emptyContact } from "@/lib/career/schema/contact";
 import { dayInZone } from "@/lib/insights/range";
 import { checkCareerDocumentOutput } from "@/lib/mcp/dto/career";
@@ -14,12 +17,14 @@ export const check_career_document = defineCapability({
   input: (ctx) => documentInput(ctx).extend({ doc: z.enum(["resume", "letter"]).describe(ctx.text("params.careerDoc")) }),
   output: checkCareerDocumentOutput,
   handler: (ctx, args) => careerRead(ctx, async () => {
-    const scrub = careerCleaner(ctx);
+    const { contact } = await loadContact();
+    const scrub = careerCleaner(ctx, contact);
     const { document } = await storedDocument(args);
-    const preview = previewDocument(document, {
-      contact: emptyContact(), images: {}, doc: args.doc,
+    const options = {
+      images: {}, doc: args.doc, scrubText: scrub,
       today: dayInZone(ctx.now(), ctx.timezone()), check: reloadConfig("career").check,
-    });
+    };
+    const preview = previewDocument(document, { ...options, contact: emptyContact() });
     const notices = [ctx.text("notice.thirdParty")];
     if (!preview.ok) return {
       notices, renderable: false, issues: preview.issues.map((issue) => ({ path: scrub(issue.path), code: issue.code })),
@@ -29,19 +34,20 @@ export const check_career_document = defineCapability({
       code: finding.code,
       severity: finding.severity,
       ...(finding.path === undefined ? {} : { path: scrub(finding.path) }),
-      params: Object.fromEntries(Object.entries(finding.params).map(([key, value]) => [
-        key, typeof value === "string" ? scrub(value) : value,
-      ])),
+      params: Object.fromEntries(Object.entries(finding.params).filter(([key, value]) =>
+        ["count", "max", "min", "months", "total", "years", "pages", "budget"].includes(key) && typeof value === "number")),
     }));
+    const { resume } = toResume(document, contact, options.images, args.doc);
+    const exportHints = documentExportHints(document, { ...options, contact });
     return {
       notices,
       renderable: true,
       issues: [],
-      text: scrub(preview.text),
+      text: preview.text,
       pageBudget: preview.pageBudget,
-      findings: findings(preview.findings),
+      findings: findings(checkWithoutPdf(resume, options)),
       uncovered: preview.uncovered,
-      exportHints: { findings: findings(preview.exportHints.findings), uncovered: preview.exportHints.uncovered },
+      exportHints: { findings: findings(exportHints.findings), uncovered: preview.exportHints.uncovered },
     };
   }),
   count: () => 1,

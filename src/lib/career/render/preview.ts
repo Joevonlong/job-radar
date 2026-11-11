@@ -14,12 +14,14 @@ export function previewDocument(document: CareerDocument, options: {
   doc: "resume" | "letter";
   today: string;
   check: CareerConfig["check"];
+  scrubText?: (text: string) => string;
 }) {
   const rendered = renderDocumentHtml(document, options);
   if (!rendered.ok) return rendered;
   const { resume } = toResume(document, options.contact, options.images, options.doc);
   const findings = checkWithoutPdf(resume, options);
-  const text = options.doc === "letter" ? plainLetter(resume, options.today) : plainResume(resume);
+  const plain = options.doc === "letter" ? plainLetter(resume, options.today) : plainResume(resume);
+  const text = options.scrubText ? options.scrubText(plain) : plain;
   const uncovered = uncoveredCharacters(text, options.check.uncovered_max_chars);
   const exportHints = documentExportHints(document, options);
   return {

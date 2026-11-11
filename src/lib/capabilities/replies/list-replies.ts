@@ -2,7 +2,7 @@ import { z } from "zod";
 import { REPLY_CATEGORIES } from "@/lib/config/schemas/replies";
 import { listReplyMetadata } from "@/lib/db/queries/replies";
 import { listRepliesOutput, replyStateSchema } from "@/lib/mcp/dto/replies";
-import { shortFieldCleaner } from "@/lib/mcp/guard";
+import { readTextCleaner } from "@/lib/mcp/read-guard";
 import { readTraps, resultLimit, truncationNotice } from "@/lib/mcp/tools/shared";
 import { defineCapability, READ_ONLY } from "../types";
 
@@ -22,7 +22,7 @@ export const list_replies = defineCapability({
     const { rows, total } = await listReplyMetadata(ctx.db, {
       state: args.state, category: args.category, since: args.since ? new Date(args.since) : undefined, limit,
     });
-    const clean = shortFieldCleaner(readTraps(ctx));
+    const clean = readTextCleaner(readTraps(ctx), ctx.text("notice.redacted"));
     const truncated = rows.length < total;
     return {
       notices: [ctx.text("notice.thirdParty"), ...(truncated ? [truncationNotice(ctx, rows.length, total, limit)] : [])],

@@ -6,6 +6,7 @@ import { CAREER_FILE_BOUNDS } from "../schema/profile";
 
 export const redactedDocumentSchema = buildDocumentSchema(
   z.string().max(CAREER_FILE_BOUNDS.textChars).nullable().default(null),
+  z.string().max(CAREER_FILE_BOUNDS.textChars),
 );
 
 export function redactDocument(document: CareerDocument, scrub = careerOutboundScrubber()) {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { listDocuments, loadDocument } from "@/lib/career/store/documents";
+import { listDocuments } from "@/lib/career/store/documents";
 import { listCareerDocumentsOutput } from "@/lib/mcp/dto/career";
 import { defineCapability, READ_ONLY } from "../types";
 import { careerAvailability, careerCleaner, careerRead } from "./shared";
@@ -12,24 +12,20 @@ export const list_career_documents = defineCapability({
   output: listCareerDocumentsOutput,
   handler: (ctx) => careerRead(ctx, async () => {
     const scrub = careerCleaner(ctx);
-    const documents = await Promise.all((await listDocuments()).map(async (summary) => {
-      const invalid = {
+    const documents = (await listDocuments()).map((summary) => {
+      if ("invalid" in summary) return {
         id: summary.id, status: "invalid" as const, title: null, kind: null, updatedAt: null, lang: null, jobId: null,
       };
-      if ("invalid" in summary) return invalid;
-      try {
-        const { document } = await loadDocument(summary.id);
-        return {
-          id: document.id,
-          status: "ok" as const,
-          title: scrub(document.title),
-          kind: document.kind,
-          updatedAt: document.updated_at,
-          lang: document.layout.lang,
-          jobId: document.job?.id ?? null,
-        };
-      } catch { return invalid; }
-    }));
+      return {
+        id: summary.id,
+        status: "ok" as const,
+        title: scrub(summary.title),
+        kind: summary.kind,
+        updatedAt: summary.updatedAt,
+        lang: summary.lang,
+        jobId: summary.jobId,
+      };
+    });
     return { notices: [ctx.text("notice.thirdParty")], documents, total: documents.length };
   }),
   count: (output) => output.documents.length,

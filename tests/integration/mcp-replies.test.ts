@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { stringify } from "yaml";
+import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, inject, it } from "vitest";
 import { PERMISSIONS, type Permission } from "@/lib/agent-access/permissions";
 import { closeDb, getDb, schema } from "@/lib/db";
@@ -18,6 +19,7 @@ let temp: TempConfig;
 let connection: Awaited<ReturnType<typeof personalClient>> | undefined;
 let replyId: number;
 let jobId: number;
+let companyId: number;
 beforeAll(() => { process.env.DATABASE_URL = url; readonly = createReadOnlyDb({ url }); });
 afterAll(async () => { await readonly.close(); await closeDb(); });
 afterEach(async () => { await connection?.close(); connection = undefined; temp.cleanup(); });
@@ -25,6 +27,7 @@ beforeEach(async () => {
   temp = makeTempConfig();
   fs.writeFileSync(path.join(temp.configDir, "replies.yaml"), "config_version: 2\nenabled: true\n");
   const [company] = await getDb().insert(schema.companies).values({ name: "Fictional\u200b Observatory", nameNorm: "fictional observatory" }).returning();
+  companyId = company!.id;
   const [job] = await getDb().insert(schema.jobs).values({ companyId: company!.id, title: "Fictional\u200b Engineer", titleNorm: "fictional engineer" }).returning();
   jobId = job!.id;
   const [application] = await getDb().insert(schema.applications).values({ jobId, status: "applied" }).returning();
@@ -82,6 +85,15 @@ it("selects only the public columns before mapping, without bringing mail into m
   ]);
   for (const column of privateColumns) expect(query).not.toContain(`"${column}"`);
   expect(query).not.toContain("*");
+});
+
+it.each(["secret@example.test", "/Users/Fictional/private.txt", "C:\\Fictional\\private.txt"])("cleans %s from company and title metadata", async (value) => {
+  await getDb().update(schema.companies).set({ name: value }).where(eq(schema.companies.id, companyId));
+  await getDb().update(schema.jobs).set({ title: value }).where(eq(schema.jobs.id, jobId));
+  await connect();
+  const result = await call();
+  expect(result.replies[0]).toMatchObject({ company: connection!.ctx.text("notice.redacted"), title: connection!.ctx.text("notice.redacted") });
+  expect(JSON.stringify(result)).not.toContain(value);
 });
 
 it("filters by effective category, state and received timestamp, with the configured cap", async () => {

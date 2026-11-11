@@ -2,9 +2,9 @@
 const structural = new Set([
   "id", "primary", "entry_id", "text_id", "wording_id", "item_id",
   "kind", "origin", "created_at", "updated_at", "date", "start", "end",
-  "profile_hash", "jd_hash", "schema_version", "status", "by", "side", "code", "cefr",
+  "profile_hash", "schema_version", "status", "by", "side", "code", "cefr",
 ]);
-const layout = new Set(["lang", "theme", "accent", "paper", "density", "colors", "custom"]);
+const layout = new Set(["lang", "theme", "paper", "density", "colors", "custom"]);
 
 export function redactStructure(value: unknown, scrub: (text: string) => string, path: string[] = []): unknown {
   if (typeof value === "string") {

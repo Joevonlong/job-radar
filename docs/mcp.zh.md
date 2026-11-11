@@ -59,16 +59,16 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 | 工具 | 输入与输出 |
 |---|---|
-| `get_career_profile` | 可选 `version`（已保存的版本编号）。返回去标识结构化档案、多写法和版本列表；`baseHash`、`updatedAt` 与网页 loader 一致。历史版本的 `baseHash` 为 null；当前文件不存在时返回空档案。不返回内部采用记录。`hasPhoto` / `hasSignature` 仅表示图片是否存在。 |
+| `get_career_profile` | 可选 `version`（已保存的版本编号）。返回去标识结构化档案、多写法和版本列表；`baseHash`、`updatedAt` 与网页编辑器使用的值一致。历史版本的 `baseHash` 为 null；当前文件不存在时返回空档案。不返回内部采用记录。`hasPhoto` / `hasSignature` 仅表示图片是否存在。 |
 | `list_career_documents` | 无参数。返回去标识标题、编号、类型、更新时间、语言、可空岗位编号及 `total`。无效文件保留为 `status: invalid` 条目，其余元数据为 null。 |
 | `get_career_document` | `id` 和可选 `version`。返回去标识文档，保持编号、字段和数组长度；包含文件 `baseHash`（历史版本为 null）、版本列表和来源变化状态。不适用时 `jdChanged` / `profileChanged` 为 null。无提议时 `proposals` 为 null，否则含 `status`、`stale`、`items`；提议文件读不出时返回 `status: unavailable`。即便读取历史版本，提议过期也按当前文档文件的哈希判断。 |
 | `check_career_document` | `id`、`doc: resume` 或 `letter`、可选 `version`；只能检查已保存文档。返回 `renderable`、路径/代码问题、去标识纯文本、`pageBudget: {pages}`、检查结果、字体未覆盖字符和网页预览的导出提示。无法渲染时文本、预算和导出提示为 null。页数预算是目标，不是 PDF 实测页数。不返回 HTML 或 PDF。 |
 
-每次调用只为构建现有出站脱敏规则读取一次联系方式文件，不返回文件或其字段。所有自由文本中的已识别姓名、地址、邮箱、电话、工作许可、可工作时间和链接（包括 URL、文件名、求职信和提议）会替换为 `[name]`、`[address]`、`[email]`、`[phone]`、`[work_auth]`、`[availability]`、`[link]`。邮箱、电话和链接模式也会替换。所在地及过短的工作许可/可工作时间值不替换，与既有出站规则一致。去标识结构的 URL 字段改用有长度上限的普通字符串，允许 `[link]`。联系方式文件不存在时使用空的存储规则；无法读取或格式无效时，整次职业读取报通用 unavailable 错误。本机路径会遮盖，图片内容和图片文件名不给。检查使用空联系方式和空图片渲染，再对返回文本和检查参数脱敏。提议中的 JD 引用遵循对应岗位当前的陷阱扫描：隐藏文本或指令换为标记，扫描不可用时引用为 null。第三方文本经过清理并附带引用数据提示。
+每次调用读取一次联系方式文件，用于构建现有出站脱敏规则；检查文档时，也用它执行与网页预览相同的联系方式检查。不返回文件或其字段。所有自由文本中的已识别姓名、地址、邮箱、电话、工作许可、可工作时间和链接（包括 URL、文件名、求职信和提议）会替换为 `[name]`、`[address]`、`[email]`、`[phone]`、`[work_auth]`、`[availability]`、`[link]`。邮箱、电话和链接模式也会替换。所在地及过短的工作许可/可工作时间值不替换，与既有出站规则一致。允许自由文本的岗位哈希和强调色字段也会脱敏；只有受 schema 约束的结构字段才跳过文本脱敏。去标识输出的 URL 和强调色字段允许有长度上限的普通字符串，以容纳占位符。联系方式文件不存在时使用空的存储规则；无法读取或格式无效时，整次职业读取报通用 unavailable 错误。本机路径会遮盖，图片内容和图片文件名不给。文档检查使用真实联系方式计算检查代码和导出检查结果，已保存电话或工作许可时不会误报缺失。返回的检查结果只包含代码、严重程度、字段路径和白名单数值参数（`count`、`max`、`min`、`months`、`total`、`years`、`pages`、`budget`），不包含文本摘录或联系方式值。返回的纯文本使用空联系方式和空图片渲染，先对完整文本脱敏，再计算两处字体未覆盖字符列表。提议中的 JD 引用遵循对应岗位当前的陷阱扫描：隐藏文本或指令换为标记，扫描不可用时引用为 null。第三方文本经过清理并附带引用数据提示。
 
-授予 `replies:read` 并开启 `replies.yaml: enabled` 后提供 `list_replies`。可选筛选参数为 `state`、`category`、`since`（ISO 日期时间，含边界）和 `limit`。按收到时间倒序返回内部数据库回信 `id`、`receivedAt`、有效 `category`（用户修正优先）、`match`、`state`、可空的 `jobId`、公司、职位和申请状态。`total`、`returned`、`truncated` 及截断提示说明 `limits.max_results` 上限；公司和职位作为第三方文本清理。查询不选择邮件主题、正文、发件人域名、引用、message/thread id、原始引用、去重键、候选或建议 JSON。回信编号是 Job Radar 数据库编号，不是邮件标识符。
+授予 `replies:read` 并开启 `replies.yaml: enabled` 后提供 `list_replies`。可选筛选参数为 `state`、`category`、`since`（ISO 日期时间，含边界）和 `limit`。按收到时间倒序返回内部数据库回信 `id`、`receivedAt`、有效 `category`（用户修正优先）、`match`、`state`、可空的 `jobId`、公司、职位和申请状态。`total`、`returned`、`truncated` 及截断提示说明 `limits.max_results` 上限；公司和职位作为第三方文本清理，其中粘贴的邮箱、本机路径和凭据值会遮盖。查询不选择邮件主题、正文、发件人域名、引用、message/thread id、原始引用、去重键、候选或建议 JSON。回信编号是 Job Radar 数据库编号，不是邮件标识符。
 
-移除权限会隐藏对应工具。关闭功能、配置损坏或两层配置文件均被移除，会立即隐藏工具；直接调用报功能未开启（`disabled`）。缺少功能读取器时也视为关闭。不修改文件或业务表，正常的元数据审计仍会记录。档案/文档/检查调用计数为 1，文档列表为条目数，回信为返回条数；五个审计 target 均为 null。
+移除权限会隐藏对应工具。关闭功能、配置损坏或两层配置文件均被移除，会立即隐藏工具；直接调用报功能未开启（`disabled`）。不修改文件或业务表，正常的元数据审计仍会记录。档案/文档/检查调用计数为 1，文档列表为条目数，回信为返回条数；五个审计 target 均为 null。
 
 ## 打开它
 

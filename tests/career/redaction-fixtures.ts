@@ -51,18 +51,19 @@ export function allFieldsExample(schema: z.ZodType, sentinel = sentinelText): un
       if (node.format === "date-time") return "2026-01-01T00:00:00Z";
       if (node.format === "date") return "2026-01-01";
       if (node.format === "uri") return contactSentinels.links[0]!.url;
-      if (key === "jd_hash" || key === "profile_hash") return "a".repeat(64);
-      if (["start", "end", "date"].includes(key)) return "2020";
-      if (key === "accent") return "#123456";
-      if (key === "code") return "en";
       if (typeof node.pattern === "string") {
-        const prefix = node.pattern.match(/doc|ent|dtx|clm|exp|prj|edu|crt|lng|skg|skl|apr|sec|itm|txt|wrd/)?.[0];
+        const pattern = new RegExp(node.pattern);
+        if (pattern.test(sentinel)) return sentinel;
+        const prefix = ["doc", "ent", "dtx", "clm", "exp", "prj", "edu", "crt", "lng", "skg", "skl", "apr", "sec", "itm", "txt", "wrd"]
+          .find((prefix) => pattern.test(`${prefix}_aaaaaaaaaa`));
         if (prefix) {
           let serial = ++sequence;
           let suffix = "";
           while (serial > 0) { suffix += String.fromCharCode(97 + serial % 26); serial = Math.floor(serial / 26); }
           return `${prefix}_${suffix.padEnd(10, "a")}`;
         }
+        const constrained = ["a".repeat(64), "2020", "en", "#123456"].find((value) => pattern.test(value));
+        if (constrained !== undefined) return constrained;
         throw new Error(`Unhandled structural string: ${key} ${node.pattern}`);
       }
       return sentinel;

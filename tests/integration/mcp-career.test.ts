@@ -4,6 +4,12 @@ import { stringify } from "yaml";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, inject, it, vi } from "vitest";
 
+vi.mock("@/lib/dashboard/context", () => ({ getDisplayTimeZone: () => "UTC" }));
+vi.mock("@/lib/career/store/images", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/career/store/images")>(), loadImages: async () => ({}),
+}));
+
+import { POST as preview } from "@/app/api/career/documents/preview/route";
 import { PERMISSIONS, type Permission } from "@/lib/agent-access/permissions";
 import { reloadConfig } from "@/lib/config";
 import { sha256 } from "@/lib/config/atomic";
@@ -36,7 +42,7 @@ const quote = "Fictional hidden evidence";
 
 beforeAll(() => { process.env.DATABASE_URL = url; readonly = createReadOnlyDb({ url }); });
 afterAll(async () => { await readonly.close(); await closeDb(); });
-afterEach(async () => { vi.restoreAllMocks(); await connection?.close(); connection = undefined; temp.cleanup(); });
+afterEach(async () => { vi.restoreAllMocks(); vi.useRealTimers(); await connection?.close(); connection = undefined; temp.cleanup(); });
 beforeEach(async () => {
   temp = tempCareer();
   const career = path.join(temp.profileDir, "career");
@@ -154,6 +160,54 @@ it.each([[], ["profile:read"], ["writer:read"], ["replies:read"]] as Permission[
     expect(names).not.toContain(name);
     expect((await connection!.client.callTool({ name, arguments: argsFor(name) })).isError).toBe(true);
   }
+});
+
+it.each(["resume", "letter"] as const)("matches the web %s finding codes using real contact without revealing its values", async (kind) => {
+  await connect();
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(connection!.ctx.now());
+  fs.writeFileSync(path.join(temp.profileDir, "career/contact.yaml"), stringify({ ...contactSentinels, phone: "0555 87654321" }));
+  const checked = checkCareerDocumentOutput.parse(await call("check_career_document", { id: doc.id, doc: kind }));
+  const response = await preview(new Request("http://localhost/api/career/documents/preview", {
+    method: "POST", body: JSON.stringify({ document: doc, doc: kind }),
+  }));
+  expect(response.status).toBe(200);
+  const web = await response.json();
+  const codes = (items: { code: string }[]) => items.map(({ code }) => code).sort();
+  expect(codes(checked.findings)).toEqual(codes(web.findings));
+  expect(codes(checked.exportHints!.findings)).toEqual(codes(web.exportHints.findings));
+  expect(codes(checked.exportHints!.findings)).toContain("career.lint.phone_country");
+  expect(codes(checked.exportHints!.findings)).not.toContain("career.lint.work_auth_missing");
+  const findings = [...checked.findings, ...checked.exportHints!.findings];
+  expect(JSON.stringify(findings)).not.toContain("0555 87654321");
+  for (const finding of findings) expect(Object.values(finding.params).every((value) => typeof value === "number")).toBe(true);
+});
+
+it.each(["resume", "letter"] as const)("keeps protected name characters out of all %s font diagnostics", async (kind) => {
+  const name = "张三丰";
+  fs.writeFileSync(path.join(temp.profileDir, "career/contact.yaml"), stringify({ ...contactSentinels, name }));
+  doc.headline!.text = `${name} 中文`;
+  doc.letter!.body[0]!.text = `${name} 中文`;
+  fs.writeFileSync(path.join(temp.profileDir, `career/documents/${doc.id}.yaml`), stringify(doc));
+  await connect();
+  const read = vi.spyOn(fs, "readFileSync");
+  const response = await connection!.client.callTool({ name: "check_career_document", arguments: { id: doc.id, doc: kind } });
+  expect(response.isError).not.toBe(true);
+  const checked = checkCareerDocumentOutput.parse(response.structuredContent);
+  expect(checked.text).toContain("[name]");
+  expect(checked.uncovered).toEqual(["中", "文"]);
+  expect(checked.exportHints!.uncovered).toEqual(["中", "文"]);
+  for (const character of name) expect(JSON.stringify(response)).not.toContain(character);
+  expect(read.mock.calls.filter(([file]) => String(file).endsWith("contact.yaml"))).toHaveLength(1);
+});
+
+it.each([...sentinels, "/Users/Fictional/private.txt"])("scrubs %s from saved job hashes and accent values", async (sentinel) => {
+  await connect();
+  doc.job!.jd_hash = sentinel;
+  if (documentSchema.safeParse({ ...doc, layout: { ...doc.layout, accent: sentinel } }).success) doc.layout.accent = sentinel;
+  fs.writeFileSync(path.join(temp.profileDir, `career/documents/${doc.id}.yaml`), stringify(doc));
+  const response = await call("get_career_document", { id: doc.id });
+  expect(JSON.stringify(response)).not.toContain(sentinel);
 });
 
 it("career permission alone cannot read matching profile or preferences, and does not open their files", async () => {

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { CareerStoreError } from "@/lib/career/contact/errors";
 import { careerOutboundScrubber } from "@/lib/career/contact/scrub";
 import { documentIdSchema } from "@/lib/career/schema/document";
+import type { CareerContact } from "@/lib/career/schema/contact";
 import { versionIdSchema } from "@/lib/career/store/history";
 import { loadDocument, readDocumentVersion } from "@/lib/career/store/documents";
 import { ToolFailure, type McpContext } from "@/lib/mcp/context";
@@ -30,8 +31,8 @@ export async function careerRead<T>(ctx: Pick<McpContext, "text">, read: () => P
   }
 }
 
-export function careerCleaner(ctx: Pick<McpContext, "traps" | "text">) {
-  const scrub = careerOutboundScrubber();
+export function careerCleaner(ctx: Pick<McpContext, "traps" | "text">, contact?: CareerContact) {
+  const scrub = careerOutboundScrubber(contact);
   const clean = shortFieldCleaner(readTraps(ctx));
   const redactPaths = readTextCleaner(null, ctx.text("notice.redacted"));
   return (text: string) => redactPaths(scrub(clean(text)));

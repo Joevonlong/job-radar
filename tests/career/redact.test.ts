@@ -1,15 +1,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import { stringify } from "yaml";
+import { z } from "zod";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { redactProfile, redactedProfileSchema } from "@/lib/career/contact/redact-profile";
+import { redactStructure } from "@/lib/career/contact/redact-structure";
 import { careerOutboundScrubber, scrubCareerOutbound } from "@/lib/career/contact/scrub";
 import { redactDocument, redactedDocumentSchema } from "@/lib/career/document/redact";
-import { documentSchema } from "@/lib/career/schema/document";
+import { documentSchema, parseStoredDocument } from "@/lib/career/schema/document";
 import { careerProfileSchema, profileContent } from "@/lib/career/schema/profile";
+import { readTextCleaner } from "@/lib/mcp/read-guard";
 import { allFieldsExample, contactSentinels, sentinels } from "./redaction-fixtures";
 import { tempCareer } from "./fixtures";
+import { document } from "./document-fixtures";
 
 let temp: ReturnType<typeof tempCareer>;
 beforeEach(() => {
@@ -31,6 +35,28 @@ function sameStructure(before: unknown, after: unknown) {
     expect(after).toEqual(before);
   }
 }
+
+it.each([documentSchema, careerProfileSchema])("constrains every exempt schema string by enum, pattern or format", (schema) => {
+  const root = z.toJSONSchema(schema) as Record<string, unknown>;
+  function visit(raw: unknown, path: string[] = []): void {
+    const node = raw as Record<string, unknown>;
+    if (typeof node.$ref === "string") {
+      let referenced: unknown = root;
+      for (const part of node.$ref.slice(2).split("/")) referenced = (referenced as Record<string, unknown>)[part];
+      visit(referenced, path);
+      return;
+    }
+    if (node.type === "string" && redactStructure("sentinel", () => "scrubbed", path) === "sentinel") {
+      expect(Boolean(node.enum || node.const || node.pattern || node.format), path.join(".")).toBe(true);
+    }
+    for (const [key, child] of Object.entries((node.properties ?? {}) as Record<string, unknown>)) visit(child, [...path, key]);
+    if (node.items) visit(node.items, path);
+    for (const union of [node.anyOf, node.oneOf, node.allOf]) {
+      if (Array.isArray(union)) union.forEach((child) => visit(child, path));
+    }
+  }
+  visit(root);
+});
 
 it.each(sentinels)("scrubs every schema string field containing %s without dropping structure", (sentinel) => {
   const doc = documentSchema.parse(allFieldsExample(documentSchema, sentinel));
@@ -59,6 +85,20 @@ it("covers every claim-target branch, including the free field and value strings
   const result = redactDocument(documentSchema.parse(doc));
   expect(result.claims[1]?.target).toEqual({ entry: doc.experience[0]!.id, field: "[email]", value: "[name]" });
   sameStructure(doc, result);
+});
+
+it.each([...sentinels, "/Users/Fictional/private.txt"])("never returns %s from hashes or accent fields", (sentinel) => {
+  for (const field of ["jd_hash", "accent"] as const) {
+    const raw = document();
+    if (field === "jd_hash") raw.job = { id: 1, company: "Example", title: "Engineer", jd_hash: sentinel };
+    else raw.layout.accent = sentinel;
+    const parsed = documentSchema.safeParse(raw);
+    if (!parsed.success) continue;
+    const scrub = careerOutboundScrubber();
+    const clean = readTextCleaner(null, "[redacted]");
+    const result = redactDocument(parseStoredDocument(raw), (text) => clean(scrub(text)));
+    expect(JSON.stringify(result), field).not.toContain(sentinel);
+  }
 });
 
 it("loads contact once for a reusable scrubber and preserves the established rule set", () => {

@@ -62,7 +62,7 @@ export const claimSchema = z.strictObject({
 });
 export type Claim = z.infer<typeof claimSchema>;
 
-export function buildDocumentSchema<U extends z.ZodType<string | null>>(url: U) {
+export function buildDocumentSchema<U extends z.ZodType<string | null>>(url: U, accent = careerAccentSchema) {
   const customEntry = z.strictObject({
     ...base, kind: z.literal("entry"), heading: docTextSchema, sub: maybeText, url,
     date: careerDateSchema, start: careerDateSchema, end: careerDateSchema, location: optional,
@@ -79,7 +79,7 @@ export function buildDocumentSchema<U extends z.ZodType<string | null>>(url: U) 
     profile_hash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
     created_at: z.iso.datetime({ offset: true }),
     updated_at: z.iso.datetime({ offset: true }),
-    layout: documentLayoutSchema,
+    layout: documentLayoutSchema.extend({ accent }),
     hide_contact: z.array(z.enum(["address", "location", "email", "phone", "work_auth", "availability", "links", "photo"]))
       .max(8).refine((items) => new Set(items).size === items.length),
     requirements: strings,
