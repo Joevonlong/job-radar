@@ -11,7 +11,7 @@ export const readJobDto = z.strictObject({
   text_withheld: z.string().nullable(),
 });
 export const pageFields = { total: z.number().int(), returned: z.number().int(), truncated: z.boolean() };
-export const todayOutput = z.strictObject({ notices, ...pageFields, view: z.string().nullable(), quick: z.enum(["high", "salary", "following"]).nullable(), quick_counts: z.strictObject({ all: z.number().int(), high: z.number().int(), salary: z.number().int(), following: z.number().int() }), jobs: z.array(readJobDto) });
+export const todayOutput = z.strictObject({ notices, ...pageFields, view: z.string().nullable(), quick: z.enum(["high", "salary", "following"]).nullable(), quick_counts: z.strictObject({ all: z.number().int(), high: z.number().int(), salary: z.number().int(), following: z.number().int().optional() }), jobs: z.array(readJobDto) });
 
 export function toReadJobDto(card: JobCard, clean: CleanText) {
   const link = (url: string | null) => readSourceUrl(url, clean);

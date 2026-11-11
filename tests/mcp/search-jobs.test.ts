@@ -133,6 +133,20 @@ describe("MCP URL state mapping", () => {
     expect(listJobs).not.toHaveBeenCalled();
   });
 
+  it.each<[SearchJobsArgs, readonly Permission[] | undefined]>([
+    [{ application_status: ["applied"] }, ["jobs:read"]], [{ application_status: ["new"], favorites_only: false }, ["jobs:read", "match:read", "notes:read"]], [{ application_status: ["offer"] }, undefined],
+  ])("refuses the application-status filter %j as invalid input without tracking permission, running no query", async (args, permissions) => {
+    const call = permissions === undefined ? ctx : context(permissions);
+    await expect(searchJobs(call, args)).rejects.toMatchObject({ category: "invalid_input", message: ctx.text("errors.trackingFilter") });
+    expect(ctx.text("errors.trackingFilter")).toContain("application_status");
+    expect(listJobs).not.toHaveBeenCalled();
+  });
+
+  it("applies the application-status filter with tracking permission", async () => {
+    await searchJobs(context(["jobs:read", "tracking:read"]), { application_status: ["applied", "interviewing"] });
+    expect(listJobs).toHaveBeenLastCalledWith(ctx.db, expect.objectContaining({ filters: expect.objectContaining({ applicationStatuses: ["applied", "interviewing"] }) }));
+  });
+
   it("keeps the star and seen filters off without tracking permission and applies them with it", async () => {
     await searchJobs(context(["jobs:read"]), { favorites_only: false, unseen_only: false });
     expect(listJobs).toHaveBeenLastCalledWith(ctx.db, expect.objectContaining({ filters: expect.objectContaining({ favoritesOnly: false, unseenOnly: false }) }));

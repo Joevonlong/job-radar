@@ -7416,7 +7416,7 @@
       "notPermitted": "所有者没有给这个连接授权 {permission}（mcp.yaml），这次调用被拒绝。",
       "tokenInactive": "这个 agent token 已被吊销或已到期，这次调用被拒绝。",
       "notFound": "没有 id 为 {id} 的岗位。",
-      "trackingFilter": "favorites_only 和 unseen_only 按你的收藏和看过的岗位筛选，需要 tracking:read；所有者没有给这个连接授权它（mcp.yaml）。请去掉这两个参数。",
+      "trackingFilter": "favorites_only、unseen_only 和 application_status 按你的收藏、看过的岗位和投递阶段筛选，需要 tracking:read；所有者没有给这个连接授权它（mcp.yaml）。请去掉这些参数。",
       "searchTimeout": "搜索职位描述耗时过长，已停止（search_timeout）。请缩小查询或筛选条件，或不带 search_in: \"all\" 再搜。",
       "failed": "查询失败（{category}）。MCP 客户端里这个服务的日志有这次调用的记录。",
       "writerDisabled": "申请写作没有打开（writer.yaml 的 enabled），或这个工具没有可写的数据库连接。",

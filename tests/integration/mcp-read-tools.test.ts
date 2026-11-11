@@ -103,6 +103,32 @@ describe("new read tools through the MCP server", () => {
     expect(value.jobs[0]?.locations).toEqual([{ label: "Example City", city: "Example City", country_code: "DE" }]);
     expect(value.jobs[0]?.links).toEqual([{ source: "ats", url: `https://example.invalid/jobs/${ids[0]}`, apply_url: null }]);
   });
+  it("refuses tracking-derived filters and counts without tracking permission, never partially", async () => {
+    const client = await connect(["jobs:read"]);
+    const refused = async (name: string, args: Record<string, unknown>, text: string) => {
+      const result = await client.callTool({ name, arguments: args });
+      expect(result.isError, name).toBe(true);
+      expect(JSON.stringify(result.content)).toContain(text);
+      expect(result.structuredContent).toBeUndefined();
+    };
+    await refused("search_jobs", { application_status: ["applied"] }, "tracking:read");
+    await refused("get_today", { quick: "following" }, "tracking:read");
+    const today = todayOutput.parse(await call(client, "get_today"));
+    expect(today.quick_counts.following).toBeUndefined();
+    expect(today.quick_counts.all).toBeGreaterThan(0);
+    const unfiltered = await call(client, "search_jobs", {}) as { jobs: unknown[] };
+    expect(unfiltered.jobs.length).toBeGreaterThan(0);
+  });
+  it("keeps the application-status filter and following counts with tracking permission", async () => {
+    const client = await connect(["jobs:read", "tracking:read"]);
+    const applied = await call(client, "search_jobs", { application_status: ["applied"] }) as { jobs: Array<{ id: number }> };
+    expect(applied.jobs.map((job) => job.id).sort()).toEqual([...ids].sort());
+    const none = await call(client, "search_jobs", { application_status: ["offer"] }) as { jobs: unknown[] };
+    expect(none.jobs).toEqual([]);
+    const today = todayOutput.parse(await call(client, "get_today", { quick: "following" }));
+    expect(today.quick_counts.following).toBe(3);
+    expect(today.jobs).toHaveLength(3);
+  });
   it("companies reuse watched/blacklist marks and job counts", async () => {
     const result = listCompaniesOutput.parse(await call(await connect(), "list_companies"));
     expect(result.companies.map((company) => ({ name: company.name, jobs: company.job_count, watched: company.watched, blacklisted: company.blacklisted }))).toEqual([{ name: "Example Company", jobs: 2, watched: true, blacklisted: false }, { name: "Other Company", jobs: 1, watched: false, blacklisted: true }]);
