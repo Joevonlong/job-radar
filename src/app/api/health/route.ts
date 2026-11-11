@@ -1,3 +1,4 @@
+/** Health is evaluated per request because it reports the live database and runner state. */
 import { loadHealth } from "@/lib/health";
 import { reportWebShippedConfig } from "@/lib/ops/shipped-config";
 

@@ -50,7 +50,9 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 | `get_activity_log` | 根记录列表，或 `root_id` 对应的子步骤/事件代码和计数。筛选为 `scope`、`status`、成对且包含两端的 `from`/`to`、`issues_only`；详情事件支持 `level`。`page` 对根记录或详情事件分页，`limit` 限制各列表。 |
 | `get_ai_usage` | 按日、任务、服务商/模型聚合的调用数、输入/输出 token、总耗时和费用，以及整个窗口的总计；明确统计 token/耗时/费用未知的调用数。筛选为 `range`（`today`、`7d`、`30d`、`month`、`custom`）、`provider`、`task`；自定义范围必须提供包含两端的 `from`/`to`。即使同时有 `jobs:read`，也不提供逐次调用或岗位 id 维度。 |
 
-日期使用调度时区。AI 自定义范围沿用页面的 `ui.yaml: ai_usage.custom_max_days` 上限，非法范围会被拒绝。`limits.max_results` 限制各列表、展开的运行、详情子步骤/事件以及每个用量分组；`truncated` 表示有省略。日志详情仅返回前一组有界子步骤，另用 `spans_truncated` 标记省略；用量总计始终覆盖整个所选窗口。这些工具不会启动处理轮、修改设置或调用 AI 服务商。Doctor 执行原有只读探测，返回固定摘要而非命令行详情。
+日期使用调度时区。AI 自定义范围沿用页面的 `ui.yaml: ai_usage.custom_max_days` 上限，非法范围会被拒绝。`limits.max_results` 限制各列表、展开的运行、详情子步骤/事件以及每个用量分组；`truncated` 表示有省略。展开的运行和日志详情子步骤/事件按从新到旧排列，详情另用 `spans_truncated` 标记省略；用量总计始终覆盖整个所选窗口。这些工具不会启动处理轮、修改设置或调用 AI 服务商。Doctor 执行原有只读探测，返回固定摘要而非命令行详情。
+
+`get_ai_usage` 的 `by_day` 按日期从新到旧排列；截断时保留最新日期和调用量最大的任务/模型分组（相同调用量按字母排序）。
 
 全部输出使用 `src/lib/mcp/dto/ops.ts` 中的严格字段白名单，错误只留类别和已知代码。不返回 Doctor 标题/详情/提示、命令、launchd 标签、路径、主机、数据库地址、原始运行错误、日志里的岗位链接或任意事件参数。无法识别的代码降级为 `unknown` 或 `other`。该权限只提供运维聚合，不授予配置文件读取。
 

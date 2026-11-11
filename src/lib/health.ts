@@ -31,7 +31,7 @@ export function shapeHealth(input: { dbOk: boolean; lastHeartbeatAt: Date | null
   };
 }
 
-/** Read failures expose no connection details; a successful read may notify the route's startup reporter. */
+/** Only the error class is logged because messages may contain connection details; success may notify the startup reporter. */
 export async function loadHealth(options: { db?: () => Db; at?: Date; onReachable?: () => void } = {}): Promise<HealthResult> {
   let dbOk = false;
   let lastHeartbeatAt: Date | null = null;

@@ -19,17 +19,20 @@ const amount = z.number().nonnegative();
 const stamp = z.iso.datetime().nullable();
 const notices = z.array(z.string());
 const code = z.enum([...SAFE_ERROR_CODES, "other"]);
-const runStatus = z.enum(["running", "succeeded", "partial", "failed", "skipped"]);
+const runStatus = z.enum(["running", "succeeded", "partial", "failed", "skipped", "unknown"]);
 const checkStatus = z.enum(["ok", "warn", "fail"]);
 const channelId = z.enum([...Object.keys(CHANNEL_CONFIG_TABLE), "unknown"]);
-const modelId = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]*(?:\.[0-9][a-zA-Z0-9_-]*)*(?:\/[a-zA-Z][a-zA-Z0-9_-]*(?:\.[0-9][a-zA-Z0-9_-]*)*)?$/);
 const providerId = z.enum([...AI_PROVIDER_IDS, "unknown"]);
 const taskId = z.enum([...AI_TASK_NAMES, "probe", "unknown"]);
 const errorDto = z.strictObject({ category: z.enum(["channel", "activity", "step"]), code });
 const errorOf = (category: z.infer<typeof errorDto>["category"], value: unknown) => value === null || value === undefined ? null : { category, code: safeErrorCode(value) };
 const iso = (value: Date | null) => value?.toISOString() ?? null;
+const enumOrUnknown = <T extends string>(schema: z.ZodType<T>, value: unknown): T | "unknown" => {
+  const parsed = schema.safeParse(value);
+  return parsed.success ? parsed.data : "unknown";
+};
 
-const DOCTOR_IDS = [
+export const DOCTOR_IDS = [
   "docker.daemon", "compose.services", "compose.project", "compose.db", "compose.web", "compose.runner", "compose.jobspy", "compose.career-pdf",
   "web.http", "web.access", "db.connect", "db.migrations", "runner.heartbeat", "aiworker.launchd", "aiworker.heartbeat",
   "ai.claude", "ai.codex", "ai.profile", "ai.backlog", "ai.quota", "config.guards", "config.layers", "config.market", "config.pending", "config.shipped", "i18n.config",
@@ -73,7 +76,7 @@ const storedResult = storedCounts.extend({
 });
 const storedStep = z.object({ name: z.enum(STEP_NAMES), status: z.enum(["ok", "partial", "failed", "skipped"]), result: storedResult.optional().catch(undefined) });
 const stepDto = z.strictObject({ name: z.enum(STEP_NAMES), status: storedStep.shape.status, counts: countsDto });
-const cycleDto = z.strictObject({ id: count, kind: z.enum(["weekday_morning", "weekday_evening", "weekend", "manual", "catchup"]), started_at: z.iso.datetime(), finished_at: stamp, status: runStatus, steps: z.array(stepDto) });
+const cycleDto = z.strictObject({ id: count, kind: z.enum(["weekday_morning", "weekday_evening", "weekend", "manual", "catchup", "unknown"]), started_at: z.iso.datetime(), finished_at: stamp, status: runStatus, steps: z.array(stepDto) });
 const runDto = z.strictObject({ id: count, channel_id: channelId, started_at: z.iso.datetime(), finished_at: stamp, status: runStatus, fetched: count, new_count: count, interrupted: z.boolean(), usage_units: amount, window_hours: amount.nullable(), window_extended: z.boolean(), error: errorDto.nullable() });
 export const listCyclesOutput = z.strictObject({ notices, returned: count, truncated: z.boolean(), cycles: z.array(cycleDto), expanded: z.strictObject({ cycle: cycleDto, runs: z.array(runDto), returned: count, truncated: z.boolean() }).nullable() });
 
@@ -105,27 +108,28 @@ export function toCycleDto(row: Cycle) {
     const step = storedStep.safeParse(raw);
     return step.success ? [{ name: step.data.name, status: step.data.status, counts: stepCounts(step.data.result) }] : [];
   }) : [];
-  return { id: row.id, kind: row.kind, started_at: row.startedAt.toISOString(), finished_at: iso(row.finishedAt), status: row.status, steps };
+  return { id: row.id, kind: enumOrUnknown(cycleDto.shape.kind, row.kind), started_at: row.startedAt.toISOString(), finished_at: iso(row.finishedAt), status: enumOrUnknown(runStatus, row.status), steps };
 }
 
 export function toRunDto(row: Run) {
-  return { id: row.id, channel_id: channelId.safeParse(row.channelId).success ? row.channelId : "unknown", started_at: row.startedAt.toISOString(), finished_at: iso(row.finishedAt), status: row.status, fetched: row.fetched, new_count: row.newCount, interrupted: row.interrupted, usage_units: row.usageUnits, window_hours: row.windowHours, window_extended: row.windowExtended, error: errorOf("channel", row.errorCode ?? (row.error === null ? null : "other")) };
+  return { id: row.id, channel_id: enumOrUnknown(channelId, row.channelId), started_at: row.startedAt.toISOString(), finished_at: iso(row.finishedAt), status: enumOrUnknown(runStatus, row.status), fetched: row.fetched, new_count: row.newCount, interrupted: row.interrupted, usage_units: row.usageUnits, window_hours: row.windowHours, window_extended: row.windowExtended, error: errorOf("channel", row.errorCode ?? (row.error === null ? null : "other")) };
 }
 
 const latestRunDto = z.strictObject({ id: count, status: runStatus, started_at: z.iso.datetime(), finished_at: stamp, fetched: count, new_count: count, interrupted: z.boolean(), error: errorDto.nullable() });
+const breakerState = z.enum(["closed", "open", "half_open", "unknown"]);
 const channelDto = z.strictObject({
-  id: channelId, enabled: z.boolean(), registered: z.boolean(), health: z.enum(["off", "not_registered", "missing_credentials", "open", "half_open", "failing", "degraded", "ok", "idle"]),
-  breaker: z.strictObject({ state: z.enum(["closed", "open", "half_open"]), open_until: stamp, consecutive_failures: count, error: errorDto.nullable() }).nullable(),
+  id: channelId, enabled: z.boolean(), registered: z.boolean(), health: z.enum(["off", "not_registered", "missing_credentials", "open", "half_open", "failing", "degraded", "ok", "idle", "unknown"]),
+  breaker: z.strictObject({ state: breakerState, open_until: stamp, consecutive_failures: count, error: errorDto.nullable() }).nullable(),
   usage: z.strictObject({ records: count, usd: amount, budget_usd: amount, included_records: count }), latest_run: latestRunDto.nullable(),
 });
 export const listChannelsOutput = z.strictObject({ notices, month: z.string().regex(/^\d{4}-\d{2}$/), total: count, returned: count, truncated: z.boolean(), channels: z.array(channelDto) });
 function toLatestRunDto(row: RecentRun) {
-  return { id: row.id, status: row.status, started_at: row.startedAt.toISOString(), finished_at: iso(row.finishedAt), fetched: row.fetched, new_count: row.newCount, interrupted: row.interrupted, error: errorOf("channel", row.errorCode ?? (row.error === null ? null : "other")) };
+  return { id: row.id, status: enumOrUnknown(runStatus, row.status), started_at: row.startedAt.toISOString(), finished_at: iso(row.finishedAt), fetched: row.fetched, new_count: row.newCount, interrupted: row.interrupted, error: errorOf("channel", row.errorCode ?? (row.error === null ? null : "other")) };
 }
 export function toChannelDto(row: SourceCard) {
   return {
-    id: channelId.safeParse(row.id).success ? row.id : "unknown", enabled: row.enabled, registered: row.registered, health: row.status,
-    breaker: row.circuit ? { state: row.circuit.state, open_until: iso(row.circuit.openUntil), consecutive_failures: row.circuit.consecutiveFailures, error: errorOf("channel", row.circuit.lastErrorCode) } : null,
+    id: enumOrUnknown(channelId, row.id), enabled: row.enabled, registered: row.registered, health: enumOrUnknown(channelDto.shape.health, row.status),
+    breaker: row.circuit ? { state: enumOrUnknown(breakerState, row.circuit.state), open_until: iso(row.circuit.openUntil), consecutive_failures: row.circuit.consecutiveFailures, error: errorOf("channel", row.circuit.lastErrorCode) } : null,
     usage: { records: row.usage.records, usd: row.usage.usd, budget_usd: row.usage.budgetUsd, included_records: row.usage.freeRecords },
     latest_run: row.runs[0] ? toLatestRunDto(row.runs[0]) : null,
   };
@@ -138,20 +142,20 @@ const activitySpanDto = z.strictObject({ id: z.uuid(), parent_id: z.uuid().nulla
 const activityEventDto = z.strictObject({ id: z.uuid(), span_id: z.uuid(), level: z.enum([...EVENT_LEVELS, "unknown"]), code: z.enum([...EVENT_CODES, "unknown"]), count: count.nullable(), error: errorDto.nullable() });
 export const activityLogOutput = z.strictObject({ notices, state: z.enum(["ready", "not_ready", "not_found", "error"]), page: count, total: count, returned: count, truncated: z.boolean(), roots: z.array(activityRootDto), detail: z.strictObject({ root: activityRootDto, spans: z.array(activitySpanDto), spans_truncated: z.boolean(), events: z.array(activityEventDto), events_total: count }).nullable() });
 export function toActivityRootDto(row: ActivityRootRow) {
-  return { id: row.id, scope: row.scope, name: row.name, status: row.status, started_at: row.startedAt.toISOString(), finished_at: iso(row.finishedAt), active: row.active, progress_done: row.progressDone, progress_total: row.progressTotal, failed_children: row.failedChildren, warn_events: row.warnEvents, error_events: row.errorEvents, events_dropped: row.eventsDropped, error: errorOf("activity", row.reasonCode ?? row.request?.errorCode) };
+  return { id: row.id, scope: enumOrUnknown(activityRootDto.shape.scope, row.scope), name: enumOrUnknown(activityName, row.name), status: enumOrUnknown(activityStatus, row.status), started_at: row.startedAt.toISOString(), finished_at: iso(row.finishedAt), active: row.active, progress_done: row.progressDone, progress_total: row.progressTotal, failed_children: row.failedChildren, warn_events: row.warnEvents, error_events: row.errorEvents, events_dropped: row.eventsDropped, error: errorOf("activity", row.reasonCode ?? row.request?.errorCode) };
 }
 export function toActivitySpanDto(row: ActivitySpanRow) {
-  return { id: row.id, parent_id: row.parentId, name: row.name, status: row.status, progress_done: row.progressDone, progress_total: row.progressTotal, events_dropped: row.eventsDropped, error: errorOf("activity", row.reasonCode) };
+  return { id: row.id, parent_id: row.parentId, name: enumOrUnknown(activityName, row.name), status: enumOrUnknown(activityStatus, row.status), progress_done: row.progressDone, progress_total: row.progressTotal, events_dropped: row.eventsDropped, error: errorOf("activity", row.reasonCode) };
 }
 export function toActivityEventDto(row: ActivityEventRow) {
   const value = count.safeParse(row.params.count);
-  return { id: row.id, span_id: row.spanId, level: row.level, code: row.code, count: value.success ? value.data : null, error: errorOf("activity", row.params.error_code) };
+  return { id: row.id, span_id: row.spanId, level: enumOrUnknown(activityEventDto.shape.level, row.level), code: enumOrUnknown(activityEventDto.shape.code, row.code), count: value.success ? value.data : null, error: errorOf("activity", row.params.error_code) };
 }
 
 const usageMeasuresDto = z.strictObject({ calls: count, tokens_in: amount, tokens_out: amount, token_unknown_calls: count, duration_ms: amount, duration_unknown_calls: count, cost_usd: amount, cost_unknown_calls: count });
 const dayUsageDto = z.strictObject({ day: z.iso.date(), ...usageMeasuresDto.shape });
 const taskUsageDto = z.strictObject({ task: taskId, ...usageMeasuresDto.shape });
-const modelUsageDto = z.strictObject({ provider: providerId, model: modelId.nullable(), ...usageMeasuresDto.shape });
+const modelUsageDto = z.strictObject({ provider: providerId, model: z.string().nullable(), ...usageMeasuresDto.shape });
 export const aiUsageOutput = z.strictObject({ notices, from: z.iso.date(), to: z.iso.date(), time_zone: z.string(), returned: count, truncated: z.boolean(), totals: usageMeasuresDto, by_day: z.array(dayUsageDto), by_task: z.array(taskUsageDto), by_model: z.array(modelUsageDto) });
 function usageMeasures(rows: readonly AiUsageGroup[]) {
   return {
@@ -163,16 +167,17 @@ function usageMeasures(rows: readonly AiUsageGroup[]) {
 function buckets(rows: readonly AiUsageGroup[], key: (row: AiUsageGroup) => string) {
   const result = new Map<string, AiUsageGroup[]>();
   for (const row of rows) result.set(key(row), [...(result.get(key(row)) ?? []), row]);
-  return [...result.entries()].sort(([a], [b]) => a.localeCompare(b));
+  return [...result.entries()];
 }
-export function toAiUsageDto(rows: readonly AiUsageGroup[]) {
+export function toAiUsageDto(rows: readonly AiUsageGroup[], knownModelIds: ReadonlySet<string>) {
   const provider = (row: AiUsageGroup) => providerId.safeParse(row.provider).success ? row.provider : "unknown";
-  const model = (row: AiUsageGroup) => modelId.safeParse(row.model).success ? row.model : null;
+  const model = (row: AiUsageGroup) => row.model !== null && knownModelIds.has(row.model) ? row.model : null;
   const task = (row: AiUsageGroup) => taskId.safeParse(row.task).success ? row.task : "unknown";
   return {
     totals: usageMeasures(rows),
-    by_day: buckets(rows, (row) => row.day).map(([day, group]) => ({ day, ...usageMeasures(group) })),
-    by_task: buckets(rows, task).map(([task, group]) => ({ task, ...usageMeasures(group) })),
-    by_model: buckets(rows, (row) => JSON.stringify([provider(row), model(row)])).map(([, group]) => ({ provider: provider(group[0]!), model: model(group[0]!), ...usageMeasures(group) })),
+    by_day: buckets(rows, (row) => row.day).map(([day, group]) => ({ day, ...usageMeasures(group) })).sort((a, b) => b.day.localeCompare(a.day)),
+    by_task: buckets(rows, task).map(([task, group]) => ({ task, ...usageMeasures(group) })).sort((a, b) => b.calls - a.calls || a.task.localeCompare(b.task)),
+    by_model: buckets(rows, (row) => JSON.stringify([provider(row), model(row)])).map(([, group]) => ({ provider: provider(group[0]!), model: model(group[0]!), ...usageMeasures(group) }))
+      .sort((a, b) => b.calls - a.calls || a.provider.localeCompare(b.provider) || (a.model ?? "").localeCompare(b.model ?? "")),
   };
 }

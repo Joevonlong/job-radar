@@ -9,7 +9,7 @@ export function listOpsCycles(db: Db, limit: number) {
 }
 
 export function listOpsRuns(db: Db, cycleId: number, limit: number) {
-  return db.select().from(runs).where(eq(runs.cycleId, cycleId)).orderBy(runs.id).limit(limit);
+  return db.select().from(runs).where(eq(runs.cycleId, cycleId)).orderBy(desc(runs.startedAt), desc(runs.id)).limit(limit);
 }
 
 export async function countPendingOpsRequests(db: Db): Promise<number> {

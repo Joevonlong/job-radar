@@ -65,7 +65,8 @@ all five and refuses subsequent calls. Default permissions remain `jobs:read` an
 
 Dates use the schedule time zone. AI custom ranges use the page's configured maximum in `ui.yaml: ai_usage.custom_max_days`;
 invalid ranges are refused. `limits.max_results` caps each list, expanded runs, detail spans/events and each usage grouping;
-`truncated` flags omitted rows. Activity detail also marks `spans_truncated`; only its first bounded set of spans is returned.
+`truncated` flags omitted rows. Expanded runs and activity detail spans/events are newest first; detail also marks `spans_truncated`.
+`get_ai_usage` returns `by_day` newest first; truncation keeps the newest days and the largest task/model groups by calls (alphabetical ties).
 Usage totals always cover the full selected window. These tools never start a cycle, change settings or call an AI provider.
 Doctor performs the existing read-only probes and returns fixed summaries rather than its command-line details.
 

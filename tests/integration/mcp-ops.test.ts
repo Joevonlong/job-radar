@@ -45,6 +45,9 @@ beforeEach(async () => {
   sources.sources.jsearch.enabled = true;
   sources.sources.jsearch.monthly_budget_usd = 12;
   fs.writeFileSync(path.join(temp.configDir, "sources.yaml"), stringify(sources));
+  fs.writeFileSync(path.join(temp.configDir, "models.yaml"), stringify({ providers: {
+    anthropic: { models: [{ id: "example-model", price: { input_per_mtok: 1, output_per_mtok: 1 } }] },
+  } }));
   resetConfigCache();
   settings = mcpSchema.parse({ enabled: true, permissions: ["ops:read"], stdio: { permissions: ["ops:read"] }, limits: { max_results: 50 } });
   lines = [];
@@ -70,7 +73,7 @@ beforeEach(async () => {
   ]);
   const root = activityRow({ scope: "cycle", name: "cycle", cycleId, status: "failed", startedAt: now, finishedAt: now, lastActivityAt: now, progressDone: 1, progressTotal: 2 });
   rootId = root.id;
-  const span = activityRow({ rootId, parentId: rootId, name: "step.collect", status: "failed", reasonCode: "network" });
+  const span = activityRow({ rootId, parentId: rootId, name: "step.collect", status: "failed", reasonCode: "network", startedAt: now, lastActivityAt: now });
   await db.insert(schema.activitySpans).values([root, span]);
   await db.insert(schema.activityEvents).values(activityEvent(span, { level: "error", code: "item.failed", params: { count: 2, error_code: secret, detail: secret } }));
   const [company] = await db.insert(schema.companies).values({ name: secret, nameNorm: "private" }).returning();
@@ -172,6 +175,60 @@ it("enforces both permission lists live and refuses calls after revocation", asy
     }
     settings = allowed;
   }
+});
+
+it.each([
+  ["host", "private-db-host"], ["path", "private/resume"], ["token", "sk-ops-sentinel123"],
+  ["URL", "https://private.example/x"], ["oversized name", "x".repeat(300)],
+])("withholds an untrusted model containing a %s through MCP independently", async (_kind, model) => {
+  await getDb().insert(schema.aiUsage).values({ provider: "anthropic", task: "probe", model, at: now });
+  const client = await connect();
+  const result = await client.callTool({ name: "get_ai_usage", arguments: { range: "today", task: "probe" } });
+  expect(result.isError).not.toBe(true);
+  expect(aiUsageOutput.parse(result.structuredContent).by_model).toMatchObject([{ provider: "anthropic", model: null, calls: 1 }]);
+  expect(JSON.stringify(result)).not.toContain(model);
+});
+
+it("withholds known model ids when the catalog cannot be read", async () => {
+  fs.writeFileSync(path.join(temp.configDir, "models.yaml"), "providers: [");
+  const client = await connect();
+  const usage = await call(client, "get_ai_usage", aiUsageOutput, { range: "today" });
+  expect(usage.by_model.every((row) => row.model === null)).toBe(true);
+  expect(JSON.stringify(usage)).not.toContain("example-model");
+});
+
+it("keeps newest days and largest groups when usage exceeds the configured result limit", async () => {
+  settings.limits.max_results = 1;
+  const oldest = new Date(`${day}T00:00:00Z`);
+  oldest.setUTCDate(oldest.getUTCDate() - 2);
+  const middle = new Date(oldest);
+  middle.setUTCDate(middle.getUTCDate() + 1);
+  await getDb().insert(schema.aiUsage).values([
+    { provider: "anthropic", task: "probe", model: "example-model", at: oldest },
+    { provider: "anthropic", task: "probe", model: "example-model", at: middle },
+    ...Array.from({ length: 4 }, () => ({ provider: "anthropic", task: "translate", model: "example-model", at: now })),
+  ]);
+  const client = await connect();
+  const usage = await call(client, "get_ai_usage", aiUsageOutput, { range: "7d", limit: 50 });
+  expect(usage).toMatchObject({ truncated: true, by_day: [{ day, calls: 7 }], by_task: [{ task: "translate", calls: 4 }], by_model: [{ model: "example-model", calls: 8 }] });
+  expect(usage.by_day).toHaveLength(1);
+  expect(usage.by_day.some((row) => row.day === oldest.toISOString().slice(0, 10))).toBe(false);
+  expect(usage.totals.calls).toBe(9);
+});
+
+it("keeps the latest expanded run, span and event when truncating operations history", async () => {
+  settings.limits.max_results = 1;
+  const later = new Date(now.getTime() + 1000);
+  const [run] = await getDb().insert(schema.runs).values({ channelId: "jsearch", cycleId, startedAt: later, status: "succeeded" }).returning();
+  const span = activityRow({ rootId, parentId: rootId, name: "step.collect", startedAt: later });
+  await getDb().insert(schema.activitySpans).values(span);
+  const event = activityEvent(span, { at: later, level: "info", code: "item.failed", params: { count: 9 } });
+  await getDb().insert(schema.activityEvents).values(event);
+  const client = await connect();
+  const cycles = await call(client, "list_cycles", listCyclesOutput, { cycle_id: cycleId });
+  expect(cycles.expanded).toMatchObject({ runs: [{ id: run!.id }], truncated: true });
+  const activity = await call(client, "get_activity_log", activityLogOutput, { root_id: rootId });
+  expect(activity).toMatchObject({ truncated: true, detail: { spans: [{ id: span.id }], spans_truncated: true, events: [{ id: event.id }] } });
 });
 
 it("caps lists and expansions using its own settings and rejects unrecognized or invalid input", async () => {

@@ -38,6 +38,7 @@ interface Resolved {
   catalog: ModelsConfig | null;
 }
 
+/** Reload settings on each read because the web process has no config watcher. */
 async function resolve(state: AiUsageUrlState, db: Db, at?: Date): Promise<Resolved> {
   const settings = reloadConfig("ui").ai_usage;
   const timeZone = reloadConfig("schedule").timezone;

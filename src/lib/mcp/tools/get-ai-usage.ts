@@ -17,7 +17,8 @@ export function getAiUsageInput(ctx: Pick<McpContext, "text">) {
 export async function getAiUsage(ctx: McpContext, args: z.infer<ReturnType<typeof getAiUsageInput>>) {
   const data = await loadAiUsageData({ range: args.range ?? null, from: args.from ?? null, to: args.to ?? null, provider: args.provider ?? null, task: args.task ?? null, model: null, metric: null, page: null }, { db: ctx.db });
   if (data.range.invalid) throw new ToolFailure("invalid_input", ctx.text("ops.errors.range"));
-  const usage = toAiUsageDto(data.groups);
+  const knownModelIds = new Set(Object.values(data.catalog?.providers ?? {}).flatMap((provider) => provider.models.map((model) => model.id)));
+  const usage = toAiUsageDto(data.groups, knownModelIds);
   const limit = resultLimit(ctx, args.limit);
   const byDay = usage.by_day.slice(0, limit);
   const byTask = usage.by_task.slice(0, limit);
