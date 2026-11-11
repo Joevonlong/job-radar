@@ -1,6 +1,6 @@
 /**
  * The MCP server over stdio (docs/mcp.md): an MCP client you configure (Claude Desktop, Claude Code, ...) starts this as a child
- * process and talks to it on stdin / stdout. No port is opened. Nothing is written to the database, except that the tool
+ * process and talks to it on stdin / stdout. No port is opened. Tool calls write metadata-only audit rows; the tool
  * `save_application_answer`, when granted writer:write, adds answer versions over a connection of its own.
  *
  *   pnpm --silent mcp:serve
@@ -8,6 +8,8 @@
  * Off by default: with mcp.yaml `enabled: false` (or no available tool permissions, or an unreadable mcp.yaml) it says why on stderr and
  * exits with 1, which the client shows in its log. stdout carries protocol messages only; every other line goes to stderr.
  * Settings are re-read on every call: disabling mcp.yaml (or removing a permission, or breaking the file) refuses the next call without a restart.
+ * When the client goes away it waits at most mcp.yaml `audit.write_timeout_ms` for running calls and their audit rows, then closes
+ * the database connections, giving a query that is still running at most 5 seconds.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -15,9 +17,11 @@ import path from "node:path";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
 import { authorize, liveMcpSettings } from "../src/lib/agent-access/authorize";
+import { createAuditRecorder } from "../src/lib/agent-access/audit";
 import { CAPABILITIES, visibleCapabilities } from "../src/lib/capabilities/registry";
 import { createConnection } from "../src/lib/db/client";
 import { createReadOnlyDb } from "../src/lib/db/read-only-client";
+import { openAgentCallsConnection } from "../src/lib/db/repos/agent-calls";
 import { loadDatabaseEnv } from "../src/lib/env";
 import { stderrLine } from "../src/lib/mcp/call-log";
 import { buildServer, defaultContext } from "../src/lib/mcp/server";
@@ -67,7 +71,17 @@ function main(): void {
   }
 
   const database = createReadOnlyDb();
-  const context = defaultContext(database.db, settings, { text, writeDb: writable?.db ?? null });
+  const { audit: auditSettings } = settings;
+  const openAudit = () => {
+    const connection = openAgentCallsConnection(loadDatabaseEnv().DATABASE_URL, {
+      connectTimeoutSeconds: auditSettings.connect_timeout_seconds,
+      statementTimeoutMs: auditSettings.statement_timeout_ms,
+      lockTimeoutMs: auditSettings.lock_timeout_ms,
+    });
+    return { db: connection.db, end: (options: { timeout: number }) => connection.sql.end(options) };
+  };
+  const audit = createAuditRecorder(openAudit, { text, log: stderrLine, writeTimeoutMs: auditSettings.write_timeout_ms });
+  const context = defaultContext(database.db, settings, { text, writeDb: writable?.db ?? null, audit });
   const version = packageVersion();
   const handle = serveStdio(() => buildServer(context, { version }), {
     onerror: (error) => stderrLine(`[mcp] transport error: ${error.name}`),
@@ -78,7 +92,7 @@ function main(): void {
   const stop = (code: number) => {
     if (stopping) return;
     stopping = true;
-    void Promise.allSettled([handle.close(), database.close(), ...(writable ? [writable.sql.end({ timeout: 5 })] : [])]).then(() => {
+    void Promise.allSettled([handle.close()]).then(() => Promise.allSettled([audit.close()])).then(() => Promise.allSettled([database.close(), ...(writable ? [writable.sql.end({ timeout: 5 })] : [])])).then(() => {
       stderrLine(text("serve.stopped"));
       process.exit(code);
     });

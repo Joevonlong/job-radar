@@ -4,6 +4,7 @@ import type { TrapsConfig } from "@/lib/config/schemas/traps";
 import type { SearchPlan } from "@/lib/jobs/search-query";
 import type { Db } from "@/lib/db/client";
 import type { WriterInputs } from "@/lib/writer/settings";
+import type { AuditEntry, AuditOutcome, AuditRecorder, AuditTarget } from "@/lib/agent-access/audit";
 
 import { formatCallLine, type LogLine } from "./call-log";
 import { errorResult } from "./guard";
@@ -14,7 +15,7 @@ export interface McpWriterAccess {
   /** writer.yaml, me.yaml and stories.yaml as they are now. */
   inputs: () => WriterInputs;
   /**
-   * The only connection that can write, used by `save_application_answer` and by nothing else. Null unless writer:write is
+   * The answer-writing connection, used by `save_application_answer` and by nothing else. Null unless writer:write is
    * effective and the application writer is on.
    */
   writeDb: Db | null;
@@ -49,6 +50,9 @@ export interface McpContext {
    * second time). Absent: no field block is given.
    */
   permissions?: ReadonlySet<Permission>;
+  audit?: AuditRecorder;
+  caller?: { caller: "stdio"; tokenId: number | null; transport: "stdio" };
+  auditCall?: { success: (count: number) => AuditEntry; committed: boolean };
 }
 
 type ErrorResult = ReturnType<typeof errorResult>;
@@ -79,19 +83,48 @@ export function errorCategory(error: unknown): string {
   return "internal";
 }
 
+export function auditFailure(error: unknown): AuditOutcome {
+  const category = error instanceof ToolFailure ? error.category : errorCategory(error);
+  return category === "not_permitted" && error instanceof ToolFailure
+    ? { outcome: "not_permitted", error_category: null }
+    : { outcome: "error", error_category: category };
+}
+
+export function auditEntry(ctx: Pick<McpContext, "caller">, capability: string, target: AuditTarget | null, outcome: AuditOutcome, count: number, durationMs: number): AuditEntry {
+  return {
+    caller: ctx.caller?.caller ?? "stdio",
+    token_id: ctx.caller?.tokenId ?? null,
+    transport: ctx.caller?.transport ?? "stdio",
+    capability,
+    target,
+    ...outcome,
+    returned_count: count,
+    duration_ms: Math.max(0, Math.round(durationMs)),
+  };
+}
+
 /**
- * Runs one tool call: the call log line (tool, item count, time, ok / failure category; no arguments, no result) and the error
- * result for anything thrown. A `ToolFailure` keeps its message; any other error is reported by its category only.
+ * Logs and audits one call without its arguments or result. An answer's committed transaction already holds its success row.
+ * A `ToolFailure` keeps its message; unexpected failures are reported by category only.
  */
-export async function runLogged<R>(ctx: McpContext, tool: string, call: () => Promise<{ result: R; count: number }>): Promise<R | ErrorResult> {
+export async function runLogged<R>(ctx: McpContext, tool: string, call: (ctx: McpContext) => Promise<{ result: R; count: number }>, target: AuditTarget | null = null): Promise<R | ErrorResult> {
   const started = performance.now();
+  const finish = ctx.audit?.beginCall?.();
+  const auditCall = {
+    success: (count: number) => auditEntry(ctx, tool, target, { outcome: "ok", error_category: null }, count, performance.now() - started),
+    committed: false,
+  };
   try {
-    const { result, count } = await call();
+    const { result, count } = await call({ ...ctx, auditCall });
     ctx.log(formatCallLine({ tool, ok: true, count, ms: performance.now() - started }));
+    if (!auditCall.committed) await ctx.audit?.record(auditCall.success(count));
     return result;
   } catch (error) {
     const category = error instanceof ToolFailure ? error.category : errorCategory(error);
     ctx.log(formatCallLine({ tool, ok: false, count: 0, ms: performance.now() - started, category }));
+    if (!auditCall.committed) await ctx.audit?.record(auditEntry(ctx, tool, target, auditFailure(error), 0, performance.now() - started));
     return errorResult(error instanceof ToolFailure ? error.message : ctx.text("errors.failed", { category }));
+  } finally {
+    finish?.();
   }
 }

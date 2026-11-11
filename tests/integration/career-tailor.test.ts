@@ -119,8 +119,9 @@ it("upgrades the preceding enum migration preserving existing rows", async () =>
     fs.cpSync(path.resolve("drizzle"), directory, { recursive: true });
     const file = path.join(directory, "meta/_journal.json");
     const journal = JSON.parse(fs.readFileSync(file, "utf8")) as { entries: { tag: string }[] };
-    expect(journal.entries.at(-1)?.tag).toBe("0058_career_tailor_kind");
-    journal.entries.pop(); fs.writeFileSync(file, JSON.stringify(journal));
+    const tailor = journal.entries.findIndex((entry) => entry.tag === "0058_career_tailor_kind");
+    expect(tailor).toBeGreaterThan(0);
+    journal.entries.splice(tailor); fs.writeFileSync(file, JSON.stringify(journal));
     await runMigrations({ url: address.toString(), migrationsFolder: directory, currentScoresBackfill: backfill });
     expect(await findLatestCareerTailorRequest(connection.db, "doc_aaaaaaaaaa")).toBeNull();
     const previous = await insertControlRequest(connection.db, { kind: "career_extract", payload: { marker: "existing" } });

@@ -2,6 +2,7 @@ import type { ToolAnnotations } from "@modelcontextprotocol/server";
 import type { z } from "zod";
 
 import type { Permission } from "@/lib/agent-access/permissions";
+import type { AuditTarget } from "@/lib/agent-access/audit";
 import type { McpContext } from "@/lib/mcp/context";
 
 type CapabilityOutput = { notices: string[] } & Record<string, unknown>;
@@ -15,6 +16,7 @@ export interface Capability {
   output: z.ZodType<CapabilityOutput>;
   handler: (ctx: McpContext, args: unknown) => Promise<CapabilityOutput>;
   count: (output: CapabilityOutput) => number;
+  target?: (args: unknown) => AuditTarget | null;
   annotations: ToolAnnotations;
   text: { title: MessageKey; description: MessageKey };
   /**
@@ -26,11 +28,12 @@ export interface Capability {
   outputFor?: (permissions: ReadonlySet<Permission>) => z.ZodType<CapabilityOutput>;
 }
 
-type CapabilityDefinition<I extends z.ZodObject, O extends z.ZodType<CapabilityOutput>> = Omit<Capability, "input" | "output" | "handler" | "count" | "outputFor"> & {
+type CapabilityDefinition<I extends z.ZodObject, O extends z.ZodType<CapabilityOutput>> = Omit<Capability, "input" | "output" | "handler" | "count" | "target" | "outputFor"> & {
   input: (ctx: Pick<McpContext, "text">) => I;
   output: O;
   handler: (ctx: McpContext, args: z.output<I>) => Promise<z.output<O>>;
   count: (output: z.output<O>) => number;
+  target?: (args: z.output<I>) => AuditTarget | null;
   outputFor?: (permissions: ReadonlySet<Permission>) => z.ZodType<z.output<O>>;
 };
 

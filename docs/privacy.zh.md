@@ -25,6 +25,7 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 | 职业档案提取草稿，含建议字段和原文引用 | `data/profile/career/drafts/` 和配置归档 | 直到采用、丢弃或按 `career.yaml: import.draft_ttl_days` 过期；备份可能继续保留 |
 | 从画像、文字或简历提取的素材草稿，以及它们引用的片段 | 数据库表 `profile_story_drafts` | 采用或丢弃草稿时清除文字；这一行在 `writer.yaml: import.draft_ttl_days` 天后删除。见[提取素材](#提取素材) |
 | runner 心跳 | 数据库 | 24 小时 |
+| MCP 调用元数据：调用方、传输方式、capability、可选目标 id、结果或错误类别、条数和耗时；从不存参数、返回内容或消息文字 | 数据库表 `agent_calls` | `mcp.yaml: audit.retention_days`（默认 90 天），由 runner 清理；旧备份可能保留已删的行。见 [MCP 调用审计](mcp.zh.md#调用审计) |
 | 数据库备份 | `data/backups/` | 自动：14 份日备、8 份周备；手动备份不会被清理。已删除的记录在旧备份里还会留着，直到这些备份被删掉 |
 | 给 resume-kit 的 JD 导出 | `data/exports/jd/` | 直到你删除 |
 | 日志 | 容器日志（轮转）、`data/logs/`（轮转）、macOS 上的 `~/Library/Logs/job-radar/` | 轮转 |

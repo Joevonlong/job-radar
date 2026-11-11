@@ -70,11 +70,7 @@ export const mcpPermissions: ConfigMigration = {
       },
     });
     const first = replacements[0]?.key;
-    if (isScalar(toolsKey) && isScalar(first)) {
-      first.commentBefore = toolsKey.commentBefore;
-      first.spaceBefore = toolsKey.spaceBefore;
-      first.comment = toolsKey.comment ?? (isMap(rawTools) && !rawTools.flow ? rawTools.commentBefore : isNode(rawTools) ? rawTools.comment : undefined);
-    }
+    if (isScalar(toolsKey) && isScalar(first)) first.spaceBefore = toolsKey.spaceBefore;
     map.items.splice(index, 1, ...replacements);
     if (effective.search_jobs === effective.get_job) return;
     const off = effective.search_jobs ? "get_job" : "search_jobs";

@@ -188,7 +188,7 @@ export const mcpCheck: DoctorCheck = {
     const probe = await ctx.probes.mcp();
     if (probe.state === "config_error") return warn(mcpSpec, ctx.t("checks.data.mcp.configError", { problem: probe.problem }), ctx.t("checks.data.mcp.configHint"));
     if (!probe.enabled) return ok(mcpSpec, ctx.t("checks.data.mcp.off"));
-    return ok(mcpSpec, ctx.t("checks.data.mcp.on", { effective: probe.effective.join(", ") || ctx.t("checks.data.mcp.none"), matrix: probe.permissions.join(", ") || ctx.t("checks.data.mcp.none") }));
+    return ok(mcpSpec, ctx.t("checks.data.mcp.on", { effective: probe.effective.join(", ") || ctx.t("checks.data.mcp.none"), matrix: probe.permissions.join(", ") || ctx.t("checks.data.mcp.none"), days: probe.auditRetentionDays }));
   },
 };
 

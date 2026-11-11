@@ -32,3 +32,14 @@ limits:
   max_results: 20
   # Most characters of a JD one get_job call returns (500-100000); a longer JD is cut and marked as cut
   max_description_chars: 12000
+
+# Local tool-call metadata only: no arguments, returned content or error messages (docs/mcp.md).
+audit:
+  # Runner deletes older calls (1-3650 days), including when the MCP server is off
+  retention_days: 90
+  # Dedicated audit connection: at most one session, with bounded waits
+  connect_timeout_seconds: 2
+  statement_timeout_ms: 1500
+  lock_timeout_ms: 200
+  # Longest a call waits for its audit row (100-10000), queueing included; also the longest shutdown waits for the last rows
+  write_timeout_ms: 2000

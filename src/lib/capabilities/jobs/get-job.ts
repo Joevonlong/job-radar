@@ -15,6 +15,7 @@ export const get_job = defineCapability({
   outputFor: (p) => getJobOutputFor(p),
   handler: getJob,
   count: () => 1,
+  target: (args) => ({ type: "job", id: args.job_id }),
   annotations: READ_ONLY,
   text: { title: "tools.get_job.title", description: "tools.get_job.description" },
 });
