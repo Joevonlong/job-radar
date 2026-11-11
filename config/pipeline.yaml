@@ -524,6 +524,7 @@ filter:
   #   rule_warn_ms: 200            # pnpm deal-breakers:check warns when one rule takes longer over all open jobs
   #   match_ms: 100                # a deal-breaker pattern slower than this on a test text (a long line without a match) is left out
   #   rule_budget_ms: 2000         # time one rule may take in one filter run; a rule that uses it up stops for that run
+  #   preview_samples: 3           # samples per rule in the /me and MCP previews
   #   preview_ms: 3000             # longest the /me preview may take before it shows what it counted so far
 
 # Checks of a job that only mark it (they change no score and filter nothing). The values below are the defaults that apply

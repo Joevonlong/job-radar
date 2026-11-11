@@ -4,8 +4,9 @@
 # delete any. Each call also adds one metadata row to the local `agent_calls` table (see `audit` below).
 # Privacy: whatever the tools return is handed by your client to the model provider it uses (Anthropic for Claude, ...).
 # What may be returned is fixed in code: job facts, source links, scores and ranks, signals with their JD quotes, the JD after
-# AI-trap cleaning, and the status, dates, next step and interview rounds of your applications. Never returned: your profile,
-# salary floor as a field, emails, local paths and keys. Match reasons and notes require their separate permissions.
+# AI-trap cleaning, and the status, dates, next step and interview rounds of your applications. Match and note fields require
+# their own permissions. Never returned: contact/career files, profile snapshots, import drafts, emails, local paths, keys.
+# profile:read shares me/preferences/stories (including salary floor and language levels), interests and read-only previews.
 # Only when writer:read is granted (it gives `get_application_context`): your application questions and answer versions, and the material
 # you chose for each question, which can include your profile summary, skills and languages, chosen stories and emphasis note.
 
@@ -20,11 +21,12 @@ enabled: false
 
 # The global matrix is the most any connection may receive. Tool permissions:
 # search_jobs / get_job: jobs:read; list_applications: tracking:read
+# get_profile / get_interests / preview_deal_breakers / preview_interest_category: profile:read (off by default)
 # get_application_context: writer:read and writer.yaml enabled (shares your chosen application material)
 # save_application_answer: writer:write and writer.yaml enabled (only adds answer versions)
 # get_system_status / list_cycles / list_channels / get_activity_log / get_ai_usage: ops:read (opt-in)
 # Operations expose codes, counts and usage aggregates only; no raw errors, paths or job-level usage.
-# Other catalog permission ids are accepted but do not give tools yet.
+# match:read / notes:read add fields to job tools; other catalog ids are accepted but do not give tools yet.
 permissions:
   - jobs:read
   - tracking:read
@@ -36,7 +38,7 @@ stdio:
     - tracking:read
 
 limits:
-  # Most results per list or usage dimension (1-100), also expanded runs, activity spans and events; truncation is marked
+  # Most results per list or usage dimension (1-100), also expanded runs, activity spans, events and pending interest suggestions; truncation is marked
   max_results: 20
   # Most characters of a JD one get_job call returns (500-100000); a longer JD is cut and marked as cut
   max_description_chars: 12000

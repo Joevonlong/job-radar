@@ -127,7 +127,16 @@ async function loadSection<D>(
   }
 }
 
-export async function loadProfilePage(): Promise<ProfilePageData> {
+export function loadProfilePage(options: { parts: readonly ProfileName[] }): Promise<Partial<Pick<ProfilePageData, ProfileName>>>;
+export function loadProfilePage(): Promise<ProfilePageData>;
+export async function loadProfilePage(options?: { parts: readonly ProfileName[] }): Promise<ProfilePageData | Partial<Pick<ProfilePageData, ProfileName>>> {
+  if (options) {
+    const sections: Partial<Pick<ProfilePageData, ProfileName>> = {};
+    if (options.parts.includes("me")) sections.me = await loadSection("me", () => meConfigToDraft(reloadConfig("me")), []);
+    if (options.parts.includes("preferences")) sections.preferences = await loadSection("preferences", () => preferencesConfigToDraft(reloadConfig("preferences")), []);
+    if (options.parts.includes("stories")) sections.stories = await loadSection("stories", () => storiesConfigToDraft(reloadConfig("stories")), []);
+    return sections;
+  }
   let dbAvailable = true;
   let staleScores = 0;
   let meSnapshots: ProfileSnapshot[] = [];
