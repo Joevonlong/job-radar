@@ -161,6 +161,20 @@ export async function getCompanyResearchForJob(db: Executor, jobId: number, now:
   return row ? toView(row.research, now) : null;
 }
 
+/** The newest successful company result and its originating posting, if that posting still belongs to the company. */
+export async function getCompanyResearchWithJob(db: Executor, companyId: number, now: Date) {
+  const [row] = await db
+    .select({ research: companyResearch, job: { jobId: jobs.id, description: jobs.description } })
+    .from(companyResearch)
+    .leftJoin(jobs, and(eq(jobs.id, companyResearch.jobId), eq(jobs.companyId, companyResearch.companyId)))
+    .where(and(eq(companyResearch.companyId, companyId), eq(companyResearch.status, "ok")))
+    .orderBy(desc(companyResearch.fetchedAt), desc(companyResearch.id))
+    .limit(1);
+  if (!row) return null;
+  const research = toView(row.research, now);
+  return research === null ? null : { research, job: row.job };
+}
+
 export type CompanyResearchInsert =
   | { status: "ok"; companyId: number; jobId: number | null; result: CompanyResearchResult; domainUsed: string | null; provider: string | null; model: string | null; promptVersion: number; fetchedAt: Date; expiresAt: Date }
   | { status: "failed"; companyId: number; jobId: number | null; errorCode: string; domainUsed: string | null; provider: string | null; model: string | null; promptVersion: number; fetchedAt: Date };

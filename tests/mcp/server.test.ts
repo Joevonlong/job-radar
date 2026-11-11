@@ -151,10 +151,10 @@ describe("caller-specific output blocks", () => {
 });
 
 describe("tools/list", () => {
-  it("offers the three read-only tools with titles, descriptions and schemas", async () => {
+  it("offers the read-only tools with titles, descriptions and schemas", async () => {
     const client = await connect(context());
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications"]);
+    expect(tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites"]);
     for (const tool of tools) {
       expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
       expect(tool.description?.length).toBeGreaterThan(40);
@@ -184,7 +184,7 @@ describe("tools/list", () => {
 
     it("are offered with their permission and the writer on; only the save tool says it writes, and that it destroys nothing", async () => {
       const tools = await names(withWriter(true));
-      expect(tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_application_context", "save_application_answer"]);
+      expect(tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer"]);
       expect(tools.find((t) => t.name === "get_application_context")?.annotations).toMatchObject({ readOnlyHint: true });
       expect(tools.find((t) => t.name === "save_application_answer")?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: false });
       const save = tools.find((t) => t.name === "save_application_answer");
@@ -192,8 +192,8 @@ describe("tools/list", () => {
       expect((save?.inputSchema as { additionalProperties?: unknown }).additionalProperties).toBe(false);
     });
     it("are not offered while the writer is off, or without their permission", async () => {
-      expect((await names(withWriter(false))).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications"]);
-      expect((await names({ ...withWriter(true), settings: context().settings, readSettings: context().readSettings })).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications"]);
+      expect((await names(withWriter(false))).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites"]);
+      expect((await names({ ...withWriter(true), settings: context().settings, readSettings: context().readSettings })).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites"]);
     });
     it("a save without a writable connection is refused before anything is read", async () => {
       const client = await connect(withWriter(true, null));
@@ -204,7 +204,7 @@ describe("tools/list", () => {
       const lines: string[] = [];
       const ctx = { ...withWriter(true, null), log: (line: string) => lines.push(line) };
       const client = await connect(ctx);
-      expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_application_context"]);
+      expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context"]);
       const result = await client.callTool({ name: "save_application_answer", arguments: { job_id: 1, question_id: 1, text: "An answer." } });
       expect(result.isError).toBe(true);
       expect(textOf(result)).toBe(ctx.text("errors.writerDisabled"));
@@ -213,7 +213,7 @@ describe("tools/list", () => {
   });
   it("leaves out both jobs tools without jobs:read", async () => {
     const client = await connect(context({ permissions: ["tracking:read"] }));
-    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["list_applications"]);
+    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["list_applications", "get_application", "list_favorites"]);
   });
 });
 
@@ -371,7 +371,7 @@ describe("tools come from the registry", () => {
     const ctx = context();
     ctx.readSettings = () => mcpSchema.parse({ enabled: true, limits: { max_results: 4 } });
     const client = await connectCapabilities(ctx, [...CAPABILITIES, fake]);
-    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["search_jobs", "get_job", "list_applications", "registry_probe"]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "registry_probe"]);
     const result = await client.callTool({ name: fake.id, arguments: { value: " hello " } });
     expect(result.isError).not.toBe(true);
     expect(result.structuredContent).toEqual({ notices: [], value: "HELLO", limit: 4 });
@@ -481,7 +481,7 @@ describe("authorization on every call", () => {
     expect(tracking.isError).toBe(true);
     expect(textOf(tracking)).toBe(ctx.text("errors.notPermitted", { permission: "tracking:read" }));
     expect(lines).toEqual([expect.stringMatching(/^\[mcp\] list_applications fail not_permitted items=0 ms=\d+$/)]);
-    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["search_jobs", "get_job"]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["search_jobs", "get_job", "get_today", "list_companies", "get_company", "get_insights"]);
 
     await client.callTool({ name: "search_jobs", arguments: {} });
     expect(lines.at(-1)).toMatch(/^\[mcp\] search_jobs fail internal items=0 ms=\d+$/);
