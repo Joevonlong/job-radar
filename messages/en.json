@@ -100,7 +100,8 @@
       "nameRequired": "Enter a name in at least one language",
       "iconTooLong": "An icon has at most 2 characters",
       "color": "Pick a colour of the palette",
-      "slowPattern": "Too slow on a long test text: give each + and * an upper limit, as in [a-z]'{1,40}' or .'{0,40}'"
+      "slowPattern": "Too slow on a long test text: give each + and * an upper limit, as in [a-z]'{1,40}' or .'{0,40}'",
+      "unknownPlace": "\"{name}\" isn't a known place. Pick it from the suggestions as you type, or try its English or local name (a city of 15,000 people or more, a country, a region or Worldwide)."
     },
     "list": {
       "row": "{label} {n}",
@@ -615,24 +616,35 @@
       },
       "home_city": {
         "label": "Home city",
-        "hint": "Leave it empty to count anywhere in the home country. On-site and hybrid jobs here count as local. It is sent to your AI provider with every job."
+        "hint": "Type and pick a city from the list. Leave it empty to count anywhere in the home country. On-site and hybrid jobs here count as local. It is sent to your AI provider with every job.",
+        "placeholder": "Type a city, then pick it…",
+        "change": "Type to pick another city…",
+        "clear": "Clear home city {city}",
+        "unknown": "\"{name}\" isn't a known place, so it's matched as written. Clear it and pick the city again from the list."
       },
       "places": {
         "label": "Locations outside home city",
-        "hint": "A city, country or region, or Worldwide. Click a place to switch between \"I'd move here\" and \"Remote only\".",
-        "add": "Add",
-        "placeholder": "Amsterdam, Finland, EU…",
+        "hint": "Type and pick a city, country or region, or Worldwide, from the list. Click a place to switch between \"I'd move here\" and \"Remote only\".",
+        "placeholder": "Type Amsterdam, Finland, EU…",
         "worldwide": "Worldwide",
         "relocate": "I'd move here",
         "remoteOnly": "Remote only",
         "switch": "{place}: {state}. Click to switch",
         "fixed": "{place}: always remote only",
         "remove": "Remove {place}",
-        "unknown": "\"{name}\" isn't in this market's tables, so it's matched as written. Check the spelling if that isn't what you meant.",
+        "unknown": "\"{name}\" isn't a known place, so it's matched as written. Remove it and pick the place again from the list.",
         "ruleMove": "A city you add starts as \"I'd move here\" (solid); a country or region starts as \"Remote only\" (dashed).",
         "ruleWorldwide": "Worldwide is always remote only.",
         "searches": "{count, plural, one {· # search per keyword group} other {· # searches per keyword group}}",
-        "ruleSearches": "Searches run every cycle. Remote searches of a place only run on boards that can search one."
+        "ruleSearches": "Searches run every cycle. Remote searches of a place only run on boards that can search one.",
+        "candidates": "Matching places",
+        "searching": "Searching…",
+        "noMatch": "No known place starts with this. Try its English or local name.",
+        "kind": {
+          "country": "Country",
+          "region": "Region",
+          "worldwide": "Everywhere"
+        }
       },
       "workplace": {
         "label": "Workplace"
@@ -730,7 +742,8 @@
       "invalidChoice": "Choose a valid option",
       "contractConflict": "A contract type cannot be both allowed and excluded",
       "invalid": "{message}",
-      "slowPattern": "{kind, select, nested {Too slow: a repeated group repeats inside} unbounded {Too slow: more than one open-ended run such as .* or \\s+; give them an upper limit} leading {Too slow: starts with an open-ended .* (leave it out, a pattern matches anywhere)} alternation {Too slow: the alternatives of a repeated group can start alike} probe {Too slow on a long test text: give each + and * an upper limit, as in [a-z]'{1,40}' or .'{0,40}'} other {Too slow on a long test text; make the pattern simpler}}"
+      "slowPattern": "{kind, select, nested {Too slow: a repeated group repeats inside} unbounded {Too slow: more than one open-ended run such as .* or \\s+; give them an upper limit} leading {Too slow: starts with an open-ended .* (leave it out, a pattern matches anywhere)} alternation {Too slow: the alternatives of a repeated group can start alike} probe {Too slow on a long test text: give each + and * an upper limit, as in [a-z]'{1,40}' or .'{0,40}'} other {Too slow on a long test text; make the pattern simpler}}",
+      "unknownPlace": "\"{name}\" isn't a known place. Pick it from the suggestions as you type, or try its English or local name (a city of 15,000 people or more, a country, a region or Worldwide)."
     },
     "formErrors": {
       "invalidPayload": "The submitted data was malformed. Reload the page and try again.",
@@ -2091,7 +2104,8 @@
       "sortedAsc": "Must be sorted from shortest to longest",
       "notInRanges": "Must be one of the time ranges above",
       "capOrder": "Must be larger than the bucket width",
-      "languageTag": "A language code such as en, zh, de or pt-BR"
+      "languageTag": "A language code such as en, zh, de or pt-BR",
+      "unknownPlace": "\"{name}\" isn't a known place. Pick it from the suggestions as you type, or try its English or local name (a city of 15,000 people or more, a country, a region or Worldwide)."
     },
     "sections": {
       "career_general": "Career profile and limits",
@@ -6663,7 +6677,7 @@
     "market": {
       "suggestions": "Cities of this market",
       "addCity": "Add {city}",
-      "noSuggestions": "No city list for this country: type yours.",
+      "noSuggestions": "No city list for this country: type a city above and pick it.",
       "timezone": "Time zone",
       "timezoneHint": "Cycle times and \"today\" follow this zone.",
       "browserZone": "Your browser is in {zone}.",

@@ -18,7 +18,7 @@ const geo: PlaceGeo = placeGeo({
     countries: [{ code: "XA", name: "Xaland", aliases: [] }, { code: "CH", name: "Switzerland", aliases: [] }],
     regions: { eu: { name: "European Union", countries: ["XA", "NL"] } },
   },
-});
+}, null);
 
 function migrate(text: string): Record<string, unknown> {
   const doc = parseDocument(`target_titles: [Engineer]\n${text}`);

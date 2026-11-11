@@ -7,6 +7,7 @@ import type { CycleStepContext, StepResult } from "@/lib/cycle/steps";
 import { registerCycleStep } from "@/lib/cycle/steps";
 import { loadConfig, parseConfigText, readProfileText, type MeConfig, type PipelineConfig, type PreferencesConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
+import { placeDictionary } from "@/lib/market/geo";
 import type { Db } from "@/lib/db/client";
 import {
   getFilterResults,
@@ -136,9 +137,10 @@ const sameReasons = (a: readonly string[], b: readonly string[]): boolean => a.l
  */
 export async function runFilter(db: Db, options: FilterOptions): Promise<FilterRunResult> {
   const watchedCompanies = options.watchedCompanies ?? currentWatchedCompanies(options.logger);
+  const places = placeDictionary();
   // Version the evaluator along with all configuration it reads, including inputs outside the preference snapshot.
-  const configHash = createHash("sha256").update(JSON.stringify([3, options.preferences, options.pipeline, options.me, watchedCompanies])).digest("hex");
-  const compiled: CompiledFilter = compileFilter(options.preferences, options.pipeline, { me: options.me, watchedCompanies });
+  const configHash = createHash("sha256").update(JSON.stringify([4, options.preferences, options.pipeline, options.me, watchedCompanies, places.meta.fetched])).digest("hex");
+  const compiled: CompiledFilter = compileFilter(options.preferences, options.pipeline, { me: options.me, watchedCompanies, places });
   const dealBreakers = startDealBreakerRun(compiled.dealBreakers, options.timeBox ?? vmTimeBox);
   // Phrase and visa rule health depends on this run's time budget, which an input fingerprint cannot predict.
   // Read unchanged jobs too so timeouts are reported and previous vetoes survive any incomplete evaluation.

@@ -6,9 +6,10 @@ import { useRef, useState } from "react";
 
 import { MarketFields } from "@/components/profile/market-fields";
 import { Field, describedBy } from "@/components/profile/fields";
+import { HomeCityField } from "@/components/profile/home-city-field";
+import { usePlaceGeo } from "@/components/profile/place-picker";
 import { PlacesField } from "@/components/profile/places-field";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { MarketView } from "@/lib/market/view";
 import type { FieldError } from "@/lib/profile/draft";
@@ -42,6 +43,7 @@ export function StepMarket({ view, done, market }: StepMarketProps) {
   const packChoices = useRef(new Map<string, MarketInput["market"]>());
   // Whether the user set the currency / the cities themselves: until then a new country brings its own (a saved step counts as set)
   const [edited, setEdited] = useState({ currency: done, homeCity: done });
+  const { geo, remember } = usePlaceGeo(market.placeGeo, market.placeRecords);
 
   if (draft === null || view.saved === null) {
     return (
@@ -65,11 +67,12 @@ export function StepMarket({ view, done, market }: StepMarketProps) {
   const zoneOptions = zones.includes(zone) || zone === "" ? zones : [zone, ...zones];
   const ids = { city: "setup-market-city", places: "setup-market-places", zone: "setup-market-zone" };
   const cityError = errors.profile("home_city");
+  const sameMarket = draft.market.pack === market.packId && market.error === null;
   const placesError = errors.profile("places");
 
-  const setHomeCity = (home_city: string): void => {
+  const setHomeCity = (home_city: string, home_city_id: number | null = null): void => {
     setEdited({ ...edited, homeCity: true });
-    setDraft({ ...draft, home_city });
+    setDraft({ ...draft, home_city, home_city_id });
   };
 
   const changeMarket = (next: MarketInput["market"]): void => {
@@ -81,6 +84,7 @@ export function StepMarket({ view, done, market }: StepMarketProps) {
           ...draft,
           market: edited.currency ? next : { ...next, currency: defaults?.currency ?? "" },
           home_city: edited.homeCity ? draft.home_city : (defaults?.city ?? ""),
+          home_city_id: edited.homeCity ? (draft.home_city_id ?? null) : null,
         });
         return;
       }
@@ -97,7 +101,17 @@ export function StepMarket({ view, done, market }: StepMarketProps) {
       <MarketFields baseId="setup-market" value={draft.market} saved={view.saved} onChange={changeMarket} market={market} errors={profileErrors} />
 
       <Field id={ids.city} label={tProfile("home_city.label")} hint={tProfile("home_city.hint")} error={cityError} errorText={errors.text("home_city")}>
-        <Input id={ids.city} className="max-w-72" value={draft.home_city} data-testid="setup-home-city" aria-invalid={errors.has("home_city") || undefined} aria-describedby={describedBy(ids.city, true, cityError ?? errors.text("home_city"))} onChange={(event) => setHomeCity(event.target.value)} />
+        <HomeCityField
+          id={ids.city}
+          value={{ home_city: draft.home_city, home_city_id: draft.home_city_id ?? null }}
+          onChange={(next) => setHomeCity(next.home_city, next.home_city_id)}
+          geo={geo}
+          onPick={remember}
+          known={sameMarket}
+          testId="setup-home-city"
+          invalid={errors.has("home_city")}
+          describedBy={describedBy(ids.city, true, cityError ?? errors.text("home_city"))}
+        />
       </Field>
       <div className="flex flex-col gap-sp-2" data-testid="setup-city-suggestions">
         <p className="font-mono text-data-sm font-semibold tracking-wider text-ink-2 uppercase">{t("suggestions")}</p>
@@ -122,10 +136,11 @@ export function StepMarket({ view, done, market }: StepMarketProps) {
           id={ids.places}
           value={draft.places}
           onChange={(places) => setDraft({ ...draft, places })}
-          geo={market.placeGeo}
+          geo={geo}
+          onPick={remember}
           options={market.scopeOptions}
-          known={draft.market.pack === market.packId && market.error === null}
-          search={{ homeCity: draft.home_city, workplace: view.workplace, home: { country: market.country, countryName: market.countryName } }}
+          known={sameMarket}
+          search={{ homeCity: draft.home_city, homeCityId: draft.home_city_id ?? null, workplace: view.workplace, home: { country: market.country, countryName: market.countryName } }}
           invalid={errors.has("places")}
           describedBy={describedBy(ids.places, true, placesError ?? errors.text("places"))}
         />

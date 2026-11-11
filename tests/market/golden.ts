@@ -266,7 +266,7 @@ export function computeGolden(inputs: GoldenInputs, ctx: GoldenContext, legacyCo
   const prompt = buildScorePrompt({
     me,
     preferences: ctx.preferences("eu_hire_in_de"),
-    geo: placeGeo(ctx.pipeline),
+    geo: placeGeo(ctx.pipeline, null),
     homeCountry: ctx.pipeline.market.country,
     job: {
       title: "Senior AI Engineer (m/w/d)",

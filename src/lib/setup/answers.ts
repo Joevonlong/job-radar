@@ -23,8 +23,10 @@ export const answersSchema = z.strictObject({
       currency: z.string().max(10).optional(),
       home_language: z.string().max(10).optional(),
       home_city: z.string().max(200).optional(),
-      /** As in preferences.yaml: `{ place, relocate }`. */
-      places: z.array(z.strictObject({ place: z.string().max(200), relocate: z.boolean() })).max(200).optional(),
+      /** The home city's GeoNames id, to tell apart cities of one name; without it the name is looked up. */
+      home_city_id: z.number().int().positive().optional(),
+      /** As in preferences.yaml: `{ place, relocate, id? }`. Every place must be one the place list knows. */
+      places: z.array(z.strictObject({ place: z.string().max(200), relocate: z.boolean(), id: z.union([z.number().int().positive(), z.string().max(40)]).optional() })).max(200).optional(),
       timezone: z.string().max(100).optional(),
     })
     .optional(),
@@ -92,6 +94,7 @@ export function marketInputOf(answers: NonNullable<SetupAnswers["market"]>, curr
   return {
     market: { pack: answers.pack, country: answers.country ?? "", currency: answers.currency ?? "", home_language: answers.home_language ?? "" },
     home_city: answers.home_city ?? current.home_city,
+    home_city_id: answers.home_city === undefined ? (current.home_city_id ?? null) : (answers.home_city_id ?? null),
     places: answers.places ?? current.places,
     timezone: answers.timezone ?? current.timezone,
   };

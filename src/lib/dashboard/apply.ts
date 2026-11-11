@@ -1,5 +1,6 @@
 import type { JobSourceRef } from "@/lib/db/queries/types";
 import { canonicalCity, citySpellings, placeGeo, wantedLocations, type PlaceGeo, type PlacePreferences } from "@/lib/market/places";
+import type { PlaceSource } from "@/lib/market/geo/dictionary";
 import type { ApplicationStatus } from "@/lib/db/repos/applications";
 import { foldText, wholeWordPattern } from "@/lib/filter/rules";
 
@@ -25,12 +26,16 @@ export function postingLink(source: Pick<JobSourceRef, "applyUrl" | "url" | "fam
   return source.family === "ats" ? (source.url ?? source.applyUrl) : (source.applyUrl ?? source.url);
 }
 
-/** Names of the wanted cities (every spelling the tables know) and their metro towns, for `pickApplyTarget`. */
+/**
+ * Names of the wanted cities (every spelling the tables and the place dictionary `places` know) and their metro towns,
+ * for `pickApplyTarget`.
+ */
 export function targetPlaceNames(
   preferences: PlacePreferences,
   pipeline: { filter: { city_aliases: PlaceGeo["cityAliases"]; metro_areas: Readonly<Record<string, readonly string[]>> }; market: Pick<PlaceGeo, "cities" | "countries" | "regions"> },
+  places: PlaceSource | null = null,
 ): string[] {
-  const geo = placeGeo(pipeline);
+  const geo = placeGeo(pipeline, places);
   const names = new Set<string>();
   for (const location of wantedLocations(preferences)) {
     const spellings = citySpellings(location, geo);

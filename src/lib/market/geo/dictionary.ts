@@ -24,6 +24,12 @@ export interface Place {
   spellings: string[];
 }
 
+/** The dictionary language of a page locale (`zh-CN` -> zh); English for one the dictionary has no names in. */
+export function placeLang(locale: string): PlaceLang {
+  const language = locale.toLowerCase().split("-")[0];
+  return language === "zh" || language === "de" ? language : "en";
+}
+
 export interface SearchOptions {
   lang?: PlaceLang;
   limit?: number;
@@ -49,6 +55,9 @@ interface Entry {
   admin1Code: string | null;
   population: number;
   spellings: string[];
+  /** Its own names (canonical, ASCII, English, German, Chinese, local), as opposed to other spellings GeoNames lists. */
+  primary: string[];
+  primaryKeys: string[];
 }
 
 interface LocalisedName {
@@ -57,11 +66,17 @@ interface LocalisedName {
   zh: string | null;
 }
 
-export interface PlaceDictionary {
+/** What a place lookup reads from the dictionary: the shipped one on the server, or the few places a page already holds. */
+export interface PlaceSource {
+  getPlace(id: number, lang?: PlaceLang): Place | null;
+  /** A country by its ISO code. */
+  getCountry(code: string, lang?: PlaceLang): Place | null;
+  matchPlaceName(text: string, options?: MatchOptions): Place[];
+}
+
+export interface PlaceDictionary extends PlaceSource {
   readonly meta: Pick<PlaceDictionaryFile, "source" | "licence" | "fetched" | "lastModified" | "counts">;
   searchPlaces(prefix: string, options?: SearchOptions): Place[];
-  getPlace(id: number, lang?: PlaceLang): Place | null;
-  matchPlaceName(text: string, options?: MatchOptions): Place[];
 }
 
 const DEFAULT_LIMIT = 10;
@@ -105,6 +120,11 @@ function pick(names: LocalisedName, lang: PlaceLang): string {
   return names[lang] ?? names.en;
 }
 
+function primaryOf(names: readonly (string | null)[]): Pick<Entry, "primary" | "primaryKeys"> {
+  const primary = names.filter((name): name is string => name !== null);
+  return { primary, primaryKeys: primary.map(placeKey) };
+}
+
 function lowerBound(keys: readonly string[], value: string): number {
   let lo = 0;
   let hi = keys.length;
@@ -136,6 +156,7 @@ export function createPlaceDictionary(file: PlaceDictionaryFile): PlaceDictionar
       admin1Code: null,
       population,
       spellings: [...new Set([en, de, zh, local, ...other].filter((s): s is string => s !== null))],
+      ...primaryOf([en, de, zh, local]),
     });
   }
   for (const [id, name, ascii, iso, admin1Code, population, en, de, zh, local, other] of file.places) {
@@ -151,6 +172,7 @@ export function createPlaceDictionary(file: PlaceDictionaryFile): PlaceDictionar
       admin1Code,
       population,
       spellings: [...new Set([name, ascii, en, de, zh, local, ...other].filter((s): s is string => s !== null))],
+      ...primaryOf([name, ascii, en, de, zh, local]),
     });
   }
 
@@ -164,6 +186,7 @@ export function createPlaceDictionary(file: PlaceDictionaryFile): PlaceDictionar
     }
   }
   const sortedKeys = [...index.keys()].sort();
+  const countryIds = new Map(file.countries.map(([iso, id]) => [iso, id]));
 
   const toPlace = (entry: Entry, lang: PlaceLang): Place => {
     const names = { en: entry.en, de: entry.de, zh: entry.zh };
@@ -192,6 +215,12 @@ export function createPlaceDictionary(file: PlaceDictionaryFile): PlaceDictionar
   return {
     meta: { source: file.source, licence: file.licence, fetched: file.fetched, lastModified: file.lastModified, counts: file.counts },
 
+    /**
+     * Ranks what a picker shows first: a place's own name typed in full, then another spelling typed in full, then places
+     * whose own name starts with the text, then those where only another spelling does (so `Au` lists Australia and
+     * Austria, not Kosovo through one of its other names). Within each, a spelling with the typed accents comes first, then
+     * the larger place.
+     */
     searchPlaces(prefix, options = {}) {
       const query = placeKey(prefix);
       const limit = options.limit ?? DEFAULT_LIMIT;
@@ -205,8 +234,13 @@ export function createPlaceDictionary(file: PlaceDictionaryFile): PlaceDictionar
       }
       const lang = options.lang ?? "en";
       const typed = typedKey(prefix);
-      const tier = (entry: Entry): number =>
-        exact.has(entry.id) ? 0 : entry.spellings.some((s) => typedKey(s).startsWith(typed)) ? 1 : 2;
+      const tier = (entry: Entry): number => {
+        if (entry.primaryKeys.includes(query)) return 0;
+        if (exact.has(entry.id)) return 2;
+        const ownPrefix = entry.primaryKeys.some((key) => key.startsWith(query));
+        const accents = (ownPrefix ? entry.primary : entry.spellings).some((s) => typedKey(s).startsWith(typed)) ? 0 : 1;
+        return (ownPrefix ? 4 : 6) + accents;
+      };
       return [...found]
         .map((id) => entries.get(id))
         .filter((entry): entry is Entry => entry !== undefined && accepts(entry, options.country, options.kinds))
@@ -222,6 +256,11 @@ export function createPlaceDictionary(file: PlaceDictionaryFile): PlaceDictionar
       return entry === undefined ? null : toPlace(entry, lang);
     },
 
+    getCountry(code, lang = "en") {
+      const entry = entries.get(countryIds.get(code.toUpperCase()) ?? 0);
+      return entry === undefined ? null : toPlace(entry, lang);
+    },
+
     matchPlaceName(text, options = {}) {
       const lang = options.lang ?? "en";
       return (index.get(placeKey(text)) ?? [])
@@ -229,6 +268,27 @@ export function createPlaceDictionary(file: PlaceDictionaryFile): PlaceDictionar
         .filter((entry): entry is Entry => entry !== undefined && accepts(entry, options.country, options.kinds))
         .sort(byPopulation)
         .map((entry) => toPlace(entry, lang));
+    },
+  };
+}
+
+/**
+ * A place source over places already looked up (each as `getPlace` gave it): what a page holds of the dictionary, which
+ * the browser never loads whole. It answers like the dictionary for these places and knows no other.
+ */
+export function createPlaceSource(places: readonly Place[]): PlaceSource {
+  const byId = new Map(places.map((place) => [place.id, place]));
+  const accepts = (place: Place, options: MatchOptions): boolean =>
+    (options.country === undefined || place.countryCode === options.country.toUpperCase()) && (options.kinds === undefined || options.kinds.includes(place.kind));
+  return {
+    getPlace: (id) => byId.get(id) ?? null,
+    getCountry: (code) => places.find((place) => place.kind === "country" && place.countryCode === code.toUpperCase()) ?? null,
+    matchPlaceName(text, options = {}) {
+      const key = placeKey(text);
+      if (key === "") return [];
+      return [...byId.values()]
+        .filter((place) => accepts(place, options) && place.spellings.some((spelling) => placeKey(spelling) === key))
+        .sort((a, b) => b.population - a.population || a.id - b.id);
     },
   };
 }

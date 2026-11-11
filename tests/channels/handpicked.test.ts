@@ -179,7 +179,7 @@ function prefilter(options: Parameters<typeof inputs>[0] = {}, s: HandpickedSett
 
 function placesOf(options: Parameters<typeof inputs>[0] = {}) {
   const i = inputs(options);
-  return buildPlaces({ preferences: i.preferences, geo: placeGeo(i.pipeline), country: i.country });
+  return buildPlaces({ preferences: i.preferences, geo: placeGeo(i.pipeline, null), country: i.country });
 }
 
 describe("fixtures", () => {

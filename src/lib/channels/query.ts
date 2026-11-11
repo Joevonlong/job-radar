@@ -4,6 +4,7 @@ import type { SearchConfig } from "@/lib/config";
 import type { CycleKind } from "@/lib/db/repos/cycles";
 
 import { placeGeo, plannedSearches, type PlaceGeo, type PlacePreferences } from "@/lib/market/places";
+import { placeDictionary } from "@/lib/market/geo";
 import { remoteScopeKey } from "@/lib/market/remote-scope";
 
 import type { ChannelMarket } from "./market";
@@ -61,7 +62,7 @@ export interface QueryPlaces {
 }
 
 export function queryPlaces(preferences: QueryPlaces["preferences"], pipeline: Parameters<typeof placeGeo>[0] & { market: { country: string; countryName: string } }): QueryPlaces {
-  return { preferences, geo: placeGeo(pipeline), home: { country: pipeline.market.country, countryName: pipeline.market.countryName } };
+  return { preferences, geo: placeGeo(pipeline, placeDictionary()), home: { country: pipeline.market.country, countryName: pipeline.market.countryName } };
 }
 
 /**
