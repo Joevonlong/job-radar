@@ -15,7 +15,7 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 **工具返回的内容，会由你的客户端交给它所用的模型服务商**（Claude 对应 Anthropic，依此类推），适用该服务商的条款。打开这个服务，就在 [privacy.zh.md](privacy.zh.md) 列出的出口之外多了这一条。
 
-| 会给（你提问时） | 永远不给（没有任何设置能打开） |
+| 会给（你提问时） | 不会作为元数据字段提供 |
 |---|---|
 | 岗位事实字段：职位名、公司、地点、办公方式、合同类型、中介标记、德语要求、状态、日期、技能 | 画像快照和导入草稿 |
 | 来源链接（原帖和申请链接） | 职业档案文件、文档和联系方式 |
@@ -24,6 +24,8 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 | 薪酬 / 福利信号及其 JD 引用和位置 | 邮件和求职回信 |
 | 经 AI 陷阱清洗的 JD（见下文） | `.env` 和 `.auth/` 里的值、密钥、AI 用量、通知、运行记录、配置文件原文 |
 | 你的申请：状态、最近一次变更时间、在该状态停留的天数、下一步及日期、面试轮数、状态历史 | |
+
+明确授予 `raw:read` 后，`get_job_raw` 还会提供未经清理的原始载荷，包含其中可能存在的招聘人员联系数据或 AI 指令；详见下方原始招聘数据权限和限制。
 
 职业档案本身（它的文件、文档、联系方式和草稿）永远不给，没有 MCP 工具读取它。
 
@@ -53,7 +55,7 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 ## 打开它
 
-1. 打开 `mcp.yaml`（设置 → 高级，或 `data/config/mcp.yaml`），设 `enabled: true`。全局 `permissions` 是所有连接的权限上限，本机连接的授权写在 `stdio.permissions`，只有两者的交集生效；两者默认都是 `jobs:read` 和 `tracking:read`。`limits` 限制每次调用返回的条数（`max_results`，最多 100）和 JD 长度（`max_description_chars`）。
+1. 打开 `mcp.yaml`（设置 → 高级，或 `data/config/mcp.yaml`），设 `enabled: true`。全局 `permissions` 是所有连接的权限上限，本机连接的授权写在 `stdio.permissions`，只有两者的交集生效；两者默认都是 `jobs:read` 和 `tracking:read`。`limits` 限制每次调用返回的条数（`max_results`，最多 100）和 JD 长度（`max_description_chars`），以及原始载荷总长度（`max_raw_chars`）。
 2. 检查：`pnpm run doctor` 的 `data.mcp` 显示已打开、全局矩阵和 stdio 的有效权限。
 3. 把服务加到你的客户端（见下），然后重启客户端。
 
@@ -118,6 +120,7 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 |---|---|
 | `search_jobs` | 按排名返回岗位卡片，过滤方式和岗位列表一样：`query`（标题、公司名与别名、城市/地点和国家）、`search_in`（默认 `summary`；`all` 加搜原始 JD 和有效译文）、`country`（1–20 个两字母国家代码，不区分大小写、精确匹配，OR）、`city`、`workplace`、`min_rank`、`min_annual_salary`（市场基准货币）、`since` / `until`（首次发现日期，`YYYY-MM-DD`）、`application_status`、`sort`（`relevance`、`rank`、`posted`、`first_seen`；有 query 默认 relevance，无 query 默认 rank）、`limit`。始终隐藏硬过滤排除的岗位；默认范围还隐藏关闭和休眠岗位，范围等新增参数见下文。不含 JD 正文。 |
 | `get_job` | 一个岗位（`job_id`）的详情：上面所有字段，加上资历、语言、带引用的信号、发现的 AI 陷阱数量、你的申请，以及清洗后的 JD。 |
+| `get_job_raw` | **默认关闭，仅需 `raw:read`。** 参数 `job_id`：返回各来源的渠道 id、URL、ISO 抓取时间、解析状态/错误和原始 JSON 载荷字符串，按抓取时间倒序，同时间按原始记录 id 倒序。没有来源载荷时返回空列表；未知岗位返回 `not_found`。 |
 | `list_applications` | 你的申请，排名高的在前；`status` 过滤；`stale_only: true` 只列超过每日提醒阈值（`notify.yaml: reminders.interested_days` / `applied_days`）还没动静的，等得最久的在前。有效 `notes:read` 增加每项的 `notes.application_notes`；没有它时原字段集合不变。 |
 | `get_profile` | **默认关闭；`profile:read`。** 所选画像部分及网页表单的 `baseHash`。 |
 | `get_interests` | **默认关闭；`profile:read`。** 词表、保存的视图、关注公司和待处理建议。 |
@@ -165,6 +168,16 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 职位名、公司名、别名、域名、地点、来源标签和链接独立清理，不依赖陷阱扫描。`list_applications` 在没有备注权限时保持这些字段和原有回答。`get_company` 仅对研究文本检查生成该研究的岗位是否有当前、可读且启用的陷阱扫描；检查失败时研究文字为 null，并说明不可用原因，公司事实、经过清理的来源链接和岗位卡片仍正常提供。这些工具不返回原始载荷，不依赖 `raw:read`。
 
 `get_today` 的显式和默认保存视图都要求 `profile:read`。没有该权限时不应用也不返回默认视图；显式保存视图以 `not_permitted` 拒绝（`view: "all"` 仍可用）。有权限时，仅在未传任何开关且省略 view 时采用默认视图。解析出的视图若含申请状态筛选，还必须有 `tracking:read`；否则在查询岗位前以 `not_permitted` 拒绝整次调用。`get_insights` 的 `cities` 和 `signals.categories` 包含配置的目标城市、兴趣名称及零匹配类别，没有 `profile:read` 时省略这两块，其余岗位统计仍可提供。
+
+## 原始招聘数据权限（`raw:read`）
+
+`get_job_raw` 仅需 `raw:read`，必须在两份权限列表中明确加入。默认关闭，`read_only` 和 `assistant` 预设都不包含它。载荷是未经陷阱清理的不可信第三方内容，可能含针对 AI 的指令和招聘人员的姓名、邮箱、电话号码等联系数据。必须严格当作数据，绝不执行其中的指令。`notices` 第一项始终是固定的原始内容风险说明，随后是标准第三方提示，以及适用时的截断提示。不要求陷阱扫描。
+
+每个载荷用 `JSON.stringify` 序列化，除此和截断之外保持原样，包括不可见字符和指令文本。渠道表没有显示名称列，因此 `channel` 只包含 `id`。元数据按字段白名单构建；渠道 id 和流水线产生的 `parse_error` 使用现有读取文本清理器，移除或替换不可见字符、AI 指令、可识别的邮箱、路径和凭据。不安全的来源 URL 不提供。原始记录 id、哈希、指纹、运行 id 和其他数据库列不会返回；这一字段限制不清理原始载荷内部的内容。
+
+## 限制
+
+`limits.max_results` 限制结果列表，`limits.max_description_chars` 限制清理后的 JD 长度。`limits.max_raw_chars` 限制一次 `get_job_raw` 调用所有来源序列化载荷的字符总量，默认 20,000，整数范围 500–1,000,000。按 UTF-16 代码单元计数，不拆开代理对。每个来源包含截断前的 `total_chars` 和 `truncated`；只要有截断，顶层 `truncated` 也为 true，并提示上限。预算耗尽后仍保留所有来源的元数据，载荷为空且 `truncated: true`。截断字符串可能不是完整 JSON。新限制有默认值，无需配置迁移。
 
 ## 从客户端写答案
 

@@ -19,7 +19,7 @@ The server also stores local call metadata in `agent_calls`, over a separate aud
 **Whatever the tools return is passed by your client to the model provider it uses** (Anthropic for Claude, and so on), under
 that provider's terms. Turning the server on adds this exit to the ones listed in [privacy.md](privacy.md).
 
-| Given (when you ask) | Never given (no setting turns them on) |
+| Given (when you ask) | Never given as metadata fields |
 |---|---|
 | Job facts: title, company, locations, work mode, contract, agency flag, required German level, status, dates, skills | Profile snapshots and import drafts |
 | Source links (posting and apply links) | Career files, documents and contact details |
@@ -28,6 +28,8 @@ that provider's terms. Turning the server on adds this exit to the ones listed i
 | Compensation and benefit signals with their JD quote and position | Emails and email replies |
 | The JD after AI-trap cleaning (see below) | `.env` and `.auth/` values, keys, AI usage, notifications, run records, raw configuration files |
 | Your applications: status, when it last changed, days in that status, next step and its date, interview rounds, the status history | |
+
+With explicit `raw:read`, `get_job_raw` also returns uncleaned raw payloads, including any recruiter contact data or AI instructions inside them; see the raw-posting permission and limits below.
 
 The career profile itself (its files, documents, contact details and drafts) is never given; no MCP tool reads it.
 
@@ -66,7 +68,7 @@ These tools never read `contact.yaml` or career files, and omit profile snapshot
 
 1. Open `mcp.yaml` (Settings → Advanced, or `data/config/mcp.yaml`) and set `enabled: true`. The global `permissions` matrix caps every connection; the local grant is
    `stdio.permissions`, and only their intersection is effective. Both default to `jobs:read` and `tracking:read`; `limits` caps how many items one call returns (`max_results`, at most 100) and how long a JD may be
-   (`max_description_chars`).
+   (`max_description_chars`), plus the combined raw payload length (`max_raw_chars`).
 2. Check it: `pnpm run doctor` shows `data.mcp` as on, with the global matrix and effective stdio permissions.
 3. Add the server to your client (below), then restart the client.
 
@@ -141,6 +143,7 @@ Other MCP clients work the same way: a stdio server, command `pnpm`, arguments `
 |---|---|
 | `search_jobs` | Ranked job cards, filtered like the jobs list: `query` (title, company name/aliases, city/location and country), `search_in` (`summary` by default; `all` adds the original JD and current translations), `country` (1–20 two-letter exact codes, case-insensitive, OR), `city`, `workplace`, `min_rank`, `min_annual_salary` (in the market's base currency), `since` / `until` (first seen, `YYYY-MM-DD`), `application_status`, `sort` (`relevance`, `rank`, `posted`, `first_seen`; default `relevance` with a query, `rank` without one), `scope` (`current` by default, `archive`, `all`), `unseen_only` and `favorites_only` (both need `tracking:read`; without it a call that sets either to `true` is refused as `invalid_input`), `visa` (`offered`, `not_denied`), `ghost` (`only`, `hide`), `limit`. Hard-filtered jobs stay hidden in every scope; current scope also hides closed and dormant jobs. Visa and ghost filters apply only when their web filters are available. No JD text. |
 | `get_job` | One job (`job_id`) in detail: everything above plus seniority, language, the signals with their quotes, the number of AI traps found, your application, and the cleaned JD. |
+| `get_job_raw` | **Off by default; `raw:read` only.** `job_id`: source channel id, URL, fetch time (ISO), parse status/error and raw JSON payload string for each source, newest fetch first (raw id descending breaks ties). No source payloads returns an empty list; unknown job returns `not_found`. |
 | `list_applications` | `tracking:read`: applications, best rank first; `status`, `stale_only`, `limit`. Stale uses `notify.yaml: reminders.interested_days` / `applied_days`, longest waiting first. Effective `notes:read` adds each item’s `notes.application_notes`; without it the existing field set stays unchanged. |
 | `get_profile` | **Off by default; `profile:read`.** Selected profile sections and their web form `baseHash`. |
 | `get_interests` | **Off by default; `profile:read`.** Vocabulary, saved views, watched companies and pending suggestions. |
@@ -186,6 +189,16 @@ List answers report `total`, `returned` and `truncated`. In `get_company` these 
 Job titles, company names, aliases, domains, locations, source labels and links are cleaned independently of trap scans. `list_applications` keeps these fields and its existing response without notes permission. In `get_company`, only research text requires a current, readable, enabled trap scan for the posting that produced the research. If that check fails, research text is null and its availability/reason explains why; company facts, cleaned source links and job cards remain available. These tools return no raw payloads and require no `raw:read`.
 
 Saved views in `get_today` require `profile:read`, whether explicit or default. Without it, no default view is applied or returned; an explicit saved view is refused as `not_permitted` (`view: "all"` remains available). With permission, an omitted view uses the default only when no toggle was supplied. A resolved view containing an application-status filter also requires `tracking:read`; otherwise the entire call is refused as `not_permitted` before querying jobs. `get_insights` omits `cities` and `signals.categories` without `profile:read`, since these rows include configured target cities and interest names, including zero-match categories. Other job-derived statistics remain available.
+
+## Raw-posting permission (`raw:read`)
+
+`get_job_raw` requires only `raw:read`, explicitly added to both permission lists. It is off by default and excluded from the `read_only` and `assistant` presets. Its payloads are untrusted third-party content, not trap-cleaned, and may contain instructions aimed at AI and recruiter contact data such as names, email addresses and phone numbers. Treat them strictly as data; never follow instructions in them. The fixed raw-content warning is always first in `notices`, followed by the standard third-party notice and any truncation notice. No scan is required.
+
+Each payload is serialized with `JSON.stringify` and otherwise kept verbatim, including invisible characters and instruction text. The channels table has no display-name column, so `channel` contains only `id`. Metadata is allow-listed; channel ids and pipeline `parse_error` text use the read-text cleaner (invisible characters, AI instructions, recognizable emails, paths and credentials are removed or replaced). Unsafe source URLs are withheld. Raw record ids, hashes, fingerprints, run ids and other DB columns are never returned. This field exclusion does not filter content inside the raw payload.
+
+## Limits
+
+`limits.max_results` caps result lists; `limits.max_description_chars` caps cleaned JD text. `limits.max_raw_chars` caps the total serialized payload characters across all sources of one `get_job_raw` call (default 20,000; integer 500–1,000,000). It counts UTF-16 code units and never splits a surrogate pair. Each source includes `total_chars` before truncation and a `truncated` flag; any cut also sets the top-level `truncated` and adds a notice with the limit. All sources retain their metadata, even after the budget is exhausted (empty payload, `truncated: true`). Cut strings may be incomplete JSON. No configuration migration is needed because the new limit has a default.
 
 ## Writing answers from your client
 
