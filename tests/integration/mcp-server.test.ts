@@ -529,6 +529,8 @@ describe("get_job field blocks", () => {
     if (permissions.includes("match:read")) {
       expect(result.structured.match?.fit_reasons[0]?.quote).toMatch(/\[(hidden text|instruction to AI) removed by Job Radar\]/);
       expect(result.structured.match?.gaps[0]?.quote).toMatch(/\[(hidden text|instruction to AI) removed by Job Radar\]/);
+      expect(result.structured.match?.gaps[0]?.text).toBe(result.structured.match?.gaps[0]?.quote);
+      expect(JSON.stringify(result)).not.toContain("Stored gap");
     }
     const noticeIndex = result.structured.notices.findIndex((notice) => notice.includes("third-party recruiting content"));
     expect(result.structured.notices[noticeIndex + 1]).toContain("derived from third-party postings");
