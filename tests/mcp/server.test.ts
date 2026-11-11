@@ -382,8 +382,8 @@ describe("tools come from the registry", () => {
     expect(lines).toEqual([expect.stringMatching(/^\[mcp\] registry_probe fail disabled items=0 ms=\d+$/)]);
   });
 
-  it("lists byte-identical tool definitions to the SDK for all five tools", async () => {
-    const ctx = context({ permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"], stdio: { permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"] } });
+  it("lists byte-identical tool definitions to the SDK for every capability", async () => {
+    const ctx = context({ permissions: ["jobs:read", "raw:read", "tracking:read", "writer:read", "writer:write"], stdio: { permissions: ["jobs:read", "raw:read", "tracking:read", "writer:read", "writer:write"] } });
     ctx.writer = { inputs: () => ({ writer: writerSchema.parse({ enabled: true }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: untouchable };
     const reference = new McpServer({ name: "reference", version: "1" }, { capabilities: { tools: {} } });
     for (const cap of CAPABILITIES) {
@@ -399,6 +399,7 @@ describe("permissions decide visibility", () => {
   const cases = [
     { name: "search_jobs", permission: "jobs:read", args: {} },
     { name: "get_job", permission: "jobs:read", args: { job_id: 1 } },
+    { name: "get_job_raw", permission: "raw:read", args: { job_id: 1 } },
     { name: "list_applications", permission: "tracking:read", args: {} },
     { name: "get_application_context", permission: "writer:read", args: { job_id: 1 } },
     { name: "save_application_answer", permission: "writer:write", args: { job_id: 1, question_id: 1, text: "An answer." } },

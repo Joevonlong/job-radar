@@ -4,8 +4,10 @@
 # delete any. Each call also adds one metadata row to the local `agent_calls` table (see `audit` below).
 # Privacy: whatever the tools return is handed by your client to the model provider it uses (Anthropic for Claude, ...).
 # What may be returned is fixed in code: job facts, source links, scores and ranks, signals with their JD quotes, the JD after
-# AI-trap cleaning, and the status, dates, next step and interview rounds of your applications. Never returned: your profile,
-# match reasons and gaps, filter reasons and your salary floor, notes, emails, local paths, keys.
+# AI-trap cleaning, and the status, dates, next step and interview rounds of your applications. Metadata never includes
+# profile files, emails, local paths or keys. Additional permission-gated text is described in docs/mcp.md.
+# With raw:read, get_job_raw returns uncleaned third-party payloads, possibly including recruiter contact data;
+# only their combined length is capped. Its metadata and parse_error are cleaned; private DB columns stay out.
 # Only when writer:read is granted (it gives `get_application_context`): your application questions and answer versions, and the material
 # you chose for each question, which can include your profile summary, skills and languages, chosen stories and emphasis note.
 
@@ -19,6 +21,7 @@ enabled: false
 # search_jobs / get_job: jobs:read; list_applications: tracking:read
 # get_application_context: writer:read and writer.yaml enabled (shares your chosen application material)
 # save_application_answer: writer:write and writer.yaml enabled (only adds answer versions)
+# get_job_raw: raw:read (off by default; untrusted, uncleaned payloads may include recruiter contact data)
 # Other catalog permission ids are accepted but do not give tools yet.
 permissions:
   - jobs:read
@@ -35,6 +38,8 @@ limits:
   max_results: 20
   # Most characters of a JD one get_job call returns (500-100000); a longer JD is cut and marked as cut
   max_description_chars: 12000
+  # Total JSON payload characters across all sources of one get_job_raw call (500-1000000); cuts are marked
+  max_raw_chars: 20000
 
 # The call record (docs/mcp.md, "Audit trail"): time, tool, target id, outcome, count and duration of each call; never its
 # arguments, what it returned, or an error message.

@@ -5,6 +5,7 @@ import type { McpConfig } from "@/lib/config/schemas/mcp";
 import type { McpContext } from "@/lib/mcp/context";
 
 import { get_job } from "./jobs/get-job";
+import { get_job_raw } from "./jobs/get-job-raw";
 import { search_jobs } from "./jobs/search-jobs";
 import { list_applications } from "./tracking/list-applications";
 import type { Capability } from "./types";
@@ -21,6 +22,7 @@ import { list_favorites } from "./tracking/list-favorites";
 export const CAPABILITIES: readonly Capability[] = [
   search_jobs,
   get_job,
+  get_job_raw,
   list_applications,
   get_today,
   list_companies,
