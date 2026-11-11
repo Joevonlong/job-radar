@@ -1383,6 +1383,7 @@ exports[`read DTO allow-lists > get_today schema snapshot 1`] = `
         "all",
         "high",
         "salary",
+        "following",
       ],
       "type": "object",
     },

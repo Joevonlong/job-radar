@@ -5,7 +5,7 @@ import { MAX_FILTER_VALUE_CHARS } from "@/lib/jobs/constants";
 import { filterValues, TODAY_ALL_VIEW } from "@/lib/interests/view-filters";
 import { localLanguageName } from "@/lib/market/view";
 import { ToolFailure, type McpContext } from "../context";
-import { todayOutput } from "../dto/read-jobs";
+import { todayOutputFor } from "../dto/read-jobs";
 import { readTextCleaner } from "../read-guard";
 import { readTraps, resultLimit } from "./shared";
 import { limitReadOutput, readCards, readNotices } from "./read-shared";
@@ -27,5 +27,5 @@ export async function getToday(ctx: McpContext, args: z.infer<ReturnType<typeof 
   const limit = resultLimit(ctx, args.limit);
   const jobs = await readCards(ctx, data.cards.slice(0, limit));
   const clean = readTextCleaner(readTraps(ctx), ctx.text("notice.redacted"));
-  return limitReadOutput(ctx, todayOutput, { notices: readNotices(ctx, jobs.length, data.cards.length, limit, jobs.some((job) => job.text_withheld !== null)), total: data.cards.length, returned: jobs.length, truncated: data.cards.length > jobs.length, view: data.active ? clean(data.active.id) : null, quick: data.active ? null : data.quick, quick_counts: { all: data.quickCounts.all, high: data.quickCounts.high, salary: data.quickCounts.salary, ...(tracking ? { following: data.quickCounts.following } : {}) }, jobs }, limit);
+  return limitReadOutput(ctx, todayOutputFor(ctx.permissions ?? new Set()), { notices: readNotices(ctx, jobs.length, data.cards.length, limit, jobs.some((job) => job.text_withheld !== null)), total: data.cards.length, returned: jobs.length, truncated: data.cards.length > jobs.length, view: data.active ? clean(data.active.id) : null, quick: data.active ? null : data.quick, quick_counts: { all: data.quickCounts.all, high: data.quickCounts.high, salary: data.quickCounts.salary, ...(tracking ? { following: data.quickCounts.following } : {}) }, jobs }, limit);
 }

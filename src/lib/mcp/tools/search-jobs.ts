@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { Permission } from "@/lib/agent-access/permissions";
 import { SEARCH_QUERY_MAX_CHARS } from "@/lib/config/schemas/job-search";
 import { MCP_MAX_RESULTS_CAP } from "@/lib/config/schemas/mcp";
 import { listJobs, SearchTimeoutError } from "@/lib/db/queries/jobs";
@@ -12,7 +13,7 @@ import { ghostFilterAvailable } from "@/lib/ghost/filter";
 import { APPLICATION_FILTER_STATUSES, JOB_SCOPES, JOB_WORKPLACES, MIN_SALARY_MAX, VISA_FILTERS } from "@/lib/jobs/constants";
 
 import { ToolFailure, type McpContext } from "../context";
-import { searchJobsOutput, searchJobsOutputFor, toJobCardDto, type SearchJobsOutput } from "../dto";
+import { releasedJobCard, searchJobsOutput, searchJobsOutputFor, toJobCardDto, type SearchJobsOutput } from "../dto";
 import { shortFieldCleaner } from "../guard";
 import { readTraps, resultLimit, truncationNotice } from "./shared";
 
@@ -78,10 +79,12 @@ export function searchJobsParams(args: SearchJobsArgs): JobsSearchParams {
  * Cards share /jobs filters, hiding hard-filtered and archived jobs by default. Unlike the web's query parser, MCP uses its
  * lenient search plan so unreadable pipeline settings do not take text search down. The existing MCP default sort stays rank
  * without a query (including archive); every explicit MCP sort has the same web equivalent. The star, seen and application-status filters would
- * reveal tracking data through the jobs they keep, so without tracking permission they are refused as invalid input.
+ * reveal tracking data through the jobs they keep, so without tracking permission they are refused as not permitted, before any query; the
+ * card's application status is then left out too.
  */
 export async function searchJobs(ctx: McpContext, args: SearchJobsArgs): Promise<SearchJobsOutput> {
-  if ((args.favorites_only === true || args.unseen_only === true || args.application_status !== undefined) && !ctx.permissions?.has("tracking:read")) throw new ToolFailure("invalid_input", ctx.text("errors.trackingFilter"));
+  const permissions: ReadonlySet<Permission> = ctx.permissions ?? new Set();
+  if ((args.favorites_only === true || args.unseen_only === true || args.application_status !== undefined) && !permissions.has("tracking:read")) throw new ToolFailure("not_permitted", ctx.text("errors.notPermitted", { permission: "tracking:read" }));
   const params = searchJobsParams(args);
   const [visa, ghost] = await Promise.all([visaFilterAvailable(ctx.db), ghostFilterAvailable(ctx.db)]);
   const filters = await jobsListFilters(ctx.db, { ...params, q: null }, { visa, ghost, now: ctx.now() });
@@ -96,7 +99,7 @@ export async function searchJobs(ctx: McpContext, args: SearchJobsArgs): Promise
   const clean = shortFieldCleaner(traps);
   const access = await summaryAccess(ctx, page.jobs, traps);
   const jobs = await Promise.all(page.jobs.map(async (card) => ({
-    ...toJobCardDto(card, clean),
+    ...releasedJobCard(toJobCardDto(card, clean), permissions),
     ...await loadBlocks(searchJobCardBlocks, ctx, { card, clean, summaryFailure: access.reason ?? (access.allowed.has(card.id) ? null : "not_scanned") }, undefined),
   })));
   const truncated = page.total > jobs.length;
@@ -106,5 +109,5 @@ export async function searchJobs(ctx: McpContext, args: SearchJobsArgs): Promise
   if (output.jobs.some((job) => job.match?.summary !== null && job.match?.summary !== undefined)) derivedNotices.push(ctx.text("notice.derived"));
   if (output.jobs.some((job) => job.match?.summary_withheld != null)) derivedNotices.push(ctx.text("notice.derivedWithheld"));
   notices.splice(1, 0, ...derivedNotices);
-  return searchJobsOutputFor(ctx.permissions ?? new Set()).parse({ ...output, notices });
+  return searchJobsOutputFor(permissions).parse({ ...output, notices });
 }

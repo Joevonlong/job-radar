@@ -111,13 +111,17 @@ describe("new read tools through the MCP server", () => {
       expect(JSON.stringify(result.content)).toContain(text);
       expect(result.structuredContent).toBeUndefined();
     };
-    await refused("search_jobs", { application_status: ["applied"] }, "tracking:read");
+    for (const args of [{ application_status: ["applied"] }, { favorites_only: true }, { unseen_only: true }]) await refused("search_jobs", args, "tracking:read");
     await refused("get_today", { quick: "following" }, "tracking:read");
     const today = todayOutput.parse(await call(client, "get_today"));
     expect(today.quick_counts.following).toBeUndefined();
     expect(today.quick_counts.all).toBeGreaterThan(0);
-    const unfiltered = await call(client, "search_jobs", {}) as { jobs: unknown[] };
+    const unfiltered = await call(client, "search_jobs", {}) as { jobs: Array<Record<string, unknown>> };
     expect(unfiltered.jobs.length).toBeGreaterThan(0);
+    for (const job of unfiltered.jobs) expect(job).not.toHaveProperty("application_status");
+    const detail = await call(client, "get_job", { job_id: ids[0] }) as { job: Record<string, unknown> };
+    for (const key of ["application_status", "closed_reason", "application"]) expect(detail.job).not.toHaveProperty(key);
+    expect(detail.job).toHaveProperty("status");
   });
   it("keeps the application-status filter and following counts with tracking permission", async () => {
     const client = await connect(["jobs:read", "tracking:read"]);
@@ -129,13 +133,19 @@ describe("new read tools through the MCP server", () => {
     expect(today.quick_counts.following).toBe(3);
     expect(today.jobs).toHaveLength(3);
   });
-  it("companies reuse watched/blacklist marks and job counts", async () => {
-    const result = listCompaniesOutput.parse(await call(await connect(), "list_companies"));
+  it("companies reuse job counts, and the watched/blacklist marks only with profile permission", async () => {
+    const result = listCompaniesOutput.parse(await call(await connect(["jobs:read", "profile:read"]), "list_companies"));
     expect(result.companies.map((company) => ({ name: company.name, jobs: company.job_count, watched: company.watched, blacklisted: company.blacklisted }))).toEqual([{ name: "Example Company", jobs: 2, watched: true, blacklisted: false }, { name: "Other Company", jobs: 1, watched: false, blacklisted: true }]);
+    const plain = listCompaniesOutput.parse(await call(await connect(), "list_companies"));
+    expect(plain.companies.map((company) => ({ name: company.name, jobs: company.job_count }))).toEqual([{ name: "Example Company", jobs: 2 }, { name: "Other Company", jobs: 1 }]);
+    for (const company of plain.companies) { expect(company).not.toHaveProperty("watched"); expect(company).not.toHaveProperty("blacklisted"); }
   });
   it("company detail gives aliases, domain, guarded research and active jobs", async () => {
-    const value = getCompanyOutput.parse(await call(await connect(), "get_company", { company_id: companyId }));
+    const value = getCompanyOutput.parse(await call(await connect(["jobs:read", "profile:read"]), "get_company", { company_id: companyId }));
     expect(value.company).toMatchObject({ aliases: ["Example Alias", "Second Alias"], website_domain: "example.invalid", watched: true });
+    const plain = getCompanyOutput.parse(await call(await connect(), "get_company", { company_id: companyId }));
+    expect(plain.company).not.toHaveProperty("watched");
+    expect(plain.company).not.toHaveProperty("blacklisted");
     expect(value.jobs.map((job) => job.id)).toEqual(ids.slice(0, 2));
     expect(value.research?.fields[0]).toMatchObject({ text: traps.ai_input.instruction_marker, source_url: "https://example.invalid/about" });
     expect(JSON.stringify(value)).not.toContain(TRAP);

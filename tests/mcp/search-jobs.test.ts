@@ -127,18 +127,10 @@ describe("MCP URL state mapping", () => {
 
   it.each<[SearchJobsArgs, readonly Permission[] | undefined]>([
     [{ favorites_only: true }, ["jobs:read", "match:read", "notes:read"]], [{ unseen_only: true }, ["jobs:read"]], [{ unseen_only: true, favorites_only: false }, undefined],
-  ])("refuses the star and seen filters %j as invalid input without tracking permission", async (args, permissions) => {
-    const call = permissions === undefined ? ctx : context(permissions);
-    await expect(searchJobs(call, args)).rejects.toMatchObject({ category: "invalid_input", message: ctx.text("errors.trackingFilter") });
-    expect(listJobs).not.toHaveBeenCalled();
-  });
-
-  it.each<[SearchJobsArgs, readonly Permission[] | undefined]>([
     [{ application_status: ["applied"] }, ["jobs:read"]], [{ application_status: ["new"], favorites_only: false }, ["jobs:read", "match:read", "notes:read"]], [{ application_status: ["offer"] }, undefined],
-  ])("refuses the application-status filter %j as invalid input without tracking permission, running no query", async (args, permissions) => {
+  ])("refuses the tracking filter %j as not permitted without tracking permission, running no query", async (args, permissions) => {
     const call = permissions === undefined ? ctx : context(permissions);
-    await expect(searchJobs(call, args)).rejects.toMatchObject({ category: "invalid_input", message: ctx.text("errors.trackingFilter") });
-    expect(ctx.text("errors.trackingFilter")).toContain("application_status");
+    await expect(searchJobs(call, args)).rejects.toMatchObject({ category: "not_permitted", message: ctx.text("errors.notPermitted", { permission: "tracking:read" }) });
     expect(listJobs).not.toHaveBeenCalled();
   });
 
@@ -218,8 +210,10 @@ describe("MCP card permission blocks", () => {
     const job = result.jobs[0]!;
     const match = permissions.includes("match:read");
     const tracking = permissions.includes("tracking:read");
+    const { application_status: status, ...base } = toJobCardDto(card(), (text) => text);
     const expected = {
-      ...toJobCardDto(card(), (text) => text),
+      ...base,
+      ...(tracking ? { application_status: status } : {}),
       ...(match ? { match: { summary: SUMMARY, summary_lang: "en", summary_withheld: null, filter_result: "passed", filter_reasons: [FILTER] } } : {}),
       ...(tracking ? { tracking: { status: "applied", favorite: true, seen: true } } : {}),
     };
@@ -233,11 +227,15 @@ describe("MCP card permission blocks", () => {
     expect(result.notices).toEqual([ctx.text("notice.thirdParty"), ...(match ? [ctx.text("notice.derived")] : [])]);
     expect(vi.mocked(currentTrapScanJobIds).mock.calls.length).toBe(match ? 1 : 0);
     expect(searchJobsOutputFor(new Set(["jobs:read"])).safeParse({ ...result, jobs: [{ ...job, tracking: { status: "new", favorite: false, seen: false } }] }).success).toBe(false);
+    expect(searchJobsOutputFor(new Set(permissions)).safeParse({ ...result, jobs: [{ ...job, application_status: "applied" }] }).success).toBe(tracking);
   });
 
-  it("missing call permissions gives the unchanged base card", async () => {
+  it("missing call permissions gives the base card without the application status", async () => {
     cards(card());
-    expect((await searchJobs(ctx, {})).jobs[0]).toEqual(toJobCardDto(card(), (text) => text));
+    const full = toJobCardDto(card(), (text) => text);
+    const job = (await searchJobs(ctx, {})).jobs[0]!;
+    expect(job).not.toHaveProperty("application_status");
+    expect({ ...job, application_status: full.application_status }).toEqual(full);
     expect(currentTrapScanJobIds).not.toHaveBeenCalled();
   });
 
