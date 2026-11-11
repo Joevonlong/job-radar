@@ -38,7 +38,7 @@ beforeAll(async () => {
   await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 beforeEach(async () => {
-  await db().execute(sql`truncate table agent_budget_usage`);
+  await db().execute(sql`truncate table agent_budget_usage, agent_budget_tickets`);
 });
 afterAll(async () => {
   await closeDb();
@@ -95,7 +95,7 @@ describe("agent daily budgets", () => {
   it("returns caller units and one total request before taking again", async () => {
     const deps = settings({ per_caller: { score_jobs: 60 }, total: 2 });
     const first = ticket(await takeAgentBudget(db(), { caller: "stdio", action: "score_jobs", units: 60 }, deps));
-    await giveBackAgentBudget(db(), first);
+    expect(await giveBackAgentBudget(db(), first)).toBe(true);
     expect(await usage("stdio", "score_jobs")).toBe(0);
     expect(await usage("*", "*")).toBe(0);
     ticket(await takeAgentBudget(db(), { caller: "stdio", action: "score_jobs", units: 60 }, deps));
@@ -103,17 +103,40 @@ describe("agent daily budgets", () => {
     expect(await usage("*", "*")).toBe(1);
   });
 
-  it("gives back against the ticket day after midnight and clamps counters at zero", async () => {
+  it("gives back against the ticket day after midnight, and a second give-back of that ticket has no effect", async () => {
     const deps = settings({ per_caller: { translate_job: 3 }, total: 20 });
     const first = ticket(await takeAgentBudget(db(), { caller: "stdio", action: "translate_job" }, deps));
+    ticket(await takeAgentBudget(db(), { caller: "stdio", action: "translate_job" }, deps));
     const nextDay = { ...deps, now: () => new Date("2026-11-11T23:30:00Z") };
     ticket(await takeAgentBudget(db(), { caller: "stdio", action: "translate_job" }, nextDay));
-    await giveBackAgentBudget(db(), first);
-    await giveBackAgentBudget(db(), first);
-    expect(await usage()).toBe(0);
-    expect(await usage("*", "*")).toBe(0);
+    expect(await giveBackAgentBudget(db(), first)).toBe(true);
+    expect(await giveBackAgentBudget(db(), first)).toBe(false);
+    expect(await usage()).toBe(1);
+    expect(await usage("*", "*")).toBe(1);
     expect(await usage("stdio", "translate_job", "2026-11-12")).toBe(1);
     expect(await usage("*", "*", "2026-11-12")).toBe(1);
+  });
+
+  it("does not over-grant when one ticket is given back twice", async () => {
+    const deps = settings({ per_caller: { translate_job: 3 }, total: 20 });
+    const taken = [];
+    for (let i = 0; i < 3; i += 1) taken.push(ticket(await takeAgentBudget(db(), { caller: "stdio", action: "translate_job" }, deps)));
+    await giveBackAgentBudget(db(), taken[0]);
+    await giveBackAgentBudget(db(), taken[0]);
+    ticket(await takeAgentBudget(db(), { caller: "stdio", action: "translate_job" }, deps));
+    expect(await takeAgentBudget(db(), { caller: "stdio", action: "translate_job" }, deps)).toMatchObject({ ok: false, refusal: { reason: "caller_cap", used: 3 } });
+    expect(await usage()).toBe(3);
+    expect(await usage("*", "*")).toBe(3);
+  });
+
+  it("releases a ticket once under concurrent give-backs", async () => {
+    const deps = settings({ per_caller: { score_jobs: 100 }, total: 20 });
+    ticket(await takeAgentBudget(db(), { caller: 7, action: "score_jobs", units: 30 }, deps));
+    const held = ticket(await takeAgentBudget(db(), { caller: 7, action: "score_jobs", units: 20 }, deps));
+    const results = await Promise.all(Array.from({ length: 6 }, () => giveBackAgentBudget(db(), held)));
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(await usage("token:7", "score_jobs")).toBe(30);
+    expect(await usage("*", "*")).toBe(1);
   });
 
   it("refuses a whole batch and reports how many jobs remain without charging the total", async () => {
@@ -190,7 +213,7 @@ describe("agent daily budgets", () => {
   it("lets indirect research go, skips a full caller, and contains config failures", async () => {
     const deps = settings({ per_caller: { research_company: 1 }, total: 5 });
     expect(await takeIndirectBudget(db(), { caller: "stdio", action: "research_company" }, deps)).toEqual({
-      decision: "go", ticket: { caller: "stdio", action: "research_company", day: DAY, units: 1 },
+      decision: "go", ticket: { id: expect.any(String), caller: "stdio", action: "research_company", day: DAY, units: 1 },
     });
     expect(await takeIndirectBudget(db(), { caller: "stdio", action: "research_company" }, deps)).toMatchObject({ decision: "skip", reason: "caller_cap", refusal: { remaining: 0 } });
     await expect(takeIndirectBudget(db(), { caller: "stdio", action: "research_company" }, {
@@ -215,11 +238,15 @@ describe("agent daily budgets", () => {
     });
   });
 
-  it("prunes only rows before the cutoff day", async () => {
-    await db().insert(schema.agentBudgetUsage).values(["2026-11-09", "2026-11-10", "2026-11-11"].map((day) => ({ caller: "stdio", action: "translate_job", day, used: 1 })));
-    expect(await pruneAgentBudgetUsage(db(), "2026-11-10")).toBe(1);
+  it("prunes only counter and ticket rows before the cutoff day", async () => {
+    const days = ["2026-11-09", "2026-11-10", "2026-11-11"];
+    await db().insert(schema.agentBudgetUsage).values(days.map((day) => ({ caller: "stdio", action: "translate_job", day, used: 1 })));
+    await db().insert(schema.agentBudgetTickets).values(days.map((day) => ({ caller: "stdio", action: "translate_job", day, units: 1 })));
+    expect(await pruneAgentBudgetUsage(db(), "2026-11-10")).toBe(2);
     const rows = await db().select().from(schema.agentBudgetUsage).orderBy(schema.agentBudgetUsage.day);
     expect(rows.map((row) => row.day)).toEqual(["2026-11-10", "2026-11-11"]);
+    const held = await db().select().from(schema.agentBudgetTickets).orderBy(schema.agentBudgetTickets.day);
+    expect(held.map((row) => row.day)).toEqual(["2026-11-10", "2026-11-11"]);
     expect(await pruneAgentBudgetUsage(db(), "2026-11-10")).toBe(0);
   });
 });

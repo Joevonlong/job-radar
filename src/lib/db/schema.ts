@@ -1412,3 +1412,16 @@ export const agentBudgetUsage = pgTable("agent_budget_usage", {
   check("agent_budget_usage_used_nonnegative", sql`${t.used} >= 0`),
   index("agent_budget_usage_day_idx").on(t.day),
 ]);
+
+/** One row per budget take that can still be given back; giving it back deletes the row, so a ticket releases its units once. */
+export const agentBudgetTickets = pgTable("agent_budget_tickets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  caller: text("caller").notNull(),
+  action: text("action").notNull(),
+  day: date("day", { mode: "string" }).notNull(),
+  units: integer("units").notNull(),
+  createdAt: timestamptz("created_at").notNull().defaultNow(),
+}, (t) => [
+  check("agent_budget_tickets_units_positive", sql`${t.units} >= 1`),
+  index("agent_budget_tickets_day_idx").on(t.day),
+]);

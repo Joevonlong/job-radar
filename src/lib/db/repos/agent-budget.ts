@@ -1,9 +1,10 @@
 import { and, eq, lt, or, sql } from "drizzle-orm";
 
 import type { Executor } from "../executor";
-import { agentBudgetUsage as usage } from "../schema";
+import { agentBudgetTickets as tickets, agentBudgetUsage as usage } from "../schema";
 
 type BudgetKey = { caller: string; action: string };
+type HeldTicket = BudgetKey & { day: string; units: number };
 
 export async function takeBudgetUnits(db: Executor, input: BudgetKey & { day: string; units: number; cap: number }): Promise<number | null> {
   if (input.units < 1 || input.units > input.cap) return null;
@@ -24,6 +25,18 @@ export async function giveBackBudgetUnits(db: Executor, input: BudgetKey & { day
     .where(and(eq(usage.caller, input.caller), eq(usage.action, input.action), eq(usage.day, input.day)));
 }
 
+export async function recordBudgetTicket(db: Executor, input: HeldTicket): Promise<string> {
+  const [row] = await db.insert(tickets).values(input).returning({ id: tickets.id });
+  return row.id;
+}
+
+/** Deletes the ticket and returns what it held; a ticket already given back or pruned returns null. */
+export async function claimBudgetTicket(db: Executor, id: string): Promise<HeldTicket | null> {
+  const [row] = await db.delete(tickets).where(eq(tickets.id, id))
+    .returning({ caller: tickets.caller, action: tickets.action, day: tickets.day, units: tickets.units });
+  return row ?? null;
+}
+
 /** Returns one entry per requested key, including zero for a missing row. */
 export async function readBudgetUsage(db: Executor, input: { day: string; keys: BudgetKey[] }): Promise<(BudgetKey & { used: number })[]> {
   if (input.keys.length === 0) return [];
@@ -33,6 +46,7 @@ export async function readBudgetUsage(db: Executor, input: { day: string; keys: 
 }
 
 export async function pruneAgentBudgetUsage(db: Executor, beforeDay: string): Promise<number> {
-  const result = await db.delete(usage).where(lt(usage.day, beforeDay));
-  return result.count;
+  const counters = await db.delete(usage).where(lt(usage.day, beforeDay));
+  const held = await db.delete(tickets).where(lt(tickets.day, beforeDay));
+  return counters.count + held.count;
 }

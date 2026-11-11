@@ -1,7 +1,7 @@
 import { loadConfig } from "@/lib/config";
 import { AGENT_ACTIONS, type AgentAction, type McpBudgets } from "@/lib/config/schemas/mcp";
 import type { Db } from "@/lib/db/client";
-import { giveBackBudgetUnits, readBudgetUsage, takeBudgetUnits } from "@/lib/db/repos/agent-budget";
+import { claimBudgetTicket, giveBackBudgetUnits, readBudgetUsage, recordBudgetTicket, takeBudgetUnits } from "@/lib/db/repos/agent-budget";
 import { addDays, dayInZone, startOfDayInZone } from "@/lib/insights/range";
 
 import { liveMcpSettings } from "./authorize";
@@ -16,7 +16,7 @@ export type BudgetRefusal = {
   requested: number;
   resetsAt: Date;
 };
-export type BudgetTicket = { caller: AgentCaller; action: AgentAction; day: string; units: number };
+export type BudgetTicket = { id: string; caller: AgentCaller; action: AgentAction; day: string; units: number };
 export type BudgetTake = { ok: true; ticket: BudgetTicket } | { ok: false; refusal: BudgetRefusal };
 export interface BudgetDeps {
   budgets(): McpBudgets;
@@ -86,7 +86,8 @@ export async function takeAgentBudget(db: Db, input: { caller: AgentCaller; acti
         const [total] = await readBudgetUsage(tx, { day, keys: [totalRow] });
         throw new TotalBudgetRefused(refusal("total_cap", input.action, budgets.total, total.used, units, resetsAt));
       }
-      return { ok: true, ticket: { caller: input.caller, action: input.action, day, units } };
+      const id = await recordBudgetTicket(tx, { ...callerRow, units });
+      return { ok: true, ticket: { id, caller: input.caller, action: input.action, day, units } };
     });
   } catch (error) {
     if (error instanceof TotalBudgetRefused) return { ok: false, refusal: error.refusal };
@@ -94,11 +95,17 @@ export async function takeAgentBudget(db: Db, input: { caller: AgentCaller; acti
   }
 }
 
-/** Releases a merged or cached request against the day named by its ticket, even after local midnight. */
-export async function giveBackAgentBudget(db: Db, ticket: BudgetTicket): Promise<void> {
-  await db.transaction(async (tx) => {
-    await giveBackBudgetUnits(tx, { caller: callerKey(ticket.caller), action: ticket.action, day: ticket.day, units: ticket.units });
-    await giveBackBudgetUnits(tx, { caller: "*", action: "*", day: ticket.day, units: 1 });
+/**
+ * Releases a merged or cached request against the day its ticket was taken, even after local midnight. A ticket gives back
+ * once: a repeated or concurrent give-back of the same ticket finds it claimed, releases nothing and returns false.
+ */
+export async function giveBackAgentBudget(db: Db, ticket: BudgetTicket): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const held = await claimBudgetTicket(tx, ticket.id);
+    if (!held) return false;
+    await giveBackBudgetUnits(tx, { caller: held.caller, action: held.action, day: held.day, units: held.units });
+    await giveBackBudgetUnits(tx, { caller: "*", action: "*", day: held.day, units: 1 });
+    return true;
   });
 }
 
