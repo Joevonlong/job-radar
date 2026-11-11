@@ -65,9 +65,10 @@ it.each(["stdio", "http"] as const)("reads only reply metadata with isolated and
     const database = await databaseHashes(getDb());
     const data = await call();
     expect(data).toMatchObject({ total: 2, returned: 2, truncated: false });
+    const withStatus = permissions.includes("tracking:read");
     expect(data.replies).toEqual([
-      { id: replyId, receivedAt: "2026-01-02T10:00:00.000Z", category: "interview_invite", match: "matched", state: "pending", jobId, company: "Fictional Observatory", title: "Fictional Engineer", applicationStatus: "applied" },
-      { id: replyId + 1, receivedAt: "2026-01-01T10:00:00.000Z", category: "rejection", match: "unmatched", state: "dismissed", jobId: null, company: null, title: null, applicationStatus: null },
+      { id: replyId, receivedAt: "2026-01-02T10:00:00.000Z", category: "interview_invite", match: "matched", state: "pending", jobId, company: "Fictional Observatory", title: "Fictional Engineer", ...(withStatus ? { applicationStatus: "applied" } : {}) },
+      { id: replyId + 1, receivedAt: "2026-01-01T10:00:00.000Z", category: "rejection", match: "unmatched", state: "dismissed", jobId: null, company: null, title: null, ...(withStatus ? { applicationStatus: null } : {}) },
     ]);
     expect(data.notices).toEqual([connection!.ctx.text("notice.thirdParty")]);
     expect(connection!.audit[0]).toMatchObject({ capability: "list_replies", returned_count: 2, target: null, transport });

@@ -8,9 +8,10 @@ export interface ReplyReadFilters {
   category?: ReplyCategory;
   since?: Date;
   limit: number;
+  includeApplicationStatus?: boolean;
 }
 
-/** Mail content and transport identifiers are never selected by this read surface. */
+/** Mail content and transport identifiers are never selected by this read surface; the application status only when asked for (default). */
 export function replyReadQuery(db: Executor, filters: ReplyReadFilters) {
   return db.select({
     id: emailReplies.id,
@@ -22,7 +23,7 @@ export function replyReadQuery(db: Executor, filters: ReplyReadFilters) {
     jobId: emailReplies.jobId,
     company: companies.name,
     title: jobs.title,
-    applicationStatus: applications.status,
+    ...(filters.includeApplicationStatus === false ? {} : { applicationStatus: applications.status }),
   }).from(emailReplies)
     .leftJoin(jobs, eq(jobs.id, emailReplies.jobId))
     .leftJoin(companies, eq(companies.id, jobs.companyId))

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { REPLY_CATEGORIES } from "@/lib/config/schemas/replies";
 import { listReplyMetadata } from "@/lib/db/queries/replies";
-import { listRepliesOutput, replyStateSchema } from "@/lib/mcp/dto/replies";
+import { listRepliesOutput, listRepliesOutputFor, replyStateSchema } from "@/lib/mcp/dto/replies";
 import { readTextCleaner } from "@/lib/mcp/read-guard";
 import { readTraps, resultLimit, truncationNotice } from "@/lib/mcp/tools/shared";
 import { defineCapability, READ_ONLY } from "../types";
@@ -17,10 +17,12 @@ export const list_replies = defineCapability({
     limit: z.number().int().positive().optional().describe(ctx.text("params.limit")),
   }),
   output: listRepliesOutput,
+  outputFor: listRepliesOutputFor,
   handler: async (ctx, args) => {
     const limit = resultLimit(ctx, args.limit);
+    const withStatus = ctx.permissions?.has("tracking:read") === true;
     const { rows, total } = await listReplyMetadata(ctx.db, {
-      state: args.state, category: args.category, since: args.since ? new Date(args.since) : undefined, limit,
+      state: args.state, category: args.category, since: args.since ? new Date(args.since) : undefined, limit, includeApplicationStatus: withStatus,
     });
     const clean = readTextCleaner(readTraps(ctx), ctx.text("notice.redacted"));
     const truncated = rows.length < total;
@@ -35,7 +37,7 @@ export const list_replies = defineCapability({
         jobId: row.jobId,
         company: row.company === null ? null : clean(row.company),
         title: row.title === null ? null : clean(row.title),
-        applicationStatus: row.applicationStatus,
+        ...(withStatus ? { applicationStatus: row.applicationStatus ?? null } : {}),
       })),
       total,
       returned: rows.length,
