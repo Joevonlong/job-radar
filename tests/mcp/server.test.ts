@@ -414,7 +414,7 @@ describe("tools come from the registry", () => {
   });
 
   it("lists byte-identical tool definitions to the SDK for every registered tool", async () => {
-    const ctx = context({ permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write", "profile:read", "career:read", "replies:read"], stdio: { permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write", "profile:read", "career:read", "replies:read"] } });
+    const ctx = context({ permissions: ["jobs:read", "raw:read", "tracking:read", "writer:read", "writer:write", "profile:read", "career:read", "replies:read"], stdio: { permissions: ["jobs:read", "raw:read", "tracking:read", "writer:read", "writer:write", "profile:read", "career:read", "replies:read"] } });
     ctx.writer = { inputs: () => ({ writer: writerSchema.parse({ enabled: true }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: untouchable };
     ctx.features = { careerEnabled: () => true, repliesEnabled: () => true };
     const reference = new McpServer({ name: "reference", version: "1" }, { capabilities: { tools: {} } });
@@ -431,6 +431,7 @@ describe("permissions decide visibility", () => {
   const cases = [
     { name: "search_jobs", permission: "jobs:read", args: {} },
     { name: "get_job", permission: "jobs:read", args: { job_id: 1 } },
+    { name: "get_job_raw", permission: "raw:read", args: { job_id: 1 } },
     { name: "list_applications", permission: "tracking:read", args: {} },
     { name: "get_application_context", permission: "writer:read", args: { job_id: 1 } },
     { name: "save_application_answer", permission: "writer:write", args: { job_id: 1, question_id: 1, text: "An answer." } },
