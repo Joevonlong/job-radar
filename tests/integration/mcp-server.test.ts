@@ -252,6 +252,18 @@ describe("search_jobs", () => {
     }
   });
 
+  it("refuses the star and seen filters without tracking permission as invalid input", async () => {
+    const permissions: Permission[] = ["jobs:read", "match:read"];
+    const client = await connect({ mcp: settings({ permissions, stdio: { permissions } }) });
+    for (const args of [{ favorites_only: true }, { unseen_only: true }]) {
+      const result = await call<SearchJobsOutput>(client, "search_jobs", args);
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain("tracking:read");
+      expect(lines.at(-1)).toContain("invalid_input");
+    }
+    expect((await call<SearchJobsOutput>(client, "search_jobs", { favorites_only: false })).isError).toBe(false);
+  });
+
   it("reports a full-text search past its time limit as search_timeout; summary search has no limit", async () => {
     // A few megabytes of description keep the regex scan well above one millisecond
     await getDb().execute(sql`update jobs set description = repeat('lorem ipsum dolor ', 200000) where id = ${await redBanana()}`);

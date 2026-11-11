@@ -77,9 +77,11 @@ export function searchJobsParams(args: SearchJobsArgs): JobsSearchParams {
 /**
  * Cards share /jobs filters, hiding hard-filtered and archived jobs by default. Unlike the web's query parser, MCP uses its
  * lenient search plan so unreadable pipeline settings do not take text search down. The existing MCP default sort stays rank
- * without a query (including archive); every explicit MCP sort has the same web equivalent.
+ * without a query (including archive); every explicit MCP sort has the same web equivalent. The star and seen filters would
+ * reveal tracking data through the jobs they keep, so without tracking permission they are refused as invalid input.
  */
 export async function searchJobs(ctx: McpContext, args: SearchJobsArgs): Promise<SearchJobsOutput> {
+  if ((args.favorites_only === true || args.unseen_only === true) && !ctx.permissions?.has("tracking:read")) throw new ToolFailure("invalid_input", ctx.text("errors.trackingFilter"));
   const params = searchJobsParams(args);
   const [visa, ghost] = await Promise.all([visaFilterAvailable(ctx.db), ghostFilterAvailable(ctx.db)]);
   const filters = await jobsListFilters(ctx.db, { ...params, q: null }, { visa, ghost, now: ctx.now() });

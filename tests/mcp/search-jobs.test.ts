@@ -125,9 +125,24 @@ describe("MCP URL state mapping", () => {
     { unseen_only: null }, { favorites_only: null }, { scope: 1 }, { visa: true }, { ghost: [] },
   ])("rejects invalid new arguments %j", (raw) => { expect(input.safeParse(raw).success).toBe(false); });
 
+  it.each<[SearchJobsArgs, readonly Permission[] | undefined]>([
+    [{ favorites_only: true }, ["jobs:read", "match:read", "notes:read"]], [{ unseen_only: true }, ["jobs:read"]], [{ unseen_only: true, favorites_only: false }, undefined],
+  ])("refuses the star and seen filters %j as invalid input without tracking permission", async (args, permissions) => {
+    const call = permissions === undefined ? ctx : context(permissions);
+    await expect(searchJobs(call, args)).rejects.toMatchObject({ category: "invalid_input", message: ctx.text("errors.trackingFilter") });
+    expect(listJobs).not.toHaveBeenCalled();
+  });
+
+  it("keeps the star and seen filters off without tracking permission and applies them with it", async () => {
+    await searchJobs(context(["jobs:read"]), { favorites_only: false, unseen_only: false });
+    expect(listJobs).toHaveBeenLastCalledWith(ctx.db, expect.objectContaining({ filters: expect.objectContaining({ favoritesOnly: false, unseenOnly: false }) }));
+    await searchJobs(context(["jobs:read", "tracking:read"]), { favorites_only: true, unseen_only: true });
+    expect(listJobs).toHaveBeenLastCalledWith(ctx.db, expect.objectContaining({ filters: expect.objectContaining({ favoritesOnly: true, unseenOnly: true }) }));
+  });
+
   it("preserves all combined filters through the shared function, including fractional thresholds", async () => {
     const args = input.parse({ query: "AI", city: "Metro", workplace: ["remote"], country: ["DE"], min_rank: 70.5, min_annual_salary: 50000.5, since: "2026-10-01", until: "2026-10-15", application_status: ["applied"], unseen_only: true, favorites_only: true, scope: "all", visa: "offered", ghost: "hide" });
-    await searchJobs(ctx, args);
+    await searchJobs(context(["jobs:read", "tracking:read"]), args);
     const filters = await jobsListFilters(ctx.db, { ...searchJobsParams(args), q: null }, { visa: true, ghost: true, now: ctx.now() });
     expect(listJobs).toHaveBeenLastCalledWith(ctx.db, expect.objectContaining({ filters: { ...filters, search: searchPlan("AI") }, visa: true, ghost: true }));
     expect(filters).toMatchObject({ minRank: 70.5, minAnnualSalary: 50000.5, cities: ["Metro"], workplaces: ["remote"], applicationStatuses: ["applied"], scope: "all", visa: "offered", ghost: "hide", unseenOnly: true, favoritesOnly: true });
