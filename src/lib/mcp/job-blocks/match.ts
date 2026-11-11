@@ -11,7 +11,7 @@ import type { ReasonSource } from "@/lib/scoring/evidence";
 import { buildVisaCheckView } from "@/lib/visa/view";
 
 import { jobBlockSettings } from "./settings";
-import type { JobBlockSource } from "./source";
+import { quotedText, type JobBlockSource } from "./source";
 
 export async function loadMatch(_ctx: McpContext, source: JobBlockSource): Promise<z.infer<typeof matchBlockDto>> {
   const { detail, clean } = source;
@@ -25,7 +25,10 @@ export async function loadMatch(_ctx: McpContext, source: JobBlockSource): Promi
   const visa = settings.visaEnabled() ? buildVisaCheckView(detail.visa, settings.needsVisaSponsorship()) : null;
   const notice = settings.dealBreakers(detail, score.filterReasons);
   const written = source.strict.ok;
-  const reason = (text: string, evidence: ReasonSource | undefined) => ({ text: clean(text), basis: evidence?.basis ?? null, quote: evidence?.quote === null || evidence?.quote === undefined ? null : source.quote(evidence.quote, evidence.offset), offset: evidence?.offset ?? null });
+  const reason = (text: string, evidence: ReasonSource | undefined) => {
+    const quoted = evidence?.quote === null || evidence?.quote === undefined ? { text: clean(text), quote: null } : quotedText(source, text, evidence.quote, evidence.offset);
+    return { text: quoted.text, basis: evidence?.basis ?? null, quote: quoted.quote, offset: evidence?.offset ?? null };
+  };
   return {
     available: written,
     reason: source.strict.ok ? null : source.strict.reason,

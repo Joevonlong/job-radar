@@ -19,7 +19,7 @@ import { isTranslationStale } from "@/lib/translation/hash";
 import { companyFieldText, httpsUrlOrNull } from "@/lib/writer/company-background";
 
 import { jobBlockSettings } from "./settings";
-import type { JobBlockSource } from "./source";
+import { quotedText, type JobBlockSource } from "./source";
 
 export async function loadTranslation(ctx: McpContext, source: JobBlockSource): Promise<z.infer<typeof translationBlockDto>> {
   if (!source.strict.ok) return { available: false, reason: source.strict.reason, items: [] };
@@ -37,10 +37,7 @@ export async function loadTranslation(ctx: McpContext, source: JobBlockSource): 
 }
 
 export function toBreakdownContent(content: BreakdownContent, source: JobBlockSource): NonNullable<z.infer<typeof breakdownBlockDto>["content"]> {
-  const point = (item: { text: string; quote: string; offset: number }) => {
-    const quote = source.quote(item.quote, item.offset);
-    return { text: source.clean(quote !== null && quote !== item.quote ? quote : item.text), quote, offset: item.offset };
-  };
+  const point = (item: { text: string; quote: string; offset: number }) => ({ ...quotedText(source, item.text, item.quote, item.offset), offset: item.offset });
   const requiredPoint = (item: BreakdownContent["other"][number]) => {
     const mapped = point(item);
     return { text: mapped.text, requirement: item.requirement, quote: mapped.quote, offset: mapped.offset };
@@ -56,8 +53,8 @@ export function toBreakdownContent(content: BreakdownContent, source: JobBlockSo
     soft_skills: content.soft_skills.map(requiredPoint),
     other: content.other.map(requiredPoint),
     languages: content.languages.map((item) => {
-      const quote = source.quote(item.quote, item.offset);
-      return { language: source.clean(quote !== null && quote !== item.quote ? quote : item.language), level: item.level, requirement: item.requirement, quote, offset: item.offset };
+      const mapped = quotedText(source, item.language, item.quote, item.offset);
+      return { language: mapped.text, level: item.level, requirement: item.requirement, quote: mapped.quote, offset: item.offset };
     }),
   };
 }
