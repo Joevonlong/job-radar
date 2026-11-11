@@ -17,10 +17,11 @@ import type { FilterVisibility, JobsSearchParams } from "./search-params";
 
 /**
  * The filters of `/jobs?<params>`; `cities` = the city groups and `visa` = `visaFilterAvailable` / `ghost` =
- * `ghostFilterAvailable` when the caller already has them; `companyIndex` reuses its company lookup.
+ * `ghostFilterAvailable` when the caller already has them; `companyIndex` reuses its company lookup. interests.yaml is read
+ * only for the high-value filter, so an unreadable file leaves every other list working.
  */
 export async function jobsListFilters(db: Db, params: JobsSearchParams, known: { cities?: readonly CityGroup[]; visa?: boolean; ghost?: boolean; companyIndex?: CompanyMatchIndex; listing?: boolean; now?: Date; badgeDays?: number } = {}): Promise<JobFilters> {
-  const highValue = loadHighValuePolicy();
+  const highValue = params.high === true ? loadHighValuePolicy() : null;
   const view = viewFiltersFromParams(params);
   const [companyIds] = await resolveViewCompanyIds(db, [view], { index: known.companyIndex });
   return {
@@ -37,7 +38,7 @@ export async function jobsListFilters(db: Db, params: JobsSearchParams, known: {
     filteredOnly: params.filteredOnly === true,
     hideGermanLevels: params.hideLang ? germanLevelsToHide() : null,
     // without any high-value category the filter has nothing to keep (its button is hidden): ignored
-    highValue: params.high === true && hasHighValueCategories(highValue) ? highValue : null,
+    highValue: hasHighValueCategories(highValue) ? highValue : null,
     favoritesOnly: params.fav === true,
     unseenOnly: params.unseen === true,
     // the salary filter and the salary sort compare in the market's base currency (left out, they would assume EUR)
