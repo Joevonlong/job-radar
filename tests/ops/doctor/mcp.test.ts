@@ -11,14 +11,18 @@ describe("data.mcp", () => {
     expect(r.status).toBe("ok");
     expect(r.detail).toContain("enabled: false");
   });
-  it("on: names the tools and that the client's model provider receives the results", async () => {
-    const r = await only(mcpCheck, makeContext({ probes: { mcp: async () => ({ state: "ok", enabled: true, tools: ["search_jobs", "get_job"] }) } }));
+  it("on: names the effective permissions and global matrix and that the client's model provider receives the results", async () => {
+    const r = await only(mcpCheck, makeContext({ locale: "en", probes: { mcp: async () => ({ state: "ok", enabled: true, permissions: ["jobs:read", "tracking:read"], effective: ["jobs:read"] }) } }));
     expect(r.status).toBe("ok");
-    expect(r.detail).toContain("search_jobs, get_job");
+    expect(r.detail).toContain("permissions: jobs:read (allowed overall: jobs:read, tracking:read)");
     expect(r.detail).toContain("docs/mcp");
   });
+  it("names an empty effective list as none", async () => {
+    const r = await only(mcpCheck, makeContext({ locale: "en", probes: { mcp: async () => ({ state: "ok", enabled: true, permissions: ["jobs:read"], effective: [] }) } }));
+    expect(r.detail).toContain("permissions: none (allowed overall: jobs:read)");
+  });
   it("warns when mcp.yaml cannot be read", async () => {
-    const r = await only(mcpCheck, makeContext({ probes: { mcp: async () => ({ state: "config_error", problem: "limits.max_results: Too big" }) } }));
+    const r = await only(mcpCheck, makeContext({ locale: "en", probes: { mcp: async () => ({ state: "config_error", problem: "limits.max_results: Too big" }) } }));
     expect(r.status).toBe("warn");
     expect(r.detail).toContain("limits.max_results");
     expect(r.hint).toContain("pnpm config:check");

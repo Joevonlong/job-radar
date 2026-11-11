@@ -169,10 +169,13 @@ describe("mcp:serve over stdio", () => {
     expect(session.code).toBe(0);
   }, 60_000);
 
-  it("offers the save tool when it and the writer are on at start, which needs the write connection opened before the list", async () => {
-    const configDir = path.join(userDir, "writer-on");
+  it.each([
+    ["writer-on", "config_version: 3\nenabled: true\npermissions: [jobs:read, tracking:read, writer:read, writer:write]\nstdio:\n  permissions: [jobs:read, tracking:read, writer:read, writer:write]\n"],
+    ["writer-on-v2", "config_version: 2\nenabled: true\ntools:\n  get_application_context: true\n  save_application_answer: true\n"],
+  ])("offers the save tool when it and the writer are on at start, which needs the write connection opened before the list (%s)", async (name, mcpYaml) => {
+    const configDir = path.join(userDir, name);
     fs.mkdirSync(configDir);
-    fs.writeFileSync(path.join(configDir, "mcp.yaml"), "enabled: true\ntools:\n  get_application_context: true\n  save_application_answer: true\n");
+    fs.writeFileSync(path.join(configDir, "mcp.yaml"), mcpYaml);
     fs.writeFileSync(path.join(configDir, "writer.yaml"), "enabled: true\n");
     const session = await converse(
       [
@@ -308,7 +311,7 @@ describe("mcp:serve live settings", () => {
       expect(initial.result).toBeDefined();
       expect(initial.result?.isError).not.toBe(true);
 
-      fs.writeFileSync(file, "enabled: true\ntools:\n  list_applications: false\n");
+      fs.writeFileSync(file, "config_version: 3\nenabled: true\npermissions: [jobs:read]\nstdio:\n  permissions: [jobs:read, tracking:read]\n");
       const refused = await session.request("tools/call", { name: "list_applications", arguments: {} });
       expect(refused.result?.isError).toBe(true);
       expect(JSON.stringify(refused.result)).toContain(text("errors.notPermitted", { permission: "tracking:read" }));

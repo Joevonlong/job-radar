@@ -6378,7 +6378,8 @@
         },
         "mcp": {
           "title": "给 AI 客户端用的 MCP 服务",
-          "on": "已打开：你配置的 MCP 客户端能读取岗位和申请（工具：{tools}）。工具返回的内容会交给该客户端所用的模型服务商，见 docs/mcp.zh.md",
+          "on": "已打开：你配置的 MCP 客户端可用这些权限：{effective}（全局上限：{matrix}）。工具返回的内容会交给该客户端所用的模型服务商，见 docs/mcp.zh.md",
+          "none": "无",
           "off": "未打开（mcp.yaml 的 enabled: false，默认）",
           "configError": "mcp.yaml 读不出来：{problem}",
           "configHint": "pnpm config:check 会指出是哪一项"
@@ -7356,7 +7357,7 @@
     "serve": {
       "disabled": "Job Radar 的 MCP 服务没有打开。在 mcp.yaml（data/config/ 下，或设置 → 高级）里设 enabled: true，再重启你的 MCP 客户端。见 docs/mcp.zh.md。",
       "configError": "mcp.yaml 读不出来：{problem}。用 pnpm config:check 看是哪一项。",
-      "noTools": "mcp.yaml 的 tools 把所有工具都关了：没有可提供的工具。",
+      "noTools": "按 mcp.yaml 的有效权限，没有一个工具可用：没有可提供的工具。",
       "ready": "Job Radar MCP 服务已就绪（stdio）。工具：{tools}",
       "stopped": "Job Radar MCP 服务已停止",
       "failed": "Job Radar MCP 服务出错后停止（{category}）"
@@ -7378,7 +7379,6 @@
       "settingsUnreadable": "mcp.yaml 读不出来（{problem}），修好之前不接受任何调用。用 pnpm config:check 看是哪一项。",
       "serverOff": "Job Radar 的 MCP 服务已关闭（mcp.yaml 的 enabled），这次调用被拒绝。",
       "notPermitted": "所有者没有给这个连接授权 {permission}（mcp.yaml），这次调用被拒绝。",
-      "toolSwitchedOff": "{tool} 在 mcp.yaml（tools）里关掉了，这次调用被拒绝。",
       "notFound": "没有 id 为 {id} 的岗位。",
       "searchTimeout": "搜索职位描述耗时过长，已停止（search_timeout）。请缩小查询或筛选条件，或不带 search_in: \"all\" 再搜。",
       "failed": "查询失败（{category}）。MCP 客户端里这个服务的日志有这次调用的记录。",

@@ -1,13 +1,13 @@
 /**
  * The MCP server over stdio (docs/mcp.md): an MCP client you configure (Claude Desktop, Claude Code, ...) starts this as a child
  * process and talks to it on stdin / stdout. No port is opened. Nothing is written to the database, except that the tool
- * `save_application_answer`, when switched on, adds answer versions over a connection of its own.
+ * `save_application_answer`, when granted writer:write, adds answer versions over a connection of its own.
  *
  *   pnpm --silent mcp:serve
  *
- * Off by default: with mcp.yaml `enabled: false` (or every tool switched off, or an unreadable mcp.yaml) it says why on stderr and
+ * Off by default: with mcp.yaml `enabled: false` (or no available tool permissions, or an unreadable mcp.yaml) it says why on stderr and
  * exits with 1, which the client shows in its log. stdout carries protocol messages only; every other line goes to stderr.
- * Settings are re-read on every call: switching mcp.yaml off (or a tool, or breaking the file) refuses the next call without a restart.
+ * Settings are re-read on every call: disabling mcp.yaml (or removing a permission, or breaking the file) refuses the next call without a restart.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";

@@ -490,7 +490,7 @@ backups, `ui.yaml: config_editor.backups_keep` copies per file).
 - Each config can carry a top-level `config_version: <integer>`; omitted = 1.
 - The code has a current version for each file (the `to` of the last migration step in `src/lib/config/migrations/<file>/NNN-*.ts`).
 - A file **older than the code**: it is migrated in memory before validation and works as usual; the doctor suggests running `pnpm config:migrate --write` to write the migration back (comments are kept, the original goes to `.backup/`).
-- The last step of each file's chain (`overlay-format`) only changes the format: it is made by the deploy's write step, never in memory. `models.yaml` and the profile files do not have it.
+- The `overlay-format` step in a file's chain only changes the format: it is made by the deploy's write step, never in memory. `models.yaml` and the profile files do not have it.
 - A file **newer than the code** (the code was rolled back): an explicit error (`ConfigError`, doctor shows a red failure), no guessing. Upgrade the code, or take the pre-migration file back from `data/config/.backup/<timestamp>/`.
 - Files in the defaults directory ship with the product and are always at the current version (checked by `config:check`).
 
@@ -510,7 +510,7 @@ of config files: the loader, the settings page and the advanced editor, migratio
 Earlier versions only warned and read the value as a string. The one tag of our own is `!unset`
 ([Your file is an overlay](#your-file-is-an-overlay)); everywhere it means nothing, it is refused with its reason.
 
-Writing a migration (for developers): in `src/lib/config/migrations/<file name>/NNN-slug.ts`, export a `{ from, to, description?, migrate(doc) }` (`to = from + 1`; `migrate` edits the yaml `Document` in place, keeps comments, and does no I/O), register it in order in `CONFIG_MIGRATIONS` in `migrations/index.ts`, and change the default-directory copy of the file to the new format with the new `config_version`. The contract is in `src/lib/config/migrations/types.ts`.
+Writing a migration (for developers): in `src/lib/config/migrations/<file name>/NNN-slug.ts`, export a `{ from, to, description?, migrate(doc) }` (`to = from + 1`; `migrate` edits the yaml `Document` in place, keeps comments, and does no I/O), register it in order in `CONFIG_MIGRATIONS` in `migrations/index.ts`, and change the default-directory copy of the file to the new format with the new `config_version`. The contract is in `src/lib/config/migrations/types.ts`. Steps after the overlay format may set `wholeFiles: true` to also update whole files without changing their format version; they must leave the new shape unchanged. A step may return one-line notices about meaning changes (never file values), printed per file in preview and write mode. Because `mcp.yaml`'s permissions step is such a step, a whole file's `config_version` no longer pins the shape of `mcp.yaml`: `config:migrate --to-full` writes the current shape, which code from before the permission lists rejects.
 
 ## Shipped config identity
 

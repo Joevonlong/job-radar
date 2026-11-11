@@ -181,14 +181,14 @@ export const trapsCheck: DoctorCheck = {
 
 const mcpSpec = { id: "data.mcp", group: "data" } as const;
 
-/** Whether the read-only MCP server (`pnpm mcp:serve`) is switched on, and with which tools; off is the default and fine. */
+/** Whether the MCP server (`pnpm mcp:serve`) is enabled, with its global matrix and effective stdio permissions; off is the default and fine. */
 export const mcpCheck: DoctorCheck = {
   ...mcpSpec,
   async run(ctx) {
     const probe = await ctx.probes.mcp();
     if (probe.state === "config_error") return warn(mcpSpec, ctx.t("checks.data.mcp.configError", { problem: probe.problem }), ctx.t("checks.data.mcp.configHint"));
     if (!probe.enabled) return ok(mcpSpec, ctx.t("checks.data.mcp.off"));
-    return ok(mcpSpec, ctx.t("checks.data.mcp.on", { tools: probe.tools.join(", ") }));
+    return ok(mcpSpec, ctx.t("checks.data.mcp.on", { effective: probe.effective.join(", ") || ctx.t("checks.data.mcp.none"), matrix: probe.permissions.join(", ") || ctx.t("checks.data.mcp.none") }));
   },
 };
 

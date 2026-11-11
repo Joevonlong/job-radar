@@ -65,13 +65,12 @@ export function observeInvalidInput<S extends StandardSchemaWithJSON>(schema: S,
   return { "~standard": { ...std, validate } } as unknown as S;
 }
 
-/** The denial message uses only the safe problem summary, permission or capability name. */
-function accessFailure(decision: Exclude<AccessDecision, { allowed: true }>, capability: Capability, text: McpTranslator): ToolFailure {
+/** The denial message uses only the safe problem summary or permission. */
+function accessFailure(decision: Exclude<AccessDecision, { allowed: true }>, text: McpTranslator): ToolFailure {
   switch (decision.reason) {
     case "unreadable": return new ToolFailure("settings_unreadable", text("errors.settingsUnreadable", { problem: decision.problem }));
     case "disabled": return new ToolFailure("not_permitted", text("errors.serverOff"));
     case "missing_permission": return new ToolFailure("not_permitted", text("errors.notPermitted", { permission: decision.permission }));
-    case "switched_off": return new ToolFailure("not_permitted", text("errors.toolSwitchedOff", { tool: capability.id }));
   }
 }
 
@@ -94,7 +93,7 @@ export function buildServer(ctx: McpContext, options: { version?: string; capabi
       async (args) =>
         runLogged(ctx, cap.id, async () => {
           const decision = authorize(cap, ctx.readSettings);
-          if (!decision.allowed) throw accessFailure(decision, cap, t);
+          if (!decision.allowed) throw accessFailure(decision, t);
           if (cap.availability && !cap.availability.available(ctx)) throw new ToolFailure(cap.availability.category, t(cap.availability.message));
           const output = await cap.handler({ ...ctx, settings: decision.settings }, args);
           return { result: toolResult(output), count: cap.count(output) };
