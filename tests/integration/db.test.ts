@@ -20,6 +20,7 @@ const EXPECTED_TABLES = [
   "activity_events",
   "activity_spans",
   "agent_budget_usage",
+  "agent_calls",
   "ai_usage",
   "application_answer_versions",
   "application_events",

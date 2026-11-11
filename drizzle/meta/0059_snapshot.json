@@ -1,5 +1,5 @@
 {
-  "id": "6f123352-5df9-4c2e-b6e2-c6e27f6ec173",
+  "id": "5533dd87-6c72-4b63-8f62-ad54afb9383e",
   "prevId": "2d22deeb-473d-4674-85e9-d4546fab7035",
   "version": "7",
   "dialect": "postgresql",
@@ -403,49 +403,92 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.agent_budget_usage": {
-      "name": "agent_budget_usage",
+    "public.agent_calls": {
+      "name": "agent_calls",
       "schema": "",
       "columns": {
-        "caller": {
-          "name": "caller",
-          "type": "text",
-          "primaryKey": false,
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
           "notNull": true
         },
-        "action": {
-          "name": "action",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "day": {
-          "name": "day",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "used": {
-          "name": "used",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "updated_at": {
-          "name": "updated_at",
+        "called_at": {
+          "name": "called_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "caller": {
+          "name": "caller",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'stdio'"
+        },
+        "token_id": {
+          "name": "token_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transport": {
+          "name": "transport",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'stdio'"
+        },
+        "capability": {
+          "name": "capability",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_type": {
+          "name": "target_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "error_category": {
+          "name": "error_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "returned_count": {
+          "name": "returned_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
         }
       },
       "indexes": {
-        "agent_budget_usage_day_idx": {
-          "name": "agent_budget_usage_day_idx",
+        "agent_calls_called_at_idx": {
+          "name": "agent_calls_called_at_idx",
           "columns": [
             {
-              "expression": "day",
+              "expression": "called_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -458,22 +501,17 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "agent_budget_usage_caller_action_day_pk": {
-          "name": "agent_budget_usage_caller_action_day_pk",
-          "columns": [
-            "caller",
-            "action",
-            "day"
-          ]
-        }
-      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "agent_budget_usage_used_nonnegative": {
-          "name": "agent_budget_usage_used_nonnegative",
-          "value": "\"agent_budget_usage\".\"used\" >= 0"
+        "agent_calls_outcome_check": {
+          "name": "agent_calls_outcome_check",
+          "value": "\"agent_calls\".\"outcome\" in ('ok', 'not_permitted', 'invalid_input', 'error')"
+        },
+        "agent_calls_error_category_check": {
+          "name": "agent_calls_error_category_check",
+          "value": "(\"agent_calls\".\"outcome\" = 'error' and \"agent_calls\".\"error_category\" is not null) or (\"agent_calls\".\"outcome\" <> 'error' and \"agent_calls\".\"error_category\" is null)"
         }
       },
       "isRLSEnabled": false

@@ -149,7 +149,7 @@ export type TrapsProbe =
   | { state: "config_error"; problem: string };
 
 /** What `data.mcp` reads: the switch, global matrix and effective stdio permissions of mcp.yaml, or why it cannot be read. */
-export type McpProbe = { state: "ok"; enabled: boolean; permissions: readonly string[]; effective: readonly string[] } | { state: "config_error"; problem: string };
+export type McpProbe = { state: "ok"; enabled: boolean; permissions: readonly string[]; effective: readonly string[]; auditRetentionDays: number } | { state: "config_error"; problem: string };
 
 /** What `data.replies` reads: the switch, the label, when it was last read and the replies older than `doctor.pending_warn_days`. */
 export type RepliesProbe =

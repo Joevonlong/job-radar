@@ -1,6 +1,7 @@
 # MCP server (docs/mcp.md): lets an MCP client you configure yourself (Claude Desktop, Claude Code, ...) query your jobs and
 # applications. The client starts `pnpm mcp:serve` as a local child process and talks to it over stdio; no port is opened. Nothing
-# can be written, except that `save_application_answer`, when you grant writer:write, adds answer versions; it cannot change or delete any.
+# can be written, except that `save_application_answer`, when you grant writer:write, adds answer versions; it cannot change or
+# delete any. Each call also adds one metadata row to the local `agent_calls` table (see `audit` below).
 # Privacy: whatever the tools return is handed by your client to the model provider it uses (Anthropic for Claude, ...).
 # What may be returned is fixed in code: job facts, source links, scores and ranks, signals with their JD quotes, the JD after
 # AI-trap cleaning, and the status, dates, next step and interview rounds of your applications. Never returned: your profile,
@@ -34,6 +35,18 @@ limits:
   max_results: 20
   # Most characters of a JD one get_job call returns (500-100000); a longer JD is cut and marked as cut
   max_description_chars: 12000
+
+# The call record (docs/mcp.md, "Audit trail"): time, tool, target id, outcome, count and duration of each call; never its
+# arguments, what it returned, or an error message.
+audit:
+  # Days a call row is kept (1-3650); the runner deletes older rows, also while the server is off
+  retention_days: 90
+  # Dedicated audit connection: at most one session, with bounded waits
+  connect_timeout_seconds: 2
+  statement_timeout_ms: 1500
+  lock_timeout_ms: 200
+  # Longest a call waits for its audit row (100-10000), queueing included; also the longest shutdown waits for the last rows
+  write_timeout_ms: 2000
 
 # Daily agent counters use the calendar day in schedule.yaml's time zone; action tools are not connected yet.
 budgets:

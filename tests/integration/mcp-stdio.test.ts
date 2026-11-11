@@ -13,6 +13,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "v
 import { z } from "zod";
 
 import { closeDb, getDb } from "@/lib/db";
+import { createConnection } from "@/lib/db/client";
 import { runMigrations } from "@/lib/db/migrate";
 import { seedDatabase } from "@/lib/db/seed";
 import { mcpTranslator } from "@/lib/mcp/text";
@@ -335,3 +336,93 @@ describe("mcp:serve live settings", () => {
     }
   }, 90_000);
 });
+
+/** Holds an ACCESS EXCLUSIVE lock on `table` in its own session until released. */
+async function holdLock(table: "jobs" | "agent_calls") {
+  const holder = createConnection(url, { max: 1, connectTimeoutSeconds: 30 });
+  const release = Promise.withResolvers<void>();
+  const locked = Promise.withResolvers<void>();
+  const holding = holder.sql.begin(async (tx) => {
+    await tx.unsafe(`lock table ${table} in access exclusive mode`);
+    locked.resolve();
+    await release.promise;
+  });
+  holding.catch(locked.reject);
+  await locked.promise;
+  return {
+    waiting: async () => {
+      const [row] = await getDb().execute<{ waiting: number }>(sql`select count(*)::int as waiting from pg_locks where not granted and relation = ${table}::regclass`);
+      return row?.waiting ?? 0;
+    },
+    release: async () => {
+      release.resolve();
+      await holding.catch(() => undefined);
+      await holder.sql.end({ timeout: 1 });
+    },
+  };
+}
+
+describe("mcp:serve shutdown stays bounded", () => {
+  const WRITE_TIMEOUT_MS = 400;
+  const READ_POOL_CLOSE_MS = 5000;
+  const SLACK_MS = 2500;
+  const DEFAULT_WRITE_TIMEOUT_MS = 2000;
+  const yaml = `config_version: 3\nenabled: true\naudit:\n  statement_timeout_ms: 60000\n  lock_timeout_ms: 60000\n  write_timeout_ms: ${WRITE_TIMEOUT_MS}\n`;
+
+  async function started(name: string) {
+    const configDir = path.join(userDir, name);
+    fs.mkdirSync(configDir);
+    fs.writeFileSync(path.join(configDir, "mcp.yaml"), yaml);
+    const session = openSession(serverEnv(configDir));
+    const initialized = await session.request("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "shutdown-test", version: "1" } });
+    expect(initialized.error).toBeUndefined();
+    session.notify("notifications/initialized");
+    return session;
+  }
+
+  async function jobId(): Promise<number> {
+    const [row] = await getDb().execute<{ id: number }>(sql`select id from jobs where status = 'active' order by id limit 1`);
+    if (!row) throw new Error("no active seed job");
+    return Number(row.id);
+  }
+
+  it("answers within the audit deadline and exits promptly while its audit insert waits on a lock", async () => {
+    const id = await jobId();
+    const session = await started("stalled-audit");
+    const lock = await holdLock("agent_calls");
+    try {
+      const before = performance.now();
+      const reply = await session.request("tools/call", { name: "get_job", arguments: { job_id: id } });
+      const answeredAfter = performance.now() - before;
+      expect(reply.result?.isError).not.toBe(true);
+      expect(answeredAfter).toBeGreaterThanOrEqual(WRITE_TIMEOUT_MS - 50);
+      expect(answeredAfter).toBeLessThan(DEFAULT_WRITE_TIMEOUT_MS);
+      const abandoned = await lock.waiting();
+      void session.request("tools/call", { name: "get_job", arguments: { job_id: id } }).catch(() => undefined);
+      await expect.poll(lock.waiting, { timeout: 10_000 }).toBeGreaterThan(abandoned);
+      const stopping = performance.now();
+      expect(await session.finish()).toBe(0);
+      expect(performance.now() - stopping).toBeLessThan(WRITE_TIMEOUT_MS + SLACK_MS);
+    } finally {
+      await lock.release();
+      await session.close();
+    }
+  }, 60_000);
+
+  it("exits within the read pool's close timeout while a call waits on a long-held lock", async () => {
+    const id = await jobId();
+    const session = await started("held-lock");
+    const lock = await holdLock("jobs");
+    try {
+      void session.request("tools/call", { name: "get_job", arguments: { job_id: id } }).catch(() => undefined);
+      await expect.poll(lock.waiting, { timeout: 10_000 }).toBeGreaterThan(0);
+      const stopping = performance.now();
+      expect(await session.finish()).toBe(0);
+      expect(performance.now() - stopping).toBeLessThan(WRITE_TIMEOUT_MS + READ_POOL_CLOSE_MS + SLACK_MS);
+    } finally {
+      await lock.release();
+      await session.close();
+    }
+  }, 60_000);
+});
+

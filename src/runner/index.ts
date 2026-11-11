@@ -17,6 +17,9 @@ import { deleteExpiredStoryDrafts } from "@/lib/db/repos/story-drafts";
 import { failOrphanedCycles, getDbNow, type CycleKind } from "@/lib/db/repos/cycles";
 import { deliveryPayloadBytes, deliveryTablesReady, pruneDeliveryItems } from "@/lib/db/repos/deliveries";
 import { createDeliveryPruner } from "./delivery-prune";
+import { pruneAgentCalls } from "@/lib/db/repos/agent-calls";
+import { liveMcpSettings } from "@/lib/agent-access/authorize";
+import { pruneAgentCallsOnce } from "./agent-calls-prune";
 import { pruneAgentBudgetOnce } from "./agent-budget-prune";
 import { pruneAgentBudgetUsage } from "@/lib/db/repos/agent-budget";
 import { readMcpSettings } from "@/lib/mcp/settings";
@@ -494,6 +497,7 @@ async function main(): Promise<number> {
         const pruned = await pruneHeartbeats(db, new Date(Date.now() - retentionMs));
         lastPruneAt = Date.now();
         if (pruned > 0) log(`pruned ${pruned} old heartbeats`);
+        await pruneAgentCallsOnce({ now: () => new Date(), readSettings: liveMcpSettings, prune: (olderThan) => pruneAgentCalls(db, olderThan), log });
         await pruneAgentBudgetOnce({
           now: () => new Date(),
           readSettings: readMcpSettings,

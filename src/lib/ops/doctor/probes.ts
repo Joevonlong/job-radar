@@ -318,7 +318,7 @@ export async function createRealContext(env: Readonly<Record<string, string | un
 function probeMcp(): McpProbe {
   try {
     const settings = readMcpSettings();
-    return { state: "ok", enabled: settings.enabled, permissions: settings.permissions, effective: [...effectivePermissions(settings.stdio.permissions, settings.permissions)] };
+    return { state: "ok", enabled: settings.enabled, permissions: settings.permissions, effective: [...effectivePermissions(settings.stdio.permissions, settings.permissions)], auditRetentionDays: settings.audit.retention_days };
   } catch (error) {
     return { state: "config_error", problem: error instanceof ConfigError ? firstConfigProblem(error) : "unreadable" };
   }

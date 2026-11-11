@@ -101,7 +101,9 @@ export async function saveApplicationAnswer(ctx: McpContext, args: SaveApplicati
   }
 
   const counts = countStatuses(sentences);
+  const { audit, auditCall } = ctx;
   const added = await appendAnswerVersion(writeDb, {
+    onAdded: audit && auditCall ? (tx) => audit.inTransaction(tx, auditCall.success(1)) : undefined,
     jobId: args.job_id,
     questionId: args.question_id,
     maxVersions: writer.questions.max_versions_per_question,
@@ -120,6 +122,7 @@ export async function saveApplicationAnswer(ctx: McpContext, args: SaveApplicati
   });
   if (added.state === "not_found") throw notFound();
   if (added.state === "full") throw new ToolFailure("version_limit", ctx.text("errors.versionLimit", { max: writer.questions.max_versions_per_question }));
+  if (ctx.audit && ctx.auditCall) ctx.auditCall.committed = true;
 
   const byStatus: Record<string, number> = {};
   for (const sentence of sentences) byStatus[sentence.status] = (byStatus[sentence.status] ?? 0) + 1;

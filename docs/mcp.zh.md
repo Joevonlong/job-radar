@@ -9,6 +9,8 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 - **只在本机。** 不开端口、没有 token：只有你在这台电脑上配置的程序能启动它。
 - **只读，有一个由权限控制的例外。** 工具都通过只读的数据库会话读取。唯一能写的工具 `save_application_answer` 需要 `writer:write` 权限，也只能新增答案版本。服务从不触发采集或 AI 调用。
 
+服务还会通过单独的审计连接，把调用元数据存在本机的 `agent_calls` 表里（见[调用审计](#调用审计)）。
+
 ## 哪些数据会离开本机
 
 **工具返回的内容，会由你的客户端交给它所用的模型服务商**（Claude 对应 Anthropic，依此类推），适用该服务商的条款。打开这个服务，就在 [privacy.zh.md](privacy.zh.md) 列出的出口之外多了这一条。
@@ -135,6 +137,34 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 
 每次调用往 stderr 写一行（客户端会保存在该服务的日志里）：工具名、返回条数、耗时、成功与否。从不写参数和结果。错误只给类别（`database`、`not_found`、`invalid_input` 等），不含地址或路径。
 
+## 调用审计
+
+每次工具调用还会在本机的 `agent_calls` 表里加一行，`tools/list` 不记。每行只有数字 id、调用时间（`called_at`）、
+调用方和传输方式（目前都是 `stdio`）、可空的 `token_id`（目前为空）、capability id、可选的目标类型和数字 id
+（`job`、`application` 或 `question`）、结果（`ok`、`not_permitted`、`invalid_input` 或 `error`）、返回条数和毫秒耗时。
+只有 `error` 行有 `error_category`，值是 `database`、`not_found` 这样的固定类别。参数不合法时没有目标。
+从不存参数、返回内容或消息文字，错误消息也不存。
+
+读取工具仍走只读会话，审计行一条一条地走另一条最多一个会话的连接。服务等这一行写完再回答，但从调用结束算起最多等
+`audit.write_timeout_ms`，排在别的行后面的时间也算在内。写不进去或超时，读取仍照常回答，stderr 另写一行，只说失败类别
+（超时是 `timeout`）。超时的行不会重发，因为数据库可能已经存下了；服务丢掉那个会话，下一行再开新的。保存答案时，答案版本和成功的审计行走写入连接的同一个事务：
+一起保存，或一起不保存。审计插入失败会回滚答案、让调用失败，然后尝试通过审计连接记录这次错误。
+原来的 stderr 调用日志行不变。
+
+`mcp.yaml` 的 `audit.retention_days` 默认 **90 天**（1–3650）。runner 定期删掉更早的记录，MCP 关着也会清理；
+runner 没运行就会继续保留。旧数据库备份仍可能含已删的行。`audit` 的其他键限制专用连接的等待时间：
+
+| 键 | 默认 | 范围 |
+|---|---|---|
+| `connect_timeout_seconds` | 2 秒 | 1–30 |
+| `statement_timeout_ms` | 1500 毫秒 | 1–60000 |
+| `lock_timeout_ms` | 200 毫秒 | 1–60000 |
+| `write_timeout_ms` | 2000 毫秒 | 100–10000 |
+
+事务闲置超时也用 `statement_timeout_ms`。`statement_timeout_ms` 和 `lock_timeout_ms` 由数据库执行，`connect_timeout_seconds` 由服务的客户端执行，`write_timeout_ms` 是服务自己的期限，数据库不回话时也有效。
+客户端断开后，服务最多等 `write_timeout_ms` 让进行中的调用和它们的审计行结束，然后关闭数据库连接，仍在跑的查询最多再给 5 秒。包括 `write_timeout_ms` 在内的 `audit` 超时设置重启服务后生效，保留天数由 runner 每次重新读。
+旧配置直接使用这些默认值，不改版本号。MCP 打开时，`pnpm run doctor` 的 `data.mcp` 也显示保留天数。
+
 ## 可选：只能读的数据库角色
 
 用这个角色后 `save_application_answer` 无法保存。
@@ -156,6 +186,13 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO job_radar_ro
 
 然后用这个角色启动服务：在客户端配置的 `env` 里加 `"DATABASE_URL": "postgres://job_radar_ro:choose-a-password@127.0.0.1:5433/jobradar"`（客户端环境里的值优先于 `.env`）。密码会写在客户端的配置文件里，注意保管好这个文件。
 
+这个只有 SELECT 权限的角色也写不了审计：读取照常回答，stderr 会多上面说的那一行。要保留调用审计，可以只允许它添加审计行：
+
+```sql
+GRANT INSERT ON agent_calls TO job_radar_ro;
+GRANT USAGE ON SEQUENCE agent_calls_id_seq TO job_radar_ro;
+```
+
 ## 排查
 
 | 现象 | 原因和做法 |
@@ -169,5 +206,6 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO job_radar_ro
 | "已有 … 个版本" | 见[从客户端写答案](#从客户端写答案)。 |
 | `command not found` / `spawn pnpm ENOENT` | 客户端找不到 `pnpm` 或 `node`：用绝对路径，并在 `env` 里设 `PATH`（见上面 Claude Desktop 一节）。 |
 | "查询失败（database）" | 整套服务没在运行，或 `.env` 里的数据库地址从宿主机连不上。`pnpm run doctor` 两项都会查。 |
+| 客户端日志里有"MCP 调用记录写不进去（…）" | 调用本身已经回答，只是少了审计行。`database`：服务用的是只有 SELECT 权限的角色（给 `agent_calls` 授 `INSERT`，见[上文](#可选只能读的数据库角色)），或数据库还没迁移到这个版本（用 `scripts/ops/deploy.sh` 部署这次更新，见 [upgrade.zh.md](upgrade.zh.md)）；迁移之前 `save_application_answer` 会整个失败，报"查询失败（database）"，因为答案和它的审计行一起保存。`agent_calls` 表被锁住（比如正在迁移）或语句太慢，默认设置下也报 `database`，因为 `audit.lock_timeout_ms` 和 `audit.statement_timeout_ms` 比 `audit.write_timeout_ms` 先到。`timeout`：数据库或网络在 `audit.write_timeout_ms` 内没有回应，或写入队列太长。原因消除后，之后的调用会照常写入。 |
 | `search_timeout` | `search_in: "all"` 的搜索超过了 `job-search.yaml: query.all_scope_timeout_ms`。缩小查询或筛选条件，或不带 `search_in: "all"` 再搜。 |
 | "JD 暂不可用" | 见 [AI 陷阱与 JD](#ai-陷阱与-jd)。 |

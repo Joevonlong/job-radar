@@ -12,6 +12,8 @@ client starts `pnpm mcp:serve` as a local child process and talks to it over std
   `save_application_answer`, requires `writer:write`, and all it can do is add an answer version. The server never starts a
   collection or an AI call.
 
+The server also stores local call metadata in `agent_calls`, over a separate audit connection (see [Audit trail](#audit-trail)).
+
 ## What leaves your machine
 
 **Whatever the tools return is passed by your client to the model provider it uses** (Anthropic for Claude, and so on), under
@@ -177,6 +179,43 @@ Each call writes one line to stderr (your client keeps it in its log of the serv
 long it took, and whether it worked. Never the arguments or the results. Errors name a category only (`database`, `not_found`,
 `invalid_input`, ...), never an address or a path.
 
+## Audit trail
+
+Each tool call also adds one row to the local `agent_calls` table. `tools/list` adds none. A row holds only its numeric id,
+call time (`called_at`), caller and transport (both `stdio` today), nullable `token_id` (null today), capability id,
+optional target type and numeric id (`job`, `application` or `question`), outcome (`ok`, `not_permitted`, `invalid_input`
+or `error`), returned item count and duration in milliseconds. Only an `error` row has an `error_category`: a fixed
+category such as `database` or `not_found`. Invalid input has no target. No row holds arguments, returned content or
+message text, including error messages.
+
+Reads still use read-only sessions. Their audit rows go one at a time over a dedicated connection with at most one
+session, and the server waits for the row before answering, but never longer than `audit.write_timeout_ms` from the end
+of the call, time spent behind other rows included. If the row fails or the deadline passes, the read still answers
+normally and writes one additional stderr line with the failure category only (`timeout` for a passed deadline). A row
+that timed out is not sent again, because the database may already have saved it; the server drops that session and the
+next row opens a new one. A saved answer version and its success audit row are written in the same
+transaction on the answer's write connection: both are saved or neither is. If that audit insert fails, the answer is
+rolled back, the call fails and the server attempts to record the error over the audit connection. The existing stderr
+call-log line is unchanged.
+
+In `mcp.yaml`, `audit.retention_days` defaults to **90** (1–3650). The runner periodically deletes older rows, including
+while MCP is off; without a running runner, they remain. Old database backups can still hold deleted rows. The other
+`audit` keys bound the dedicated connection's waits:
+
+| Key | Default | Bounds |
+|---|---|---|
+| `connect_timeout_seconds` | 2 seconds | 1–30 |
+| `statement_timeout_ms` | 1500 ms | 1–60000 |
+| `lock_timeout_ms` | 200 ms | 1–60000 |
+| `write_timeout_ms` | 2000 ms | 100–10000 |
+
+The idle-in-transaction timeout uses `statement_timeout_ms` too. `statement_timeout_ms` and `lock_timeout_ms` are enforced by the database,
+`connect_timeout_seconds` by the server's client, and `write_timeout_ms` is the server's own deadline, so it also holds when the database stops replying. When the client goes
+away, the server waits at most `write_timeout_ms` for running calls and their rows, then closes its database connections,
+giving a query that is still running at most 5 more seconds. The `audit` timeouts, including `write_timeout_ms`, take effect on server restart;
+retention is read afresh by the runner. Existing config files get these defaults without a version change. `pnpm run
+doctor` reports the audit retention days in `data.mcp` when MCP is on.
+
 ## Optional: a database role that can only read
 
 The read-only sessions guard against a mistaken write, but they are not a security boundary. For a hard one, give the server
@@ -199,6 +238,14 @@ Then start the server with that role: add `"DATABASE_URL": "postgres://job_radar
 to the `env` of the client entry (a value in the client's environment wins over `.env`). The password then sits in the client's
 config file; keep that file private.
 
+With this SELECT-only role, audit inserts also fail: reads still answer with the extra stderr line described above. To keep
+the audit trail, allow the role to add audit rows and nothing else:
+
+```sql
+GRANT INSERT ON agent_calls TO job_radar_ro;
+GRANT USAGE ON SEQUENCE agent_calls_id_seq TO job_radar_ro;
+```
+
 ## Troubleshooting
 
 | What you see | Why, and what to do |
@@ -212,5 +259,6 @@ config file; keep that file private.
 | "already holds … versions" | See [Writing answers from your client](#writing-answers-from-your-client). |
 | `command not found` / `spawn pnpm ENOENT` | The client does not find `pnpm` or `node`: use absolute paths and set `PATH` in `env` (see Claude Desktop above). |
 | "The query failed (database)" | The stack is not running, or the database address in `.env` is not reachable from the host. `pnpm run doctor` checks both. |
+| "The MCP audit row could not be written (…)" in the client's log | The call itself answered; only its audit row is missing. `database`: the server runs with a SELECT-only role (grant `INSERT` on `agent_calls`, see [above](#optional-a-database-role-that-can-only-read)), or the database has not been migrated to this version yet (deploy the update with `scripts/ops/deploy.sh`, see [upgrade.md](upgrade.md)); until then `save_application_answer` fails as a whole with "The query failed (database)", because the answer and its row are saved together. `database` also covers a locked `agent_calls` table (for example during a migration) or a slow statement, because `audit.lock_timeout_ms` and `audit.statement_timeout_ms` fire before `audit.write_timeout_ms` with the defaults. `timeout`: the database or network did not answer within `audit.write_timeout_ms`, or the write queue was too long. Later calls write their rows again once the cause is gone. |
 | `search_timeout` | A `search_in: "all"` search ran past `job-search.yaml: query.all_scope_timeout_ms`. Narrow the query or filters, or search without `search_in: "all"`. |
 | "JD not available" | See [AI traps and the JD](#ai-traps-and-the-jd). |

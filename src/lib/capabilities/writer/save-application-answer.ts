@@ -11,6 +11,7 @@ export const save_application_answer = defineCapability({
   output: saveApplicationAnswerOutput,
   handler: saveApplicationAnswer,
   count: () => 1,
+  target: (args) => ({ type: "question", id: args.question_id }),
   annotations: ADDS_ONLY,
   text: { title: "tools.save_application_answer.title", description: "tools.save_application_answer.description" },
   availability: { available: (ctx) => ctx.writer?.inputs().writer?.enabled === true && ctx.writer.writeDb !== null, category: "disabled", message: "errors.writerDisabled" },

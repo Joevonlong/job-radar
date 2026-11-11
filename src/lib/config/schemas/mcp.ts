@@ -55,6 +55,17 @@ export const mcpSchema = z.strictObject({
   stdio: z.strictObject({
     permissions: z.array(permissionSchema).default([...DEFAULT_PERMISSIONS]),
   }).default({ permissions: [...DEFAULT_PERMISSIONS] }),
+  audit: z.strictObject({
+    retention_days: z.number().int().min(1).max(3650).default(90),
+    connect_timeout_seconds: z.number().int().min(1).max(30).default(2),
+    statement_timeout_ms: z.number().int().min(1).max(60_000).default(1500),
+    lock_timeout_ms: z.number().int().min(1).max(60_000).default(200),
+    /**
+     * Client deadline of one audit row written outside a transaction, from the call's end through its wait in line and the
+     * database's reply; also the longest shutdown waits for the last calls and rows.
+     */
+    write_timeout_ms: z.number().int().min(100).max(10_000).default(2000),
+  }).default({ retention_days: 90, connect_timeout_seconds: 2, statement_timeout_ms: 1500, lock_timeout_ms: 200, write_timeout_ms: 2000 }),
   limits: z
     .strictObject({
       /** Most jobs or applications one call returns; the rest is cut and the answer says so. */
