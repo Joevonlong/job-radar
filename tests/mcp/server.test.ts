@@ -4,7 +4,7 @@ import { InMemoryTransport, McpServer } from "@modelcontextprotocol/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { DEFAULT_PERMISSIONS, type Permission } from "@/lib/agent-access/permissions";
+import { DEFAULT_PERMISSIONS, PERMISSIONS, type Permission } from "@/lib/agent-access/permissions";
 import { blockList, blockShape, includeInput, loadBlocks, type FieldBlock } from "@/lib/capabilities/blocks";
 import { CAPABILITIES } from "@/lib/capabilities/registry";
 import { defineCapability, READ_ONLY, type Capability } from "@/lib/capabilities/types";
@@ -161,8 +161,21 @@ describe("tools/list", () => {
       expect(tool.outputSchema).toBeDefined();
     }
     const search = tools.find((t) => t.name === "search_jobs");
-    expect(Object.keys((search?.inputSchema as { properties: object }).properties)).toEqual(["query", "search_in", "country", "city", "workplace", "min_rank", "min_annual_salary", "since", "until", "application_status", "sort", "limit"]);
+    expect(Object.keys((search?.inputSchema as { properties: object }).properties)).toEqual(["query", "search_in", "country", "city", "workplace", "min_rank", "min_annual_salary", "since", "until", "application_status", "scope", "unseen_only", "favorites_only", "visa", "ghost", "sort", "limit"]);
     expect((search?.inputSchema as { additionalProperties?: unknown }).additionalProperties).toBe(false);
+  });
+  it.each<Permission[]>([
+    ["jobs:read"], ["jobs:read", "tracking:read"], ["jobs:read", "tracking:read", "match:read"], [...PERMISSIONS],
+  ])("lists search card blocks only within the item schema for %j", async (...permissions) => {
+    const client = await connect(context({ permissions, stdio: { permissions } }));
+    const search = (await client.listTools()).tools.find((tool) => tool.name === "search_jobs");
+    const object = z.object({ properties: z.record(z.string(), z.unknown()), additionalProperties: z.literal(false) });
+    const output = object.parse(search?.outputSchema);
+    const jobs = z.object({ items: object }).parse(output.properties.jobs);
+    expect(Object.keys(output.properties).sort()).toEqual(["jobs", "notices", "returned", "total", "truncated"]);
+    expect("match" in jobs.items.properties).toBe(permissions.includes("match:read"));
+    expect("tracking" in jobs.items.properties).toBe(permissions.includes("tracking:read"));
+    expect("notes" in jobs.items.properties).toBe(false);
   });
   describe("the writer tools", () => {
     const on = { permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"] as Permission[], stdio: { permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"] as Permission[] } };

@@ -12,7 +12,7 @@ import { visaFilterAvailable } from "@/lib/visa/filter";
 import { effectiveDateRange } from "./date-range";
 import { loadCityGroups } from "./cities";
 import type { CityGroup } from "./city-groups";
-import { resolveViewCompanyIds, toJobFilters } from "./job-filters";
+import { needsCityGroups, resolveViewCompanyIds, toJobFilters } from "./job-filters";
 import type { FilterVisibility, JobsSearchParams } from "./search-params";
 
 /**
@@ -24,7 +24,7 @@ export async function jobsListFilters(db: Db, params: JobsSearchParams, known: {
   const view = viewFiltersFromParams(params);
   const [companyIds] = await resolveViewCompanyIds(db, [view], { index: known.companyIndex });
   return {
-    ...toJobFilters(view, { cityGroups: known.cities ?? (await loadCityGroups(db)), visa: known.visa ?? (await visaFilterAvailable(db)), ghost: known.ghost ?? (await ghostFilterAvailable(db)), companyIds }),
+    ...toJobFilters(view, { cityGroups: known.cities ?? (needsCityGroups(view) ? await loadCityGroups(db) : null), visa: known.visa ?? (await visaFilterAvailable(db)), ghost: known.ghost ?? (await ghostFilterAvailable(db)), companyIds }),
     ...dateFilters(params, known.now),
     // URL-only scope and reasons never pass through saved-view conversion. Mark-all-seen shares this mapping.
     scope: params.scope,

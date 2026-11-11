@@ -7393,7 +7393,7 @@
     "tools": {
       "search_jobs": {
         "title": "Search jobs",
-        "description": "Search the jobs Job Radar collected: by keyword, city, work mode, minimum rank, minimum yearly salary, first-seen date and application status. Returns ranked job cards (facts, links, score and rank) without the JD text; use get_job for one job's details. Jobs the hard filter removed, closed jobs and jobs not listed by any source for weeks are left out. For \"what is new today\", pass since = today and sort = rank."
+        "description": "Search collected jobs with the web jobs-list filters: keyword, country, city, work mode, rank, annual salary, first-seen dates, application status, scope, unseen, favorites, visa and ghost checks. Returns facts, links and rank without JD text. Hard-filtered jobs stay hidden; current scope (default) also hides closed and dormant jobs. Effective tracking:read adds status, favorite and seen; match:read adds a guarded one-line summary and filter reasons. Use get_job for details. For \"what is new today\", pass since = today and sort = rank."
       },
       "get_job": {
         "title": "Get one job",
@@ -7415,6 +7415,11 @@
     "params": {
       "query": "Free text: matches title, company names/aliases, city/location and country. Descriptions are included only with search_in: \"all\".",
       "searchIn": "Search scope: summary (default) searches basic fields; all also searches the original description and current translations.",
+      "scope": "Job scope: current (default), archive, or all. Hard-filtered jobs stay hidden.",
+      "unseenOnly": "Only jobs you have not looked at yet.",
+      "favoritesOnly": "Only starred jobs; favorite notes are never returned.",
+      "visa": "Visa filter: offered, or not_denied. Ignored when the web visa filter is unavailable.",
+      "ghost": "Ghost job filter: only watch/likely jobs, or hide likely jobs. Ignored when the web ghost filter is unavailable.",
       "country": "Exact location country codes (two letters, 1–20 codes); OR within the list.",
       "city": "A city name, e.g. as the jobs list's city filter offers it",
       "workplace": "Work modes to keep",

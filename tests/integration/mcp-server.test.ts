@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { stringify } from "yaml";
 import { withRebuiltCurrentScores } from "../helpers/current-scores";
 /**
  * The MCP server against a seeded database, through a real MCP client (in-memory transport): the three tools, the AI-trap cleaning
@@ -8,14 +11,14 @@ import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
-import { loadConfig, type TrapsConfig } from "@/lib/config";
+import { loadConfig, resetConfigCache, type TrapsConfig } from "@/lib/config";
 import { PERMISSIONS, type Permission } from "@/lib/agent-access/permissions";
 import { BREAKDOWN_PROMPT_VERSION } from "@/lib/ai/prompts/breakdown";
 import { mcpSchema, type McpConfig } from "@/lib/config/schemas/mcp";
-import { closeDb, getDb, schema } from "@/lib/db";
+import { closeDb, getDb, listJobs, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { createReadOnlyDb, type ReadOnlyDb } from "@/lib/db/read-only-client";
-import { resetTrapTablesCache } from "@/lib/db/repos/traps";
+import { currentTrapScanJobIds, trapScanIsCurrent, resetTrapTablesCache } from "@/lib/db/repos/traps";
 import { upsertTranslation } from "@/lib/db/repos/translations";
 import { upsertJobBreakdown } from "@/lib/db/repos/breakdowns";
 import { insertCompanyResearch } from "@/lib/db/repos/company-research";
@@ -25,6 +28,14 @@ import { buildServer, defaultContext } from "@/lib/mcp/server";
 import { mcpTranslator } from "@/lib/mcp/text";
 import { descriptionHash } from "@/lib/translation/hash";
 
+import { jobsListFilters } from "@/lib/jobs/list-filters";
+import { loadJobsSearchParams } from "@/lib/jobs/search-params";
+import { resolveSort } from "@/lib/jobs/sort";
+import { resolveJobScope } from "@/lib/jobs/scope";
+import { visaFilterAvailable } from "@/lib/visa/filter";
+import { ghostFilterAvailable } from "@/lib/ghost/filter";
+import { rulesFingerprint } from "@/lib/traps/fingerprint";
+import { makeTempConfig } from "../config/helpers";
 import { blockBreakdown } from "../mcp/job-block-fixtures";
 
 const url = inject("testDatabaseUrl");
@@ -129,7 +140,116 @@ describe("search_jobs", () => {
     expect(rank.structured.jobs.map((job) => job.id)).toEqual([descriptionId, titleId]);
     const country = await call<SearchJobsOutput>(client, "search_jobs", { query: "Asterneedle", search_in: "all", country: ["de"] });
     expect(country.structured.jobs.map((job) => job.id)).toEqual([titleId]);
-    expect(Object.keys(all.structured.jobs[0]!).sort()).toEqual(["id", "title", "company", "locations", "workplace", "contract", "is_agency", "german_level_required", "status", "posted_at", "first_seen_at", "salary", "skills", "rank", "application_status", "links"].sort());
+    expect(Object.keys(all.structured.jobs[0]!).sort()).toEqual(["id", "title", "company", "locations", "workplace", "contract", "is_agency", "german_level_required", "status", "posted_at", "first_seen_at", "salary", "skills", "rank", "application_status", "links", "tracking"].sort());
+  });
+
+  it("search_jobs filters match the web list", async () => {
+    const temp = makeTempConfig();
+    try {
+      const ui = loadConfig("ui");
+      fs.writeFileSync(path.join(temp.configDir, "ui.yaml"), stringify({ ...ui, job_checks: { ...ui.job_checks, visa: { enabled: true, badges: "always" }, ghost: { enabled: true, trusted_companies: [] } } }));
+      resetConfigCache();
+      const db = getDb();
+      await db.execute(RESET);
+      const [company] = await db.insert(schema.companies).values({ name: "Parity Fixture", nameNorm: "parity fixture" }).returning();
+      const rows = await db.insert(schema.jobs).values([
+        { companyId: company!.id, title: "Asterneedle Engineer", titleNorm: "asterneedle engineer", locationsJson: [{ city: "Example City", countryCode: "DE", label: "Example City" }], firstSeenAt: NOW, lastSeenAt: NOW },
+        { companyId: company!.id, title: "Other Engineer", titleNorm: "other engineer", locationsJson: [{ city: "Other City", countryCode: "FR", label: "Other City" }], firstSeenAt: NOW, lastSeenAt: NOW },
+        { companyId: company!.id, title: "Third Engineer", titleNorm: "third engineer", firstSeenAt: NOW, lastSeenAt: NOW },
+        { companyId: company!.id, title: "Archived Engineer", titleNorm: "archived engineer", status: "closed", firstSeenAt: NOW, lastSeenAt: NOW },
+        { companyId: company!.id, title: "Filtered Engineer", titleNorm: "filtered engineer", firstSeenAt: NOW, lastSeenAt: NOW },
+      ]).returning({ id: schema.jobs.id });
+      const [first, second, , , filtered] = rows;
+      await db.insert(schema.jobFavorites).values({ jobId: first!.id, note: "Private favorite" });
+      await db.insert(schema.jobSeen).values({ jobId: second!.id, seenAt: NOW, via: "detail" });
+      await db.insert(schema.jobVisa).values([
+        { jobId: first!.id, status: "offered", inputHash: "fixture-offered", evidence: [{ status: "offered", kind: null, quote: "Visa support", offset: 0 }] },
+        { jobId: second!.id, status: "not_offered", inputHash: "fixture-refused", evidence: [{ status: "not_offered", kind: "no_sponsorship", quote: "No sponsorship", offset: 0 }] },
+      ]);
+      await db.insert(schema.jobGhost).values([
+        { jobId: first!.id, level: "watch", score: 2, inputHash: "fixture-watch", evidence: [] },
+        { jobId: second!.id, level: "likely", score: 8, inputHash: "fixture-likely", evidence: [] },
+      ]);
+      await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: filtered!.id, filterResult: "filtered_out", filterReasons: ["fixture"] }));
+      const visa = await visaFilterAvailable(db);
+      const ghost = await ghostFilterAvailable(db);
+      expect({ visa, ghost }).toEqual({ visa: true, ghost: true });
+      const client = await connect({ mcp: settings({ limits: { max_results: 100, max_description_chars: 12000 } }) });
+      const cases: Array<{ args: Record<string, unknown>; query: string }> = [
+        { args: { scope: "archive" }, query: "scope=archive" },
+        { args: { scope: "all" }, query: "scope=all" },
+        { args: { unseen_only: true }, query: "unseen=true" },
+        { args: { favorites_only: true }, query: "fav=true" },
+        { args: { visa: "offered" }, query: "visa=offered" },
+        { args: { visa: "not_denied" }, query: "visa=not_denied" },
+        { args: { ghost: "only" }, query: "ghost=only" },
+        { args: { ghost: "hide" }, query: "ghost=hide" },
+        { args: { country: ["DE"] }, query: "country=DE" },
+        { args: { query: "Asterneedle" }, query: "q=Asterneedle" },
+      ];
+      for (const { args, query } of cases) {
+        const params = loadJobsSearchParams(new URLSearchParams(query));
+        const web = await listJobs(db, {
+          filters: await jobsListFilters(db, params, { visa, ghost, now: NOW }),
+          sort: resolveSort({ sort: params.sort, q: params.q, scope: resolveJobScope(params.scope, params.status) }),
+          page: 1, pageSize: 100, timezone: TZ, visa, ghost,
+        });
+        const mcp = await call<SearchJobsOutput>(client, "search_jobs", { ...args, limit: 100 });
+        expect(mcp.isError, query).toBe(false);
+        expect(mcp.structured.truncated, query).toBe(false);
+        expect(web.total, query).toBeGreaterThan(0);
+        expect(web.total, query).toBeLessThan(rows.length);
+        expect(new Set(mcp.structured.jobs.map((job) => job.id)), query).toEqual(new Set(web.jobs.map((job) => job.id)));
+      }
+    } finally {
+      await close?.();
+      close = null;
+      temp.cleanup();
+    }
+  });
+
+  it("batch scan freshness agrees with the strict single-job check after JD, source and rule changes", async () => {
+    const db = getDb();
+    const ids = (await db.select({ id: schema.jobs.id }).from(schema.jobs)).map((row) => row.id);
+    const rulesHash = rulesFingerprint(loadConfig("traps"));
+    const assertSame = async (hash: string) => {
+      const batch = await currentTrapScanJobIds(db, [...ids, Number.MAX_SAFE_INTEGER], hash);
+      const singles = await Promise.all(ids.map(async (id) => await trapScanIsCurrent(db, id, hash) ? id : null));
+      expect(batch).toEqual(new Set(singles.filter((id): id is number => id !== null)));
+      expect(batch.has(Number.MAX_SAFE_INTEGER)).toBe(false);
+      return batch;
+    };
+    const before = await assertSame(rulesHash);
+    const id = await redBanana();
+    const sources = await db.select({ jobId: schema.jobSources.jobId }).from(schema.jobSources);
+    const sourceId = sources.find((row) => before.has(row.jobId) && row.jobId !== id)?.jobId;
+    expect(sourceId).toBeDefined();
+    expect(before.has(id)).toBe(true);
+    await db.update(schema.jobs).set({ description: "Changed description" }).where(eq(schema.jobs.id, id));
+    expect((await assertSame(rulesHash)).has(id)).toBe(false);
+    await db.execute(sql`update raw_postings set payload_json = '{"changed":true}'::jsonb, payload_hash = 'changed'
+      where id in (select raw_posting_id from job_sources where job_id <> ${id})`);
+    expect((await assertSame(rulesHash)).has(sourceId!)).toBe(false);
+    expect(await assertSame("different-rules")).toEqual(new Set());
+    expect(await currentTrapScanJobIds(db, [], rulesHash)).toEqual(new Set());
+  });
+
+  it("withholds card summaries when the findings table cannot be read", async () => {
+    const db = getDb();
+    const id = await redBanana();
+    await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: id, filterResult: "passed", score: 80, rankValue: 80, summaries: { en: "Derived fixture summary" }, outputLang: "en" }));
+    await db.execute(sql`alter table job_traps rename to job_traps_away`);
+    try {
+      const permissions: Permission[] = ["jobs:read", "match:read"];
+      const client = await connect({ mcp: settings({ permissions, stdio: { permissions } }) });
+      const result = await call<SearchJobsOutput>(client, "search_jobs", { query: "Obstgarten" });
+      expect(result.isError).toBe(false);
+      expect(result.structured.jobs.map((job) => job.id)).toEqual([id]);
+      expect(result.structured.jobs[0]?.match).toMatchObject({ summary: null, summary_lang: null, summary_withheld: "findings_unreadable" });
+    } finally {
+      await db.execute(sql`alter table job_traps_away rename to job_traps`);
+      resetTrapTablesCache();
+    }
   });
 
   it("reports a full-text search past its time limit as search_timeout; summary search has no limit", async () => {

@@ -7,9 +7,11 @@ import type { JobDetail } from "@/lib/db/queries/job-detail";
 import type { JobCard, JobSignal } from "@/lib/db/queries/types";
 import type { TrapCounts } from "@/lib/db/repos/traps";
 import { LEGACY_BASE_CURRENCY } from "@/lib/domain/types";
+import { searchJobCardBlocks } from "@/lib/mcp/job-card-blocks";
 import { getJobBlocks } from "@/lib/mcp/job-blocks";
 
 import { breakdownBlockDto, companyBlockDto, ghostBlockDto, lifecycleBlockDto, salaryBlockDto, translationBlockDto } from "./job-analysis";
+import { cardMatchBlockDto, cardTrackingBlockDto } from "./job-card-blocks";
 import { matchBlockDto } from "./job-match";
 import { trackingBlockDto } from "./job-tracking";
 import { notesBlockDto } from "./notes";
@@ -104,9 +106,13 @@ export const searchJobsOutput = z.strictObject({
   total: z.number().int(),
   returned: z.number().int(),
   truncated: z.boolean(),
-  jobs: z.array(jobCardDto),
+  jobs: z.array(jobCardDto.extend({ match: cardMatchBlockDto.optional(), tracking: cardTrackingBlockDto.optional() })),
 });
 export type SearchJobsOutput = z.infer<typeof searchJobsOutput>;
+
+export function searchJobsOutputFor(permissions: ReadonlySet<Permission>): z.ZodType<SearchJobsOutput> {
+  return searchJobsOutput.extend({ jobs: z.array(z.strictObject({ ...jobCardShape, ...blockShape(searchJobCardBlocks, permissions) })) });
+}
 
 export const getJobOutput = z.strictObject({
   notices,

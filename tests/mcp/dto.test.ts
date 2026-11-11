@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { JobDetail } from "@/lib/db/queries/job-detail";
 import type { JobCard } from "@/lib/db/queries/types";
 import type { Application } from "@/lib/db/repos/applications";
-import { applicationItemDto, jobCardDto, jobDetailDto, toApplicationItemDto, toJobCardDto, toJobDetailDto } from "@/lib/mcp/dto";
+import { cardMatchBlockDto, cardTrackingBlockDto, applicationItemDto, jobCardDto, jobDetailDto, toApplicationItemDto, toJobCardDto, toJobDetailDto } from "@/lib/mcp/dto";
 import { availableDescription } from "@/lib/mcp/guard";
 import { breakdownBlockDto, companyBlockDto, ghostBlockDto, lifecycleBlockDto, matchBlockDto, notesBlockDto, salaryBlockDto, trackingBlockDto, translationBlockDto } from "@/lib/mcp/dto";
 import { toBreakdownContent, toGhostReason } from "@/lib/mcp/job-blocks/analysis";
@@ -483,6 +483,25 @@ describe("get_job block field sets", () => {
     expect(reasons).toContainEqual({ code: "evergreen_wording", points: 2, pattern_id: "clean:pool", quote: "clean:talent pool", offset: 0, field: "title" });
     expectNoSentinel(reasons);
   });
+});
+
+describe("card block field sets", () => {
+  it("match", () => { expect(fieldSet(cardMatchBlockDto)).toMatchInlineSnapshot(`
+    [
+      "filter_reasons",
+      "filter_result",
+      "summary",
+      "summary_lang",
+      "summary_withheld",
+    ]
+  `); });
+  it("tracking", () => { expect(fieldSet(cardTrackingBlockDto)).toMatchInlineSnapshot(`
+    [
+      "favorite",
+      "seen",
+      "status",
+    ]
+  `); });
 });
 
 describe("mapping", () => {

@@ -7,7 +7,8 @@
  * Given per effective permission: jobs:read gives job facts, links, scores, signals and the cleaned JD; get_job include adds
  * translation, breakdown, salary, company, ghost and lifecycle. tracking:read adds application history, favorites, seen, closure
  * and filter override. match:read adds summaries, fit reasons, gaps, filter reasons, deal-breaker evidence, visa and match checks.
- * notes:read adds application, event and favorite notes. No other permission adds a get_job block.
+ * notes:read adds application, event and favorite notes. No other permission adds a get_job block. Search cards add only the
+ * one-line summary/language and filter result/reasons under match:read, and status/favorite/seen under tracking:read.
  * Given only by `get_application_context`, which requires effective writer:read in mcp.yaml: a job's breakdown points; its application
  * questions and their settings; for each question the material chosen for it (profile summary, skills and languages, the chosen
  * stories, the emphasis note); the fields of the company background (AI web search, unverified) and the fit note made from them; and
@@ -21,8 +22,9 @@
  * AI replaced by the trap marker) before it is put in a DTO.
  */
 export { linkDto, locationDto, salaryDto, rankDto, toLinkDto, toLocationDto, toSalaryDto, type CleanText } from "./shared";
-export { jobCardDto, amountDto, signalDto, descriptionDto, jobDetailDto, searchJobsOutput, getJobOutput, getJobOutputFor, toJobCardDto, toSignalDto, toJobDetailDto, type JobCardDto, type DescriptionDto, type JobDetailDto, type SearchJobsOutput, type GetJobOutput, type QuoteGuard } from "./jobs";
+export { jobCardDto, amountDto, signalDto, descriptionDto, jobDetailDto, searchJobsOutput, searchJobsOutputFor, getJobOutput, getJobOutputFor, toJobCardDto, toSignalDto, toJobDetailDto, type JobCardDto, type DescriptionDto, type JobDetailDto, type SearchJobsOutput, type GetJobOutput, type QuoteGuard } from "./jobs";
 export { translationBlockDto, breakdownBlockDto, salaryBlockDto, companyBlockDto, ghostBlockDto, ghostReasonDto, lifecycleBlockDto } from "./job-analysis";
+export { cardMatchBlockDto, cardTrackingBlockDto } from "./job-card-blocks";
 export { matchBlockDto } from "./job-match";
 export { trackingBlockDto } from "./job-tracking";
 export { notesBlockDto } from "./notes";
