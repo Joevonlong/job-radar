@@ -132,6 +132,15 @@ describe("get_job field blocks", () => {
     expect(output.notices).toEqual([ctx.text("notice.thirdParty"), ctx.text("notice.derived")]);
   });
 
+  it.each<{ permissions: Permission[]; event: Record<string, string> }>([
+    { permissions: ["jobs:read", "notes:read"], event: { at: BLOCK_NOW.toISOString(), note: S.eventNote } },
+    { permissions: ["jobs:read", "notes:read", "tracking:read"], event: { at: BLOCK_NOW.toISOString(), from: "interested", to: "applied", note: S.eventNote } },
+  ])("event notes carry the status change only with tracking permission: $permissions", async ({ permissions, event }) => {
+    const output = await getJob(context(permissions), { job_id: 7 });
+    expect(output.notes?.event_notes).toEqual([event]);
+    if (!permissions.includes("tracking:read")) expect(JSON.stringify(output.notes)).not.toMatch(/"(from|to)"|interested/);
+  });
+
   it("null rows and disabled checks keep their specified empty shapes", async () => {
     const detail = blockDetail();
     vi.mocked(getJobDetail).mockResolvedValue({ ...detail, score: null, application: null, favorite: null, applicationEvents: [] });
