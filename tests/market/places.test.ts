@@ -68,7 +68,7 @@ describe("lookupPlace", () => {
   it("merges the two city tables, keeping the name the aliases give", () => {
     const cologne = must("Köln");
     expect(cologne).toMatchObject({ kind: "city", name: "Cologne", countries: ["DE"] });
-    expect(cologne.spellings).toEqual(expect.arrayContaining(["Cologne", "Koeln", "köln"]));
+    expect(cologne.spellings).toEqual(expect.arrayContaining(["Cologne", "Koeln", "Köln"]));
   });
 
   it("knows a city only the aliases list, without a country", () => {
@@ -92,5 +92,49 @@ describe("city spellings", () => {
   it("give the table's name, or the text as written", () => {
     expect(canonicalCity("Munich", geo)).toBe("München");
     expect(canonicalCity("Atlantis", geo)).toBe("Atlantis");
+  });
+});
+
+describe("spellings and distinct cities", () => {
+  const hanover: PlaceGeo = {
+    ...geo,
+    cityAliases: { Hanover: ["Hannover City"] },
+    cities: { hannover: ["Hannover", "DE"], hanover: ["Hannover", "DE"] },
+  };
+
+  it("keeps the market's spellings of one city together when an alias names only one of them", () => {
+    for (const text of ["Hanover", "Hannover", "Hannover City"]) {
+      expect(lookupPlace(text, hanover)).toMatchObject({ name: "Hanover", countries: ["DE"] });
+      expect(canonicalCity(text, hanover)).toBe("Hanover");
+    }
+    expect(citySpellings("Hanover", hanover)).toEqual(expect.arrayContaining(["Hanover", "Hannover", "Hannover City"]));
+  });
+
+  it("does not depend on the order of the market rows", () => {
+    const reversed: PlaceGeo = { ...hanover, cities: { hanover: ["Hannover", "DE"], hannover: ["Hannover", "DE"] } };
+    expect(canonicalCity("Hannover City", reversed)).toBe("Hanover");
+    expect(canonicalCity("Hannover", reversed)).toBe("Hanover");
+  });
+
+  const small: PlaceGeo = { ...geo, cityAliases: {}, cities: { au: ["Au", "CH"], aue: ["Aue", "DE"], "münchen": ["München", "DE"] } };
+
+  it("never reads two configured cities as one, whatever their folded spelling", () => {
+    expect(lookupPlace("Au", small)).toMatchObject({ name: "Au", countries: ["CH"] });
+    expect(lookupPlace("Aue", small)).toMatchObject({ name: "Aue", countries: ["DE"] });
+    expect(citySpellings("Au", small)).not.toContain("Aue");
+    expect(citySpellings("Aue", small)).not.toContain("Au");
+  });
+
+  it("lets the umlaut spellings find a city only when they are unambiguous", () => {
+    expect(canonicalCity("Muenchen", small)).toBe("München");
+    expect(canonicalCity("Muenchen", { ...small, cities: { ...small.cities, muenchen: ["Muenchen Ost", "DE"] } })).toBe("Muenchen Ost");
+  });
+});
+
+describe("accents", () => {
+  it("are not part of a city's identity: Münster and Munster share one key", () => {
+    const g: PlaceGeo = { ...geo, cityAliases: {}, cities: { "münster": ["Münster", "DE"] } };
+    expect(lookupPlace("Munster", g)).toMatchObject({ kind: "city", name: "Münster" });
+    expect(lookupPlace("MÜNSTER", g)).toMatchObject({ kind: "city", name: "Münster" });
   });
 });

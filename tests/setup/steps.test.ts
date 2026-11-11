@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { ensureProfileFiles, getConfigPath, reloadConfig, setOnProfileSaved, type ConfigName } from "@/lib/config";
+import { ensureProfileFiles, getConfigPath, mutateConfig, reloadConfig, setOnProfileSaved, type ConfigName } from "@/lib/config";
 import { meConfigToDraft } from "@/lib/profile/draft";
 import { countryDefaults, loadSetupView, profileDraft, readinessOf } from "@/lib/setup/view";
 import { resetPackCache } from "@/lib/market";
@@ -118,6 +118,36 @@ describe("market", () => {
     expect(result.status === "error" ? result.fieldErrors.map((e) => e.path) : []).toContain(path);
     expect(snapshot("preferences", "search", "schedule")).toEqual(before);
     expect(stepStatus("market")).toBeUndefined();
+  });
+});
+
+describe("market: places", () => {
+  it("a place to move to that becomes the home city is saved once, in preferences and in search", async () => {
+    expect(await saveMarketStep(MARKET)).toEqual({ status: "saved", step: "market" });
+    expect(await saveMarketStep({ ...MARKET, home_city: "Utrecht" })).toEqual({ status: "saved", step: "market" });
+    expect(reloadConfig("preferences")).toMatchObject({ home_city: "Utrecht", places: [{ place: "eu", relocate: false }] });
+    expect(reloadConfig("search").locations).toEqual(["Utrecht"]);
+  });
+
+  it("Worldwide is saved as remote only, and a place named twice once, ✈ winning", async () => {
+    const input: MarketInput = { ...MARKET, places: [{ place: "Worldwide", relocate: true }, { place: "Utrecht", relocate: false }, { place: "utrecht", relocate: true }] };
+    expect(await saveMarketStep(input)).toEqual({ status: "saved", step: "market" });
+    expect(reloadConfig("preferences").places).toEqual([{ place: "Worldwide", relocate: false }, { place: "Utrecht", relocate: true }]);
+    expect(reloadConfig("search")).toMatchObject({ locations: ["Amsterdam", "Utrecht"], remote_scope: "worldwide" });
+  });
+
+  it("keeps search.yaml's remote_scope: none when only the time zone changes", async () => {
+    expect(await saveMarketStep(MARKET)).toEqual({ status: "saved", step: "market" });
+    await mutateConfig("search", (current) => ({ ...current, remote_scope: "none" }));
+    expect(await saveMarketStep({ ...MARKET, timezone: "Europe/Berlin" })).toEqual({ status: "saved", step: "market" });
+    expect(reloadConfig("search").remote_scope).toBe("none");
+    expect(reloadConfig("schedule").timezone).toBe("Europe/Berlin");
+  });
+
+  it("takes more than 50 places, as the file before places did", async () => {
+    const places = Array.from({ length: 80 }, (_, i) => ({ place: `Town ${i}`, relocate: i % 2 === 0 }));
+    expect(await saveMarketStep({ ...MARKET, places })).toEqual({ status: "saved", step: "market" });
+    expect(reloadConfig("preferences").places).toHaveLength(80);
   });
 });
 

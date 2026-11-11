@@ -12,7 +12,6 @@ async function read({ bytes, maxChars }) {
   try {
     const pages = [];
     let length = 0;
-    // pages past the limit are not read
     for (let number = 1; number <= pdf.numPages && length <= maxChars; number += 1) {
       const page = await pdf.getPage(number);
       const content = await page.getTextContent();
@@ -24,14 +23,14 @@ async function read({ bytes, maxChars }) {
       pages.push(text);
       length += text.length;
     }
-    return pages.join("\n\n");
+    return { text: pages.join("\n\n"), pagesNotRead: pages.length < pdf.numPages };
   } finally {
     await pdf.loadingTask.destroy();
   }
 }
 
 try {
-  parentPort.postMessage({ ok: true, text: await read(workerData) });
+  parentPort.postMessage({ ok: true, ...await read(workerData) });
 } catch {
   parentPort.postMessage({ ok: false });
 }

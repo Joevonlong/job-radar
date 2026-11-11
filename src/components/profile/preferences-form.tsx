@@ -11,7 +11,7 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { changedPaths } from "@/lib/draft-diff";
 import type { SalaryMedian, StatedSalary } from "@/lib/profile/floor-preview";
-import { placesBeyondSearchEntries, searchEntriesOutsidePlaces, type OldSearchEntries } from "@/lib/market/places";
+import { homeCityAbroad, placesBeyondSearchEntries, searchEntriesOutsidePlaces, type OldSearchEntries } from "@/lib/market/places";
 import type { MarketView } from "@/lib/market/view";
 import {
   CONTRACT_MODES,
@@ -59,6 +59,7 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
   const sameMarket = draft.market.pack === market.packId && market.error === null;
   const leftovers = sameMarket ? searchEntriesOutsidePlaces(oldSearch, draft, market.placeGeo, { country: market.country, countryName: market.countryName }) : [];
   const added = sameMarket ? placesBeyondSearchEntries(oldSearch, draft, market.placeGeo, { country: market.country, countryName: market.countryName }) : [];
+  const abroad = sameMarket ? homeCityAbroad(draft.home_city, market.placeGeo, market.country) : null;
 
   function patch(next: Partial<PreferencesDraft>) {
     setDraft((current) => ({ ...current, ...next }));
@@ -124,6 +125,11 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
           describedBy={describedBy(ids.places, true, errors.get("places"))}
         />
       </Field>
+      {abroad !== null ? (
+        <p role="status" className="text-body-sm font-bold" data-testid="home-city-abroad">
+          {t("fields.homeCityAbroad", { city: draft.home_city.trim(), country: abroad.name, home: market.countryName })}
+        </p>
+      ) : null}
       {leftovers.length > 0 ? (
         <p role="status" className="text-body-sm font-bold" data-testid="search-leftovers">
           {t("fields.searchLeftovers", { names: leftovers.join(", ") })}

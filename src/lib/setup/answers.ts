@@ -24,7 +24,7 @@ export const answersSchema = z.strictObject({
       home_language: z.string().max(10).optional(),
       home_city: z.string().max(200).optional(),
       /** As in preferences.yaml: `{ place, relocate }`. */
-      places: z.array(z.strictObject({ place: z.string().max(200), relocate: z.boolean() })).max(50).optional(),
+      places: z.array(z.strictObject({ place: z.string().max(200), relocate: z.boolean() })).max(200).optional(),
       timezone: z.string().max(100).optional(),
     })
     .optional(),

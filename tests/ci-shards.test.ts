@@ -43,7 +43,7 @@ function fixture(job: typeof jobs[number], firstMode: string, secondMode: string
   write("bash", '#!/bin/bash\nif [[ "$1" == tests/transition/run.sh ]]; then exec "$DUMMY_COMMAND" "$@"; fi\nexec /bin/bash "$@"\n');
   write("pnpm", '#!/bin/bash\nexec "$DUMMY_COMMAND" "$@"\n');
   write("dummy", `#!/bin/bash
-if [[ -n "$SWAP_MANAGERS" ]]; then shard=$SWAP_MANAGERS; else shard=$3; fi
+if [[ -n "$SWAP_MANAGERS" ]]; then shard=$SWAP_MANAGERS; else shard=\${3%%,*}; fi
 mode=$DUMMY_SECOND_MODE
 [[ "$shard" != "$DUMMY_FIRST_SHARD" ]] || mode=$DUMMY_FIRST_MODE
 printf '%s\\n' "$*" > "$DUMMY_ROOT/$shard.args"
@@ -163,7 +163,8 @@ describe.each(jobs)("$job workflow processes", (job) => {
       }
       if (job.job === "upgrade-transition") {
         const scenario = job.shards[0]!;
-        expect(fs.readFileSync(path.join(fx.tmp, `${scenario}.args`), "utf8")).toContain(`--scenarios ${scenario} ${fx.state}/${scenario}/artifacts`);
+        const scenarios = scenario === "B" ? "B,F" : "A";
+        expect(fs.readFileSync(path.join(fx.tmp, `${scenario}.args`), "utf8")).toContain(`--scenarios ${scenarios} ${fx.state}/${scenario}/artifacts`);
         const other = scenario === "A" ? "B" : "A";
         expect(fs.existsSync(path.join(fx.tmp, `${other}.args`))).toBe(false);
       }

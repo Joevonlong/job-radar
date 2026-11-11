@@ -23,6 +23,8 @@ With reason sources on (`ai.yaml: scoring.evidence`), each scoring call writes a
 output tokens grow. Compare the median output tokens of the `score` task before and after turning it on; the calls are
 still recorded as `score`. See [score-evidence.md](score-evidence.md).
 
+Résumé tailoring is the `career_tailor` task. One request makes up to three calls (selection, wording and, when you ask for a cover letter, the letter; shortening makes one), and each call is its own row under `career_tailor`, with no job id. Each call is limited by `max_output_tokens` of the `career_tailor` task in `ai.yaml`. See [resume-tailoring.md](resume-tailoring.md).
+
 ## Prices: `price` and `equivalent_price`
 
 - `price`: for API providers only; real billing, counts toward the monthly budget. It can have `cached_input_per_mtok` (cache-hit input) and `cache_write_per_mtok` (input written to cache); if omitted, `input_per_mtok` is used (conservative, as before).

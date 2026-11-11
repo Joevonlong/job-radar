@@ -1,0 +1,122 @@
+language: de
+experience:
+  - company:
+      value: Nebelfalter Systeme GmbH
+      quote: Nebelfalter Systeme GmbH
+    role:
+      value: Senior Plattformentwicklerin
+      quote: Senior Plattformentwicklerin
+    start:
+      value: 2023-04
+      quote: 04/2023
+    end:
+      value: present
+      quote: seit 04/2023
+    bullets:
+      - value: Leitete die Planung einer Plattform für interne Datendienste.
+        quote: Leitete die Planung einer Plattform für interne Datendienste.
+      - value: Reduzierte die durchschnittliche Bereitstellungszeit um 35 Prozent.
+        quote: Reduzierte die durchschnittliche Bereitstellungszeit um 35 Prozent.
+      - value: Begleitete vier Kolleginnen und Kollegen bei Architekturentscheidungen.
+        quote: Begleitete vier Kolleginnen und Kollegen bei Architekturentscheidungen.
+      - value: Erfasste Rückmeldungen aus regelmäßigen Gesprächen und übersetzte sie in überprüfbare nächste Schritte für das Team.
+        quote: Erfasste Rückmeldungen aus regelmäßigen Gesprächen und übersetzte sie in überprüfbare nächste Schritte für das Team.
+      - value: Stimmte Prioritäten mit angrenzenden Bereichen ab und hielt Entscheidungen mit Gründen und offenen Fragen schriftlich fest.
+        quote: Stimmte Prioritäten mit angrenzenden Bereichen ab und hielt Entscheidungen mit Gründen und offenen Fragen schriftlich fest.
+      - value: Prüfte Ergebnisse anhand vereinbarter Beispiele und besprach Abweichungen frühzeitig mit den beteiligten Kolleginnen und Kollegen.
+        quote: Prüfte Ergebnisse anhand vereinbarter Beispiele und besprach Abweichungen frühzeitig mit den beteiligten Kolleginnen und Kollegen.
+  - company:
+      value: Nebelfalter Systeme GmbH
+      quote: Nebelfalter Systeme GmbH
+    role:
+      value: Plattformentwicklerin
+      quote: Plattformentwicklerin
+    start:
+      value: 2020-01
+      quote: 01/2020
+    end:
+      value: 2023-03
+      quote: 03/2023
+    bullets:
+      - value: Entwickelte einen Dienst für 10.000.000 Anfragen pro Monat.
+        quote: Entwickelte einen Dienst für 10.000.000 Anfragen pro Monat.
+      - value: Automatisierte die Auslieferung von Anwendungen mit nachvollziehbaren Prüfungen.
+        quote: Automatisierte die Auslieferung von Anwendungen mit nachvollziehbaren Prüfungen.
+      - value: Dokumentierte Betriebsabläufe und betreute den Bereitschaftsdienst.
+        quote: Dokumentierte Betriebsabläufe und betreute den Bereitschaftsdienst.
+      - value: Bereitete Übergaben für neue Mitarbeitende vor und ergänzte die Unterlagen um häufige Fragen und nachvollziehbare Beispiele.
+        quote: Bereitete Übergaben für neue Mitarbeitende vor und ergänzte die Unterlagen um häufige Fragen und nachvollziehbare Beispiele.
+      - value: Verglich unterschiedliche Lösungswege hinsichtlich Aufwand und Nutzen und stellte die Ergebnisse in kurzen Besprechungen vor.
+        quote: Verglich unterschiedliche Lösungswege hinsichtlich Aufwand und Nutzen und stellte die Ergebnisse in kurzen Besprechungen vor.
+      - value: Verfolgte Rückmeldungen nach der Einführung und plante gemeinsam mit dem Team gezielte Verbesserungen für den nächsten Arbeitszyklus.
+        quote: Verfolgte Rückmeldungen nach der Einführung und plante gemeinsam mit dem Team gezielte Verbesserungen für den nächsten Arbeitszyklus.
+  - company:
+      value: Kieselsteg Digital GmbH
+      quote: Kieselsteg Digital GmbH
+    role:
+      value: Softwareentwicklerin
+      quote: Softwareentwicklerin
+    start:
+      value: 2018-02
+      quote: 02/2018
+    end:
+      value: 2019-12
+      quote: 12/2019
+    bullets:
+      - value: Erstellte Schnittstellen für die interne Auftragsverwaltung.
+        quote: Erstellte Schnittstellen für die interne Auftragsverwaltung.
+      - value: Führte gemeinsame Codebesprechungen im kleinen Team ein.
+        quote: Führte gemeinsame Codebesprechungen im kleinen Team ein.
+      - value: Untersuchte Fehlermeldungen und verbesserte die Protokollierung.
+        quote: Untersuchte Fehlermeldungen und verbesserte die Protokollierung.
+      - value: Koordinierte Abstimmungen mit benachbarten Teams und dokumentierte Zuständigkeiten, Fristen und den Stand der offenen Aufgaben.
+        quote: Koordinierte Abstimmungen mit benachbarten Teams und dokumentierte Zuständigkeiten, Fristen und den Stand der offenen Aufgaben.
+      - value: Erstellte verständliche Anleitungen für wiederkehrende Tätigkeiten und überprüfte sie gemeinsam mit den späteren Nutzerinnen und Nutzern.
+        quote: Erstellte verständliche Anleitungen für wiederkehrende Tätigkeiten und überprüfte sie gemeinsam mit den späteren Nutzerinnen und Nutzern.
+      - value: Wertete Erfahrungen aus abgeschlossenen Aufgaben aus und schlug konkrete Änderungen für künftige Abläufe vor.
+        quote: Wertete Erfahrungen aus abgeschlossenen Aufgaben aus und schlug konkrete Änderungen für künftige Abläufe vor.
+education:
+  - school:
+      value: Hochschule Kieselgarten
+      quote: Hochschule Kieselgarten
+    degree:
+      value: BSc Informatik
+      quote: BSc Informatik
+    start:
+      value: "2015"
+      quote: "2015"
+    end:
+      value: "2019"
+      quote: "2019"
+    summary:
+      value: "Schwerpunkt: Angewandte Methoden und Teamarbeit"
+      quote: "Schwerpunkt: Angewandte Methoden und Teamarbeit"
+skills:
+  - group: Programmierung
+    items:
+      - value: Go
+        quote: Go
+      - value: Python
+        quote: Python
+  - group: Arbeitsweise
+    items:
+      - value: Code Review
+        quote: Code Review
+      - value: Moderation
+        quote: Moderation
+languages:
+  - name:
+      value: Deutsch
+      quote: Deutsch
+    level:
+      value: Muttersprache
+      quote: Muttersprache
+  - name:
+      value: Englisch
+      quote: Englisch
+    level:
+      value: C1
+      quote: C1
+summary:
+  value: Erfahrene Fachkraft mit Freude an Zusammenarbeit und sorgfältiger Analyse. Ich verbinde praktische Umsetzung mit verständlicher Kommunikation und begleite Aufgaben von der ersten Klärung bis zur Übergabe. Besonders wichtig sind mir nachvollziehbare Entscheidungen, gute Dokumentation und Lösungen, die im Alltag zuverlässig funktionieren. Ich arbeite strukturiert, teile Wissen offen und berücksichtige unterschiedliche Perspektiven. Auch bei wechselnden Anforderungen achte ich auf klare Verantwortlichkeiten und regelmäßige Rückmeldungen.
+  quote: Erfahrene Fachkraft mit Freude an Zusammenarbeit und sorgfältiger Analyse. Ich verbinde praktische Umsetzung mit verständlicher Kommunikation und begleite Aufgaben von der ersten Klärung bis zur Übergabe. Besonders wichtig sind mir nachvollziehbare Entscheidungen, gute Dokumentation und Lösungen, die im Alltag zuverlässig funktionieren. Ich arbeite strukturiert, teile Wissen offen und berücksichtige unterschiedliche Perspektiven. Auch bei wechselnden Anforderungen achte ich auf klare Verantwortlichkeiten und regelmäßige Rückmeldungen.

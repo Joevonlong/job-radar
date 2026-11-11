@@ -58,16 +58,6 @@ export function scopeCountries(scope: RemoteScopeValue, market: Pick<Market, "co
   return new Set(scope.region.flatMap((token) => regionCountries(token, market)));
 }
 
-/**
- * Location-text patterns that name the scope as a whole ("EU", "Europe", "EMEA"): the home region's for `home_country`
- * (a remote job "anywhere in the EU" hires in Germany too), the named regions' for a region scope.
- */
-export function scopeWidePatterns(scope: RemoteScopeValue, market: Pick<Market, "homeRegion" | "regions">): string[] {
-  if (scope === "none" || scope === "worldwide") return [];
-  const regions = scope === "home_country" ? (market.homeRegion === null ? [] : [market.homeRegion]) : scope.region;
-  return [...new Set(regions.flatMap((token) => market.regions[token]?.patterns ?? []))];
-}
-
 /** English name of a region token ("European Union", "Switzerland"), the token itself when unknown. */
 export function regionTokenName(token: string, market: Pick<Market, "regions" | "countries">): string {
   if (/^[A-Z]{2}$/.test(token)) return market.countries.find((c) => c.code === token)?.name ?? token;

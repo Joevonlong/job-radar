@@ -83,7 +83,6 @@ describe("DE market golden", () => {
 
   it("hard filter verdicts and reasons under every remote scope", () => {
     const keep = (i: number): boolean => !isChanged(inputs.locations[Math.floor(i / 4)] ?? "");
-    // `none` no longer exists: what it becomes is tested with the migration
     for (const scope of Object.keys(expected.filterLocation).filter((key) => key !== "none")) {
       const got = (actual.filterLocation[scope] ?? []).filter((_, i) => keep(i));
       const want = (expected.filterLocation[scope] ?? []).filter((_, i) => keep(i));
@@ -92,6 +91,32 @@ describe("DE market golden", () => {
       expect(differences(`filterDescription.${scope}`, actual.filterDescription[scope] ?? [], expected.filterDescription[scope] ?? [], (i) => (inputs.long[i] ?? "").slice(0, 80))).toEqual([]);
     }
     expect(differences("filterSalary", actual.filterSalary, expected.filterSalary, (i) => String(i))).toEqual([]);
+  });
+
+  /**
+   * `remote_scope: none` is gone from preferences.yaml: the upgrade takes `remote` out of `workplace` (search.yaml keeps its own
+   * `none`, which only stops remote collection). Intended changes, and only these: a remote job is hidden by the workplace rule
+   * (`workplace_not_wanted:remote`, the scope check may add `remote_out_of_scope`) instead of `remote_not_wanted`, and a remote
+   * job in an allowed city, which passed before, is hidden too. On-site, hybrid and unstated jobs keep their verdict and reasons.
+   */
+  it("hard filter under the old `none`, upgraded: only remote jobs change, and they are hidden by the workplace rule", () => {
+    const keep = (i: number): boolean => !isChanged(inputs.locations[Math.floor(i / 4)] ?? "");
+    const isRemote = (i: number): boolean => i % 4 === 2;
+    const got = actual.filterLocation.none ?? [];
+    const want = expected.filterLocation.none ?? [];
+    const other = (list: readonly string[]) => list.filter((_, i) => keep(i) && !isRemote(i));
+    expect(differences("filterLocation.none", other(got), other(want), (i) => String(i))).toEqual([]);
+
+    const hiddenByWorkplace = (verdict: string): boolean => verdict.startsWith("filtered_out|") && verdict.includes("workplace_not_wanted:remote") && !verdict.includes("remote_not_wanted");
+    const remote = got.filter((_, i) => keep(i) && isRemote(i));
+    expect(remote.length).toBeGreaterThan(0);
+    expect(remote.filter((verdict) => !hiddenByWorkplace(verdict))).toEqual([]);
+    const passedBefore = want.filter((verdict, i) => keep(i) && isRemote(i) && verdict.startsWith("passed"));
+    expect(passedBefore.length).toBeGreaterThan(0);
+    for (const kind of ["filterTitle", "filterDescription"] as const) {
+      expect(expected[kind].none?.every((verdict) => verdict === "filtered_out|remote_not_wanted")).toBe(true);
+      expect((actual[kind].none ?? []).filter((verdict) => !hiddenByWorkplace(verdict))).toEqual([]);
+    }
   });
 
   it("pre-score, German deduction and city dropdown", () => {

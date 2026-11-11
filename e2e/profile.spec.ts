@@ -321,6 +321,9 @@ test("story extraction from a pasted text: drafts wait for review, flags show, a
   await page.getByTestId("story-import-paste").click();
   await page.getByTestId("story-import-text").fill("Led the migration of the billing service to Postgres\nwith no downtime for customers.");
   await page.getByTestId("story-import-send-text").click();
+  await expect(page.getByTestId("send-preview")).toBeVisible();
+  await expect(page.getByTestId("story-draft")).toHaveCount(0);
+  await page.getByTestId("outbound-send").click();
 
   const drafts = page.getByTestId("story-draft");
   await expect(drafts).toHaveCount(2, { timeout: 30_000 });
@@ -347,6 +350,33 @@ test("story extraction from a pasted text: drafts wait for review, flags show, a
   expect(read(STORIES_FILE)).not.toContain("Invented achievement");
 });
 
+test("story extraction from the profile summary opens a preview and queues only after confirmation", async ({ page }) => {
+  await clearStoryExtraction();
+  await open(page);
+  const summary = "Led the migration of the billing service to Postgres with no downtime for customers.";
+  const me = page.getByTestId("me-card");
+  await me.getByLabel("给 AI 的简介").fill(summary);
+  await me.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(() => read(ME_FILE)).toContain(summary);
+  const queuedOrigins = async () => {
+    const sql = postgres(process.env.E2E_DATABASE_URL ?? "", { max: 1, onnotice: () => {} });
+    try {
+      return await sql`select payload->>'origin' as origin from control_requests where kind = 'story_extract'`;
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+  };
+  await page.getByTestId("story-import-profile").click();
+  await expect(page.getByTestId("send-preview")).toBeVisible();
+  await expect(page.getByTestId("outbound-text")).toHaveValue(summary);
+  expect(await queuedOrigins()).toHaveLength(0);
+  await page.getByTestId("outbound-send").click();
+  await expect.poll(queuedOrigins).toEqual([{ origin: "profile" }]);
+  await expect(page.getByTestId("send-preview")).toHaveCount(0);
+  await expect(page.getByTestId("story-draft")).toHaveCount(2, { timeout: 30_000 });
+  await clearStoryExtraction();
+});
+
 test("story extraction from an uploaded résumé: a PDF is read, a scan and a wrong type are refused", async ({ page }) => {
   await clearStoryExtraction();
   await open(page);
@@ -364,6 +394,9 @@ test("story extraction from an uploaded résumé: a PDF is read, a scan and a wr
   const pdf = minimalPdf(["Shipped the search rewrite for the Atlas product team.", "Reduced query latency for all customers."]);
   await page.getByTestId("story-import-file").setInputFiles({ name: "resume.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf) });
   await page.getByTestId("story-import-send-file").click();
+  await expect(page.getByTestId("send-preview")).toBeVisible();
+  await expect(page.getByTestId("story-draft")).toHaveCount(0);
+  await page.getByTestId("outbound-send").click();
   const drafts = page.getByTestId("story-draft");
   await expect(drafts).toHaveCount(2, { timeout: 30_000 });
   await expect(drafts.filter({ hasText: "Shipped the search rewrite" })).toHaveCount(1);

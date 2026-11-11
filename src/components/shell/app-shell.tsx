@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { readCareerGate } from "@/lib/config/career-gate";
 import { getDb } from "@/lib/db";
 import { loadShellStatus } from "@/lib/shell/status";
 import type { ShellStatus } from "@/lib/shell/status-schema";
@@ -7,6 +8,7 @@ import type { ShellStatus } from "@/lib/shell/status-schema";
 import { AccessBanner } from "./access-banner";
 import { ScrollProgress } from "./scroll-progress";
 import { ShellChrome } from "./shell-chrome";
+import { ShellNavProvider } from "./shell-nav-provider";
 import { ShellStatusProvider } from "./shell-status-provider";
 import { Sidebar } from "./sidebar";
 import { MAIN_CONTENT_ID } from "./main-content-id";
@@ -45,21 +47,23 @@ export async function AppShell({ children, access }: { children: ReactNode; acce
       </div>
     );
   }
-  const initialStatus = await readInitialStatus();
+  const [initialStatus, career] = await Promise.all([readInitialStatus(), readCareerGate()]);
   const signOut = access.signOut ? <SignOutButton /> : null;
   return (
     <ShellStatusProvider initial={initialStatus}>
-      <SkipLink />
-      <div className="[&:has([data-fit-viewport])]:flex [&:has([data-fit-viewport])]:h-dvh [&:has([data-fit-viewport])]:flex-col">
-        {access.banner ? <AccessBanner /> : null}
-        <div className="flex min-h-screen [&:has([data-fit-viewport])]:min-h-0 [&:has([data-fit-viewport])]:flex-1">
-          <ScrollProgress />
-          <UnsavedGuard />
-          <ShellChrome sidebar={<Sidebar signOut={signOut} />} topbar={<Topbar signOut={signOut} />} setupTopbar={<Topbar minimal />}>
-            {children}
-          </ShellChrome>
+      <ShellNavProvider career={career.enabled}>
+        <SkipLink />
+        <div className="[&:has([data-fit-viewport])]:flex [&:has([data-fit-viewport])]:h-dvh [&:has([data-fit-viewport])]:flex-col">
+          {access.banner ? <AccessBanner /> : null}
+          <div className="flex min-h-screen [&:has([data-fit-viewport])]:min-h-0 [&:has([data-fit-viewport])]:flex-1">
+            <ScrollProgress />
+            <UnsavedGuard />
+            <ShellChrome sidebar={<Sidebar signOut={signOut} />} topbar={<Topbar signOut={signOut} />} setupTopbar={<Topbar minimal />}>
+              {children}
+            </ShellChrome>
+          </div>
         </div>
-      </div>
+      </ShellNavProvider>
     </ShellStatusProvider>
   );
 }

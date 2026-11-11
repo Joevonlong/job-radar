@@ -347,6 +347,21 @@ function titleOutsideMarker(title: string, filter: CompiledFilter): string | nul
   return null;
 }
 
+/**
+ * The title marker names a country, alone or with a qualifier ("US", "Canada only", "US East Coast"): the longest run of its
+ * words the tables read as a country. "East Coast" or "Americas" names none.
+ */
+function markerNamesCountry(marker: string, filter: CompiledFilter): boolean {
+  const geo = placeGeo(filter.pipeline);
+  const words = marker.split(/[\s\-–—]+/u).filter((word) => word !== "");
+  for (let length = words.length; length > 0; length--) {
+    for (let start = 0; start + length <= words.length; start++) {
+      if (lookupPlace(words.slice(start, start + length).join(" "), geo)?.kind === "country") return true;
+    }
+  }
+  return false;
+}
+
 interface PartialVerdict {
   excluded: string[];
   notes: string[];
@@ -428,7 +443,7 @@ function checkStatedLocation(job: FilterJob, filter: CompiledFilter, out: Partia
   if (locations.some((l) => isWantedCity(l, filter))) return;
   const marker = job.workplace === "remote" && filter.scopeCountries !== null ? titleOutsideMarker(job.title, filter) : null;
   const wholeCountry = locations.some((l) => isWholeCountry(l, filter));
-  if (marker !== null && (!wholeCountry || lookupPlace(marker, placeGeo(filter.pipeline))?.kind === "country")) {
+  if (marker !== null && (!wholeCountry || markerNamesCountry(marker, filter))) {
     out.excluded.push(encodeReason("remote_out_of_scope", marker));
     return;
   }

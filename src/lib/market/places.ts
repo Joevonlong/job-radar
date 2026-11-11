@@ -44,7 +44,7 @@ function placeKey(value: string): string {
   return value.replace(/ß/g, "ss").normalize("NFKD").replace(/\p{M}/gu, "").toLocaleLowerCase("en").replace(/\s+/g, " ").trim();
 }
 
-/** `placeKey`, with the umlauts' "ae oe ue" spellings folded too, so "München", "Munchen" and "Muenchen" are one city. */
+/** `placeKey`, with the umlauts' "ae oe ue" spellings folded too, so "München", "Munchen" and "Muenchen" meet. Only a fallback: it can make two cities ("Au", "Aue") collide. */
 function citySpellingKey(value: string): string {
   return placeKey(value).replace(/ae/g, "a").replace(/oe/g, "o").replace(/ue/g, "u");
 }
@@ -55,33 +55,57 @@ interface CityEntry {
   spellings: string[];
 }
 
+interface CityIndex {
+  /** `placeKey` of a spelling -> its city. The first city to claim a spelling keeps it. */
+  exact: Map<string, CityEntry>;
+  /** `citySpellingKey` -> its city, or null when two cities share the folded key: then only the exact spelling finds either. */
+  folded: Map<string, CityEntry | null>;
+}
+
 const addSpelling = (entry: CityEntry, spelling: string): void => {
   if (!entry.spellings.some((other) => placeKey(other) === placeKey(spelling))) entry.spellings.push(spelling);
 };
 
-function buildCityIndex(geo: Pick<PlaceGeo, "cityAliases" | "cities">): Map<string, CityEntry> {
-  const index = new Map<string, CityEntry>();
-  const register = (spelling: string, entry: CityEntry): void => {
-    const key = citySpellingKey(spelling);
-    if (!index.has(key)) index.set(key, entry);
-  };
-  // the aliases first: the name a user's own table gives a city stays its name
-  for (const [canonical, aliases] of Object.entries(geo.cityAliases)) {
-    const entry: CityEntry = { name: canonical, country: null, spellings: [canonical] };
-    for (const alias of aliases) addSpelling(entry, alias);
-    for (const spelling of entry.spellings) register(spelling, entry);
-  }
+function buildCityIndex(geo: Pick<PlaceGeo, "cityAliases" | "cities">): CityIndex {
+  const entries: CityEntry[] = [];
+  const byCity = new Map<string, CityEntry>();
   for (const [spelling, [canonical, country]] of Object.entries(geo.cities)) {
-    const entry = index.get(citySpellingKey(spelling)) ?? index.get(citySpellingKey(canonical)) ?? { name: canonical, country, spellings: [canonical] };
-    entry.country ??= country;
-    if (entry.country === country) addSpelling(entry, spelling);
-    register(spelling, entry);
-    register(canonical, entry);
+    const id = `${placeKey(canonical)}|${country}`;
+    let entry = byCity.get(id);
+    if (entry === undefined) {
+      entry = { name: canonical, country, spellings: [canonical] };
+      byCity.set(id, entry);
+      entries.push(entry);
+    }
+    addSpelling(entry, spelling);
   }
-  return index;
+  for (const [canonical, aliases] of Object.entries(geo.cityAliases)) {
+    const names = [canonical, ...aliases];
+    const hit = entries.filter((entry) => entry.spellings.some((spelling) => names.some((name) => placeKey(name) === placeKey(spelling))));
+    const target = hit[0] ?? { name: canonical, country: null, spellings: [] };
+    if (hit.length === 0) entries.push(target);
+    for (const other of hit.slice(1)) {
+      for (const spelling of other.spellings) addSpelling(target, spelling);
+      entries.splice(entries.indexOf(other), 1);
+    }
+    for (const name of names) addSpelling(target, name);
+    target.name = canonical;
+    target.spellings = [canonical, ...target.spellings.filter((spelling) => placeKey(spelling) !== placeKey(canonical))];
+  }
+  const exact = new Map<string, CityEntry>();
+  const folded = new Map<string, CityEntry | null>();
+  for (const entry of entries) {
+    for (const spelling of entry.spellings) {
+      if (!exact.has(placeKey(spelling))) exact.set(placeKey(spelling), entry);
+      const key = citySpellingKey(spelling);
+      const seen = folded.get(key);
+      folded.set(key, seen === undefined || seen === entry ? entry : null);
+    }
+  }
+  return { exact, folded };
 }
 
-const cityIndexes = new WeakMap<PlaceGeo["cities"], WeakMap<PlaceGeo["cityAliases"], Map<string, CityEntry>>>();
+const cityIndexes = new WeakMap<PlaceGeo["cities"], WeakMap<PlaceGeo["cityAliases"], CityIndex>>();
 
 function cityEntry(text: string, geo: Pick<PlaceGeo, "cityAliases" | "cities">): CityEntry | null {
   let byAliases = cityIndexes.get(geo.cities);
@@ -94,8 +118,9 @@ function cityEntry(text: string, geo: Pick<PlaceGeo, "cityAliases" | "cities">):
     index = buildCityIndex(geo);
     byAliases.set(geo.cityAliases, index);
   }
-  const key = citySpellingKey(text);
-  return key === "" ? null : (index.get(key) ?? null);
+  const key = placeKey(text);
+  if (key === "") return null;
+  return index.exact.get(key) ?? index.folded.get(citySpellingKey(text)) ?? null;
 }
 
 /** The tables' name of a city ("Munich" -> "München"), else the text as written. */
@@ -160,12 +185,52 @@ export interface PlacePreferences {
   places: readonly { place: string; relocate: boolean }[];
 }
 
+/**
+ * `home_city` and `places` as every reader takes them, whatever wrote them (the forms, the wizard, the CLI, an answers file,
+ * the file edited by hand). The preferences schema runs it on every load and save; a reader with the market's tables runs it
+ * again with them.
+ * - Worldwide is remote only: nobody moves to "anywhere".
+ * - A place that is the home city is dropped.
+ * - A place named twice is one entry, at its first position. It is ✈ when any of them is, since moving there includes
+ *   working remotely there.
+ *
+ * "Named twice" is `lookupPlace`'s reading with tables (Munich, München), else the text with case, accents and spaces ignored.
+ * Unchanged input comes back as the same object.
+ */
+export function normalizePlaces<T extends PlacePreferences>(preferences: T, geo: PlaceGeo | null = null): T {
+  const keyOf = (text: string): string => (geo === null ? placeKey(text) : samePlaceKey(text, geo));
+  const home = keyOf(preferences.home_city);
+  const byKey = new Map<string, { place: string; relocate: boolean }>();
+  for (const entry of preferences.places) {
+    const key = keyOf(entry.place);
+    if (key === "" || key === home) continue;
+    const relocate = entry.relocate && placeKey(entry.place) !== WORLDWIDE;
+    const seen = byKey.get(key);
+    byKey.set(key, seen === undefined ? { place: entry.place, relocate } : { ...seen, relocate: seen.relocate || relocate });
+  }
+  const places = [...byKey.values()];
+  const same = places.length === preferences.places.length && places.every((entry, i) => entry.place === preferences.places[i]?.place && entry.relocate === preferences.places[i]?.relocate);
+  return same ? preferences : { ...preferences, places };
+}
+
+/**
+ * The country the tables put the home city in, when that is not the home country; null otherwise (or when the tables do not know the
+ * city). An upgrade makes the first old location the home city without reading the tables, so `[Amsterdam, Berlin]` for a German market
+ * gives a home city abroad: on-site jobs are then looked for in Amsterdam inside Germany.
+ */
+export function homeCityAbroad(homeCity: string, geo: PlaceGeo, homeCountry: string): { code: string; name: string } | null {
+  const place = lookupPlace(homeCity, geo);
+  const code = place?.kind === "city" && !place.countries.includes(homeCountry) ? place.countries[0] : undefined;
+  if (code === undefined) return null;
+  return { code, name: geo.countries.find((country) => country.code === code)?.name ?? code };
+}
+
 /** Worldwide is always remote only, whatever a hand-written file or the command-line setup marks it as. */
 const isWorldwide = (text: string): boolean => placeKey(text) === WORLDWIDE;
 
 /** The wanted places as text, for pages and prompts: the home city, then the places I'd move to. */
 export function wantedLocations(preferences: PlacePreferences): string[] {
-  const moves = preferences.places.filter((entry) => entry.relocate && !isWorldwide(entry.place)).map((entry) => entry.place);
+  const moves = normalizePlaces(preferences).places.filter((entry) => entry.relocate && !isWorldwide(entry.place)).map((entry) => entry.place);
   return preferences.home_city.trim() === "" ? moves : [preferences.home_city, ...moves];
 }
 
@@ -180,7 +245,7 @@ export function wantedCities(preferences: PlacePreferences, geo: PlaceGeo): stri
 /** A code that stands for a country the tables do not list: kept as written, so a scope token from an old file still counts. */
 const isCountryCode = (text: string): boolean => /^[A-Z]{2}$/.test(text);
 
-/** The scope token of a remote-only place: a region's id or a country's code. A city or an unknown name has none. */
+/** The scope token of a country or region: a region's id or a country's code. A city or an unknown name has none. */
 function scopeToken(text: string, geo: PlaceGeo): string | null {
   const place = lookupPlace(text, geo);
   if (place === null) return isCountryCode(text) ? text : null;
@@ -191,14 +256,20 @@ function scopeToken(text: string, geo: PlaceGeo): string | null {
 }
 
 /**
- * The remote scope the score prompt names: Worldwide, the tokens of the remote-only places, else the home country. The prompt's
- * wording is part of what a stored score means, so it stays as it was; the filter reads `placeAreas`.
+ * The remote scope the places add up to. Never `none`.
+ * - Worldwide: `worldwide`.
+ * - Countries and regions, remote-only and ✈ alike (moving there includes working remotely there): their tokens. With no
+ *   remote-only one, the home country stays in, as it is the scope when no place names one.
+ * - None of them: `home_country`.
  */
-export function wantedRemoteScope(preferences: PlacePreferences, geo: PlaceGeo): Exclude<RemoteScopeValue, "none"> {
-  if (preferences.places.some((entry) => isWorldwide(entry.place))) return "worldwide";
-  const remoteOnly = preferences.places.filter((entry) => !entry.relocate).map((entry) => entry.place);
-  const tokens = [...new Set(remoteOnly.flatMap((text) => scopeToken(text, geo) ?? []))];
-  return tokens.length > 0 ? { region: tokens } : "home_country";
+export function wantedRemoteScope(preferences: PlacePreferences, geo: PlaceGeo, homeCountry: string): Exclude<RemoteScopeValue, "none"> {
+  const { places } = normalizePlaces(preferences, geo);
+  if (places.some((entry) => lookupPlace(entry.place, geo)?.kind === "worldwide")) return "worldwide";
+  const tokens = (relocate: boolean): string[] => places.filter((entry) => entry.relocate === relocate).flatMap((entry) => scopeToken(entry.place, geo) ?? []);
+  const remoteOnly = tokens(false);
+  if (remoteOnly.length > 0) return { region: [...new Set([...remoteOnly, ...tokens(true)])] };
+  const moving = tokens(true).filter((token) => token !== homeCountry);
+  return moving.length > 0 ? { region: [...new Set([homeCountry, ...moving])] } : "home_country";
 }
 
 /** A city, or a name the tables do not know, that a job's location is compared with by its text. */
@@ -340,18 +411,25 @@ const textsOf = (value: unknown): string[] => (Array.isArray(value) ? value.filt
 
 const hasScopeRegion = (scope: unknown): scope is { region: unknown } => typeof scope === "object" && scope !== null && "region" in scope;
 
-/** The places search.yaml's old keys name. */
-function oldSearchNames(search: OldSearchEntries): string[] {
-  const scope = search.remote_scope;
-  return [...textsOf(search.locations), ...(scope === "worldwide" ? ["Worldwide"] : hasScopeRegion(scope) ? textsOf(scope.region) : [])];
+/** The scope tokens search.yaml's old `remote_scope` names, Worldwide as a name. */
+function oldRemoteNames(scope: unknown): string[] {
+  return scope === "worldwide" ? ["Worldwide"] : hasScopeRegion(scope) ? textsOf(scope.region) : [];
 }
 
-/** What search.yaml's old `locations` and `remote_scope` name that the location settings do not list: they are not searched any more. With no home city the home country is searched by name, so it counts as listed. */
+/**
+ * What search.yaml's old `locations` and `remote_scope` name that the location settings do not search any more. An old location
+ * needs the home city or a place I'd move to, since only those get an on-site search; an old scope token needs the home country or any
+ * listed place. So a remote-only `CH` does not stand in for a dropped on-site `Switzerland`. With no home city the home country is
+ * searched by name, so it counts as the home city.
+ */
 export function searchEntriesOutsidePlaces(search: OldSearchEntries, preferences: PlacePreferences, geo: PlaceGeo, home: { country: string; countryName: string }): string[] {
-  const names = oldSearchNames(search);
+  const keys = (texts: readonly string[]): Set<string> => new Set(texts.map((text) => samePlaceKey(text, geo)));
+  const { places } = normalizePlaces(preferences, geo);
   const homeNames = preferences.home_city.trim() === "" ? [home.country, home.countryName] : [preferences.home_city];
-  const listed = new Set([...homeNames, ...preferences.places.map((entry) => entry.place)].map((text) => samePlaceKey(text, geo)));
-  return [...new Set(names.filter((name) => !listed.has(samePlaceKey(name, geo))))];
+  const onsite = keys([...homeNames, ...places.filter((entry) => entry.relocate).map((entry) => entry.place)]);
+  const remote = keys([home.country, home.countryName, ...places.map((entry) => entry.place)]);
+  const dropped = [...textsOf(search.locations).filter((name) => !onsite.has(samePlaceKey(name, geo))), ...oldRemoteNames(search.remote_scope).filter((name) => !remote.has(samePlaceKey(name, geo)))];
+  return [...new Set(dropped)];
 }
 
 /**

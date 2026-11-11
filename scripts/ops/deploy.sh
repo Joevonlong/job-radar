@@ -3,7 +3,7 @@
 # capability: config-overlay-convert
 # Deploy / upgrade Job Radar on this machine. Safe to run again: every step is idempotent.
 #
-#   scripts/ops/deploy.sh [--dry-run] [--skip-pull] [--branch main | --ref v2.0.0 [--verify]] [--remote origin]
+#   scripts/ops/deploy.sh [--dry-run] [--skip-pull] [--branch NAME | --ref v2.0.0 [--verify]] [--remote origin]
 #                     [--no-backup] [--no-prune] [--no-ai-worker] [--no-drain] [--drain-timeout S]
 #                     [--wait-timeout 300] [--settle S]
 #
@@ -14,7 +14,8 @@
 #                  (.tmp-* / .trash-* under data/releases/ai-worker) of earlier deploys that did not finish;
 #                  git, docker, node, pnpm are installed and Docker is running; no uncommitted changes to tracked files
 #                  (in every mode, --skip-pull too); optional external-volume guard
-#   2  pull        the checkout is on the branch and fast-forwards to <remote>/<branch>; then the target commit is fixed:
+#   2  pull        follows the current branch (main or stable), or --branch NAME; fast-forwards to <remote>/<branch>,
+#                  never switches branches without --ref; then the target commit is fixed:
 #                  every later step uses that commit, and a step stops when HEAD moved or tracked files changed meanwhile.
 #                  With --ref, the resolved commit must ship an install script that runs the worker from a release
 #                  directory (else see docs/upgrade.md, "Downgrade to a version before release directories")
@@ -52,13 +53,18 @@
 #   12 prune       releases the deploy lock and removes the build context, then cleans the Docker build cache and
 #                  dangling images (never volumes or images in use); cleanup failures only warn
 #   13 doctor      pnpm run doctor (including config.pending: what step 11 left, and why)
+#                  then a development-build notice if HEAD's tree differs from v<package.json version> (or the tag is
+#                  missing), with the commit count when available; a switch-back command only when <remote>/stable exists
 #
 #   --dry-run          print the steps and the commands, change nothing (read-only probes still run, and a problem
 #                      that would stop a real run, a deploy lock held by another run included, is shown as a warning)
-#   --skip-pull        do not touch git (deploy the checkout as it is; e.g. a rollback to an older commit)
-#   --branch NAME      branch to deploy (default main); --remote NAME (default origin)
-#   --ref REF          deploy a release tag (recommended for users, e.g. --ref v2.0.0) or another branch instead of main: the
-#                      checkout is switched to it (a tag leaves git in detached HEAD; `git checkout main` returns). Running
+#   --skip-pull        do not touch git (deploy the checkout as it is, including a feature branch or detached HEAD)
+#   --branch NAME      branch to follow (default: current branch (main or stable)); it must be checked out
+#                      and never switches branches; by default, other branches and detached HEAD are refused
+#                      unless using --ref or --skip-pull
+#   --remote NAME      remote to fetch from (default origin)
+#   --ref REF          deploy a release tag (recommended for users, e.g. --ref v2.0.0) or another branch: the
+#                      checkout is switched to it (a tag leaves git in detached HEAD). Running
 #                      again with an older tag is the rollback of the code (the database comes from the pre-deploy backup)
 #   --verify           with --ref <tag>: run `git verify-tag` first and stop when the signature is missing or invalid
 #                      (uses the maintainer's public key in docs/signing-key.pub; deploy does not verify tags by default)
@@ -70,6 +76,8 @@
 #   --wait-timeout S   how long step 8 waits for the services to turn healthy (default 300)
 #   --settle S         the longest step 11 waits for that, counted from its start (before config writes and prune); 0 = no wait
 #                      (default: schedule.yaml deploy.ai_worker_swap_timeout_seconds, 120)
+#
+# The development-build notice never prompts or changes the exit code; dry-run skips it until a real deploy finishes.
 #
 # Exit code (decided once, at the end, by scripts/ops/lib/deploy-result.sh): 0 = deployed, the doctor found nothing or
 # only warnings; 1 = a step failed (the message says which, and what state the services and the ai-worker are in), another
@@ -103,7 +111,7 @@ source "$APP/$OPS/lib/config.sh"
 
 DRY_RUN=0
 SKIP_PULL=0
-BRANCH="main"
+BRANCH=""
 REF=""
 VERIFY=0
 REMOTE="origin"
@@ -213,6 +221,33 @@ step() {
 }
 
 say() { echo "  $*"; }
+
+stable_branch_exists() { git -C "$ROOT" show-ref --verify --quiet "refs/remotes/$REMOTE/stable" 2>/dev/null; }
+
+# Informational only: a missing tag or failed probe must not change the deploy result.
+development_build_notice() {
+  local version tag head_tree tag_tree count
+  version="$(node -e 'const version = require("./package.json").version; if (typeof version === "string") process.stdout.write(version);' 2>/dev/null)" || return 0
+  [[ -n "$version" ]] || return 0
+  tag="v$version"
+  if git -C "$ROOT" show-ref --verify --quiet "refs/tags/$tag" 2>/dev/null; then
+    head_tree="$(git -C "$ROOT" rev-parse --verify 'HEAD^{tree}' 2>/dev/null)" || return 0
+    tag_tree="$(git -C "$ROOT" rev-parse --verify "refs/tags/$tag^{tree}" 2>/dev/null)" || return 0
+    [[ "$head_tree" != "$tag_tree" ]] || return 0
+    count="$(git -C "$ROOT" rev-list --count "refs/tags/$tag..HEAD" 2>/dev/null)" || return 0
+    echo
+    say "This is a development build: $count commits after $tag."
+  else
+    echo
+    say "This is a development build based on version $version; tag $tag was not found locally."
+  fi
+  if stable_branch_exists; then
+    say "To switch back to stable:"
+    echo "  \$ git switch stable"
+    echo "  \$ scripts/ops/deploy.sh"
+  fi
+  return 0
+}
 
 # A step failed: say which, why, and what to do; the steps already done are not undone.
 fail_step() {
@@ -363,8 +398,17 @@ if [[ "$SKIP_PULL" -eq 1 ]]; then
   say "--skip-pull: git is left alone, deploying the checkout as it is ($(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo '?'))"
 else
   current="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
-  if [[ -z "$REF" && "$current" != "$BRANCH" ]]; then
-    require "the current branch is ${current}, not $BRANCH" "Run from the main checkout (not a worktree or feature branch), use --ref <tag> to deploy a release, run \`git switch main\` if HEAD is detached, or --skip-pull to deploy the current code"
+  if [[ -z "$REF" ]]; then
+    branch_hint="Use --ref <tag> to deploy a release, or --skip-pull to deploy the current code"
+    if stable_branch_exists; then branch_hint="$branch_hint, or run \`git switch stable\`"; fi
+    if [[ -z "$BRANCH" ]]; then
+      case "$current" in
+        main|stable) BRANCH="$current" ;;
+        *) require "the current branch is $current; without --branch or --ref, only main or stable can be deployed" "$branch_hint" ;;
+      esac
+    elif [[ "$current" != "$BRANCH" ]]; then
+      require "the current branch is ${current}, not $BRANCH" "$branch_hint"
+    fi
   fi
   before="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo '?')"
   if [[ -n "$REF" ]]; then
@@ -400,7 +444,7 @@ else
       proc_step "could not check out $REF" "Resolve the git error above, then run this script again" git -C "$ROOT" checkout --detach "$ref_target"
       say "$before -> $(git -C "$ROOT" rev-parse --short HEAD) ($REF)"
     fi
-  else
+  elif [[ -n "$BRANCH" ]]; then
     echo "  \$ git fetch $REMOTE $BRANCH"
     echo "  \$ git merge --ff-only $REMOTE/$BRANCH"
     if [[ "$DRY_RUN" -eq 0 ]]; then
@@ -408,6 +452,8 @@ else
       proc_step "$BRANCH and $REMOTE/$BRANCH have diverged, cannot fast-forward" "The local $BRANCH has commits that are not on the remote: find out why before deploying, do not force-push" git -C "$ROOT" merge --ff-only "$REMOTE/$BRANCH"
       say "$before -> $(git -C "$ROOT" rev-parse --short HEAD)"
     fi
+  else
+    say "pull skipped in this plan: select main or stable, or use --ref <tag>"
   fi
 fi
 # From here on "the commit to deploy" is TARGET, never whatever HEAD is at the moment.
@@ -592,6 +638,18 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
     echo "  Only the scraping channels linkedin-guest, indeed and jobspy-google use it (all off by default); while one of them is on, the doctor below reports it as a problem. docker compose -p $PROJECT logs --tail 100 jobspy shows why." >&2
   fi
   compose ps
+fi
+
+if compose config --services 2>/dev/null | grep -qx career-pdf; then
+  echo "  \$ docker compose -p $PROJECT up -d --no-deps --wait --wait-timeout $WAIT_TIMEOUT career-pdf"
+  if [[ "$DRY_RUN" == 0 ]]; then
+    assert_target
+    proc_check_stop; pdf_code=0
+    proc_run docker compose -p "$PROJECT" up -d --no-deps --wait --wait-timeout "$WAIT_TIMEOUT" career-pdf || pdf_code=$?; proc_check_stop
+    if (( pdf_code != 0 )); then
+      echo "deploy: warning: career-pdf did not become healthy; the deploy continues. Check docker compose logs career-pdf." >&2
+    fi
+  fi
 fi
 
 step "migrate: database migrations"
@@ -886,6 +944,7 @@ fi
 step "doctor: overall check"
 echo "  \$ pnpm run doctor"
 if [[ "$DRY_RUN" == 1 ]]; then
+  say "dry-run: development-build notice skipped (shown after a real deploy)"
   echo
   if [[ "$PROBLEMS" -gt 0 ]]; then
     echo "dry-run finished: nothing was changed. $PROBLEMS condition(s) are not met right now (see the warnings above); a real run would stop there."
@@ -912,4 +971,5 @@ fi
 if [[ "$CONFIG_WRITES_PENDING" == 1 ]]; then
   echo "Deployed, but the config writes are pending: $CONFIG_PENDING_REASON. The next deploy retries them.$([[ "$DOCTOR_RC" =~ ^[012]$ ]] || echo ' The doctor did not run either.')" >&2
 fi
+development_build_notice || true
 exit "$(deploy_final_rc "$CONFIG_WRITES_PENDING" "$DOCTOR_RC" "$WORKER_WAIT_RC")"

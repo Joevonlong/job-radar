@@ -69,9 +69,11 @@ coach:
 # Extracting stories from your profile, a pasted text or an uploaded résumé (the buttons of the stories card on /me). The text
 # goes to the providers of the `story_extract` task in ai.yaml. The file itself is never stored.
 import:
+  title_words: [Lebenslauf, Curriculum Vitae, CV, Resume, Résumé, Tabellarischer Lebenslauf]
+  sensitive_labels: [Geburtsdatum, Geburtsort, Staatsangehörigkeit, Nationalität, Familienstand, Anschrift, Date of birth, Place of birth, Nationality, Marital status, Address]
   # Largest résumé file, in bytes; a larger one is refused unread
   max_file_bytes: 2000000
-  # Longest source text sent to the AI, in characters; a longer one is cut and the page says so
+  # Longest confirmed text sent to the AI, in characters; any earlier truncation is shown in the preview
   max_chars: 30000
   # A source with less text than this has nothing to extract (a scanned PDF has no text layer)
   min_chars: 20

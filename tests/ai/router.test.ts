@@ -75,7 +75,7 @@ describe("errors of a task with private input", () => {
     return { logged: JSON.stringify(warns), stored: health.rows.get("deepseek"), error: thrown instanceof Error ? thrown.message : "" };
   };
 
-  it.each(["story_extract", "write"] as const)("%s: logs, health and the final error hold the kind only", async (task) => {
+  it.each(["story_extract", "career_extract", "write"] as const)("%s: logs, health and the final error hold the kind only", async (task) => {
     const { logged, stored, error } = await run(task);
     for (const text of [logged, JSON.stringify(stored), error]) expect(text).not.toContain(SECRET);
     expect(stored).toMatchObject({ lastErrorKind: "provider_error", lastErrorMessage: "provider_error" });

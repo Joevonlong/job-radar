@@ -6,7 +6,7 @@ import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../t
 import { createCycleCache } from "../web/cache";
 import { createTitleFilter, interleave, isWithinWindow, parseDate, windowCutoff } from "../web/select";
 import { loadKnownDetails, storedDetailOf } from "../known";
-import { searchKind } from "../query";
+import { placeFreeRequestKey, searchKind } from "../query";
 import { ANSWER_SECTIONS, HOME_OFFICE_VALUES, fetchDetail, fetchSearchPage, postingUrl, searchUrl } from "./client";
 import { parseStepstonePayload } from "./parse";
 import { payloadSchema, type StepstoneDetail, type StepstoneListItem, type StepstonePayload } from "./schema";
@@ -221,6 +221,7 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
     usesQueries: true,
     supportsCompanyQueries: true,
     supportsRemotePlaces: false,
+    requestKey: placeFreeRequestKey,
     // the ghost job check: StepStone ids are stable and the detail page's full text is stored
     stableExternalIds: true,
     fullDescription: true,

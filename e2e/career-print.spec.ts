@@ -1,0 +1,441 @@
+import { parse, stringify } from "yaml";
+import type { AddressInfo } from "node:net";
+import type { Download } from "./fixtures";
+import { createPdfService } from "../src/career-pdf/service";
+import { execFileSync, spawnSync } from "node:child_process";
+import fs, { readFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { getDocumentProxy, getResolvedPDFJS } from "unpdf";
+import { z } from "zod";
+import { test as base, expect } from "./fixtures";
+import { normalizedText, PRINT_DAY, PRINT_DOCUMENTS, PRINT_OPTIONS, sampleResume, signaturePng } from "./career-print-samples";
+import { extractText, renderResume, runCheck, runLetterCheck, shipBlockers, shownContent, type Doc, type Resume } from "../src/lib/career/engine";
+import { missingContent, parserProblems, readingOrderProblem } from "../src/lib/career/engine/extract";
+import { plainText } from "../src/lib/career/engine/sections";
+import { THEMES } from "../src/lib/career/engine/themes";
+import { openPrinter, type Printer } from "../src/lib/career/print/print-pdf";
+import { checkOptions } from "../tests/career/engine/helpers/check-options";
+
+const FIXTURES = path.resolve(import.meta.dirname, "../tests/fixtures/career");
+const BASELINE = path.join(FIXTURES, "print-baseline");
+const OPTIONS = { ...checkOptions(FIXTURES), today: PRINT_DAY, images: { signature: signaturePng() } };
+const WORD = /[\p{L}]{5,}/gu;
+/** Line-end hyphenation can split a few compounds; garbled output splits many more words. */
+const MAX_MISSING_WHOLE_WORDS = 3;
+/** Chromium rounds metric paper sizes to device pixels before writing PDF points. */
+const PAPER_SIZE_TOLERANCE_PT = 1;
+
+const test = base.extend<Record<never, never>, { printer: Printer }>({
+  printer: [async ({}, usePrinter) => {
+    const printer = await openPrinter();
+    try { await usePrinter(printer); } finally { await printer.close(); }
+  }, { scope: "worker" }],
+});
+
+function html(resume: Resume, theme = resume.meta.theme, doc: Doc = "resume", signature = true): string {
+  return renderResume(resume, { theme, doc, today: PRINT_DAY, images: signature ? OPTIONS.images : undefined });
+}
+
+function assertWholeWords(text: string, resume: Resume, doc: Doc, extractor: string): void {
+  const source = doc === "letter" ? [resume.basics.name, ...(resume.letter?.body ?? [])] : [resume.basics.name, ...shownContent(resume, PRINT_DAY).map((part) => part.text)];
+  const expected = new Set(source.flatMap((part) => plainText(part).match(WORD) ?? []).map((word) => word.toLowerCase()));
+  const actual = new Set((text.match(WORD) ?? []).map((word) => word.toLowerCase()));
+  const missing = [...expected].filter((word) => !actual.has(word));
+  expect(expected.size).toBeGreaterThan(0);
+  expect(missing.length, `${extractor}: ${missing.join(", ")}`).toBeLessThanOrEqual(MAX_MISSING_WHOLE_WORDS);
+  expect(text, extractor).toContain(resume.basics.name);
+}
+
+async function sheetSizes(pdf: Uint8Array): Promise<number[][]> {
+  const document = await getDocumentProxy(new Uint8Array(pdf), { verbosity: 0 });
+  try {
+    const sizes: number[][] = [];
+    for (let n = 1; n <= document.numPages; n++) {
+      const page = await document.getPage(n);
+      const viewport = page.getViewport({ scale: 1 });
+      sizes.push([viewport.width, viewport.height]);
+      page.cleanup();
+    }
+    return sizes;
+  } finally {
+    await document.loadingTask.destroy();
+  }
+}
+
+for (const document of PRINT_DOCUMENTS) {
+  test(`${document.key}: pages match the baseline on every OS`, async ({ printer }) => {
+    const pages = z.record(z.string(), z.number().int().positive()).parse(JSON.parse(readFileSync(path.join(BASELINE, "pages.json"), "utf8")));
+    expect(pages[document.key], "every document needs a baseline page count").toBeDefined();
+    const result = await printer.print(html(sampleResume(FIXTURES, document.sample), document.theme, document.doc), PRINT_OPTIONS);
+    expect(result.pages).toBe(pages[document.key]);
+  });
+
+  test(`${document.key}: exact Linux text matches the baseline`, async ({ printer }) => {
+    test.skip(process.platform !== "linux", "The text layer differs between operating systems; the baseline is Linux.");
+    const result = await printer.print(html(sampleResume(FIXTURES, document.sample), document.theme, document.doc), PRINT_OPTIONS);
+    expect(await normalizedText(result.pdf)).toBe(readFileSync(path.join(BASELINE, `${document.key}.txt`), "utf8"));
+  });
+
+  test(`${document.key}: real PDF checks contain no errors`, async ({ printer }) => {
+    const resume = sampleResume(FIXTURES, document.sample);
+    const { pdf } = await printer.print(html(resume, document.theme, document.doc), PRINT_OPTIONS);
+    const result = await (document.doc === "letter" ? runLetterCheck : runCheck)(resume, pdf, OPTIONS);
+    expect(result.issues.filter((issue) => issue.level === "error")).toEqual([]);
+  });
+
+  test(`${document.key}: extractors preserve whole words`, async ({ printer }, testInfo) => {
+    const resume = sampleResume(FIXTURES, document.sample);
+    const { pdf } = await printer.print(html(resume, document.theme, document.doc), PRINT_OPTIONS);
+    assertWholeWords(await normalizedText(pdf), resume, document.doc, "unpdf");
+    const probe = spawnSync("pdftotext", ["-v"], { stdio: "ignore" });
+    if (probe.error && "code" in probe.error && probe.error.code === "ENOENT") {
+      testInfo.annotations.push({ type: "extractor", description: "pdftotext is not on PATH; unpdf whole-word assertions ran." });
+      return;
+    }
+    if (probe.error) throw probe.error;
+    expect(probe.status, "pdftotext must be usable when installed").toBe(0);
+    const directory = await mkdtemp(path.join(tmpdir(), "career-words-"));
+    try {
+      const file = path.join(directory, "resume.pdf");
+      await writeFile(file, pdf);
+      const text = execFileSync("pdftotext", ["-raw", "-enc", "UTF-8", file, "-"], { encoding: "utf8", timeout: PRINT_OPTIONS.timeoutMs });
+      assertWholeWords(text, resume, document.doc, "pdftotext -raw");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+test("printer isolation blocks external resources and scripts with a working control", async ({ printer, browser }) => {
+  let requests = 0;
+  const server = createServer((request, response) => {
+    requests++;
+    if (request.url === "/image.png") {
+      response.setHeader("Content-Type", "image/png");
+      response.end(signaturePng());
+    } else {
+      response.setHeader("Content-Type", "text/javascript");
+      response.end('document.body.append(" External script ran ");');
+    }
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Expected a TCP address");
+  const origin = `http://127.0.0.1:${address.port}`;
+  const hostile = `<!doctype html><body><p>Original printable text</p><img src="${origin}/image.png"><script>document.body.append(" Inline script ran ");</script><script src="${origin}/probe.js"></script></body>`;
+  try {
+    const isolated = await printer.print(hostile, PRINT_OPTIONS);
+    expect(isolated.pages).toBeGreaterThan(0);
+    expect(requests).toBe(0);
+    const text = await normalizedText(isolated.pdf);
+    expect(text).toContain("Original printable text");
+    expect(text).not.toContain("Inline script ran");
+    expect(text).not.toContain("External script ran");
+    const context = await browser.newContext({ javaScriptEnabled: true });
+    try {
+      const page = await context.newPage();
+      await page.setContent(hostile, { waitUntil: "load" });
+      const control = await normalizedText(new Uint8Array(await page.pdf()));
+      expect(requests).toBeGreaterThan(0);
+      expect(control).toContain("Inline script ran");
+      expect(control).toContain("External script ran");
+    } finally { await context.close(); }
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test("every printed sample embeds its used theme families without fallback fonts", async ({ printer }) => {
+  test.setTimeout(180_000);
+  const { OPS } = await getResolvedPDFJS();
+  const normalize = (family: string) => family.replace(/^[A-Z]{6}\+/, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  for (const sample of PRINT_DOCUMENTS) {
+    const { pdf } = await printer.print(html(sampleResume(FIXTURES, sample.sample), sample.theme, sample.doc), PRINT_OPTIONS);
+    const document = await getDocumentProxy(new Uint8Array(pdf), { verbosity: 0, fontExtraProperties: true });
+    try {
+      const names = new Set<string>();
+      for (let n = 1; n <= document.numPages; n++) {
+        const page = await document.getPage(n);
+        const operators = await page.getOperatorList();
+        for (let i = 0; i < operators.fnArray.length; i++) if (operators.fnArray[i] === OPS.setFont) {
+          const [id] = z.tuple([z.string(), z.number()]).parse(operators.argsArray[i]);
+          const font = z.object({ name: z.string(), data: z.instanceof(Uint8Array) }).parse(page.commonObjs.get(id));
+          expect(font.data.length, `${sample.key}: embedded font ${font.name}`).toBeGreaterThan(0);
+          names.add(normalize(font.name));
+        }
+        page.cleanup();
+      }
+      const families = [...new Set(THEMES[sample.theme].template.fonts.map((font) => normalize(font.family)))];
+      expect(names.size, sample.key).toBeGreaterThan(0);
+      for (const name of names) expect(families.some((family) => name.startsWith(family)), `${sample.key}: unexpected font ${name}`).toBe(true);
+      // Classic uses proportional stacks; minimal and band letters have neither stacks nor inline code.
+      const usesMono = sample.theme !== "classic" && (sample.doc !== "letter" || ["compact", "split"].includes(sample.theme));
+      const used = families.filter((family) => usesMono || family !== normalize("IBM Plex Mono"));
+      for (const family of used) expect([...names].some((name) => name.startsWith(family)), `${sample.key}: missing ${family}`).toBe(true);
+    } finally { await document.loadingTask.destroy(); }
+  }
+});
+
+test("minimal tagged PDF starts with the name and passes the parser in reading order", async ({ printer }) => {
+  const resume = sampleResume(FIXTURES, "sample.en");
+  const { pdf } = await printer.print(html(resume, "minimal"), PRINT_OPTIONS);
+  const result = await runCheck(resume, pdf, OPTIONS);
+  expect(result.parser).toEqual([]);
+  expect(result.readingOrder).toBeNull();
+  expect(result.text.startsWith(resume.basics.name)).toBe(true);
+  expect(result.ok).toBe(true);
+});
+
+test("split prints education bullets and inline code punctuation; compact keeps headings whole", async ({ printer }) => {
+  const resume = sampleResume(FIXTURES, "sample.en");
+  resume.education[0].bullets.push("Teaching assistant for databases.");
+  resume.experience[0].bullets.push("Built services and `Go`. See blog.");
+  const split = await extractText((await printer.print(html(resume, "split"), PRINT_OPTIONS)).pdf);
+  expect(missingContent(resume, split, PRINT_DAY, OPTIONS.limits)).toEqual([]);
+  expect(split.replace(/\s+/g, " ")).toContain("Teaching assistant for databases.");
+  expect(split).toContain("services and Go. See blog.");
+  const sample = sampleResume(FIXTURES, "sample.en");
+  const compact = await extractText((await printer.print(html(sample, "compact"), PRINT_OPTIONS)).pdf);
+  expect(parserProblems(sample, compact)).toEqual([]);
+  expect(compact).toMatch(/^LANGUAGES$/m);
+});
+
+test("numbers stay with their units in HTML and retain ordinary spaces in the text layer", async ({ printer }) => {
+  const resume = sampleResume(FIXTURES, "sample.en");
+  const bullet = "Cut p95 latency from 820 ms to 210 ms and cost by 40 % for 3 TB a day";
+  resume.experience[0].bullets = [bullet];
+  const content = html(resume);
+  expect(content).toContain("820\u00a0ms");
+  expect(content).toContain("40\u00a0%");
+  expect(resume.experience[0].bullets[0]).toBe(bullet);
+  const result = await runCheck(resume, (await printer.print(content, PRINT_OPTIONS)).pdf, OPTIONS);
+  expect(result.text).toMatch(/820 ms to 210 ms and cost by 40 % for 3 TB/);
+  expect(result.parser).toEqual([]);
+});
+
+test("shipping blocks placeholders in a real printed document and accepts the finished sample", async ({ printer }) => {
+  const resume = sampleResume(FIXTURES, "sample.en");
+  const finished = await printer.print(html(resume), PRINT_OPTIONS);
+  expect(shipBlockers(resume, "resume", { limits: OPTIONS.limits, pages: finished.pages })).toEqual([]);
+  resume.basics.summary = "⟨One sentence about you⟩";
+  const unfinished = await printer.print(html(resume), PRINT_OPTIONS);
+  expect(shipBlockers(resume, "resume", { limits: OPTIONS.limits, pages: unfinished.pages }).map((issue) => issue.code)).toContain("career.gate.placeholders");
+});
+
+test("a two-page resume has two A4 sheets", async ({ printer }) => {
+  const resume = sampleResume(FIXTURES, "sample.en");
+  resume.meta.pages = 2;
+  resume.experience = [...resume.experience, ...resume.experience, ...resume.experience];
+  const result = await printer.print(html(resume), PRINT_OPTIONS);
+  expect(result.pages).toBe(2);
+  const sizes = await sheetSizes(result.pdf);
+  expect(sizes).toHaveLength(2);
+  for (const [width, height] of sizes) {
+    expect(Math.abs(width - 210 / 25.4 * 72)).toBeLessThanOrEqual(PAPER_SIZE_TOLERANCE_PT);
+    expect(Math.abs(height - 297 / 25.4 * 72)).toBeLessThanOrEqual(PAPER_SIZE_TOLERANCE_PT);
+  }
+});
+
+test("the second-page folio occupies its own line and preserves reading order", async ({ printer }) => {
+  const resume = sampleResume(FIXTURES, "sample.en");
+  resume.experience = Array.from({ length: 8 }, () => resume.experience).flat();
+  const { pdf, pages } = await printer.print(html(resume), PRINT_OPTIONS);
+  expect(pages).toBeGreaterThanOrEqual(2);
+  const text = await extractText(pdf);
+  expect(text.split("\n").map((line) => line.trim())).toContain(`2 / ${pages}`);
+  expect(readingOrderProblem(resume, text)).toBeNull();
+});
+
+test("a Letter-paper resume occupies one Letter sheet without A4 padding", async ({ printer }) => {
+  const resume = sampleResume(FIXTURES, "sample.en");
+  resume.meta.paper = "letter";
+  const { pdf, pages } = await printer.print(html(resume), PRINT_OPTIONS);
+  expect(pages).toBe(1);
+  expect(await sheetSizes(pdf)).toEqual([[612, 792]]);
+});
+
+for (const theme of Object.keys(THEMES)) {
+  test(`${theme}: sections preserve text, tags, custom headings and quiet-mode pages`, async ({ printer }) => {
+    const resume = sampleResume(FIXTURES, "sections.en");
+    const accent = await printer.print(html(resume, theme), PRINT_OPTIONS);
+    const text = await extractText(accent.pdf);
+    resume.meta.colors = "quiet";
+    const quiet = await printer.print(html(resume, theme), PRINT_OPTIONS);
+    expect(quiet.pages).toBe(accent.pages);
+    expect(await extractText(quiet.pdf)).toBe(text);
+    expect(text.split("\n")[0].trim()).toBe(resume.basics.name);
+    expect(readingOrderProblem(resume, text)).toBeNull();
+    const flat = text.replace(/\s+/g, " ");
+    expect(flat).toContain("Developer experience · Reliability · Cost · Security · Observability");
+    expect(flat).toContain("Go · CLI · OSS");
+    expect(flat).toMatch(/\bWork Experience\b/i);
+  });
+}
+
+test("real letter checks accept the signed example and reject two pages with a missing signature", async ({ printer }) => {
+  const resume = sampleResume(FIXTURES, "letter.de");
+  const good = await runLetterCheck(resume, (await printer.print(html(resume, "split", "letter"), PRINT_OPTIONS)).pdf, OPTIONS);
+  expect(good.ok).toBe(true);
+  expect([good.pages, good.budget, good.readingOrder, good.parser]).toEqual([1, 1, null, []]);
+  expect(good.text.split("\n")[0]).toMatch(new RegExp(`^${resume.basics.name}`));
+  resume.letter!.body = [...resume.letter!.body, ...resume.letter!.body, ...resume.letter!.body];
+  resume.letter!.signature = "missing-signature.png";
+  const content = html(resume, resume.meta.theme, "letter", false);
+  const bad = await runLetterCheck(resume, (await printer.print(content, PRINT_OPTIONS)).pdf, { ...OPTIONS, images: undefined });
+  expect(bad.ok).toBe(false);
+  expect(bad.pages).toBe(2);
+  expect(bad.issues[0].level).toBe("error");
+  expect(bad.lint).toContainEqual(expect.objectContaining({ where: "letter.signature", code: "career.check.signature_unreadable", level: "error" }));
+  expect(content).not.toContain('class="l-sig"');
+});
+
+const letterSample = z.object({ letter: z.object({
+  recipient: z.array(z.string()), subject: z.string(), salutation: z.string(),
+  body: z.array(z.string()), closing: z.string(),
+}) });
+
+async function pdfHeader(download: Download) {
+  const file = await download.path();
+  expect(file).not.toBeNull();
+  expect(fs.readFileSync(file!).subarray(0, 5).toString()).toBe("%PDF-");
+  expect(download.suggestedFilename()).toMatch(/\.pdf$/);
+}
+
+test.describe("document editor PDF service", () => {
+  test.describe.configure({ mode: "serial", timeout: 120000 });
+  test("counts pages, downloads saved résumé and German letter, and shows uncovered characters on mobile", async ({
+    page, browser,
+  }) => {
+    const configDir = process.env.E2E_CONFIG_DIR;
+    const profileDir = process.env.E2E_PROFILE_DIR;
+    if (!configDir || !profileDir) throw new Error("Disposable e2e directories are required");
+    const file = path.join(configDir, "career.yaml");
+    const original = fs.existsSync(file) ? fs.readFileSync(file) : null;
+    const career = path.join(profileDir, "career");
+    if (fs.existsSync(career)) throw new Error("career print e2e requires an unused career directory");
+    const service = await createPdfService({
+      open: () => openPrinter({ executablePath: browser.browserType().executablePath() }),
+      maxHtmlBytes: 8000000, timeoutMs: 30000, log: () => undefined,
+    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        service.server.once("error", reject);
+        service.server.listen(0, "127.0.0.1", resolve);
+      });
+      const url = `http://127.0.0.1:${(service.server.address() as AddressInfo).port}`;
+      fs.writeFileSync(file, stringify({ config_version: 2, enabled: true, pdf: { url },
+        preview: { debounce_ms: 50, page_count_debounce_ms: 250 } }));
+      await page.goto("/career");
+      const experience = page.getByTestId("career-experience");
+      await experience.getByRole("button", { name: "添加经历", exact: true }).click();
+      await experience.getByLabel("公司", { exact: true }).fill("Example Company");
+      await experience.getByLabel(/^开始日期/).fill("2024");
+      await experience.getByLabel("写法 1", { exact: true }).fill("Engineer");
+      await experience.getByRole("button", { name: "添加要点", exact: true }).click();
+      await experience.getByLabel("写法 1", { exact: true }).last().fill("Built a reliable service for 20 teams");
+      await page.getByRole("button", { name: "保存档案", exact: true }).click();
+      await expect(page.getByTestId("career-profile-form").getByRole("status")).toContainText("已保存");
+      await page.getByRole("link", { name: "简历文档", exact: true }).click();
+      await page.getByLabel("文档标题（可选）").fill("Printable résumé");
+      await page.getByRole("button", { name: "从档案创建", exact: true }).click();
+      await expect(page.getByTestId("document-editor")).toBeVisible();
+      await expect(page.getByTestId("document-page-count")).toHaveText("1 页");
+      const role = page.getByTestId("document-experience").getByRole("textbox", { name: "职位", exact: true });
+      await role.fill("Saved before exporting");
+      const resumeReady = page.waitForEvent("download");
+      await page.getByRole("button", { name: "导出简历 PDF", exact: true }).click();
+      const resume = await resumeReady;
+      await pdfHeader(resume);
+      const resumeFile = (await resume.path())!;
+      expect(await extractText(new Uint8Array(fs.readFileSync(resumeFile)))).toContain("Saved before exporting");
+      await page.reload();
+      await expect(role).toHaveValue("Saved before exporting");
+      await page.getByRole("combobox", { name: "文档语言", exact: true }).selectOption("de");
+      await page.getByRole("tab", { name: "求职信", exact: true }).click();
+      await page.getByRole("button", { name: "添加求职信", exact: true }).click();
+      const sample = letterSample.parse(parse(fs.readFileSync(path.resolve("tests/fixtures/career/letter.de.yaml"), "utf8")));
+      await page.getByLabel("收件人（每行一项）", { exact: true }).fill(sample.letter.recipient.join("\n"));
+      await page.getByLabel("主题", { exact: true }).fill(sample.letter.subject);
+      await page.getByLabel("称呼", { exact: true }).fill(sample.letter.salutation);
+      await page.getByLabel("落款", { exact: true }).fill(sample.letter.closing);
+      for (const [index, text] of sample.letter.body.entries()) {
+        await page.getByRole("button", { name: "添加条目", exact: true }).click();
+        await page.getByRole("textbox", { name: `文本 ${index + 1}`, exact: true }).fill(text);
+      }
+      await expect(page.getByTestId("document-page-count")).toHaveText(/\d+ 页/);
+      const letterReady = page.waitForEvent("download");
+      await page.getByRole("button", { name: "导出求职信 PDF", exact: true }).click();
+      const letter = await letterReady;
+      await pdfHeader(letter);
+      expect(letter.suggestedFilename()).not.toBe(resume.suggestedFilename());
+      expect(letter.suggestedFilename()).toContain("Anschreiben");
+      expect(await extractText(new Uint8Array(fs.readFileSync((await letter.path())!)))).toContain("Sehr geehrte Frau Muster");
+      await page.getByRole("tab", { name: "内容", exact: true }).click();
+      await page.getByTestId("document-experience").getByRole("textbox", { name: "文本 1", exact: true }).fill("中文成果");
+      await expect(page.getByTestId("document-font-hint")).toContainText("中 文 成 果");
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.evaluate(() => {
+        document.documentElement.classList.remove("light");
+        document.documentElement.classList.add("dark");
+      });
+      await page.getByRole("tab", { name: "预览", exact: true }).click();
+      await expect(page.getByTestId("document-checks")).toBeVisible();
+      await expect(page.locator('iframe[title="文档预览"]')).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: test.info().outputPath("career-print-mobile-dark.png") });
+    } finally {
+      await service.close();
+      if (original) fs.writeFileSync(file, original);
+      else fs.rmSync(file, { force: true });
+      fs.rmSync(career, { recursive: true, force: true });
+    }
+  });
+
+  test("prints hostile HTML without external traffic or script execution", async ({ browser }) => {
+    const requests: string[] = [];
+    const external = createServer((request, response) => {
+      requests.push(request.url ?? "");
+      response.end("external response");
+    });
+    await new Promise<void>((resolve, reject) => {
+      external.once("error", reject);
+      external.listen(0, "127.0.0.1", resolve);
+    });
+    const service = await createPdfService({
+      open: () => openPrinter({ executablePath: browser.browserType().executablePath() }),
+      maxHtmlBytes: 8000000, timeoutMs: 30000, log: () => undefined,
+    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        service.server.once("error", reject);
+        service.server.listen(0, "127.0.0.1", resolve);
+      });
+      const origin = `http://127.0.0.1:${(external.address() as AddressInfo).port}`;
+      const url = `http://127.0.0.1:${(service.server.address() as AddressInfo).port}`;
+      const html = `<!doctype html><html><head><link rel="stylesheet" href="${origin}/external.css"></head>
+        <body><p id="sentinel">script did not run</p><img src="${origin}/external.png">
+        <script>document.getElementById('sentinel').textContent='script executed';fetch('${origin}/script');</script>
+        </body></html>`;
+      const response = await fetch(`${url}/render`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ html }),
+      });
+      expect(response.status).toBe(200);
+      const text = await extractText(new Uint8Array(await response.arrayBuffer()));
+      expect(text).toContain("script did not run");
+      expect(text).not.toContain("script executed");
+      expect(requests).toEqual([]);
+    } finally {
+      await service.close();
+      external.closeAllConnections();
+      await new Promise<void>((resolve) => external.close(() => resolve()));
+    }
+  });
+
+});

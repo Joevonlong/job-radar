@@ -7,7 +7,7 @@ import { placeGeo, plannedSearches, type PlaceGeo, type PlacePreferences } from 
 import { remoteScopeKey } from "@/lib/market/remote-scope";
 
 import type { ChannelMarket } from "./market";
-import type { Channel, RemoteScope, SearchQuery } from "./types";
+import type { Channel, ChannelRuntimeSettings, RemoteScope, SearchQuery } from "./types";
 import type { WatchedCompanyBoard } from "@/lib/companies/watched-boards";
 
 /** The cycle kinds that come from schedule.yaml (the others are `manual` and `catchup`). */
@@ -97,10 +97,45 @@ export function isRemotePlaceQuery(query: SearchQuery): boolean {
   return query.remote && query.location !== null;
 }
 
-/** The queries of `queries` a unit of these channels can run; a board that sends no place on a remote query skips the ones naming a place. */
-export function queriesForChannels(queries: readonly SearchQuery[], channels: readonly Pick<Channel, "supportsRemotePlaces">[]): SearchQuery[] {
-  if (channels.some((channel) => channel.supportsRemotePlaces !== false)) return [...queries];
-  return queries.filter((query) => !isRemotePlaceQuery(query));
+/** A channel of a unit, with its settings when it is enabled and configured: only those take part in merging requests. */
+export interface UnitChannel {
+  channel: Pick<Channel, "supportsRemotePlaces" | "requestKey">;
+  /** Null: the channel is off or not configured this cycle, so it sends nothing and does not keep two queries apart. */
+  settings: ChannelRuntimeSettings | null;
+}
+
+function requestKeyOf({ channel, settings }: UnitChannel, query: SearchQuery): string {
+  if (settings === null || channel.requestKey === undefined) return `id:${query.id}`;
+  try {
+    return channel.requestKey(query, settings);
+  } catch {
+    return `id:${query.id}`;
+  }
+}
+
+/**
+ * The queries of `queries` a unit of these channels runs, in one step:
+ * - a board that sends no place on a remote query skips the ones naming a place (kept when any channel of the unit can send them);
+ * - queries every active channel of the unit sends as the same request are one: the first is kept. A channel without `requestKey`
+ *   keeps every query apart, so a cascade merges only what each of its enabled, configured members would send alike.
+ */
+export function queriesForChannels(queries: readonly SearchQuery[], channels: readonly UnitChannel[]): SearchQuery[] {
+  const runnable = channels.some(({ channel }) => channel.supportsRemotePlaces !== false) ? [...queries] : queries.filter((query) => !isRemotePlaceQuery(query));
+  const active = channels.filter((entry) => entry.settings !== null);
+  if (active.length === 0) return runnable;
+  const seen = new Set<string>();
+  return runnable.filter((query) => {
+    const key = JSON.stringify(active.map((entry) => requestKeyOf(entry, query)));
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** The request key of a board that reads a query's keywords, its kind and, on site, its place, and nothing of a remote scope or a country. */
+export function placeFreeRequestKey(query: SearchQuery): string {
+  const kind = searchKind(query);
+  return JSON.stringify([kind, query.keywords, kind === "city" ? query.location : null, query.company?.key ?? null, query.windowHours, query.maxResults]);
 }
 
 /** `Amsterdam, Netherlands`: the place of a located query with its country, for boards that read both from one text. No known country, or the place is the country: the place alone. */

@@ -2,6 +2,7 @@ import type { OldSearchEntries } from "@/lib/market/places";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 
+import { CareerCard } from "@/components/career/career-card";
 import { ProfileEditor } from "@/components/profile/profile-editor";
 import { ProfileIncompleteBanner } from "@/components/profile/profile-incomplete-banner";
 import { PageHeader } from "@/components/shell/page-header";
@@ -65,6 +66,7 @@ export default async function Page() {
       <PageHeader title={t("title")} description={t("description")} />
       <ProfileIncompleteBanner missing={profileMissing} waiting={waiting} showLink={false} />
       <ProfileEditor me={data.me} preferences={data.preferences} stories={data.stories} storyLimits={data.storyLimits} storyImport={data.storyImport} staleScores={data.staleScores} dbAvailable={data.dbAvailable} salaries={salaries} axis={axis} salaryMedian={salaryMedian} market={market} oldSearch={oldSearch} userLanguageLevel={userGermanLabelOrNull()} />
+      <CareerCard />
     </div>
   );
 }

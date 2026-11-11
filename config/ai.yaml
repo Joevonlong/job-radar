@@ -153,6 +153,12 @@ tasks:
       claude-cli: claude-sonnet-5-5
   summarize: {}
   suggest: {}
+  career_extract:
+    max_output_tokens: 8192
+  # Resume tailoring uses multiple calls within one request budget.
+  career_tailor:
+    # Maximum tokens returned by each tailoring step.
+    max_output_tokens: 8192
   # The application writer (writer.yaml) has a task of its own; unset = global order and limits. Cover letters with several
   # versions need more output than the global cap, and API providers take longer to write them, e.g.:
   #   write:

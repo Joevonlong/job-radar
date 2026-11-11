@@ -34,7 +34,7 @@ pnpm run doctor --only config.market
 | 方面 | 行为 |
 |---|---|
 | 地点 | 写出国家的地点得到该国代码（`Remote - USA` → US，`Dublin, CA` → US）。本国国名前面的城市（`Gütersloh, Germany`）只在本国市场下读取。 |
-| 远程范围 | 由 preferences.yaml 的 `places` 得出：没有时是 `home_country`，也可以是 `worldwide`，或列出代码时的 `{region: [eu, CH, …]}`（命名区域和 ISO 国家）。旧值：`eu_hire_in_de` = `home_country`，`eu_any` = `{region: [eu]}`。`home_country` 保留地点在本国的远程岗、写明包里 `region`（德国包：EU、Europe、EMEA、EEA）或全球的远程岗，显示为“能从德国远程（含面向欧盟 / 欧洲 / EMEA / 全球的远程岗）”；没有 `region` 的市场显示“能从某国远程”。逐行的结果见 [远程岗和关注公司](usage.zh.md#远程岗和关注公司)。 |
+| 远程范围 | 由 preferences.yaml 的 `places` 得出：远程岗可以在本国，以及每个列出的国家、区域或城市（✈ 和仅远程都算）；列了“全球”就在哪里都行。写明包里 `region`（德国包：EU、Europe、EMEA、EEA）的标签也算，不管还列了什么，所以 `[DE, CH]` 仍保留 `Remote - EU`。评分提示词把它写成 `home_country`、`worldwide` 或 `{region: [eu, CH, …]}`，显示为“能从德国远程（含面向欧盟 / 欧洲 / EMEA / 全球的远程岗）”；没有 `region` 的市场显示“能从某国远程”。旧值：`eu_hire_in_de` = `home_country`，`eu_any` = `{region: [eu]}`。逐行的结果见 [远程岗和关注公司](usage.zh.md#远程岗和关注公司)。 |
 | 本地语言 | 包里有该语言的要求规则、并且 `home_language` 就是这门语言时，才读岗位要求的等级；高于你在 me.yaml `languages` 里的等级会扣分（ai.yaml `scoring.language_penalty`）。否则这一步关闭：不读等级、不扣分、打分提示词不问这一项，页面也隐藏相关筛选和标签。 |
 | 基准货币 | 薪资底线、"最低年薪"筛选、统计和高薪门槛都用市场的货币。其他货币按 pipeline.yaml 的 `salary.fx_pivot` + `fx_rates` 换算；没有汇率的货币不参与比较。 |
 | 渠道 | sources.yaml 里写了 `markets: [DE]` 的渠道只在这些市场运行；在别的市场下折叠在"其他市场"里，不算失败。国家参数留空（`country`、`country_name`、`country_indeed`）、远程地点不写的键，都跟随市场。 |
@@ -54,6 +54,15 @@ pnpm run doctor --only config.market
 | `rules.yaml` | pipeline.yaml 里和语言有关的部分：`company.legal_suffixes` / `agency_names`、`agency.*_patterns`、`contract.*`、`salary.currencies`（货币的写法）、`filter.generic_location_patterns`、`filter.remote.*`；`closed_posting.phrases`：原帖页面上表示"不再接收申请"的句子（正则，不区分大小写；只接受 configuration.zh.md"关注岗位复查"一节说的安全子集：不允许 `*`、`+`、`{n,}`），收藏 / 跟进岗位的复查用（见 usage.zh.md"已关闭的岗位"）；`ghost`：招聘帖背后可能没有真实空缺的迹象（见[幽灵岗位说法](#幽灵岗位说法)）；`visa`：JD 里关于签证赞助的说法（见[签证说法](#签证说法)）。 |
 
 `generic` 包总是加载：世界国家表、区域 `eu`、`eea`、`europe`、`dach`、`nordics`、城市表、美国州代码和英文规则。市场自己的包叠加在它上面。
+
+## 地名怎么读
+
+过滤、排序、城市分组、“查看岗位”链接和 handpicked 通道用同一个查找来读地名。一个地名可以是 Worldwide、区域、国家或城市；既是国家又是城市的名字（Singapore），地名查找本身按国家读，而过滤、排序、城市分组、“查看岗位”链接和 handpicked 通道先读城市表，把它当城市。
+
+- **市场表里的任何写法都算同一个城市。** `cities` 表为每种写法给出规范名和国家，所以 `Munich`、`München`、`Muenchen` 是同一个城市，不论你在地点里填哪一个、岗位用哪一个。
+- **你的 `city_aliases` 加入这个城市，不会把它拆开。** 你为某个规范名列出的写法，会并入市场表里同一城市的写法（`Hanover` 加别名 `Hannover City`，仍能匹配 `Hannover` 的岗位），显示的是你的规范名。`metro_areas`、`metro_regions` 的键也这样读，所以 `Koeln: [Hürth]` 对 `Cologne` 偏好生效。
+- **不同的城市保持不同。** 原样写法永远优先。重音和大小写不用来区分城市（`Münster` 与 `Munster` 是同一个键），只有变音写法（`ae`、`oe`、`ue` 对应 `ä`、`ö`、`ü`）是后备，而且只在只指向一个城市时才用，所以表里同时有 `Au` 和 `Aue` 时，两者不会互相匹配。
+- 表里都没有的名字不算错误：它只匹配它自己。
 
 ## 生效的 pipeline 配置怎么合成
 
@@ -183,8 +192,9 @@ pnpm run doctor --only config.market
 | `remote_scope: {region: [...]}` | 每个代码按原样成为仅远程地点 |
 | `remote_scope: worldwide` | `Worldwide` 成为仅远程地点 |
 | `remote_scope: none` | 从 `workplace` 去掉 `remote`，除非它是唯一的值 |
+| 同时出现在 `locations` 和 `remote_scope` 里的地点 | 一条 ✈：愿意搬去的地方也包括在那里远程 |
 
-结果有变化的情况：设为 `none` 时，地点在允许城市的远程职位过去会显示，现在会以 `workplace_not_wanted` 隐藏；设为 `none` 且 `workplace: [remote]` 时，远程职位现在会被检查，不再被隐藏；`{region: [...]}` 没有包含本国时，本国的远程职位现在会显示；`locations` 里的国外城市变成 ✈ 地点并开始匹配。如果 `locations` 的第一项是国外城市，它会成为常住城市，那里的职位按本国比较。
+结果有变化的情况：设为 `none` 时，地点在允许城市的远程职位过去会显示，现在会以 `workplace_not_wanted` 隐藏；设为 `none` 且 `workplace: [remote]` 时，远程职位现在会被检查，不再被隐藏；`{region: [...]}` 没有包含本国时，本国的远程职位现在会显示；`locations` 里的国外城市变成 ✈ 地点并开始匹配。`locations: [Berlin, CH]` 加 `remote_scope: {region: [CH]}` 现在除了瑞士的远程岗，也保留德国的。如果 `locations` 的第一项是国外城市（德国市场的 `[Amsterdam, Berlin]`），它会成为常住城市，那里的职位按本国比较；`config:check` 和 `/me` 会提醒常住城市不在本国，你可以改设本国的城市，把另一个列为 ✈。
 
 `search.yaml` 的 `locations` 和 `remote_scope` 仍可接受但不再生效，也没有迁移步骤：搜索来自 `places`，`config:check` 和 `/me` 会提醒 `places` 里没有的内容，以及 `places` 新增、而这两个键没列出的搜索。两个文件一致时，升级后查询和查询 id 不变，轮转历史得以延续。这些配置会增加或改变搜索：
 
@@ -196,7 +206,25 @@ pnpm run doctor --only config.market
 | `locations` 里的国外城市 | 增加它的远程搜索 |
 | `workplace` 没有 `remote`，范围不是 `none` | 去掉远程搜索，因为这和迁移后的 `none` 无法区分 |
 
-旧版本的代码读不了版本 3。要退回旧版本，请先用升级前的备份或 `/me` 上的画像历史恢复这个文件。
+旧 `locations` 里的现场搜索只有是常住城市或 ✈ 地点时才算列出了，因为只有它们有现场搜索；范围代码是本国或任何列出的地点就算。所以仅远程的 `CH` 不会盖住旧的现场搜索 `Switzerland` 的提醒。
+
+同一个网站会以同样方式发出的搜索，每轮只跑一次。在去掉网站发送不了的搜索的那一步里，如果一个单元里每个已启用、已配置的通道发出的请求都相同，两条查询就合并：Apify 设了 `remote_locations.region: Europe` 时，`{region: [eu]}` 和 `{region: [CH]}` 发往同一个地点，只算一次付费运行；Arbeitsagentur、StepStone、XING 和 JSearch 的远程搜索不带地点，每个关键词组只跑一次远程搜索。判断不了的通道（LinkedIn 会话、Monid、jobspy）把每条查询分开，所以启用了其中之一的级联不合并。
+
+已知限制：✈ 城市按数据表给它的国家搜索，所以即使旧配置指的是马萨诸塞州的 Cambridge，✈ `Cambridge` 也搜英国（过滤仍在本国保留 Cambridge）；常住美国时 ✈ `Paris` 也保留 `Paris, TX`。Arbeitsagentur 只认德语地名（`München`、`Deutschland`，以及 `sources.arbeitsagentur.location_names` 里的城市），国外的地点在那里搜不到结果；它是免费网站，所以不跳过。
+
+每次读取 `preferences.yaml`，不管是谁写的（表单、设置向导、`pnpm run setup`、答案文件或手改），`places` 都按同一套规则处理：
+
+- Worldwide 一律是仅远程。
+- 和常住城市相同的地点去掉。
+- 同一地点写了两次只算一条，留在第一次出现的位置，其中任一条是 ✈ 就是 ✈。比较时不分大小写、重音和空格；读得到市场地名表的地方，同一地点的两种写法（Munich、München）也算一条。
+
+地点条数和名字长度都没有上限，和原来的 `locations` 一样。
+
+评分提示词里的远程范围由地点得出：任一地点是 Worldwide 就是全球；否则是其中的国家和区域，仅远程的和 ✈ 的都算，没有仅远程的国家或区域时再加上本国；一个国家或区域都没有时就是本国。过滤直接读地点（见上），本国总在其中。
+
+设置向导只写 preferences.yaml：search.yaml 的旧键保持原样，不再生效。要停掉远程搜索，就从办公方式里去掉“远程”。
+
+旧版本的代码读不了版本 3。要退回旧版本，请放回升级前的版本 2 文件：`pnpm config:migrate --write`（部署时会运行）会把它复制到 `data/config/.backup/<时间>/profile/preferences.yaml`，也可以从你自己的备份里取（[备份与恢复](backup-restore.zh.md)）。用 `/me` 上的画像历史恢复旧版本没有用：保存时又会转换成版本 3。
 
 ## 改名的配置键
 

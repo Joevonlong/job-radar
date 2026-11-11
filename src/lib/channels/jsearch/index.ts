@@ -89,6 +89,7 @@ export function createJsearchChannel(deps: JsearchDeps = {}): Channel {
     usesQueries: true,
     supportsCompanyQueries: true,
     supportsRemotePlaces: false,
+    requestKey: (query) => JSON.stringify([buildRequests(query, configured(), marketForChannel().countryName, marketForChannel().country), query.maxResults]),
     estimateCost: (paidRecords) => paidRecords * configured().overage_cost_per_request_usd,
 
     async collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPostingInput[]> {

@@ -1,18 +1,19 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { buildQueries, buildSweepQuery, capQuery, isRemotePlaceQuery, queriesForChannels, queryId, windowHoursFor } from "@/lib/channels/query";
+import { buildQueries, buildSweepQuery, capQuery, isRemotePlaceQuery, placeFreeRequestKey, queriesForChannels, queryId, windowHoursFor } from "@/lib/channels/query";
+import { settingsFromConfig } from "@/lib/channels/registry";
 import { configRegistry } from "@/lib/config";
 
 import { shippedYaml } from "../config/helpers";
-import { shippedSearch, testPlaces } from "./helpers";
+import { shippedChannels, shippedSearch, testPlaces } from "./helpers";
 
 describe("queriesForChannels", () => {
   const places = testPlaces({ places: [{ place: "NL", relocate: false }] });
   const queries = buildQueries(shippedSearch(), { ...places, preferences: { ...places.preferences, places: [{ place: "Netherlands", relocate: false }] } }, "manual");
 
   it("takes place queries from a unit whose channels cannot send one, and keeps every scope query", () => {
-    const withoutPlaces = queriesForChannels(queries, [{ supportsRemotePlaces: false }]);
+    const withoutPlaces = queriesForChannels(queries, [{ channel: { supportsRemotePlaces: false }, settings: null }]);
     expect(queries.some(isRemotePlaceQuery)).toBe(true);
     expect(withoutPlaces.some(isRemotePlaceQuery)).toBe(false);
     expect(withoutPlaces).toEqual(queries.filter((query) => !isRemotePlaceQuery(query)));
@@ -20,7 +21,27 @@ describe("queriesForChannels", () => {
   });
 
   it("keeps them when any channel of the unit can", () => {
-    expect(queriesForChannels(queries, [{ supportsRemotePlaces: false }, {}])).toEqual(queries);
+    expect(queriesForChannels(queries, [{ channel: { supportsRemotePlaces: false }, settings: null }, { channel: {}, settings: null }])).toEqual(queries);
+  });
+
+  describe("one request per distinct request", () => {
+    const settings = settingsFromConfig("arbeitsagentur", shippedChannels());
+    const scopes = testPlaces({ places: [{ place: "eu", relocate: false }, { place: "NL", relocate: false }] });
+    const scoped = buildQueries(shippedSearch(), scopes, "manual");
+    const groups = Object.keys(shippedSearch().keyword_groups).length;
+    const noPlace = { supportsRemotePlaces: false, requestKey: placeFreeRequestKey };
+
+    it("sends a board with no place on a remote search one remote search per keyword group, whatever the scopes", () => {
+      expect(scoped.filter((query) => query.remote)).toHaveLength(2 * groups);
+      const kept = queriesForChannels(scoped, [{ channel: noPlace, settings }]);
+      expect(kept.filter((query) => query.remote)).toHaveLength(groups);
+      expect(kept.filter((query) => !query.remote)).toEqual(scoped.filter((query) => !query.remote));
+    });
+
+    it("merges nothing when an active channel of the unit has no request key, and ignores channels that are off", () => {
+      expect(queriesForChannels(scoped, [{ channel: noPlace, settings }, { channel: {}, settings }])).toEqual(scoped);
+      expect(queriesForChannels(scoped, [{ channel: noPlace, settings }, { channel: {}, settings: null }]).filter((query) => query.remote)).toHaveLength(groups);
+    });
   });
 });
 

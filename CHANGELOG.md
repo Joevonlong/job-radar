@@ -5,12 +5,20 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
+- **Location settings are one list of places.** `preferences.yaml` now has `home_city` and `places: [{place, relocate}]` in place of `locations` and `remote_scope`, on `/me` and in the setup wizard, and converts itself. A place the market's tables don't know gets a warning and is matched as written. Result changes: with `remote_scope: none`, a remote job in an allowed city is now hidden as `workplace_not_wanted`; with `none` and `workplace: [remote]`, remote jobs are now checked instead of hidden. The list is normalised on every load and save: `Worldwide` is remote only, a place listed twice counts once with ✈ winning, and a place equal to the home city is dropped. ✈ countries and regions count toward the remote scope, and there is no length or count limit on places, so every file that loaded before still loads. To downgrade, put back the pre-upgrade file from `data/config/.backup/`. See "The location settings migration" in `docs/market-packs.md`.
+- **Places now decide the rules and the searches.** A ✈ place counts for on-site and hybrid jobs in its own country and, for a city, under the same name at home, a remote-only place never does, and a name the tables don't know matches as written in any country. An empty `home_city` means anywhere in the home country. A remote job passes on home, a listed country or city, or a wide label covering one of them; a remote job whose title names another country, also with a qualifier (`Canada only`, `US East Coast`), stays hidden even in a country that counts, while a bare `East Coast` names none. Searches come from `places` and `workplace`, with one remote search per listed place. `search.yaml`'s `locations` and `remote_scope` are ignored and gone from the shipped file, and the `/settings` search fields are gone; `/me` and `config:check` warn about entries `places` doesn't list (an on-site entry needs the home city or a ✈ place, so a remote-only `CH` doesn't cover an old on-site `Switzerland`), about searches `places` adds, and about a home city outside the home country, which an upgrade of `[Amsterdam, Berlin]` gives a German market. When the two files agreed, the upgrade keeps the same queries and ids; the exceptions are in `docs/market-packs.md`. Stored filter results are recomputed. To go back to older code, restore `preferences.yaml` and `search.yaml` from a backup or the profile history. See `docs/market-packs.md`.
+- **Results that change with the upgrade.** `remote_scope: {region: [...]}` without home now shows home-country remote jobs; a foreign city in `locations` becomes ✈ and starts matching on site; `locations: [Berlin, CH]` with `remote_scope: {region: [CH]}` now keeps German remote jobs next to Swiss ones; a `workplace` without `remote` now drops the remote search even when `remote_scope` was not `none`.
+- **Searches a board would send the same way run once.** In the step that drops what a board can't send, queries whose request is the same for every enabled, configured channel of a unit are merged: two scopes a LinkedIn channel's `remote_locations` sends to one location (Apify with `region: Europe` and `{region: [eu, CH]}` is one paid run), and the scope searches of boards that send no place on a remote search (Arbeitsagentur, StepStone, XING, JSearch). Those boards skip remote searches that name a place; Sources, the cycle summary and the log show how many (with `collect.query_rotation: false`, only the summary and the log).
+- **How a place is searched.** A ✈ name the tables don't know (`Poing`) and a city only `city_aliases` knows are searched without a country on Apify and the LinkedIn session, with the same query id as before. A single foreign token such as `{region: [CH]}` keeps its query id, and Bright Data, Indeed and JSearch now send its country. A search abroad on Indeed in a country without an Indeed site returns nothing instead of failing, so it no longer counts toward the circuit breaker; the home country without a site still fails. The form on `/me` shows the number of searches per keyword group. Known limits: a ✈ city searches in the country the tables give it (`Cambridge` searches the UK even if Cambridge, MA was meant), ✈ `Paris` for a US home also keeps `Paris, TX`, and Arbeitsagentur finds only German place names, so a place abroad returns nothing there.
+- **Arbeitsagentur searches German place names.** The API finds nothing for `Germany` or `Munich`, so a country name is translated and `sources.arbeitsagentur.location_names` holds cities with another German name.
+- One place lookup for the filter, the ranking, the city groups, the "View posting" link and the handpicked channel. Every spelling in the market's city table now counts as the same city, so `Munich` also matches `München` in markets whose `filter.city_aliases` does not list it, and `Au` and `Aue` stay two cities. Stored filter results are worked out again on the next cycle, because a job's result can change.
 
-- **Gmail replies (optional, off by default).** Reads one Gmail label read-only with local rules and suggests status changes on `/pipeline`, each confirmed by you and undoable. No AI reads the mails and no mail content leaves the machine. See `docs/gmail-replies.md`. Adds the table `email_replies`.
-- **Merge duplicate companies.** `pnpm companies:merge` lists likely duplicate company rows and merges the pairs you confirm, with a dry run and an undo; a merged spelling no longer grows its row back in later cycles. See `docs/extraction.md`. Adds the table `company_merges` and `company.duplicate_tail_words` in `pipeline.yaml`.
+## [2.1.0] - 2026-11-07
 
-### Changed
+Job Radar 2.1.0 adds a career profile with résumé tailoring, an application writer, company research and Gmail reply
+tracking, all off until you turn them on. It also changes how an installation is upgraded: your config files only hold
+what you changed, the shipped config is built into the images, the host AI worker runs from a release directory, and
+releases now land on a `stable` branch.
 
 - **The project website moved to [jobradar.bid](https://jobradar.bid/).** The READMEs and docs link there now; the old address redirects, so existing links keep working.
 - **Location settings are one list of places.** `preferences.yaml` now has `home_city` and `places: [{place, relocate}]` in place of `locations` and `remote_scope`, on `/me` and in the setup wizard, and converts itself. A place the market's tables don't know gets a warning and is matched as written. The filter's rules are unchanged, so a ✈ place outside the home country doesn't bring in jobs there yet. Result changes: with `remote_scope: none`, a remote job in an allowed city is now hidden as `workplace_not_wanted`; with `none` and `workplace: [remote]`, remote jobs are now checked instead of hidden. See "The location settings migration" in `docs/market-packs.md`.
@@ -22,600 +30,144 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - One place lookup for the filter, the ranking, the city groups, the "View posting" link and the handpicked channel. Every spelling in the market's city table now counts as the same city, so `Munich` also matches `München` in markets whose `filter.city_aliases` does not list it. Stored filter results are worked out again on the next cycle, because a job's result can change.
 - **Watched company lookups on Arbeitsagentur ask for the exact employer first.** The `arbeitgeber` parameter matches the employer name as written (`Siemens AG`: all hits are that employer), so it is tried first; only when it finds nothing (a short form such as `Siemens`) the search falls back to free text, whose results are narrowed to the employer afterwards, as before. Request and detail limits are unchanged. No config change.
 - **Apify remote queries no longer send LinkedIn's `f_WT=2`.** Through this actor it had no effect (same results, same order), so the shipped `remote_input` is now empty and the docs say that remote queries are plain searches at the remote location, with the pipeline judging remote from the posting. Needs no migration: your config files only hold what you changed, and an old whole file that still lists `f_WT` keeps working (the filter did nothing before either).
+**Upgrading from 2.0.1 takes a few manual steps once.** Read [Upgrade to 2.1.0](docs/upgrade.md#upgrade-to-2-1-0) before
+you deploy; the upgrade notes below list what changes for an existing installation.
 
-- **The advanced editor shows "Restore default" only when your file changes something.** A file that is only the stub or comments no longer offers it (it did nothing visible); the button follows the saved state of the file.
-- **`pnpm config:check` reports what your config files change.** One line per overlay file with the number of overridden and unset keys, notes for a pin equal to the shipped value and for an `!unset` that does nothing, and `pnpm config:check --overrides` to list them (protected keys never show a value; others show only numbers, booleans and short plain strings, otherwise just their shape). The doctor's `config.layers` summary shows the same totals. `pnpm release:changed-defaults <from> <to>` lists the shipped defaults that differ between two git refs. Reports only: no file format changes and nothing is written.
+### Highlights
 
-- **The ghost job check reads the job title.** A title such as "AI Talent Pool", "Open Application", "Initiativbewerbung (m/w/d)" or "Evergreen - AI Engineer" is now caught even when the description reads like an ordinary posting. The reason says the title said it and quotes it; a title hit scores `evergreen_wording.title_points` (default 3, so it reaches "watch" on its own; the description's 2 is not added). Recruiting jobs ("Talent Pool Manager") are excluded. The check stays off by default and only hints, as before. Adds the pack keys `ghost.title_patterns` and `ghost.title_exclude`; if you keep a full copy of a pack in your config folder, copy them in. When the check is on, the next cycles check every open job once more (no AI calls). See `docs/ghost-jobs.md`.
-- **Résumé uploads are limited.** One web process reads at most two résumé files at a time; more are refused with "too many files" (HTTP 429) until one ends, and a body that takes longer than 30 seconds to arrive is cut off. `import.max_concurrent_uploads` (default 2, up to 10) and `import.upload_timeout_seconds` (default 30) in `writer.yaml` set them; a `writer.yaml` you already have needs no change, but older code refuses the new keys (`writer` is strict), so remove them before rolling back. Pasted text and the profile are not limited. Nothing changes for a single user.
-- **Company website display.** A website you confirmed is hidden on the job page and the company list once `non_company_hosts` lists it (it was already not used for research), and an international domain such as `xn--mnchen-bau-9db.de` is shown as `münchen-bau.de` (a label that mixes scripts or hides characters stays in its `xn--` form). What is stored and sent is unchanged.
-- **The ghost job check reads the job title.** A title such as "AI Talent Pool", "Open Application", "Initiativbewerbung (m/w/d)" or "Evergreen - AI Engineer" is now caught even when the description reads like an ordinary posting. The reason says the title said it and quotes it; a title hit scores `evergreen_wording.title_points` (default 3, so it reaches "watch" on its own; the description's 2 is not added). Recruiting jobs ("Talent Pool Manager", "Team Lead - Talent Pool") and teams, products or companies that carry the words in their name ("Software Engineer, Talent Network", "General Applications", "Director of Future Opportunities", "Evergreen Solar") are excluded. A comma before the phrase is read as a team name, which trades some misses ("AI Engineer, Talent Pool") for fewer false alarms. The check stays off by default and only hints, as before. Adds the pack keys `ghost.title_patterns` and `ghost.title_exclude`; if you keep a full copy of a pack in your config folder, copy them in. When the check is on, the next cycles check every open job once more (no AI calls). See `docs/ghost-jobs.md`.
-- **Writer and Gmail replies fixes.** The usage-cap notice in the application writer now reads like the other AI panels. The evidence check no longer reads a spaced single letter as a unit (`5 m` is a 5; `$5 m` and `3 x` still count). Gmail replies skip mail from a Gmail alias of the mailbox, and a mail that fails every cycle no longer holds a batch slot: `replies.yaml` gets `max_fetches_per_cycle` (default 100; a `replies.yaml` you already have needs no change, but older code refuses the new key, so remove it before rolling back).
-- **An `ai.yaml` newer than the code now stops the AI worker like any other config file.** It used to end the worker with a fatal error about 4 seconds after each start, so launchd or systemd restarted it over and over; the worker now names the file and waits `host_worker.already_running_wait_seconds` (the shipped value) before it exits.
-- **Faster queue lookups on a long `control_requests` table.** Finding the open writer request of a job stays fast with a queue backlog, and finding the latest story extraction no longer reads the whole table. Adds the index `control_requests_payload_job_id_idx`; it needs no action, and old code ignores it after a rollback.
-- **An old AI worker no longer starts a request during an upgrade.** A config file could turn newer in the moment between the worker's check and its claim; the worker now checks again after the claim and puts the request back for the upgraded worker.
-- **StepStone now only requests URLs its `robots.txt` permits.** The channel used to send `?sort=2&ag=…&radius=…&page=…`, which
-  StepStone's current `robots.txt` disallows; it now sends a single `?q=<keyword>` parameter. Trade-off: one request per keyword
-  and place (about 25 results in StepStone's own order, no paging, no newest-first sort), and the look-back window is applied
-  afterwards, so StepStone finds fewer postings than before. See [Sources](docs/sources.md#scraping).
-
-### Fixed
-
-- **JSearch collects again.** RapidAPI removed `GET /search` (it answers 404, "Endpoint '/search' does not exist"); the channel now calls `GET /search-v2`.
-- **StepStone keeps already stored jobs fresh.** A job that is already stored and appears on the first result page is now marked as seen even when it is older than the look-back window (no extra request), so jobs only StepStone lists no longer drift to "possibly closed". New jobs older than the window are still not stored. Refreshed jobs count in a run's `fetched` and the monthly record count, on top of `max_results`. A query that stores nothing logs how many listed answers the window dropped.
-- **A rollback of your preferences now shows the score of that version.** After a rollback, the job page, lists, Today, pushes, search through MCP and the automatic follow-ups kept reading the score and filter result of the version you left, even after re-scoring. Every one of them now reads the version you rolled back to, marked out of date until it is re-scored. A preferences or profile file edited back by hand to older text with different values now counts as the same rollback: it marks the other versions' scores out of date, so those jobs are scored again. The first cycle after the upgrade corrects rows left over from earlier rollbacks.
-
-### Upgrade notes
-
-- **Your config files now hold only what differs from the shipped ones.** A file in `data/config/` is laid over the shipped
-  file key by key, so keys you did not write follow product updates, and `key: !unset` removes a shipped key. The next deploy
-  converts your files in its write step (originals in `data/config/.backup/<time>/`, the keys dropped and kept in
-  `data/config/conversion-<time>.json`); `pnpm config:migrate --convert-overlays` shows it first. A form save, the advanced
-  editor and the source import never change a file's format, and a file at the older version still works as a whole file.
-  Two limits: a pin equal to the current shipped value is dropped, and an old default that differs from it stays pinned; both
-  are explained in [Your file is an overlay](docs/configuration.md#your-file-is-an-overlay). Restart `pnpm mcp:serve` and other
-  processes you started by hand. **Rollback:** older code refuses an overlay, so run `pnpm config:migrate --to-full --write`
-  first, with web and runner stopped and the database up; see [Rollback](docs/deploy.md#5-rollback).
-- **`sources.stepstone.radius_km` and `max_pages` are removed** (`sources.yaml` config version 9; the config update deletes
-  them, and `pnpm config:check` passes on the result). **Rollback:** the update also raises `config_version` of `sources.yaml`, and an older version refuses a file with a
-  newer version. Restore the file from `data/config/.backup/<timestamp>/` (the copy from before the update), or add
-  `radius_km: 30` and `max_pages: 2` under `sources.stepstone` **and** set `config_version: 8` (the value before this update;
-  `config_version: 7` if you also roll back the Apify change). XING keeps its own.
-- **Apify LinkedIn searches now request the query's exact window** (`f_TPR=r<seconds>`, for example `r36000` for 10 hours) instead of the actor's 24-hour, week or month filter, so fewer billed records fall outside the window. Results are still not newest first, because the actor ignores `sortBy=DD`, so catch-up stays off for this channel.
+- **Career profile and résumé tailoring (off by default).** Keep a local career profile on `/career`, import it from a
+  résumé, build résumés and cover letters from it, and tailor them to a job with AI proposals you accept one by one.
+  Turn it on in **Settings → Workflow → Career profile**. PDF export and page counts need the optional `career-pdf`
+  service: add `COMPOSE_PROFILES=career-pdf` to `.env` and deploy again. See [Career profile](docs/career-profile.md) and
+  [Résumé tailoring](docs/resume-tailoring.md).
+- **Application writer (off by default).** Drafts answers to application questions and cover letters from your own
+  experience library, with an evidence check on every sentence. See [Application writer](docs/application-writer.md).
+- **Company research (off by default).** Company background from an AI provider with web search, a research bar on the
+  job page and optional automatic research when you star a job. See [Research](docs/research.md).
+- **Gmail replies (off by default).** Reads one Gmail label with local rules and suggests status changes on `/pipeline`;
+  no mail content leaves the machine. See [Gmail replies](docs/gmail-replies.md).
+- **More sources.** Arbeitnow and Berlin Startup Jobs (on for the Germany market), Handpicked Berlin and Berlin Design
+  Network discovery (off), Monid as a paid LinkedIn fallback, and watched companies searched by name on the channels you
+  use.
+- **OpenAI API and OpenRouter** as pay-per-token AI providers; nothing is sent to them without their API key.
+- **Release channels.** The `stable` branch carries the newest release; `main` is the development branch.
+- **Config overlays.** A file in `data/config/` now holds only the keys you changed, so the rest follows product updates.
 
 ### Upgrade notes
 
-- **`sources.yaml` moves to `config_version: 8`.** The migration rewrites `linkedin.apify.input_template` only when it is the old shipped template of the default actor; an edited template, one for another actor, or one next to an edited `date_posted` keeps working as before. In `remote_input`, a `{key, value}` list now merges by `key` with the template's list instead of replacing it. If your `sources.yaml` sets `linkedin.apify.date_posted` but no `input_template`, it now follows the new shipped template and your `date_posted` is no longer read; to keep it, copy the old template (with `datePosted: "{date_posted}"`) into your file. **Rollback:** an older version refuses a `config_version: 8` file, and any config write can produce one: `pnpm config:migrate --write`, but also saving settings. Check the version in `data/config/sources.yaml` before downgrading. If it is 8, restore a version 7 backup from `data/config/.backup/` if you have one (it loses later edits), or set the template back to `datePosted: "{date_posted}"` without `urlParam` and set `config_version: 7`.
-- **Cron times and daylight saving.** With the croner 11 update, interval crons (such as `*/30 * * * *`) may run extra in the repeated hour at fall back and skip the spring gap; fixed-time crons (07:00, 17:00, 09:00) still run once. A fixed time inside the spring gap now runs at the first valid time after it. See `docs/configuration.md`.
-- **Berlin Startup Jobs now starts by itself on existing German installs.** The new Berlin Startup Jobs channel is on by
-  default for installs whose market is Germany, so the next cycle after upgrading starts reading it. To turn it off, set
-  `sources.berlinstartupjobs.enabled: false` in `data/config/sources.yaml`.
-- **Optional title check for duplicate merging.** `dedupe.title_guard` in `pipeline.yaml` can compare titles before a job
-  is merged on its description. It is off by default, so matching does not change, and no migration runs. The first cycle
-  after upgrading re-evaluates the filter once, with no AI cost. **Rollback:** an older version refuses
-  `title_guard` in `data/config/pipeline.yaml`, so remove the key first. See
-  [Merging duplicate jobs](docs/extraction.md#merging-duplicate-jobs).
-- **Your `models.yaml` is now an overlay on the shipped model catalog.** `data/config/models.yaml` used to replace the
-  shipped `config/models.yaml` as a whole; it is now laid over it model by model: an entry with the same `id` (within a
-  provider) replaces the shipped entry, a new `id` is added, `deprecated: true` with just an `id` hides a shipped model,
-  and everything you do not list follows product updates. A file that lists every model keeps working unchanged (so do
-  files from before a provider existed); `pnpm config:check` says when yours only repeats shipped models and could be
-  slimmed down. Migration `0048_models_sync_control` adds the `models_sync` control request kind; it runs on its own.
-  **Rollback:** an older version reads your `models.yaml` as the whole catalog, so a file holding only your additions
-  would leave it without the shipped models. Run `pnpm models:export --full` before downgrading: it writes the complete
-  catalog to your file (the old one is backed up in `data/config/.backup/editor/`). The `models_sync` enum value stays in the
-  database; older code ignores it. See [Before downgrading](docs/ai-providers.md#before-downgrading).
-- **Research bar and automatic research.** Migration `research_auto_runs` adds a table and runs on its own. `research.yaml` gets an
-  `auto` block: the shipped file starts research when you star a job, but a `research.yaml` you already have stays manual until you
-  add the block, and research stays off unless you turned it on. **Rollback:** older code refuses the new `auto` block and the
-  `origin` marker on queued requests: set `enabled: false`, let the queue drain, and remove the block before you switch. See
-  [Before rolling back](docs/research.md#before-rolling-back).
-- **Company background.** A new database table, three new columns on `companies` and a new `research.yaml`, off by default;
-  no action is needed. **Rollback:** the migration is additive and older code ignores it and the new file. Older code refuses
-  `ai.yaml` if a form save wrote `tasks.company_research` (or `reasoning_effort_by_task.company_research`) into it: delete those
-  keys first. See [Company background](docs/research.md#before-rolling-back).
-- **Saved views keep the date filter.** A view saved with a quick range (`within: 7d` or `month`) stores the range and
-  recomputes it on the day it is opened; `dateBy: posted` records that it compares the posted date (a view without `dateBy`
-  compares first seen, as before). Existing views load unchanged. **Rollback:** 2.0.1 checks `interests.yaml` strictly and
-  refuses the whole file while any view holds `within` or `dateBy`, so no view loads: delete both keys from every view before
-  switching. Nothing writes a migration backup for this; the app's own copies in `data/config/.backup/editor/<timestamp>/`
-  keep only the newest 20 and help only if one is older than the first view holding the keys. See
-  [Upgrading with the date filter](docs/upgrade.md#upgrading-with-the-date-filter).
-- **Two new AI providers, OpenAI API and OpenRouter, are appended to your `api_order`.** Loading or migrating `ai.yaml`
-  (now `config_version: 3`) adds `openai` and `openrouter` at the end of the list, after your own order. Nothing is sent
-  to them until `OPENAI_API_KEY` or `OPENROUTER_API_KEY` is in `.env`. **Rollback:** older code refuses the version 3
-  file: restore `ai.yaml` from `data/config/.backup/<timestamp>/`, or set `config_version: 2`, remove both ids from
-  `api_order` (and any task `order` or `models`), delete `providers.openai`, `providers.openrouter` and every
-  `max_tokens_field`, and delete the `openai` and `openrouter` sections of your own `models.yaml` copy if you keep one.
-  See [Rollback](docs/deploy.md#5-rollback).
-- **Job search defaults to basic fields.** Queries match title, company names/aliases, city/location and recognized countries;
-  descriptions no longer participate by default. Use `/jobs?searchIn=all` or MCP `search_in: "all"` to include original descriptions
-  and current translations. Short words match whole words, longer words allow prefixes, and quoted phrases stay within a field.
-  Queries default to descending relevance unless an explicit sort is supplied; `country` codes filter locations exactly.
-  A two-letter country code typed alone is a country; inside a longer query only when typed in capitals (`engineer DE`,
-  while `chef de projet` stays text). Description searches stop after `job-search.yaml: query.all_scope_timeout_ms` and say so.
-  `country` and `searchIn` are URL-only, never written to saved views. No migration or stored-data rewrite is needed.
-  The web server and the read-only MCP server open their database sessions with `jit = off` (Postgres JIT compilation
-  cost more than these queries); runner and AI worker keep the server default.
-- **Watched company names now leave your machine by default.** Existing watch lists without an enabled ATS board start nationwide searches on supported, enabled channels, including the paid LinkedIn providers Bright Data and Apify and JSearch, as well as StepStone and XING when enabled. The paid channels spend their own monthly allowance, request limit and `monthly_budget_usd` (and `paid_total_monthly_budget_usd`) on these queries, so a long watch list can use a small allowance before keyword queries get their turn. Set `search.yaml: watched_company_queries.enabled: false` to stop all company queries, or `company_queries: false` in a channel's block of `sources.yaml` (also a switch in the source registry) to opt that channel out. Company queries share existing budgets and session limits. Before rolling back, remove these keys from user configuration and run the older version's `pnpm config:check`; keep database history. See [Privacy](docs/privacy.md) and [rollback](docs/configuration.md#watched-company-searches).
-
-- **Rolling back past catch-up windows:** setting `collect.max_catch_up_hours: 0` stops new stretched runs, but history
-  does not expire on its own. For a safe rollback, use a build that retains `and not r.window_extended` in
-  `markJobsPossiblyClosed`; otherwise some jobs may be marked possibly closed and reopened on their next sighting.
-  Before starting code that does not know the catch-up keys, remove `collect.max_catch_up_hours` and
-  `collect.catch_up_tolerance_hours` from your user `data/config/sources.yaml`.
-- **Jobs not listed for weeks leave automatic processing.** After 30 days possibly closed (normally 7 + 30 days unseen), unprotected jobs become dormant: default job lists, company counts, search and navigation badges shrink; badges also stop counting closed jobs. Find dormant jobs in the Closed or Possibly closed view, and choose Still open to wake them. No data is deleted. **Rollback:** remove `lifecycle.dormant_after_days` from your user `pipeline.yaml` if you added it (older strict schemas reject it); keep the nullable database columns. Older code shows these jobs again, and re-upgrading sweeps stale markers and user protection.
-
-- **Rolling back past interactive AI lanes:** queued automatic translations can fail on the older worker; the next
-  cycle retries eligible jobs. To preserve the queued requests, remove their automatic-origin markers before rollback
-  as described in [Roll back](docs/upgrade.md#roll-back). User requests retain their existing format.
-- **Remove legacy jobspy dependencies from Compose overrides.** Delete `services.runner.depends_on.jobspy` from your
-  `compose.override.yaml` (and any jobspy dependency you added to `db` or `web`), keeping the database dependencies.
-  Deploy now refuses dependencies added by overrides before it changes anything, so an unhealthy optional sidecar cannot
-  block the core deployment. Supported older targets whose own `compose.yaml` depends on jobspy remain deployable,
-  with a note that sidecar health may still block them. See [the upgrade note](docs/deploy.md#compose-overrides-and-the-jobspy-sidecar).
-- **Company and title keys are recomputed once.** The first cycle after upgrading (or `pnpm reprocess`) gives stored
-  companies and jobs whose names are written in a non-Latin script, or contain letters such as Ø, Ł, Æ or ß, their new
-  keys before new postings are filed. German company names with ß are re-keyed once (ß now reads as ss, as in titles:
-  "Straße GmbH" and "Strasse GmbH" share a key; nothing is merged unless both spellings are stored). Companies that now
-  share a key are folded into one, keeping their jobs, salary lookups, aliases and marks; cached salary lookups follow the
-  new keys. A watched or blacklisted company whose name mixes scripts gets a second row with the same marks for its Latin
-  spelling. Nothing else changes when all names and titles are plain Latin script. If the keys cannot be recomputed, the
-  cycle files no postings until they can (the pipeline step fails visibly). Jobs the old keys had already merged stay
-  merged until you run `pnpm reprocess --split-merged` once; it lists the jobs you had acted on that it split or left
-  alone ([docs/extraction.md](docs/extraction.md#company-and-title-keys)). **Rollback:** older versions file new postings
-  with such names under the empty key again; after upgrading back, run `pnpm reprocess --split-merged`.
-- **Monid LinkedIn fallback (sources config 3 → 4):** before rolling code back below this version, restore
-  `sources.yaml` from `data/config/.backup/`, or remove `linkedin.monid` and its cascade entry and set
-  `config_version: 3`. To switch it off without rolling back, set `linkedin.monid.enabled: false`.
-- **Company ATS boards are read afresh after upgrading.** The migration clears every board's stored validator and
-  "Last success". The first round re-reads every enabled ATS board unconditionally: one request per Greenhouse, Lever,
-  Ashby or Personio board; for each SmartRecruiters board, its list pages plus one detail request per kept posting.
-  Requests are throttled; allow roughly a minute or two for the example pack. Until a board has been read completely
-  once, its "Last success" is empty and its jobs are not marked possibly closed. **Rollback:** older versions ignore
-  the detail retry column and write the timestamp again on their next successful check; the cleared values cause no
-  harm. Before rolling back past the version that introduced `sources.smartrecruiters.max_consecutive_detail_failures`,
-  remove that key if you set it yourself.
-- **The shipped config is now part of the images.** Upgrading from 2.0.1 or older with `scripts/ops/deploy.sh` yourself
-  takes three commands once: `docker compose -p job-radar stop web runner`, then `git pull` (or `git fetch --tags && git
-  checkout --detach <tag>`), then `scripts/ops/deploy.sh --skip-pull`. A plain `docker compose up -d` is not enough. Why,
-  and the details: [docs/upgrade.md](docs/upgrade.md) ("Upgrading across the shipped config in the images"). A
-  `compose.override.yaml` of your own that mounts `./config` must drop that mount (`pnpm run doctor` warns about it).
-- **`scripts/ops/deploy.sh` refuses a checkout with uncommitted changes to tracked files in every mode**, `--skip-pull`
-  included (untracked files are fine). Commit or stash first.
-- **The host ai-worker runs from a release directory.** The first upgrade to this version stops the worker until the
-  deploy installs it again: run `scripts/ops/uninstall-ai-worker.sh`, check that it stopped, `docker compose -p
-  job-radar stop web runner`, update the code, then `scripts/ops/deploy.sh --skip-pull`. A custom
-  `doctor.ai_worker_launchd_label` needs a manual `launchctl bootout` first. See
-  [docs/upgrade.md](docs/upgrade.md#first-upgrade-release-dir). `deploy.sh --ref` refuses older versions; going back
-  takes the manual steps in [docs/upgrade.md](docs/upgrade.md#downgrade-pre-release-dir).
-- **Deploy steps renumbered** (12 steps): release is step 7, up step 8, migrate step 9, ai-worker step 10, and the
-  Docker cleanup (prune) step 11, after the ai-worker switch. `--no-prune` skips step 11, `--no-ai-worker` steps 7
-  and 10.
-- **Install the database before the ai-worker:** `scripts/ops/install-ai-worker.sh` now waits for the new worker to hold
-  its database lock and write a heartbeat, so on a new host run `docker compose up -d` (at least the db) first.
-- **Node.js 22.23.4 or a later 22.x is required** (`engines.node` is now `>=22.23.4 <23`), and pnpm must be the version
-  in `package.json` (`packageManager`; `corepack enable` provides it). The Docker build stages check the Node version
-  of their image.
-- **Salary config migration (1 → 2):** `salary.yaml` no longer accepts `benchmark.include_ai_lookups`.
-  `scripts/ops/deploy.sh` migrates it automatically; for a manual upgrade, run `pnpm config:migrate` to see what the step
-  removes, then `pnpm config:migrate --write`. A v2 file with this key fails validation as an unknown key.
-- **Salary card during deploy:** step 4 migrates the config before the backup, build and restart. The old web may show
-  a salary configuration error for a few minutes until the new code restarts; the runner keeps its last valid settings.
-  If the build fails, the error persists: fix the build and rerun `scripts/ops/deploy.sh` (preferred), or stay on the old
-  version and set `salary.yaml`'s `config_version` back to the old code's current version. This is safe because the
-  migration already removed the key. If instead you restore the original from `.backup/`, follow rollback (b) below.
-- **Existing salary comparisons containing AI figures are hidden** until the next successful recomputation. With the
-  benchmark on, the card shows "not computed yet" until then; run `pnpm salary:benchmark` to recompute now. With the
-  benchmark off, it keeps showing "The old salary comparison contained AI figures and is hidden" until you turn it
-  on and wait for a cycle or recompute manually; the command does not recompute while it is off. Installations whose
-  comparisons contained no AI figures are unaffected. Users who had AI lookups enabled in the benchmark lose the AI
-  part of the sample count.
-- **Upgrades no longer rewrite your configuration while an older AI worker may still read it.** `scripts/ops/deploy.sh`
-  now only reads your config files in steps 1 to 10 (step 4 previews what will change) and writes them in step 11
-  `config-write`, after the new containers and the new ai-worker run and no other worker is left. Web saves keep working
-  the whole time. If that gate or a write fails, the deploy still finishes, prints `Deployed, but the config writes are
-  pending: <reason>. The next deploy retries them.` and exits 2; deploy again after fixing the reason
-  (`pnpm config:plan --deploy` lists what is waiting, the doctor shows `config.pending`). Stop manually started
-  `pnpm ai-worker` processes before deploying. **Rollback:** nothing new is written to `schedule.yaml`, so only remove a
-  `config_writes` block you added yourself before starting older code. Deploying an older release with `--ref` runs that
-  release's own step 4, which needs no database lock; a file in a newer format than that release reads still needs its
-  original from `data/config/.backup/`. See [docs/upgrade.md](docs/upgrade.md#settings-during-an-upgrade).
-- **An install without `setup.yaml` opens the setup wizard.** Nothing infers an existing install from the other files
-  any more, and a deploy does not add `setup.yaml`. An install coming from before the wizard (1.x) opens it once and the
-  runner holds back scheduled cycles until you finish or skip it (or run `pnpm run setup --complete`); it also reads the
-  English `language.yaml` default until you set the languages in Settings → Display. Restoring a backup from that time
-  (`restore.sh --with-config`) or `pnpm config:init --from <old config dir>` still writes a completed `setup.yaml` and the
-  Chinese `language.yaml`. Installs that already started 2.0.0 or later are not affected.
-- **Saving settings needs the database.** Settings pages, the setup wizard, the advanced editor, `/me` and the `config:*`
-  commands take a lock in the database; with it unreachable a save is refused and reading still works. A command on
-  the host needs a database it can reach from there (`.env`).
-
-**Rolling back past the release that made AI salary lookups reference-only (`salary.yaml` `config_version: 2`).** Older code does not hide comparisons containing AI figures.
-
-- **(a) Preferred: recompute with the new code before switching.** If the benchmark is off, temporarily set
-  `benchmark.enabled: true` in `salary.yaml`, run `pnpm salary:benchmark`, confirm that it prints a summary and exits
-  with code 0, then restore the previous setting.
-- **(b) Configuration (required):** Whether you set `salary.yaml`'s `config_version` back to the old code's current
-  version or restore the original from `data/config/.backup/<timestamp>/`, confirm that `benchmark.include_ai_lookups`
-  is absent or `false` **before the old code starts**. The backup may contain `true`. Otherwise, the old code can count
-  older cached lookups again (where the latest cached result still predates the upgrade); upgrading again hides the
-  comparison until it is recomputed.
-- **(c) If you restore a database backup, or (a) did not succeed:** The `pre-deploy` backup contains the old benchmark
-  table, so restoring it undoes (a). With the old code running and `benchmark.include_ai_lookups` absent or `false`,
-  run `pnpm salary:benchmark` again (if the benchmark is off, temporarily enable it, recompute, then restore the
-  previous setting). Until this recomputation, the old code may display comparisons containing AI figures.
-
-A failure in (a) does not block rollback: follow (c) and accept the display window before that recomputation.
-
-### Changed
-
-- **Starting writes no config files.** The web app and the runner only log how many user files are missing and read the
-  shipped defaults instead; `pnpm config:init` or the deploy creates them. `config:init` no longer creates `setup.yaml`
-  or `language.yaml`.
-- **Config commands:** `pnpm config:plan [--deploy] [--check]` lists the writes that are waiting (exit 0 none, 2 pending
-  with `--check`, 1 a file cannot be migrated), `pnpm config:init --env-only` creates only `.env`, and
-  `pnpm config:migrate --prune-backups` deletes all but the newest `.backup/<timestamp>/` folders (they used to pile up;
-  only the deploy's prune step runs it, `--write` never deletes). New doctor check `config.pending`.
-- **`schedule.yaml: config_writes`** (`backups_keep` 5, `lock_wait_seconds` 10) sets how many migration backups a deploy
-  keeps and how long a write waits for another writer before it reports busy. Both are schema defaults, not in the
-  shipped file. Config archives from backups carry a small marker, `data/config/.archive-meta.yaml`, that tells a restore
-  what a missing `setup.yaml` meant when the backup was made.
-- **One salary panel on the job page:** the "Salary level" and "Salary lookup" boxes are now one panel, "Salary · what this job pays": three figures on top (stated in the JD, median of similar postings, the AI's estimate for this company) and every source on one scale (this posting, similar postings, the company's other postings, the AI's band for this role, your floor). The AI's numbers stay labelled unverified and never enter a comparison. A stored lookup stays visible when the lookup is turned off, with the reason. The panel anchor is `#h-pay` (the old `#h-salary-level` and `#h-salary-lookup` are gone); no configuration or data changes.
-- **Job search controls on `/jobs`:** search covers basic information by default; turn on Include job descriptions to
-  search original descriptions and current translations. A country filter with localized names and counts sits next to
-  the search, and zero results offer a direct description search. The global shortcut is now labeled Jump to and links
-  to all matching jobs. See [usage](docs/usage.md).
-- **Stricter YAML tags in config files:** a tag the parser does not know (`!foo`, `!!int x`) is now an error with its
-  line in every reader of config files, instead of a warning that read the value as a string; `!unset` is reserved and
-  refused. This is the only behaviour change for valid configs. New: `pnpm config:check --effective` prints a hash of
-  each file's effective value to compare before and after an upgrade; the sources export carries `config_version` and
-  the full effective file; `backup.sh` and `restore.sh` read `schedule.yaml` through the loader, and when it cannot run
-  fall back to a strict shell reader (backups named in UTC, a restore mode that drops no database), with a loud
-  warning. See [configuration](docs/configuration.md#yaml-tags) and [backup and restore](docs/backup-restore.md#6-notes).
-
-- `/jobs` now has Current / Archive / All scopes, archive reason filters and last-listed sorting from source fetches. Old `status=` links and saved views keep working. Jobs, postings, scores, translations and analyses are never automatically deleted. No database migration is required; rolling back restores the former list controls without data changes.
-
-- Repeated cycles skip unchanged hard-filter inputs and use stored change fingerprints; source history and monthly usage reads transfer less data and use matching indexes. **Upgrade:** nullable fingerprint columns need no table rewrite or migration-time backfill; maintenance fills bounded batches while reads compute missing values. Index creation still takes table locks. **Rollback:** keep the added columns and triggers; old-code source writes stay correct and changed filter verdicts invalidate the cache. See [upgrade notes](docs/upgrade.md#upgrading-with-change-fingerprints).
-
-- **Interactive AI requests have their own lane:** translation, breakdown, salary lookup and AI tests can start while
-  a batch runs. Automatic follow-up translations stay in batch; clicking Translate promotes one that is still queued.
-  Concurrent work for the same job and language shares one AI operation. Manual scoring uses the existing time budget,
-  finishes work already started and shows how many jobs remain when the budget stops it.
-- **Waiting buttons follow the process's heartbeat instead of a fixed time limit:** translate, break down, salary
-  lookup, the test and "collect now" buttons and "Score now" on a job page keep waiting as long as the process that
-  claims the request is alive, instead of giving up after 10 or 12 minutes (the request ran anyway). While a request
-  waits they show how many requests are ahead of it and what the process is working on, since when; while it runs,
-  its start and how long it has been running; and when the ai-worker (or the runner) has no fresh heartbeat, that it
-  is offline, with a link to the Sources page. "Score now" now judges the ai-worker, which scores with
-  `execution: host`, not the runner. The request list on /settings shows "stopped at the time budget, N still to score"
-  for a scoring request that reports it.
-- **Faster on a large database:** the Today page reads the scores and cycle counts of its few jobs through indexes
-  instead of scoring every job; the /jobs city list places each distinct location once; recalculating score bonuses
-  after an interests change writes in batches. A migration adds four indexes; results are unchanged.
-- **AI salary lookups are only displayed:** they never count in the salary benchmark or any filter; the benchmark uses
-  only salaries stated in postings. The Salary tab's switch to count AI lookups is removed and the benchmark card shows
-  only "sample n". Lookup cards label the company level and every band "AI estimate (unverified)", identify "AI's own
-  confidence" and "Sources given by the AI (unverified)", and explain that similar postings share a lookup that is not
-  based on this job description. A lookup made on another posting links to it, or says that posting was deleted.
-- **Images built from the commit being deployed:** `scripts/ops/deploy.sh` unpacks a `git archive` of the commit it
-  deploys into `data/build/` and builds from there (`JOB_RADAR_BUILD_CONTEXT`), so ignored, untracked or locally
-  changed files never reach an image. The web and runner images carry the shipped defaults in `/app/config` (owned by
-  root, read-only for everyone); `compose.yaml` no longer mounts `./config`. Every later step checks that the checkout
-  still is at that commit and stops with `checkout moved during deploy` otherwise; a `git status` that fails (a damaged
-  index) stops the deploy too instead of passing as clean. See
-  [docs/deploy.md](docs/deploy.md#build-context-and-a-clean-checkout).
-- **One deploy at a time:** `scripts/ops/deploy.sh` takes a lock (`data/releases/ai-worker/.lock/`); a second deploy stops
-  in step 1 and prints who holds the lock and how to check and clear one that was left behind.
-- **Interrupting a deploy** (Ctrl-C, closing the terminal, `kill`) lets the running step finish, starts no further step,
-  releases the lock and exits with 130, 143 or 129; the script prints how to abort the running step at once.
-  See [docs/deploy.md](docs/deploy.md#interrupting-a-deploy).
-- **The ai-worker runs from `data/releases/ai-worker/<commit>/`**, a read-only copy of the deployed commit with its
-  production dependencies (built by `scripts/ops/prepare-release.sh`, step 7 of the deploy), so a `git pull` no longer
-  changes the code of the running worker. `scripts/ops/install-ai-worker.sh --release <dir>` replaces the running
-  worker only after the new one holds its instance lock and wrote a heartbeat, and otherwise puts the previous
-  definition back and waits for it (`not changed:`, `rolled back:` or `ROLLBACK FAILED:` say what happened; a
-  signal during the switch rolls back first). The definition names only absolute paths and sets `NODE_OPTIONS` empty.
-  `--print-release` prints the installed release (exit 3 when none, 4 when not from a release directory). The
-  previous releases are kept for a worker-only rollback. `scripts/ops/uninstall-ai-worker.sh` uses the same identity
-  rules, so a worker under a custom label is removed too. See
-  [docs/deploy.md](docs/deploy.md#the-ai-worker-runs-from-a-release-directory).
-- On macOS, logs an earlier version wrote to `~/Library/Logs/job-radar/ai-worker.{out,err}.log` are appended to
-  `data/logs/ai-worker.{out,err}.before-upgrade.log` after the next successful install.
-- `.dockerignore` leaves out everything `.gitignore` ignores, at any depth (editor folders, local demo and release-check
-  files, nested `.env`, logs, test output), also for a build from the working tree (`pnpm stack:up`).
-- **The `home_country` remote scope says what it keeps** (rules unchanged): the option reads "Remote from Germany (incl.
-  EU / Europe / EMEA / worldwide remote)" (the region comes from the market pack; a market without one shows "Remote from
-  <country>"), and a line under the select explains what is kept and excluded for the chosen kind, on My profile, Settings
-  and in the setup wizard. The Settings hint says that it decides where remote searches look while the filter uses the
-  same setting in My profile. See [docs/usage.md](docs/usage.md#remote-jobs-and-watched-companies).
-- **Title prefilter of the ATS boards and Arbeitnow compares company names by the push step's key** (case, legal forms and
-  `pipeline.yaml` aliases ignored) instead of the exact spelling, so "Acme GmbH" on the watch list now matches a board
-  named "Acme". A board whose watched status changes because of this is read again once, whatever its stored ETag says.
+- **Follow [Upgrade to 2.1.0](docs/upgrade.md#upgrade-to-2-1-0).** From `v2.0.1` the first upgrade stops the AI worker
+  and the containers by hand, updates the code and runs `scripts/ops/deploy.sh --skip-pull`; a plain `docker compose up -d`
+  is not enough. The same page explains how to return to `v2.0.1`.
+- **Node.js 22.23.4 or a later 22.x** is required, and pnpm must be the version in `package.json` (`corepack enable`).
+  Rebuild the images with `--pull`.
+- **Your config files become overlays.** The deploy converts each file in `data/config/` to the keys that differ from the
+  shipped file (originals in `data/config/.backup/<time>/`); `pnpm config:migrate --convert-overlays` shows it first.
+  Older code refuses an overlay: run `pnpm config:migrate --to-full --write` before rolling back. See
+  [Your file is an overlay](docs/configuration.md#your-file-is-an-overlay).
+- **Config versions move forward:** `sources.yaml` 9 (StepStone's `radius_km` and `max_pages` are removed), `ai.yaml` 3
+  (`openai` and `openrouter` are appended to `api_order`), `salary.yaml` 2 (`benchmark.include_ai_lookups` is removed),
+  and `models.yaml` is laid over the shipped catalog model by model. The deploy migrates them; older code refuses the new
+  versions, so restore from `data/config/.backup/` before rolling back.
+- **Watched company names now leave your machine by default.** A watch-list company without an enabled ATS board is
+  searched by name, nationwide, on the enabled channels that support it (Arbeitsagentur, the LinkedIn channels including
+  Bright Data and Apify, JSearch, StepStone, XING). On paid channels these queries spend the same allowance and budget as
+  keyword queries. Turn them off with `search.yaml: watched_company_queries.enabled: false`, or per channel with
+  `company_queries: false` in `sources.yaml`. See [Privacy](docs/privacy.md) and
+  [Watched company searches](docs/configuration.md#watched-company-searches).
+- **New channels start on German installs:** Arbeitnow and Berlin Startup Jobs read public job boards (no keywords are
+  sent) when your market is Germany. Set `sources.arbeitnow.enabled: false` or `sources.berlinstartupjobs.enabled: false`
+  to switch them off.
+- **The AI usage cap is on.** `ai.yaml: quota_guard` limits Job Radar's own claude-cli and codex-cli calls per 5-hour
+  window and per cycle; tune it in Settings → AI → Limits or set `enabled: false`.
+- **`compose.override.yaml`:** remove any `depends_on: jobspy` (the deploy refuses it) and any mount of `./config` (it
+  would hide the shipped config; `pnpm run doctor` warns).
+- **`scripts/ops/deploy.sh` refuses uncommitted changes to tracked files** in every mode. Without `--ref` it pulls the
+  branch you are on (`main` or `stable`) and refuses any other branch or a detached HEAD.
+- **Saving settings needs the database**, and the deploy writes config files only after the new AI worker runs (step 11).
+- **One-time work after the upgrade:** company and title keys of non-Latin names are recomputed, every ATS board is read
+  again, and old salary comparisons that contained AI figures stay hidden until recomputed (`pnpm salary:benchmark`).
+- Feature-specific rollback steps (saved view date filters, research, catch-up windows, dormant jobs, Monid) are in
+  [Roll back](docs/upgrade.md#roll-back) and the linked pages.
 
 ### Added
 
-- **Application writer: extract stories from what you already wrote.** On `/me`, the AI drafts stories from your profile, a pasted
-  text or a résumé file (PDF with a text layer, Markdown, plain text) into a review area; each field shows its quote and is marked
-  when the code cannot find that quote in the text, or its figures in the quote. Nothing enters `stories.yaml` until you adopt it.
-  The file is never stored and the text is cleared from the request when it ends: see [Privacy](docs/privacy.md#story-extraction).
-  `writer.yaml` gains `import` (defaults added when missing, `config_version` unchanged), `ai.yaml` a `story_extract` task, the
-  database a `profile_story_drafts` table (migration `0049_story_extract_drafts`), and the web image the `unpdf` dependency.
-  A PDF is read in a worker thread stopped at `import.pdf_timeout_seconds` / `import.pdf_max_memory_mb`. Provider errors on this task and on `write`
-  are logged and stored as their kind only. The evidence check now reads Latin magnitudes and multiples ($2M, 2.5M, 3 Mio, 10x).
-- **Company background in application answers.** Tick its fields on the workbench to quote them to the AI as data, or ask what they mean for your application; both stay unverified web text and back nothing about you. Migration `0052_application_fit_notes` runs on its own. See [Application writer](docs/application-writer.md#company-background-in-an-answer).
-- **Application writer tools for MCP clients, off by default.** `get_application_context` reads a job's writing material;
-  `save_application_answer` adds answer versions and can never change or delete one or set the final answer. See
-  [Writing answers from your client](docs/mcp.md#writing-answers-from-your-client).
-- **Handpicked Berlin channel (off by default).** Reads the public job index of handpickedberlin.com (Berlin, Munich, Hamburg
-  and German remote, with the employer's own links), keeps postings in your places that pass the title prefilter, and offers the
-  company boards behind them as candidates under Discovered boards (each candidate now shows where it was found). The site
-  publishes no terms, so the channel is not switched on for you: set `sources.handpicked.enabled: true`
-  (see [Sources](docs/sources.md#handpicked-berlin)). `pnpm config:migrate` adds the block (switched off) to `sources.yaml` (version 5)
-  and `handpicked: 2` to `apply_priority` in a copied `pipeline.yaml` (version 4). Migration `0049_board_candidate_found_by` adds
-  one column with a default; **rollback:** drop `found_by` from `ats_board_candidates` and delete the `handpicked` block and key again.
-- **Berlin Startup Jobs channel.** Reads the public listings of berlinstartupjobs.com, about 140 Berlin startup postings, many from
-  small companies that take applications by e-mail only and are on no ATS. It reads the whole board each run (about four requests),
-  keeps titles that pass the title prefilter, skips posts past their own end date, and links each job to its page on the site (no
-  e-mail address is put into a job field). On for the Germany pack; `pnpm config:migrate` adds the block to `sources.yaml`
-  (version 7) and `berlinstartupjobs: 3` to `apply_priority` in a copied `pipeline.yaml` (version 5); **rollback:** delete the
-  block and the key and set the versions back to 6 and 4, or set `sources.berlinstartupjobs.enabled: false`.
-- **Berlin Design Network discovery (off by default).** Reads the job list of berlin-design-network.org once a day and offers the
-  company boards behind its apply links (Greenhouse, Lever, Ashby, Personio, SmartRecruiters) as candidates under Discovered
-  boards; it stores no postings and never reads the companies' contact details. Set `sources.berlin_design_network.enabled: true`
-  (see [Sources](docs/sources.md#berlin-design-network)). `pnpm config:migrate` adds the block (switched off) to `sources.yaml`
-  (version 6); **rollback:** delete the block and set the version back to 5.
-- **Application writer: improve your own draft and a coach review.** Paste text you wrote in any language and get a new
-  version in the answer's language, either fitted to the job or with only the language and wording changed (that option
-  sends none of your ticked material). A version can also be reviewed: the AI rates it from 0 to 100 (marked as its
-  judgement), gives a verdict per dimension and suggests better sentences, which go through the same evidence check
-  (a suggestion without a findable quote shows as an unverified AI suggestion). Adopt one suggestion at a time or have the
-  whole answer rewritten by them. Both use the `write` task and the same request clearing as drafts; `writer.yaml` gains
-  `draft_max_chars` and `coach` (defaults added when missing, `config_version` unchanged, no migration). A figure next to
-  Chinese characters ("下降了40%") is now recognised by the evidence check. See [Application writer](docs/application-writer.md).
-- **Refresh the OpenRouter model list from the settings page.** The OpenRouter card on the AI tab has a "Refresh available
-  models" button: the ai-worker reads OpenRouter's public model list (no key is sent, only when you click), shows what you
-  can add with prices, context length and JSON-mode support, and "Add to my list" writes the ticked models to your
-  `models.yaml`. The same from the terminal: `pnpm models:sync --provider openrouter [--filter <word>] [--add <id>...]
-  [--update-prices] [--dry-run]`; `pnpm models:export --full` writes the complete catalog (for a downgrade). See
-  [AI providers](docs/ai-providers.md#checklist-for-a-new-model-release). The refresh has limits in `ai.yaml` `model_list`
-  (`timeout_seconds`, `max_response_bytes`, `max_name_chars`; defaults added when missing, `config_version` unchanged).
-- **Research bar on the job page, and research that starts by itself.** With research on, a line under the job's title shows where
-  its company lookup, JD breakdown and salary lookup stand, with a button each; `/companies` shows a stored company background and
-  lets you confirm the website. Starring a job can start them by itself, in the batch
-  lane and under its own daily limit, and can be set to include status changes or high-score new jobs; this sends the title, city,
-  country and seniority for the salary lookup, and the timing shows what you save. See [Automatic research](docs/research.md#automatic-research).
-- **Company background on the job page.** Off by default (`research.yaml`, Settings → Research). One click asks an AI provider with
-  web search what the company does, its size, funding, reviews and recent news; each field shows its source and is marked as
-  unverified. Only the company name, and a website domain you confirmed, are sent. Each field is checked in code before it is
-  stored, and one result serves every job of the company. See [Company background](docs/research.md).
-- **Application writer: export and reuse.** The workbench exports every final answer as one Markdown file built in the browser,
-  offers an earlier final answer of another job as the starting text when you add a similar question (a local word-overlap
-  check, no AI call; `reuse` in `writer.yaml`, defaults added when missing, `config_version` unchanged) and warns while that
-  answer still names the other company (also when the text leaves out its legal form, such as "Acme" for "Acme GmbH"). The job page's bottom bar on a phone has a button to the workbench. See
-  [Application writer](docs/application-writer.md).
-- **OpenAI API and OpenRouter providers:** pay-per-token API providers with their own key (`OPENAI_API_KEY`,
-  `OPENROUTER_API_KEY`), JSON mode, and the reply-length field each needs (`max_tokens_field`). OpenRouter's reported
-  cost is recorded as the exact cost of each call; its routing preferences (`data_collection: deny`,
-  `require_parameters`, optional `zdr`) are sent with every request. See [AI providers](docs/ai-providers.md#openai-api-and-openrouter)
-  and [Privacy](docs/privacy.md).
-- **Activity log** (`/sources/logs`): inspect collection cycles and steps, source queries, AI results, request attempts and system tasks. Entries are retained for 30 days after their last activity by default, subject to an event cap; preview and delete an entry, a date range or all entries. Tune it in `config/activity-log.yaml`. **Rollback:** set `enabled: false` to stop new records without a restart; older versions ignore the two tables and the config file. The tables can stay; no down migration is needed.
-- **Monid LinkedIn fallback:** an optional prepaid channel after Apify in the default LinkedIn cascade, with
-  per-run budget limits, polling, stop handling and billing recorded before parsing. See [docs/monid.md](docs/monid.md).
-- **Watched companies are also searched on LinkedIn through Bright Data and Apify, on JSearch, StepStone and XING.** A
-  company query searches the name nationwide, with no city, radius or remote filter. Where a result list names the
-  employer (Arbeitsagentur, LinkedIn session, JSearch, StepStone, XING), the detail page or billed detail request of
-  another employer's posting is skipped, so it uses no page limit or budget. See [Sources](docs/sources.md#watched-company-queries).
-- **Watched companies keep their on-site and hybrid jobs in any city of your home country.** Only the location check is
-  relaxed (a place without a country, such as "San Francisco", still does not count); remote jobs, other filters,
-  scoring and push rules are unchanged. The job is noted "Watched company: Hamburg is not one of your cities but is in
-  your home country, so the job is kept". `/interests` marks watched companies that have no ATS board.
-- **Query rotation:** collection starts with the queries waiting longest on its starting channel, so limited budgets reach the tail across cycles. Budget stops that already spent quota or money count as a turn, even with zero results; refusals before any request do not. `collect.query_rotation: false` restores config order; dry runs and history read failures use config order. Run records include usage and requested windows, and completed units report rotation summaries. Budgets and base windows stay unchanged.
-- **Catch-up windows:** queries waiting through missed turns or outages look back to their last coverage, with a
-  6-hour tolerance and a 168-hour cap by default. Bright Data, Apify and Monid keep the base window, as do channels
-  that ignore it: company ATS boards, board discovery (Tavily and Brave), Gmail job alerts and LinkedIn recommendations.
-  Stretched runs do not count as possibly-closed evidence; unseen-job link checks provide the fallback.
-  Set `collect.max_catch_up_hours: 0` to switch catch-up off without a deploy. See [catch-up windows](docs/sources.md#catch-up-windows).
-- **Fallback link checks for unseen jobs:** active jobs no source has returned for 14 days get a direct link check,
-  regardless of channel runs. Only the links decide whether to close them; unanswered checks wait 7 days before trying
-  again, including when watched rechecks keep running. Optional `lifecycle.unseen_link_check_after_days` (0 = off) and
-  `lifecycle.unseen_link_check_interval_days` tune the defaults; both kinds share the existing per-cycle link-check cap.
-- **Companies overview (`/companies`):** search and page through companies with open jobs, sort by job count, top score
-  or latest first seen, open their jobs, and watch or unwatch with the Interests page kept in sync. Phone cards and
-  sortable desktop headers share the URL state. Company exclusions link to the profile field; database-only watch
-  flags are labelled without an Unwatch button. `ui.yaml: companies.page_size` controls the page size (default 50).
-- **Company filter on `/jobs`:** a multi-select like city (`?company=…`, repeated for several), with job counts in the
-  drop-down, stored in saved views and applied on the Today page and in the view trends. Click a company name in a job row
-  or on a job's detail page to list that company's jobs. New `ui.yaml` keys `filters.company_options_max` (500) and
-  `filters.company_options_visible` (50). Rolling back to an older version needs the `company:` keys removed from views
-  first: see [docs/configuration.md](docs/configuration.md#company-filter-and-overview-uiyaml).
-- **Settings** in `schedule.yaml` (not in the shipped file): `deploy.ai_worker_releases_keep` (3),
-  `deploy.ai_worker_stop_timeout_seconds` (60) and `deploy.ai_worker_swap_timeout_seconds` (120). See
-  [docs/configuration.md](docs/configuration.md#shipped-config-identity).
-- **Doctor:** `ops.releases_lock` warns about a deploy lock left behind (owner, in-flight records, the `ps` command to
-  check and how to clear it; a lock held by the deploy that runs the doctor is fine), `ops.ai_worker_swap_backup` about
-  an unresolved worker switch backup, and `config.shipped` checks that the ai-worker runs from a release directory of
-  HEAD.
-- **CI:** an `upgrade-transition` job installs, switches, rolls back and uninstalls the real worker between releases of
-  real commits under a service-manager simulator.
-- **Doctor:** `config.shipped` warns when something is mounted on `/app/config`, or on a directory inside it, in a running
-  container (it would hide the shipped config in the image, or that part of it). This part runs even when the database
-  is down.
-- **Reason sources** (off by default, `ai.yaml: scoring.evidence`): each fit reason and gap on the job page says whether
-  the posting states it (with its own words and a jump to them in the job description), the AI inferred it, or the
-  posting does not mention it. Quotes are checked against the posting; one that is not found counts as inferred. Nothing
-  is re-scored; old scores show their reasons as before. Costs more output tokens per scoring call: see
-  [docs/score-evidence.md](docs/score-evidence.md). Before rolling back to an older version, delete `scoring.evidence`.
-- **Shipped config identity**: `pnpm config:check` prints a 12-character identity of the shipped defaults directory (a
-  hash over its files). The web, the runner and the ai-worker report the identity they run with, and the new doctor check
-  `config.shipped` shows it per process and warns when a report does not come from the process running now (another
-  container, an older start, another PID). See [docs/configuration.md](docs/configuration.md#shipped-config-identity);
-  new optional key `schedule.yaml: doctor.shipped_report_skew_seconds` (default 2).
-- **`--help` of every `scripts/ops/*.sh`** prints its whole header comment, which names every option the script accepts
-  (`uninstall-ai-worker.sh` gained `--help`).
-- **Release directories for the host AI worker** (tooling only; the worker still runs from the checkout):
-  `scripts/ops/prepare-release.sh <commit> --root <checkout>` builds a read-only
-  `data/releases/ai-worker/<commit>/` from `git archive` plus a production `pnpm install`, under the deploy lock, and
-  reuses one whose `.release.json` still matches. `src/ai-worker/release-guard.mjs`, loaded before tsx, refuses any
-  module that resolves outside its release and checks the Node version, the synchronous module hooks and esbuild's
-  binary. `scripts/ops/worker-heartbeat.ts` reports whether a given worker process holds the instance lock and has
-  written a heartbeat since a given time. tsx is now a production dependency.
-- **New optional keys** in `schedule.yaml: deploy`: `ai_worker_releases_keep` (default 3, at least 2),
-  `ai_worker_stop_timeout_seconds` (default 60, at least 10) and `ai_worker_swap_timeout_seconds` (default 120, at least
-  the stop timeout plus 10). Nothing reads them yet.
+- **Career profile:** edit sections by hand, keep several wordings, restore earlier versions; extract a draft from an
+  uploaded or pasted résumé after a preview of exactly what is sent to AI (contact details replaced).
+- **Résumé documents and PDF export:** independent résumés with a cover letter, live preview and version history; the
+  optional `career-pdf` service prints them on an internal network without data or internet access, with page counts and
+  layout checks that never block an export.
+- **Tailor a résumé to a job:** proposals to include, drop or rewrite entries and an optional cover letter; text not
+  backed by your profile is marked until you confirm it.
+- **Application writer:** an experience library on `/me`, story extraction from your profile, a text or a résumé file,
+  improving your own draft, a coach review, Markdown export and reuse of earlier answers.
+- **MCP server (off by default):** `pnpm mcp:serve` answers questions from a local MCP client over read-only sessions;
+  two application writer tools can be switched on separately. See [MCP](docs/mcp.md).
+- **Company background, research bar and automatic research** (`research.yaml`, off by default).
+- **Gmail replies** (`replies.yaml`, off by default).
+- **Deal-breakers:** your own rules that veto a job before any AI call. See [Deal-breakers](docs/deal-breakers.md).
+- **Visa sponsorship check** (rules only, no AI) and an optional **ghost job check** (off by default), both with quotes
+  from the posting. See [Visa sponsorship](docs/visa-sponsorship.md) and [Ghost jobs](docs/ghost-jobs.md).
+- **Reason sources (off by default):** each fit reason and gap says whether the posting states it, with a checked quote.
+  See [Score evidence](docs/score-evidence.md).
+- **Sources:** Arbeitnow, Berlin Startup Jobs, Handpicked Berlin, Berlin Design Network discovery, the Monid LinkedIn
+  fallback (needs `MONID_API_KEY`, see [Monid](docs/monid.md)) and watched company queries.
+- **AI providers:** OpenAI API and OpenRouter (OpenRouter requests send `data_collection: deny`), and a button to refresh
+  OpenRouter's public model list on the settings page.
+- **Activity log** (`/sources/logs`) for cycles, queries, AI results and requests, kept 30 days by default.
+- **Companies overview** (`/companies`), a company filter on `/jobs`, and `pnpm companies:merge` for duplicate companies.
+- **Collection:** query rotation, catch-up windows after missed runs, manual backfill, and link checks for jobs no source
+  has returned for 14 days.
+- **Telegram setup from the command line:** `pnpm run setup --step telegram`.
+- **Ops:** `pnpm config:check --overrides`, `pnpm config:plan`, `pnpm release:changed-defaults`, a shipped config
+  identity in the doctor, and `--help` on every `scripts/ops/*.sh`.
+
+### Changed
+
+- **Job search** on `/jobs` matches title, company, location and country by default; descriptions only with
+  **Include job descriptions** (`searchIn=all`). Results sort by relevance.
+- **`/jobs` scopes:** Current, Archive and All, a quick date filter that saved views keep, and jobs possibly closed for
+  30 days become dormant (out of default lists, never deleted; Still open wakes them).
+- **One salary panel** on the job page. AI salary lookups are only displayed, labelled unverified, and never count in
+  the benchmark or any filter.
+- **Interactive AI requests** (translation, breakdown, salary lookup, tests) have their own lane in the AI worker, and
+  waiting buttons follow the worker's heartbeat and queue position.
+- **Deploy:** images are built from a `git archive` of the deployed commit with the shipped config inside (no ignored or
+  locally changed file reaches an image), the AI worker runs from `data/releases/ai-worker/<commit>/`, one deploy runs
+  at a time, and an interrupted deploy stops cleanly.
+- **StepStone** only requests URLs its `robots.txt` permits: one `?q=` request per keyword and place, so it finds fewer
+  postings than before.
+- **Apify LinkedIn** requests the query's exact time window and no longer sends `f_WT=2`.
+- **Watched companies** keep on-site and hybrid jobs in any city of your home country.
+- The project website moved to [jobradar.bid](https://jobradar.bid/); the old address redirects.
 
 ### Fixed
 
-- Application writer: two quick clicks on **Write** queue one request, so the AI is called once. Saving a version is refused while the writer is switched off, like the rest of the workbench.
-- Application writer: earlier answers are no longer offered because questions share only generic words ("greatest strength" and "greatest weakness"; new optional `reuse.stopwords`). The old-company warning no longer fires on ordinary words for companies called It, Target or Meta.
-- Evidence check: `3千万` reads as 30,000,000, amounts written against a currency code (`EUR50,000`) are read whole, and `figure_units` match whatever their case or compatibility form.
-- A hand-written invalid `within` or `dateBy` in a saved view is ignored with a `config:check` warning instead of rejecting all of `interests.yaml`.
-- Upgrades: the worker lock holder is recognised on hosts whose name is not ASCII, so config writes no longer stay pending.
-- Sources: an unrecognised HTTP 4xx from a provider shows a short, scrubbed excerpt of its answer, and a 400 saying the balance, credits or quota have run out counts as a budget failure.
-- A container reading a config file right after a command on the Mac replaced it no longer takes it for missing: Docker
-  Desktop can answer "no such file" for about a second, and a save could then have started over from the defaults.
-- The jobspy sidecar no longer returns or logs the query string of a search URL quoted in an upstream error (it holds your keywords and location), and a keyword such as "blocked", "captcha" or "429" no longer changes how a failure is classified.
-- A write lock whose guard was left by a dead process is taken over even when a slow disk has used up the wait budget.
-- Fallback faces for the web fonts also use Liberation Sans, the usual Arial stand-in on Linux, so text does not reflow when the fonts arrive.
-- Paid channels no longer lose delivered records silently: everything Apify, Bright Data and Monid deliver is kept in a local delivery ledger with the reason it was or was not stored (error item, no id, duplicate, outside the window, unreadable response, failed or cancelled attempt), and `pnpm deliveries:show` reconciles it with the run's billed usage.
-- Anthropic API calls use compatible tool settings for current Claude models, and text-only replies reach the normal validation retry.
-- Apify LinkedIn searches keep day-precision postings in short time windows when ISO midnight is a placeholder, while preserving confirmed exact timestamps and the source's stored date; Bright Data treats bare dates as whole days, and paid LinkedIn channels no longer turn malformed dates into posting times.
-- LinkedIn session dry runs respect the stored daily page limit and re-login flag, reuse jobs from both session channels, and keep all writes in memory through a read-only shared database connection.
-- AI worker install, uninstall, doctor, deploy and setup share launchd label resolution, preserving configured `de` and `io` labels so PID and shipped-config receipt checks find the installed service.
-- Doctor warns about launchd label mismatches in either direction; invalid labels no longer break offline hints or the worker's lock-contention exit, and Linux setup keeps its service controls without resolving launchd labels.
-- Phrase and visa deal-breakers still report later timeouts for unchanged jobs, preserving stored vetoes until the rules can evaluate them again.
-- Recovering the AI worker sends one digest for queued cycles while keeping every cycle's AI work and alerts; company
-  name corrections preserve paid salary caches, and ignored HTTP bodies release their cancellation listeners.
-- Web actions recover from outdated tabs, invalid config pages name the file and link to its editor, concurrent settings and setup-wizard edits keep unrelated changes, trigger buttons say when the server cannot be reached, and caught action failures leave safe diagnostics in the web log.
-- Runner heartbeat writes that finish after their timeout still count as healthy; sustained failures allow active work its configured cleanup grace period before restarting.
-- Jobspy scrape requests are sent only once after a timeout or server error; stalled runner heartbeat work is bounded, manual backups are verified before publication, deploy preflight explains why root is unsupported, and CLI checks recognize unavailable commands on a restricted PATH.
-- Keep the closing-phrase quote visible in job details when the job becomes dormant or another closure reason takes precedence.
-
-- Scoring views show the time-budget reason and remaining count even when preparation exhausts the budget before the first job is scored.
-- Splitting merged jobs preserves locations from every linked posting and reports unreadable sources for manual review;
-  reprocessing stops its filter and signal batches when the cycle lock is lost.
-- Fixed job identity repairs across cities, linked company mark removal, LinkedIn cross-channel duplicates, concurrent
-  reprocessing and cycle interruption cleanup; reprocessing now shares the cycle's dedicated database lock.
-- **A broken jobspy sidecar no longer stops a deploy halfway:** the runner no longer waits for the sidecar, and
-  `scripts/ops/deploy.sh` starts db, web and runner first, then the sidecar on its own. When the sidecar does not turn
-  healthy the deploy warns and still runs the migration, the ai-worker switch and the config writes; the doctor reports it
-  as a problem only while `linkedin-guest`, `indeed` or `jobspy-google` is on (otherwise a warning). The sidecar image
-  now installs every Python package at a locked version with hashes, from a digest-pinned base image.
-- Translation, breakdown and salary lookup keep polling after a temporary status read failure or invalid queue response; translation queue text also applies to container execution.
-
-- **A slow interest pattern no longer freezes the app:** a pattern of a signal category that backtracks badly on long
-  text (such as `(\w+\s*)*budget`) is refused when saving on /interests or in the file editor; in a file edited by hand
-  the signal scan, the AI review and the suggestions leave it out with a warning naming its category, and "Try on recent
-  jobs" stops a slow job at its time budget. Independent interest limits also bound matching on each job in the signal
-  scan and AI review, and a preview uses one shared time budget for all jobs.
-- **Company names and job titles in non-Latin scripts no longer merge different jobs:** "Яндекс" and "株式会社メルカリ"
-  were one company, and different Japanese, Chinese, Greek, Cyrillic or Hebrew titles at one employer and city were one
-  job (and so were one role's postings in two cities written in another script), because their matching keys were empty.
-  The keys now keep the letters and digits of every script, with the marks that belong to a letter (Devanagari, Thai,
-  Japanese voicing marks); letters such as Ø, Ł and Æ in company names are kept too, ß reads as ss; a title without any
-  letter or digit never matches by title. See
-  [docs/extraction.md](docs/extraction.md#company-and-title-keys).
-- **Arbeitsagentur, StepStone and XING keep a query's list results when a detail request fails.** A throttled,
-  blocked or login-refused detail request now stops further detail requests and stores every posting the search already
-  read, recording the run as interrupted with that error; before, the whole query's results were lost. A single
-  unreadable detail only costs its description (Arbeitsagentur also accepts detail fields sent as null). "Page layout
-  changed" is reported only when none of at least 3 detail requests of a query (all of them, when
-  `max_details_per_query` is lower) could be read, and the list results are then stored as well.
-- **"Collect now" for one channel no longer swallows another click or a scheduled cycle:** an unfinished request is
-  reused only when it covers the channels asked for (a click for Greenhouse while Indeed is queued gets its own
-  request, which runs next; a LinkedIn fallback after the first one in the cascade is covered only by a request that
-  names it), and the button says "a request that covers this channel" instead of "the same request". A scheduled
-  cycle that finds a cycle of only some channels running waits for it, at most `schedule.yaml`
-  `partial_cycle_wait.max_minutes` (default 60), and then runs, instead of being skipped; one that finds a cycle of
-  every channel running is still skipped. A manual request covered by a running cycle ends as done and the button
-  follows that cycle through the shared waiting controls until it finishes, then shows its final counts. The start-up
-  catch-up and `pnpm run doctor` no longer count a cycle of some channels as the slot's cycle. Before rolling back, remove
-  `partial_cycle_wait` from `data/config/schedule.yaml` if you added it.
-- **Tag boxes no longer swallow a repeated entry silently:** typing a title, keyword or city that is already in the list
-  (any case) now keeps the text, names the existing entry under the box ("Already in the list: ...") and briefly
-  highlights it. Enter and the comma no longer act while an input method is composing. Regular expressions and
-  numbers are compared exactly, the seniority distance table still takes repeats, and a scoring criterion with commas
-  is kept as one sentence.
-- **Partial company ATS board reads keep the postings already read.** Only complete reads count as evidence for
-  "possibly closed", checked separately for each board after its jobs fall overdue and using the normal search window.
-  A failing board, short list or unresolved details holds back only that board's jobs, while stored jobs that are still
-  listed stay refreshed. "Last success" advances only after a complete read.
-- **SmartRecruiters detail failures no longer mark the board as failed in the registry:** stored postings keep
-  their saved version and are refreshed as seen; new postings are retried in later sweeps, but after a repeated failure
-  only once the board's list changes if the server answers 304 for the stored validator. Boards that do not answer 304
-  are re-read every sweep and retry then.
-  Run outcomes are unchanged: if every board of the ATS has a failed list or detail request in that sweep, the run is
-  still interrupted when postings were collected, or failed otherwise, not successful; a board with unresolved details
-  from an earlier sweep that receives 304 keeps counting as failed for the run outcome until a full re-read resolves them.
-  The run is not used to mark jobs as
-  possibly closed. The registry still shows a board as OK when its list was read and its stored jobs were refreshed.
-  New setting `sources.smartrecruiters.max_consecutive_detail_failures` (default 3) limits consecutive detail failures per board
-  per sweep. **Upgrade:** a database migration adds a column and runs automatically on deploy.
-- Board discovery (Tavily, Brave) no longer drops the same searches every run when there are more than `max_queries_per_run`; it searches the ones that waited longest first.
-- **Company career board scans:** `max_results` no longer hides stored jobs that the board still lists, which could
-  mark them possibly closed after a week. The registry's "kept" count now means postings that passed the prefilter and
-  fit within the cap. **Upgrade:** the first run after upgrading re-reads every board once (cached ETags are discarded).
-- **Deploy and doctor no longer accept an old ai-worker heartbeat as proof the current service process is ready:**
-  deploy step 12 waits for its lock, heartbeat and own shipped config report, up to the worker swap timeout
-  (`--settle` overrides it; 0 skips the wait). An unconfirmed worker now makes deploy exit 2 even if doctor has no
-  failures. Doctor warns for a current process without a receipt or a lock held by another worker; missing and stale
-  heartbeats remain failures.
-- **`cycle:run --dry-run` honours the stored budget, circuit and job state:** it ignored the database and started
-  from empty state, so dry runs made billed requests past the monthly caps, hit channels with an open circuit and
-  fetched the details of jobs already stored again. It now starts from the persisted monthly usage, circuit state and
-  stored postings (read-only), as its help text said; it still writes nothing.
-- **A job marked "no longer accepting applications" stays marked when its posting is parsed again or another channel
-  merges into it:** the pipeline reset such a job to active (and made it eligible for scoring and push) whenever a
-  source returned a changed posting or a new channel's copy. It now applies the same rule as the "seen again" step of
-  maintenance; a plain possibly closed or closed job a source returns again is still active again. The ordinary link
-  check no longer picks such a job either (it only sees that the link is live, not the page text), so it cannot reopen
-  it when the watched recheck is off, the job is no longer starred or followed, or the settings failed to read once.
-- **LinkedIn session channel, daily page limit reached part way through a query:** the postings that need no page load
-  (already stored, or list cards when `fetch_details` is off) are still delivered after the limit instead of dropped, and
-  the run is recorded as skipped (a budget stop, as with JSearch) instead of succeeded, so a query cut short is no longer
-  used to mark jobs as possibly closed. The capped query itself now goes to the next channel of the cascade (guest, off by
-  default); when it is the last query of its unit, the skip shows in the cycle's collect step (`partial`, or `failed`
-  when nothing else succeeded). "Recommended for you" stopped by the limit counts as read only when it kept postings.
-  See [docs/linkedin-session.md](docs/linkedin-session.md#when-the-daily-page-limit-is-reached).
-- **Debug logging could not be turned on:** every process logged at `info`, so the diagnostic records (AI provider
-  checks, skipped providers, HTTP retries, ignored Telegram chats) never appeared. The level is now `schedule.yaml`
-  `logging.level` (default `info`, followed without a restart) or `JOB_RADAR_LOG_LEVEL`, which wins; it applies to the
-  web app, the runner, the ai-worker and `pnpm cycle:run`, and the AI provider test and the requests outside a cycle
-  (translation, breakdown, salary lookup) now hand their logger to the providers. Remove the `logging` block from
-  `data/config/schedule.yaml` before rolling back to an older version. See
-  [docs/configuration.md](docs/configuration.md) ("Log level").
-- **Building no longer needs Google Fonts:** the fonts (Archivo, Archivo Black, IBM Plex Mono, Noto Sans SC) are
-  self-hosted from pinned npm packages, so `pnpm build` and the image build work behind a network that blocks Google
-  and no longer fail when the font download does. The pages look the same (same families, weights, character coverage
-  and loading). The Dockerfile compiles with `RUN --network=none`, so every image build proves it. The font licences
-  (SIL OFL 1.1) are in `licenses/fonts/` and in the web image.
-- Upgrades could migrate user configuration while the old AI worker was still running and reading it. Deploys now write
-  config only after the new worker is confirmed and no other worker runs, and every config and profile write takes a lock
-  in the database.
-- The deploy's worker check never matched a host name with non-ASCII characters (Postgres rewrites them in the name the
-  worker publishes), so it could not confirm that worker. Such characters are now written as `_` in that name and both
-  sides compare it that way.
-- The ai-worker no longer claims requests while a config file has a newer `config_version` than it knows (an old worker
-  still running during an upgrade): it logs the file and exits, and the upgraded worker takes over.
+- JSearch collects again (RapidAPI moved the endpoint to `/search-v2`).
+- Company names and job titles in non-Latin scripts no longer merge different jobs.
+- Arbeitsagentur, StepStone, XING and the company ATS boards keep the results already read when a detail request fails.
+- Paid channels keep every delivered record in a local delivery ledger (`pnpm deliveries:show`).
+- `cycle:run --dry-run` honours stored budgets, circuits and jobs instead of making billed requests past the caps.
+- A rollback of your preferences shows the score of the version you rolled back to.
+- Debug logging can be turned on (`schedule.yaml: logging.level` or `JOB_RADAR_LOG_LEVEL`).
+- Building no longer needs Google Fonts; the fonts are self-hosted.
+- A broken jobspy sidecar no longer stops a deploy halfway.
 
 ### Removed
 
-- **The upgrade freeze and the config file locks:** `.upgrade-freeze`, `pnpm ops:freeze` and `pnpm ops:unfreeze`, the
-  `.write.lock` files in `data/config/` and `data/profile/`, the doctor check `config.freeze`, and the
-  `deploy.config_write_lock_*` keys of `schedule.yaml` (still accepted in a file, no longer read). They existed only in
-  builds between 2.0.1 and this release. The database lock replaces the file locks; step 11 deletes leftover marker and
-  lock files once its gate has passed.
+- The upgrade freeze (`pnpm ops:freeze`, `pnpm ops:unfreeze`) and the config `.write.lock` files of pre-release builds;
+  a database lock replaces them.
 
 ### Security
 
-- Update Undici, Zod and Mailparser's Nodemailer dependency to patched versions, including transitive Undici 7.x.
-- **AI salary figures cannot affect benchmarks or filters.** Job Radar has not checked the figures or sources given by
-  the AI. Old benchmark tables containing any AI figures are hidden in full until recomputed from postings; a failed
-  recomputation leaves them hidden. Source links on the configured salary-site list are still unverified.
-- **Dependency and runtime security updates:** Next.js 16.4.2 and React 19.3.1 (published advisories in `use cache`, SVG
-  image optimisation and Server Actions handling), the MCP SDK 2.3.1, and Vite 8.3.5 and `ip-address` 10.7.4 for the
-  development and mail-client chains. The Node.js floor is raised to 22.23.4 for the 2026-10-21 Node security release;
-  rebuild the images with `--pull` so the containers get it too.
-
-### Documentation
-
-- "Possibly closed" is now described as what it is: a time-based hint judged per channel (not per search query), with the
-  link check as the evidence (a live link reopens the job; it closes only when every link returns 404 / 410). A job seen
-  again becomes active again, except when its page says it no longer accepts applications or you closed it yourself. See [docs/sources.md](docs/sources.md#how-jobs-get-marked-possibly-closed).
+- Next.js 16.4.2, React 19.3.1, the MCP SDK 2.3.1, Undici, Zod, Nodemailer, Vite 8.3.5 and `ip-address` 10.7.4 updated
+  for published advisories; the Node.js floor is 22.23.4.
+- The jobspy sidecar no longer returns or logs the query string of a search URL (your keywords and location), and its
+  Python packages are installed at locked versions with hashes from a digest-pinned base image.
 
 ## [2.0.1] - 2026-10-11
 
 ### Upgrade notes
 
-- **Your config files now hold only what differs from the shipped ones.** A file in `data/config/` is laid over the shipped
-  file key by key, so keys you did not write follow product updates, and `key: !unset` removes a shipped key. The next deploy
-  converts your files in its write step (originals in `data/config/.backup/<time>/`, the keys dropped and kept in
-  `data/config/conversion-<time>.json`); `pnpm config:migrate --convert-overlays` shows it first. A form save, the advanced
-  editor and the source import never change a file's format, and a file at the older version still works as a whole file.
-  Two limits: a pin equal to the current shipped value is dropped, and an old default that differs from it stays pinned; both
-  are explained in [Your file is an overlay](docs/configuration.md#your-file-is-an-overlay). Restart `pnpm mcp:serve` and other
-  processes you started by hand. **Rollback:** older code refuses an overlay, so run `pnpm config:migrate --to-full --write`
-  first, with web and runner stopped and the database up; see [Rollback](docs/deploy.md#5-rollback).
 - **https users sign in once more.** Over https the session cookie is now `__Host-jr_session`; sessions from before the
   upgrade are not carried over, so every device that comes in through `tailscale serve` (or another https proxy) shows
   the login page once. Plain http sessions stay valid.
@@ -680,15 +232,6 @@ deploy.
 
 ### Upgrade notes
 
-- **Your config files now hold only what differs from the shipped ones.** A file in `data/config/` is laid over the shipped
-  file key by key, so keys you did not write follow product updates, and `key: !unset` removes a shipped key. The next deploy
-  converts your files in its write step (originals in `data/config/.backup/<time>/`, the keys dropped and kept in
-  `data/config/conversion-<time>.json`); `pnpm config:migrate --convert-overlays` shows it first. A form save, the advanced
-  editor and the source import never change a file's format, and a file at the older version still works as a whole file.
-  Two limits: a pin equal to the current shipped value is dropped, and an old default that differs from it stays pinned; both
-  are explained in [Your file is an overlay](docs/configuration.md#your-file-is-an-overlay). Restart `pnpm mcp:serve` and other
-  processes you started by hand. **Rollback:** older code refuses an overlay, so run `pnpm config:migrate --to-full --write`
-  first, with web and runner stopped and the database up; see [Rollback](docs/deploy.md#5-rollback).
 Deploy with `scripts/ops/deploy.sh --ref v2.0.0` (run it with `--dry-run` first). It backs up the database, migrates the
 configuration and the database, and restarts the services. In addition:
 

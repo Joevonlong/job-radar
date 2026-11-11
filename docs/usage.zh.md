@@ -187,7 +187,7 @@ tail -f data/logs/ai-worker.err.log    # ai-worker 的错误
 | 标题带 “AI Engineer - US” 或 “(Americas)” 这类标记 | 排除，正文也救不回；标题同时写了 EMEA 或 Europe 则不排除 |
 | 只写 “Remote”（没写地方）或没有地点 | 保留，注明没写在哪里招 |
 
-只看地点的话，“全球”全部保留。列出的地点是在本国之外增加的，不会取代本国。不想再看远程职位，就从办公方式里去掉“远程”。
+只看地点的话，“全球”全部保留。列出的地点是在本国之外增加的，不会取代本国。不想再看远程职位，就从办公方式里去掉“远程”。同一地点写了两次只算一次，✈ 优先（[详情](market-packs.zh.md#地点设置的迁移)）。
 
 **职位说明写了可以在哪里工作。** 每个通过的远程职位，每次过滤都会重新读标题和职位说明，找明确的说法，比如“You must live in France”或“Open to candidates in Spain or Portugal”：
 
@@ -211,7 +211,9 @@ tail -f data/logs/ai-worker.err.log    # ai-worker 的错误
 | 本国的城市，或数据表里没有的 ✈ 名称 | 没有 |
 | 数据表里没有的仅远程名称 | 这个名称，不带国家 |
 
-表单会显示每个地点每轮增加多少次搜索。国外的搜索会带上那个地点自己的国家发给招聘网站。远程搜索发送不了地点的网站（JSearch、Arbeitsagentur、StepStone、XING）跳过这些搜索、保留其他搜索，“来源”页显示跳过了多少。公司招聘板的发现只用现场搜索。
+表单会显示每个地点每轮增加多少次搜索。国外的搜索会带上那个地点自己的国家发给招聘网站。远程搜索发送不了地点的网站（JSearch、Arbeitsagentur、StepStone、XING）跳过这些搜索、保留其他搜索，“来源”页显示跳过了多少。同一个网站会以同样方式发出的两条搜索只跑一次，比如 Apify 发往同一个 `remote_locations` 的两个远程地点。Arbeitsagentur 只认德语地名，国外的地点在那里搜不到结果。✈ 城市按数据表给它的国家搜索：✈ `Cambridge` 搜的是英国（[已知限制](market-packs.zh.md#地点设置的迁移)）。公司招聘板的发现只用现场搜索。
+
+常住城市不在本国时（旧 `locations` 的第一项可能就是），`/me` 和 `pnpm config:check` 会提醒：那里的职位按本国比较。请设一个本国的常住城市，把另一个城市列为 ✈。
 
 `search.yaml` 里旧的 `locations` 和 `remote_scope` 不再生效。它们写了你的地点里没有的内容时，`/me` 和 `pnpm config:check` 会提醒你，你可以把它加到地点里。
 
