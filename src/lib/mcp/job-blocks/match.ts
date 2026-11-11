@@ -1,14 +1,12 @@
 /** Only match permission releases judgements; profile inputs are used for checks and never copied into the output. */
 import type { z } from "zod";
 
-import { floorCheck } from "@/lib/dashboard/floor-check";
-import { germanCheck } from "@/lib/dashboard/german-check";
-import { buildSkillAliasMap, matchSkills, profileSkillKeys } from "@/lib/dashboard/skills";
+import { detailChecks, detailCheckViews } from "@/lib/jobs/detail-inputs";
+import { buildSkillAliasMap } from "@/lib/dashboard/skills";
 import type { McpContext } from "@/lib/mcp/context";
 import { matchBlockDto } from "@/lib/mcp/dto/job-match";
 import { isoOrNull } from "@/lib/mcp/dto/shared";
 import type { ReasonSource } from "@/lib/scoring/evidence";
-import { buildVisaCheckView } from "@/lib/visa/view";
 
 import { jobBlockSettings } from "./settings";
 import { quotedText, type JobBlockSource } from "./source";
@@ -19,10 +17,9 @@ export async function loadMatch(_ctx: McpContext, source: JobBlockSource): Promi
   if (score === null) return null;
   const settings = jobBlockSettings();
   const aliases = buildSkillAliasMap(settings.skillAliases());
-  const skills = matchSkills(detail.skills, profileSkillKeys(settings.skills(), aliases), aliases);
-  const german = germanCheck(detail.germanLevelRequired, settings.germanLabel());
-  const floor = floorCheck(detail.salary, settings.salaryFloor(), settings.baseCurrency() ?? "");
-  const visa = settings.visaEnabled() ? buildVisaCheckView(detail.visa, settings.needsVisaSponsorship()) : null;
+  const { skillMatches: skills, german, floor } = detailChecks(detail, { profileSkills: settings.skills(), aliases, germanLabel: settings.germanLabel(), salaryFloor: settings.salaryFloor(), currency: settings.baseCurrency() ?? "" });
+  const visaOn = settings.visaEnabled();
+  const { visaView: visa } = detailCheckViews(detail, { visa: visaOn, needsVisaSponsorship: visaOn ? settings.needsVisaSponsorship() : false, ghost: false });
   const notice = settings.dealBreakers(detail, score.filterReasons);
   const written = source.strict.ok;
   const reason = (text: string, evidence: ReasonSource | undefined) => {

@@ -5,6 +5,7 @@ import {
   boolean,
   check,
   customType,
+  date,
   index,
   integer,
   jsonb,
@@ -1380,11 +1381,33 @@ export const activityEvents = pgTable("activity_events", {
   index("activity_events_span_at_idx").on(t.spanId, t.at, t.id),
 ]);
 
+/**
+ * Agent tokens for MCP connections that are not the local stdio process. Only the SHA-256 hash of a token is stored, beside its
+ * display prefix, which also selects the rows whose hash is compared. Revoking sets `revoked_at` and keeps the row, so audit rows
+ * keep their token.
+ */
+export const agentTokens = pgTable("agent_tokens", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  tokenPrefix: text("token_prefix").notNull(),
+  permissions: text("permissions").array().notNull().default(sql`'{}'::text[]`),
+  autoApprove: boolean("auto_approve").notNull().default(false),
+  expiresAt: timestamptz("expires_at"),
+  createdAt: timestamptz("created_at").notNull().defaultNow(),
+  lastUsedAt: timestamptz("last_used_at"),
+  revokedAt: timestamptz("revoked_at"),
+}, (t) => [
+  unique("agent_tokens_token_hash_uq").on(t.tokenHash),
+  index("agent_tokens_token_prefix_idx").on(t.tokenPrefix),
+  uniqueIndex("agent_tokens_active_name_uq").on(t.name).where(sql`${t.revokedAt} is null`),
+]);
+
 export const agentCalls = pgTable("agent_calls", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
   calledAt: timestamptz("called_at").notNull().defaultNow(),
   caller: text("caller").notNull().default("stdio"),
-  tokenId: integer("token_id"),
+  tokenId: integer("token_id").references(() => agentTokens.id),
   transport: text("transport").notNull().default("stdio"),
   capability: text("capability").notNull(),
   targetType: text("target_type", { enum: ["job", "application", "question"] }),
@@ -1397,4 +1420,30 @@ export const agentCalls = pgTable("agent_calls", {
   index("agent_calls_called_at_idx").on(t.calledAt),
   check("agent_calls_outcome_check", sql`${t.outcome} in ('ok', 'not_permitted', 'invalid_input', 'error')`),
   check("agent_calls_error_category_check", sql`(${t.outcome} = 'error' and ${t.errorCategory} is not null) or (${t.outcome} <> 'error' and ${t.errorCategory} is null)`),
+]);
+
+/** One row per caller, action and local day; the counter behind mcp.yaml budgets. */
+export const agentBudgetUsage = pgTable("agent_budget_usage", {
+  caller: text("caller").notNull(),
+  action: text("action").notNull(),
+  day: date("day", { mode: "string" }).notNull(),
+  used: integer("used").notNull().default(0),
+  updatedAt: timestamptz("updated_at").notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.caller, t.action, t.day] }),
+  check("agent_budget_usage_used_nonnegative", sql`${t.used} >= 0`),
+  index("agent_budget_usage_day_idx").on(t.day),
+]);
+
+/** One row per budget take that can still be given back; giving it back deletes the row, so a ticket releases its units once. */
+export const agentBudgetTickets = pgTable("agent_budget_tickets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  caller: text("caller").notNull(),
+  action: text("action").notNull(),
+  day: date("day", { mode: "string" }).notNull(),
+  units: integer("units").notNull(),
+  createdAt: timestamptz("created_at").notNull().defaultNow(),
+}, (t) => [
+  check("agent_budget_tickets_units_positive", sql`${t.units} >= 1`),
+  index("agent_budget_tickets_day_idx").on(t.day),
 ]);

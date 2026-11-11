@@ -1,0 +1,1702 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`read DTO allow-lists > get_application schema snapshot 1`] = `
+{
+  "additionalProperties": false,
+  "properties": {
+    "company": {
+      "type": [
+        "string",
+        "null",
+      ],
+    },
+    "job_id": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer",
+    },
+    "notes": {
+      "additionalProperties": false,
+      "properties": {
+        "application_notes": {
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "event_notes": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "type": "string",
+              },
+              "from": {
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "note": {
+                "type": "string",
+              },
+              "to": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "at",
+              "from",
+              "to",
+              "note",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+      },
+      "required": [
+        "application_notes",
+        "event_notes",
+      ],
+      "type": "object",
+    },
+    "notices": {
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "returned": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer",
+    },
+    "text_withheld": {
+      "type": [
+        "string",
+        "null",
+      ],
+    },
+    "title": {
+      "type": [
+        "string",
+        "null",
+      ],
+    },
+    "total": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer",
+    },
+    "tracking": {
+      "additionalProperties": false,
+      "properties": {
+        "application": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "created_at": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                  "type": "string",
+                },
+                "history": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "at": {
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                        "type": "string",
+                      },
+                      "from": {
+                        "type": [
+                          "string",
+                          "null",
+                        ],
+                      },
+                      "to": {
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "from",
+                      "to",
+                      "at",
+                    ],
+                    "type": "object",
+                  },
+                  "type": "array",
+                },
+                "interview_rounds": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer",
+                },
+                "next_action": {
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+                "next_action_at": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                      "type": "string",
+                    },
+                    {
+                      "type": "null",
+                    },
+                  ],
+                },
+                "status": {
+                  "type": "string",
+                },
+                "status_changed_at": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                  "type": "string",
+                },
+              },
+              "required": [
+                "status",
+                "status_changed_at",
+                "created_at",
+                "next_action",
+                "next_action_at",
+                "interview_rounds",
+                "history",
+              ],
+              "type": "object",
+            },
+            {
+              "type": "null",
+            },
+          ],
+        },
+        "closure": {
+          "additionalProperties": false,
+          "properties": {
+            "auto_status": {
+              "enum": [
+                "active",
+                "possibly_closed",
+                "closed",
+              ],
+              "type": "string",
+            },
+            "link_check": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "checked_at": {
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                      "type": "string",
+                    },
+                    "outcome": {
+                      "enum": [
+                        "alive",
+                        "gone",
+                        "phrase",
+                        "unknown",
+                        "robots",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "outcome",
+                    "checked_at",
+                  ],
+                  "type": "object",
+                },
+                {
+                  "type": "null",
+                },
+              ],
+            },
+            "override": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "enum": [
+                        "closed",
+                        "open",
+                      ],
+                      "type": "string",
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "action",
+                    "at",
+                  ],
+                  "type": "object",
+                },
+                {
+                  "type": "null",
+                },
+              ],
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "manual",
+                    "gone",
+                    "dormant",
+                    "phrase",
+                    "possibly",
+                  ],
+                  "type": "string",
+                },
+                {
+                  "type": "null",
+                },
+              ],
+            },
+          },
+          "required": [
+            "auto_status",
+            "reason",
+            "override",
+            "link_check",
+          ],
+          "type": "object",
+        },
+        "favorite": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "since": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                  "type": "string",
+                },
+              },
+              "required": [
+                "since",
+              ],
+              "type": "object",
+            },
+            {
+              "type": "null",
+            },
+          ],
+        },
+        "filter_override": {
+          "anyOf": [
+            {
+              "enum": [
+                "keep",
+                "exclude",
+              ],
+              "type": "string",
+            },
+            {
+              "type": "null",
+            },
+          ],
+        },
+        "seen": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "application",
+        "favorite",
+        "seen",
+        "closure",
+        "filter_override",
+      ],
+      "type": "object",
+    },
+    "truncated": {
+      "type": "boolean",
+    },
+  },
+  "required": [
+    "notices",
+    "total",
+    "returned",
+    "truncated",
+    "job_id",
+    "title",
+    "company",
+    "text_withheld",
+    "tracking",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`read DTO allow-lists > get_company schema snapshot 1`] = `
+{
+  "additionalProperties": false,
+  "properties": {
+    "company": {
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "blacklisted": {
+          "type": "boolean",
+        },
+        "id": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+        "name": {
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "text_withheld": {
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "watched": {
+          "type": "boolean",
+        },
+        "website_domain": {
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "website_domain_source": {
+          "anyOf": [
+            {
+              "enum": [
+                "user",
+                "inferred",
+              ],
+              "type": "string",
+            },
+            {
+              "type": "null",
+            },
+          ],
+        },
+      },
+      "required": [
+        "id",
+        "name",
+        "aliases",
+        "website_domain",
+        "website_domain_source",
+        "watched",
+        "blacklisted",
+        "text_withheld",
+      ],
+      "type": "object",
+    },
+    "jobs": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "company": {
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "first_seen_at": {
+            "type": "string",
+          },
+          "id": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer",
+          },
+          "links": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "apply_url": {
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+                "source": {
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+                "url": {
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+              },
+              "required": [
+                "source",
+                "url",
+                "apply_url",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "locations": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "city": {
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+                "country_code": {
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+                "label": {
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+              },
+              "required": [
+                "label",
+                "city",
+                "country_code",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "posted_at": {
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "rank_value": {
+            "type": [
+              "number",
+              "null",
+            ],
+          },
+          "status": {
+            "type": "string",
+          },
+          "text_withheld": {
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "title": {
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+        },
+        "required": [
+          "id",
+          "title",
+          "company",
+          "status",
+          "rank_value",
+          "posted_at",
+          "first_seen_at",
+          "locations",
+          "links",
+          "text_withheld",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+    "notices": {
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "research": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean",
+            },
+            "expired": {
+              "type": [
+                "boolean",
+                "null",
+              ],
+            },
+            "fetched_at": {
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "fields": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "field": {
+                    "type": "string",
+                  },
+                  "source_url": {
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "text": {
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                },
+                "required": [
+                  "field",
+                  "text",
+                  "source_url",
+                ],
+                "type": "object",
+              },
+              "type": "array",
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+          },
+          "required": [
+            "available",
+            "reason",
+            "fetched_at",
+            "expired",
+            "fields",
+          ],
+          "type": "object",
+        },
+        {
+          "type": "null",
+        },
+      ],
+    },
+    "returned": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer",
+    },
+    "total": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer",
+    },
+    "truncated": {
+      "type": "boolean",
+    },
+  },
+  "required": [
+    "notices",
+    "total",
+    "returned",
+    "truncated",
+    "company",
+    "research",
+    "jobs",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`read DTO allow-lists > get_insights schema snapshot 1`] = `
+{
+  "additionalProperties": false,
+  "properties": {
+    "cities": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "city": {
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "count": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer",
+          },
+          "kind": {
+            "enum": [
+              "city",
+              "remote",
+              "other",
+            ],
+            "type": "string",
+          },
+          "share": {
+            "type": "number",
+          },
+        },
+        "required": [
+          "kind",
+          "city",
+          "count",
+          "share",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+    "conversion": {
+      "additionalProperties": false,
+      "properties": {
+        "fetched": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+        "passed": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+        "pushable": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+      },
+      "required": [
+        "fetched",
+        "passed",
+        "pushable",
+      ],
+      "type": "object",
+    },
+    "daily": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "avg_rank": {
+            "type": [
+              "number",
+              "null",
+            ],
+          },
+          "day": {
+            "type": "string",
+          },
+          "filtered": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer",
+          },
+          "passed": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer",
+          },
+        },
+        "required": [
+          "day",
+          "passed",
+          "filtered",
+          "avg_rank",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+    "kpi": {
+      "additionalProperties": false,
+      "properties": {
+        "avg_rank": {
+          "type": [
+            "number",
+            "null",
+          ],
+        },
+        "change": {
+          "type": [
+            "number",
+            "null",
+          ],
+        },
+        "pass_rate": {
+          "type": [
+            "number",
+            "null",
+          ],
+        },
+        "pass_rate_change_pt": {
+          "type": [
+            "number",
+            "null",
+          ],
+        },
+        "passed": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+        "previous_pass_rate": {
+          "type": [
+            "number",
+            "null",
+          ],
+        },
+        "previous_total": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+        "salary_rate": {
+          "type": [
+            "number",
+            "null",
+          ],
+        },
+        "total": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+      },
+      "required": [
+        "total",
+        "previous_total",
+        "change",
+        "passed",
+        "pass_rate",
+        "previous_pass_rate",
+        "pass_rate_change_pt",
+        "salary_rate",
+        "avg_rank",
+      ],
+      "type": "object",
+    },
+    "match": {
+      "additionalProperties": false,
+      "properties": {
+        "filters": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "jobs": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer",
+              },
+              "share": {
+                "type": "number",
+              },
+            },
+            "required": [
+              "code",
+              "jobs",
+              "share",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+      },
+      "required": [
+        "filters",
+      ],
+      "type": "object",
+    },
+    "notices": {
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "range_days": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer",
+    },
+    "salary": {
+      "additionalProperties": false,
+      "properties": {
+        "bars": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "count": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer",
+              },
+              "from": {
+                "type": "number",
+              },
+              "to": {
+                "type": [
+                  "number",
+                  "null",
+                ],
+              },
+            },
+            "required": [
+              "from",
+              "to",
+              "count",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "comparable": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+        "currency": {
+          "type": "string",
+        },
+        "disclosed": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+        "median_per_year": {
+          "type": [
+            "number",
+            "null",
+          ],
+        },
+        "passed": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+        "rate": {
+          "type": [
+            "number",
+            "null",
+          ],
+        },
+      },
+      "required": [
+        "passed",
+        "disclosed",
+        "comparable",
+        "rate",
+        "median_per_year",
+        "currency",
+        "bars",
+      ],
+      "type": "object",
+    },
+    "scores": {
+      "additionalProperties": false,
+      "properties": {
+        "avg_rank": {
+          "type": [
+            "number",
+            "null",
+          ],
+        },
+        "bars": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "count": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer",
+              },
+              "from": {
+                "type": "number",
+              },
+              "to": {
+                "type": [
+                  "number",
+                  "null",
+                ],
+              },
+            },
+            "required": [
+              "from",
+              "to",
+              "count",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "pending": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+        "scored": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+      },
+      "required": [
+        "scored",
+        "pending",
+        "avg_rank",
+        "bars",
+      ],
+      "type": "object",
+    },
+    "signals": {
+      "additionalProperties": false,
+      "properties": {
+        "avg_rank": {
+          "type": [
+            "number",
+            "null",
+          ],
+        },
+        "categories": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "avg_rank": {
+                "type": [
+                  "number",
+                  "null",
+                ],
+              },
+              "id": {
+                "type": "string",
+              },
+              "jobs": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer",
+              },
+              "label": {
+                "type": "string",
+              },
+              "share": {
+                "type": "number",
+              },
+            },
+            "required": [
+              "id",
+              "label",
+              "jobs",
+              "share",
+              "avg_rank",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "high_value": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+        "passed": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+        "without_signal": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+      },
+      "required": [
+        "passed",
+        "without_signal",
+        "high_value",
+        "avg_rank",
+      ],
+      "type": "object",
+    },
+    "sources": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "family": {
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "pass_rate": {
+            "type": "number",
+          },
+          "passed": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer",
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer",
+          },
+        },
+        "required": [
+          "family",
+          "total",
+          "passed",
+          "pass_rate",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+    "text_withheld": {
+      "type": [
+        "string",
+        "null",
+      ],
+    },
+    "tracking": {
+      "additionalProperties": false,
+      "properties": {
+        "applied": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+        "exits": {
+          "additionalProperties": false,
+          "properties": {
+            "archived": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer",
+            },
+            "rejected": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer",
+            },
+            "withdrawn": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer",
+            },
+          },
+          "required": [
+            "rejected",
+            "withdrawn",
+            "archived",
+          ],
+          "type": "object",
+        },
+        "funnel": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "conversion": {
+                "type": [
+                  "number",
+                  "null",
+                ],
+              },
+              "count": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer",
+              },
+              "stage": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "stage",
+              "count",
+              "conversion",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+      },
+      "required": [
+        "applied",
+        "funnel",
+        "exits",
+      ],
+      "type": "object",
+    },
+    "truncated": {
+      "type": "boolean",
+    },
+    "window": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "string",
+        },
+        "to": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "from",
+        "to",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "notices",
+    "truncated",
+    "range_days",
+    "window",
+    "text_withheld",
+    "kpi",
+    "daily",
+    "sources",
+    "salary",
+    "signals",
+    "scores",
+    "conversion",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`read DTO allow-lists > get_today schema snapshot 1`] = `
+{
+  "additionalProperties": false,
+  "properties": {
+    "jobs": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "company": {
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "first_seen_at": {
+            "type": "string",
+          },
+          "id": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer",
+          },
+          "links": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "apply_url": {
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+                "source": {
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+                "url": {
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+              },
+              "required": [
+                "source",
+                "url",
+                "apply_url",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "locations": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "city": {
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+                "country_code": {
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+                "label": {
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+              },
+              "required": [
+                "label",
+                "city",
+                "country_code",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "posted_at": {
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "rank_value": {
+            "type": [
+              "number",
+              "null",
+            ],
+          },
+          "status": {
+            "type": "string",
+          },
+          "text_withheld": {
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "title": {
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+        },
+        "required": [
+          "id",
+          "title",
+          "company",
+          "status",
+          "rank_value",
+          "posted_at",
+          "first_seen_at",
+          "locations",
+          "links",
+          "text_withheld",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+    "notices": {
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "quick": {
+      "anyOf": [
+        {
+          "enum": [
+            "high",
+            "salary",
+            "following",
+          ],
+          "type": "string",
+        },
+        {
+          "type": "null",
+        },
+      ],
+    },
+    "quick_counts": {
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+        "following": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+        "high": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+        "salary": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer",
+        },
+      },
+      "required": [
+        "all",
+        "high",
+        "salary",
+        "following",
+      ],
+      "type": "object",
+    },
+    "returned": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer",
+    },
+    "total": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer",
+    },
+    "truncated": {
+      "type": "boolean",
+    },
+    "view": {
+      "type": [
+        "string",
+        "null",
+      ],
+    },
+  },
+  "required": [
+    "notices",
+    "total",
+    "returned",
+    "truncated",
+    "view",
+    "quick",
+    "quick_counts",
+    "jobs",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`read DTO allow-lists > list_companies schema snapshot 1`] = `
+{
+  "additionalProperties": false,
+  "properties": {
+    "companies": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "blacklisted": {
+            "type": "boolean",
+          },
+          "id": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer",
+          },
+          "job_count": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer",
+          },
+          "last_first_seen_at": {
+            "type": "string",
+          },
+          "name": {
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "text_withheld": {
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "top_rank": {
+            "type": [
+              "number",
+              "null",
+            ],
+          },
+          "watched": {
+            "type": "boolean",
+          },
+        },
+        "required": [
+          "id",
+          "name",
+          "watched",
+          "blacklisted",
+          "job_count",
+          "top_rank",
+          "last_first_seen_at",
+          "text_withheld",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+    "notices": {
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "returned": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer",
+    },
+    "total": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer",
+    },
+    "truncated": {
+      "type": "boolean",
+    },
+  },
+  "required": [
+    "notices",
+    "total",
+    "returned",
+    "truncated",
+    "companies",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`read DTO allow-lists > list_favorites schema snapshot 1`] = `
+{
+  "additionalProperties": false,
+  "properties": {
+    "favorites": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "job": {
+            "additionalProperties": false,
+            "properties": {
+              "company": {
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "first_seen_at": {
+                "type": "string",
+              },
+              "id": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer",
+              },
+              "links": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "apply_url": {
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                    "source": {
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                    "url": {
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                  },
+                  "required": [
+                    "source",
+                    "url",
+                    "apply_url",
+                  ],
+                  "type": "object",
+                },
+                "type": "array",
+              },
+              "locations": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "city": {
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                    "country_code": {
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                    "label": {
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                  },
+                  "required": [
+                    "label",
+                    "city",
+                    "country_code",
+                  ],
+                  "type": "object",
+                },
+                "type": "array",
+              },
+              "posted_at": {
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "rank_value": {
+                "type": [
+                  "number",
+                  "null",
+                ],
+              },
+              "status": {
+                "type": "string",
+              },
+              "text_withheld": {
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+            },
+            "required": [
+              "id",
+              "title",
+              "company",
+              "status",
+              "rank_value",
+              "posted_at",
+              "first_seen_at",
+              "locations",
+              "links",
+              "text_withheld",
+            ],
+            "type": "object",
+          },
+          "notes": {
+            "additionalProperties": false,
+            "properties": {
+              "favorite_note": {
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+            },
+            "required": [
+              "favorite_note",
+            ],
+            "type": "object",
+          },
+          "since": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "job",
+          "since",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+    "notices": {
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "returned": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer",
+    },
+    "total": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer",
+    },
+    "truncated": {
+      "type": "boolean",
+    },
+  },
+  "required": [
+    "notices",
+    "total",
+    "returned",
+    "truncated",
+    "favorites",
+  ],
+  "type": "object",
+}
+`;

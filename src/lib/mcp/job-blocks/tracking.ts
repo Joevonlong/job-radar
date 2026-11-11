@@ -8,7 +8,7 @@ import { isoOrNull } from "@/lib/mcp/dto/shared";
 
 import type { JobBlockSource } from "./source";
 
-export async function loadTracking(ctx: McpContext, { detail, clean }: JobBlockSource): Promise<z.infer<typeof trackingBlockDto>> {
+export async function loadTracking(ctx: McpContext, { detail, clean }: Pick<JobBlockSource, "detail" | "clean">): Promise<z.infer<typeof trackingBlockDto>> {
   const [seen, override] = await Promise.all([isSeen(ctx.db, detail.id), getFilterOverride(ctx.db, detail.id)]);
   const application = detail.application;
   return {

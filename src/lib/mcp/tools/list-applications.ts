@@ -1,3 +1,7 @@
+import { loadBlocks } from "@/lib/capabilities/blocks";
+import { applicationNotesBlocks } from "../tracking-blocks";
+import { readSourceUrl, readTextCleaner } from "../read-guard";
+import { listApplicationsOutputFor } from "../dto/tracking";
 import { z } from "zod";
 
 import { MCP_MAX_RESULTS_CAP } from "@/lib/config/schemas/mcp";
@@ -5,8 +9,7 @@ import { listPipelineEntries, type PipelineEntry } from "@/lib/db/queries/pipeli
 import { APPLICATION_STATUSES, type ApplicationStatus } from "@/lib/db/repos/applications";
 
 import type { McpContext } from "../context";
-import { listApplicationsOutput, toApplicationItemDto, type ListApplicationsOutput } from "../dto";
-import { shortFieldCleaner } from "../guard";
+import { toApplicationItemDto, type ListApplicationsOutput } from "../dto";
 import { readTraps, resultLimit, truncationNotice } from "./shared";
 
 const DAY_MS = 86_400_000;
@@ -39,7 +42,7 @@ export function isStale(entry: Pick<PipelineEntry, "application">, now: Date, da
   return false;
 }
 
-/** The user's applications (the pipeline board), best rank first; `stale_only` lists the longest waiting first. Never notes or resume paths. */
+/** The user's applications (the pipeline board), best rank first; `stale_only` lists the longest waiting first. Application notes require notes permission. */
 export async function listApplications(ctx: McpContext, args: ListApplicationsArgs): Promise<ListApplicationsOutput> {
   const now = ctx.now();
   const days = args.stale_only ? ctx.reminderDays() : null;
@@ -52,9 +55,14 @@ export async function listApplications(ctx: McpContext, args: ListApplicationsAr
     entries = entries.filter((entry) => isStale(entry, now, days)).sort((a, b) => a.application.statusChangedAt.getTime() - b.application.statusChangedAt.getTime() || a.application.id - b.application.id);
   }
   const limit = resultLimit(ctx, args.limit);
-  const clean = shortFieldCleaner(readTraps(ctx));
-  const applications = entries.slice(0, limit).map((entry) => toApplicationItemDto(entry, now, clean));
+  const clean = readTextCleaner(readTraps(ctx), ctx.text("notice.redacted"));
+  const selected = entries.slice(0, limit);
+  const applications = await Promise.all(selected.map(async (entry) => ({
+    ...toApplicationItemDto(entry, now, clean),
+    links: entry.job.sources.map((source) => ({ source: clean(source.family), url: readSourceUrl(source.url, clean), apply_url: readSourceUrl(source.applyUrl, clean) })),
+    ...await loadBlocks(applicationNotesBlocks, ctx, { ...entry, clean }, undefined),
+  })));
   const truncated = entries.length > applications.length;
   const notices = [ctx.text("notice.thirdParty"), ...(truncated ? [truncationNotice(ctx, applications.length, entries.length, limit)] : [])];
-  return listApplicationsOutput.parse({ notices, total: entries.length, returned: applications.length, truncated, applications } satisfies ListApplicationsOutput);
+  return listApplicationsOutputFor(ctx.permissions ?? new Set()).parse({ notices, total: entries.length, returned: applications.length, truncated, applications } satisfies ListApplicationsOutput);
 }

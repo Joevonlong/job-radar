@@ -52,9 +52,8 @@ function verify(text: string, tools: typeof defaults, version: number) {
   expect(value.permissions).not.toContain("profile:read");
   expect(value.stdio.permissions).not.toContain("profile:read");
   expect(effective.has("profile:read")).toBe(false);
-  for (const name of names) {
-    const capability = CAPABILITIES.find((entry) => entry.id === name)!;
-    const old = tools[name];
+  for (const capability of CAPABILITIES.filter((candidate) => candidate.id in tools)) {
+    const old = tools[capability.id as OldTool];
     const expanded = capability.permission === "jobs:read" && tools.search_jobs !== tools.get_job;
     expect(effective.has(capability.permission)).toBe(expanded || old);
   }

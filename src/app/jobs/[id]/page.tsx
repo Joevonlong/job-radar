@@ -1,3 +1,4 @@
+import { loadDetailProfileInput, detailChecks, detailCheckViews, breakdownViewInput, salaryContextInput, companyResearchInput } from "@/lib/jobs/detail-inputs";
 import { ExternalLink } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -49,12 +50,9 @@ import { buttonVariants } from "@/components/ui/button";
 import { loadTargetPlaces } from "@/lib/dashboard/target-places";
 import { pickApplyTarget, postingLink, safeHttpUrl } from "@/lib/dashboard/apply";
 import { getDisplayTimeZone } from "@/lib/dashboard/context";
-import { germanCheck } from "@/lib/dashboard/german-check";
 import { userGermanLabelOrNull } from "@/lib/dashboard/german";
-import { floorCheck } from "@/lib/dashboard/floor-check";
 import { loadDealBreakerNotice } from "@/lib/dashboard/deal-breakers";
 import { channelDisplayName, knownContract, knownFamily } from "@/lib/dashboard/labels";
-import { buildSkillAliasMap, matchSkills, profileSkillKeys } from "@/lib/dashboard/skills";
 import { quotesFoundInJd } from "@/lib/dashboard/jd";
 import { reasonSourceViews } from "@/lib/dashboard/reason-evidence";
 import { loadModelCatalog } from "@/lib/ai/catalog";
@@ -76,9 +74,9 @@ import { readResearchSettings } from "@/lib/research/settings";
 import { trapsEnabled } from "@/lib/traps/settings";
 import { buildTrapCheckView, buildTrapPanelView } from "@/lib/traps/view";
 import { readNeedsVisaSponsorship, visaEnabled } from "@/lib/visa/settings";
-import { buildVisaCheckView, visaMarkText } from "@/lib/visa/view";
+import { visaMarkText } from "@/lib/visa/view";
 import { ghostEnabled } from "@/lib/ghost/settings";
-import { buildGhostCheckView, GHOST_TOOLTIP_REASONS, ghostMarkText, ghostShortMessage } from "@/lib/ghost/view";
+import { GHOST_TOOLTIP_REASONS, ghostMarkText, ghostShortMessage } from "@/lib/ghost/view";
 import { readInitialBreakdownRequest } from "@/lib/control/breakdown-request";
 import { countApplicationAnswers } from "@/lib/db/repos/application-writer";
 import { WriteAnswersLink } from "@/components/jobs/detail/write-answers-link";
@@ -86,9 +84,8 @@ import { writerEntryHref } from "@/lib/writer/entry";
 import { readWriterEnabled } from "@/lib/writer/settings";
 import { readInitialTranslateRequest, readPartialTranslation } from "@/lib/control/translate-request";
 import { toJobTranslation } from "@/lib/translation/service";
-import { loadConfig, reloadConfig, type AiConfig, type MeConfig } from "@/lib/config";
+import { loadConfig, reloadConfig, type AiConfig } from "@/lib/config";
 import { createProcessLogger } from "@/lib/logging/process-logger";
-import { loadPipeline } from "@/lib/market";
 import { salaryAxisScale } from "@/components/viz/salary-shared";
 import { readResumeConfig } from "@/lib/resume/config";
 import { readCareerGate } from "@/lib/config/career-gate";
@@ -203,18 +200,9 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const languageName = localLanguageName(locale);
   const figure = annualBaseFigure(job.salary, baseCurrency);
   const salaryStats = await loadMonthSalaryStats(getDb(), { now, timeZone: timezone, jobId: job.id, figure, minSample: ui.salary_stats.min_sample, currency: baseCurrency });
-  let me: MeConfig | null = null;
-  try {
-    me = loadConfig("me");
-  } catch {
-    me = null; // me.yaml cannot be read: the checks say "not set" instead of guessing
-  }
-  const aliases = buildSkillAliasMap(loadPipeline().skills);
+  const { profileSkills: mySkills, profileYears, aliases } = loadDetailProfileInput();
   const patternGuard = sharedSignalPatternGuard(interests.limits, patternLog);
-  const mySkills = me?.skills.map((skill) => skill.name) ?? [];
-  const skillMatches = matchSkills(job.skills, profileSkillKeys(mySkills, aliases), aliases);
-  const german = germanCheck(job.germanLevelRequired, userGermanLabelOrNull());
-  const floor = floorCheck(job.salary, salaryFloor, baseCurrency);
+  const { skillMatches, german, floor } = detailChecks(job, { profileSkills: mySkills, aliases, germanLabel: userGermanLabelOrNull(), salaryFloor, currency: baseCurrency });
   // The salary panel: the level within the benchmark and the on-demand salary lookup (salary.yaml; the lookup is off by default)
   const tGhost = await getTranslations("ghostJobs");
   const tCareer = await getTranslations("career.jobEntry");
@@ -226,10 +214,10 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   } catch {
     salaryAi = null; // ai.yaml cannot be read: the salary panel says so
   }
-  const salaryContext = await getSalaryContext(getDb(), { jobId: job.id, figure, currency: baseCurrency, salary: salarySettings.state === "ok" ? salarySettings.config : null, ai: salaryAi, locale: uiLocale, now });
+  const salaryContext = await getSalaryContext(getDb(), salaryContextInput(job, { currency: baseCurrency, salary: salarySettings.state === "ok" ? salarySettings.config : null, ai: salaryAi, locale: uiLocale, now }));
   // The company background (research.yaml; off by default): not shown at all while it is off and nothing is stored
   const researchSettings = readResearchSettings();
-  const companyResearch = await getCompanyResearchContext(getDb(), { jobId: job.id, research: researchSettings.state === "ok" ? researchSettings.config : null, ai: salaryAi, now });
+  const companyResearch = await getCompanyResearchContext(getDb(), companyResearchInput(job.id, researchSettings, salaryAi, now));
 
   // every signal quote, in order: the position is the id of its `mark` in the JD, the tag of a quote the JD shows jumps there
   const quoteList = activeSignals.map((s) => ({ text: s.quote, tier: s.tier }));
@@ -243,16 +231,15 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const writerEnabled = readWriterEnabled();
   // the workbench, or (off and nothing written yet) the setting that turns it on
   const writeHref = writerEntryHref({ jobId: job.id, enabled: writerEnabled, questions: answers.questions });
-  const { view: breakdownView, extraQuotes } = buildBreakdownView({
+  const { view: breakdownView, extraQuotes } = buildBreakdownView(breakdownViewInput(job, {
     row: breakdownRow,
-    description: job.description,
     signalQuotes: quoteList.map((q) => q.text),
     profileSkills: mySkills,
-    profileYears: me?.years_experience ?? null,
+    profileYears,
     aliases,
     catalog: loadModelCatalog(),
     outputLang: aiOutputLanguage(languages),
-  });
+  }));
   // The job's AI traps (nothing at all when traps.yaml is off); their marks follow the signal and breakdown quotes in the JD panel
   const showTraps = trapsEnabled();
   const trapData = showTraps ? await listTrapsOfJob(getDb(), job.id) : { rows: [], scan: null };
@@ -261,11 +248,11 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const trapItems = trapView ? [...trapView.items, ...trapView.benign].filter((item) => item.markText !== null) : [];
   const baseQuotes = [...quoteList, ...extraQuotes.map((text) => ({ text, tier: "breakdown" as const }))];
   // What the JD says about visa sponsorship (nothing when ui.yaml job_checks.visa is off); its marks follow the trap marks
-  const visaView = visaEnabled() ? buildVisaCheckView(job.visa, readNeedsVisaSponsorship()) : null;
+  const visaOn = visaEnabled();
+  const ghostOn = ghostEnabled();
+  const { visaView, ghostView } = detailCheckViews(job, { visa: visaOn, needsVisaSponsorship: visaOn ? readNeedsVisaSponsorship() : false, ghost: ghostOn });
   const visaMarks = visaView ? visaView.evidence.map((e) => visaMarkText(e.quote)).filter((text) => text !== "") : [];
   // The ghost job check (nothing when ui.yaml job_checks.ghost is off); its evergreen quote is marked after the visa marks
-  const ghostOn = ghostEnabled();
-  const ghostView = ghostOn ? buildGhostCheckView(job.ghost) : null;
   // marked only while the result shows (watch / likely): not once it is dismissed
   const ghostMark = ghostView?.quote && (ghostView.state === "watch" || ghostView.state === "likely") ? ghostMarkText(ghostView.quote) : "";
   const ghostChannelNames = Object.fromEntries(job.sources.map((source) => [source.channelId, channelDisplayName(source.channelId, source.family, (family) => tDash(`source.${family}`))]));

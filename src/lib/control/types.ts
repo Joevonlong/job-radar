@@ -1,6 +1,7 @@
 import type { ActivityRecorder, RequestSpanHandle } from "@/lib/activity/types";
 import { z } from "zod";
 
+import { agentCallerSchema } from "@/lib/agent-access/caller";
 import { MODEL_SYNC_PROVIDERS } from "@/lib/ai/model-sync/types";
 import { AI_PROVIDER_IDS } from "@/lib/ai/types";
 import type { ChannelLogger } from "@/lib/channels/types";
@@ -12,8 +13,12 @@ import { STORY_EXTRACT_MAX_CHARS, STORY_EXTRACT_ORIGINS } from "@/lib/stories/ex
 import { companySnapshotSchema, storySnapshotSchema, writerMaterialsSchema } from "@/lib/writer/materials";
 import { POLISH_OPTIONS, WRITE_MODES } from "@/lib/writer/types";
 
-/** Payload of a `run_cycle` request: run only these channels (default: every enabled channel). */
+/**
+ * Payload of a `run_cycle` request: run only these channels (default: every enabled channel).
+ * An agent's request names its caller here (stdio or a token id); executors ignore it.
+ */
 export const runCyclePayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
   channelIds: z.array(z.string().trim().min(1).max(64)).min(1).max(50).optional(),
   /** Only the hard bound; requestRunCycle and runCycleHandler check the configured max_backfill_hours. */
   backfillHours: z.number().int().min(1).max(MAX_WINDOW_HOURS).optional(),
@@ -21,16 +26,20 @@ export const runCyclePayloadSchema = z.strictObject({
 export type RunCyclePayload = z.infer<typeof runCyclePayloadSchema>;
 
 /** Payload of a `rescore_stale` request (nothing yet). */
-export const rescorePayloadSchema = z.strictObject({});
+export const rescorePayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
+});
 
 /** Payload of a `run_ai` request: the cycle whose `ai` and `notify` steps were delegated to the ai-worker. */
 export const runAiPayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
   cycleId: z.number().int().positive(),
 });
 export type RunAiPayload = z.infer<typeof runAiPayloadSchema>;
 
 /** Payload of a `translate_job` request (the translate button on the job page). */
 export const translateJobPayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
   jobId: z.number().int().positive(),
   /** Only automatic follow-up translations write this marker; web requests keep the legacy payload. */
   origin: z.literal("auto").optional(),
@@ -41,6 +50,7 @@ export type TranslateJobPayload = z.infer<typeof translateJobPayloadSchema>;
 
 /** Payload of a `breakdown_job` request (the breakdown button on the job page). */
 export const breakdownJobPayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
   jobId: z.number().int().positive(),
   /** Only automatic research writes this marker: the request waits in the batch lane and stops if research was turned off. */
   origin: z.literal("auto").optional(),
@@ -55,6 +65,7 @@ export type BreakdownJobPayload = z.infer<typeof breakdownJobPayloadSchema>;
  * ends in any way. `refs` and `materialsHash` stay: which stories and how many JD points were used, never their text.
  */
 export const writerJobPayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
   jobId: z.number().int().positive(),
   questionId: z.number().int().positive(),
   /** What the request does; absent in a request queued before the other modes existed (a draft). */
@@ -82,6 +93,7 @@ export type WriterJobPayload = z.infer<typeof writerJobPayloadSchema>;
  * value here also means the interactive lane: only `"auto"` means batch.
  */
 export const storyExtractPayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
   confirmed: z.literal(true).optional(),
   origin: z.enum(STORY_EXTRACT_ORIGINS),
   sourceHash: z.string().regex(/^[0-9a-f]{64}$/),
@@ -92,6 +104,7 @@ export const storyExtractPayloadSchema = z.strictObject({
 export type StoryExtractPayload = z.infer<typeof storyExtractPayloadSchema>;
 
 export const careerExtractPayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
   origin: z.enum(["resume", "self_description"]),
   sourceHash: z.string().regex(/^[0-9a-f]{64}$/),
   sourceChars: z.number().int().min(0).max(200000),
@@ -101,6 +114,7 @@ export type CareerExtractPayload = z.infer<typeof careerExtractPayloadSchema>;
 
 
 export const careerTailorPayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
   mode: z.enum(["tailor", "shrink"]),
   doc_id: z.string().regex(/^doc_[a-z2-7]{10}$/),
   jobId: z.number().int().positive().nullable().default(null),
@@ -115,6 +129,7 @@ export type CareerTailorPayload = z.infer<typeof careerTailorPayloadSchema>;
  * background and the chosen stories and is removed when the request ends, like a `writer_job`'s.
  */
 export const writerFitPayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
   jobId: z.number().int().positive(),
   questionId: z.number().int().positive(),
   materialsHash: z.string().regex(/^[0-9a-f]{64}$/),
@@ -130,6 +145,7 @@ export type WriterFitPayload = z.infer<typeof writerFitPayloadSchema>;
 
 /** Payload of a `salary_lookup` request (the "look up salary" button on the job page). */
 export const salaryLookupPayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
   jobId: z.number().int().positive(),
   /** Only automatic research writes this marker: the request waits in the batch lane and stops if research was turned off. */
   origin: z.literal("auto").optional(),
@@ -142,6 +158,7 @@ export type SalaryLookupPayload = z.infer<typeof salaryLookupPayloadSchema>;
 
 /** Payload of a `company_research` request (the "look up company" button on the job page). */
 export const companyResearchPayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
   jobId: z.number().int().positive(),
   /** The company at queue time: joins a double click and other postings of the same company. The worker reads the job's company again. */
   companyId: z.number().int().positive(),
@@ -157,25 +174,28 @@ export const SCORE_JOBS_MAX_IDS = 50;
 
 /** Payload of a `score_jobs` request: score exactly these jobs, or the waiting backlog (up to `scoring.backlog_per_run`). */
 export const scoreJobsPayloadSchema = z.union([
-  z.strictObject({ jobIds: z.array(z.number().int().positive()).min(1).max(SCORE_JOBS_MAX_IDS) }),
-  z.strictObject({ backlog: z.literal(true) }),
+  z.strictObject({ caller: agentCallerSchema.optional(), jobIds: z.array(z.number().int().positive()).min(1).max(SCORE_JOBS_MAX_IDS) }),
+  z.strictObject({ caller: agentCallerSchema.optional(), backlog: z.literal(true) }),
 ]);
 export type ScoreJobsPayload = z.infer<typeof scoreJobsPayloadSchema>;
 
 /** Payload of a `test_channel` request: one small dry fetch of this channel. */
 export const testChannelPayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
   channelId: z.string().trim().min(1).max(64),
 });
 export type TestChannelPayload = z.infer<typeof testChannelPayloadSchema>;
 
 /** Payload of a `test_ai` request: one tiny probe call to this provider. */
 export const testAiPayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
   provider: z.enum(AI_PROVIDER_IDS),
 });
 export type TestAiPayload = z.infer<typeof testAiPayloadSchema>;
 
 /** Payload of a `models_sync` request: refresh this provider's model list; nothing else is accepted (no URL, no path). */
 export const modelsSyncPayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
   provider: z.enum(MODEL_SYNC_PROVIDERS),
   /** Shows only the models whose id or name contains this (case-insensitive). */
   filter: z.string().trim().min(1).max(80).optional(),
@@ -183,7 +203,9 @@ export const modelsSyncPayloadSchema = z.strictObject({
 export type ModelsSyncPayload = z.infer<typeof modelsSyncPayloadSchema>;
 
 /** Payload of a `test_telegram` request: nothing. */
-export const testTelegramPayloadSchema = z.strictObject({});
+export const testTelegramPayloadSchema = z.strictObject({
+  caller: agentCallerSchema.optional(),
+});
 
 /** What the runner passes to a handler. */
 export interface ControlHandlerContext {

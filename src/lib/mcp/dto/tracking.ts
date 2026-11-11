@@ -1,3 +1,6 @@
+import type { Permission } from "@/lib/agent-access/permissions";
+import { blockShape } from "@/lib/capabilities/blocks";
+import { applicationNotesBlocks, applicationNotesDto } from "../tracking-blocks";
 /** Application status, history and list outputs omit notes and local paths. */
 import { z } from "zod";
 
@@ -39,7 +42,7 @@ export const listApplicationsOutput = z.strictObject({
   total: z.number().int(),
   returned: z.number().int(),
   truncated: z.boolean(),
-  applications: z.array(applicationItemDto),
+  applications: z.array(applicationItemDto.extend({ notes: applicationNotesDto.optional() })),
 });
 export type ListApplicationsOutput = z.infer<typeof listApplicationsOutput>;
 
@@ -65,7 +68,7 @@ export function toApplicationItemDto(entry: { job: JobCard; application: Applica
     status: application.status,
     status_changed_at: isoOf(application.statusChangedAt),
     days_in_status: Math.max(0, Math.floor((now.getTime() - application.statusChangedAt.getTime()) / DAY_MS)),
-    next_action: application.nextAction,
+    next_action: application.nextAction === null ? null : clean(application.nextAction),
     next_action_at: isoOrNull(application.nextActionAt),
     interview_rounds: application.interviewRounds,
     rank_value: job.rank?.rankValue ?? null,
@@ -73,4 +76,8 @@ export function toApplicationItemDto(entry: { job: JobCard; application: Applica
     links: job.sources.map((source) => toLinkDto(source, clean)),
     history: entry.events.map((event) => ({ from: event.fromStatus, to: event.toStatus, at: isoOf(event.at) })),
   } satisfies ApplicationItemDto);
+}
+
+export function listApplicationsOutputFor(permissions: ReadonlySet<Permission>): z.ZodType<ListApplicationsOutput> {
+  return listApplicationsOutput.extend({ applications: z.array(z.strictObject({ ...applicationItemDto.shape, ...blockShape(applicationNotesBlocks, permissions) })) });
 }

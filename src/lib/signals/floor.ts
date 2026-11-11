@@ -41,3 +41,13 @@ export function loadSignalCatalog(): SignalCatalog | null {
     return null;
   }
 }
+
+/** Display-only signal metadata is absent when interests cannot be read; filters still require their policy. */
+export function loadListSignals() {
+  try {
+    const interests = loadConfig("interests");
+    return { catalog: buildCatalog(interests), policy: loadBonusPolicy(interests), bonusCap: interests.bonus_cap };
+  } catch {
+    return null;
+  }
+}

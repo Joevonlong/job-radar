@@ -9,10 +9,10 @@ import { pickListSummary } from "@/lib/dashboard/summary";
 import type { JobCard } from "@/lib/db/queries/types";
 import { distinctFamilies } from "@/lib/dashboard/apply";
 import { isHighPayAmount, otherRegionOfAmount } from "@/lib/signals/bonus";
-import { buildCatalog, toCategoryView } from "@/lib/signals/catalog";
+import { toCategoryView } from "@/lib/signals/catalog";
 import { isArchivedReason } from "@/lib/jobs/scope";
 import { isNewSince } from "@/lib/jobs/visit";
-import { loadBonusPolicy } from "@/lib/signals/floor";
+import { loadBaseCurrency, loadListSignals } from "@/lib/signals/floor";
 import { loadTargetPlaces } from "@/lib/dashboard/target-places";
 import { formatPostedAgo, formatPostedAgoShort, formatPostedDate, formatPostedFull } from "@/lib/format/posted-date";
 import { formatFullTime, formatShortDate } from "@/lib/format/time";
@@ -50,11 +50,11 @@ export async function toListItems(
     relistBadgeDays?: number;
   },
 ): Promise<JobListItem[]> {
-  const interests = loadConfig("interests");
-  const catalog = buildCatalog(interests);
-  const policy = loadBonusPolicy(interests);
+  const signals = loadListSignals();
+  const catalog = signals?.catalog;
+  const policy = signals?.policy;
   // The axis and the percentile are in the market's base currency; without a market nothing is drawn on it
-  const baseCurrency = policy.baseCurrency ?? "";
+  const baseCurrency = policy?.baseCurrency ?? loadBaseCurrency() ?? "";
   const targetPlaces = loadTargetPlaces();
   const [format, locale, t, tGhost] = await Promise.all([getFormatter(), getLocale(), getTranslations("dashboard"), getTranslations("ghostJobs")]);
   const timeOptions = { locale: resolveLocale(locale), timeZone: options.timezone };
@@ -142,7 +142,7 @@ export async function toListItems(
       filterFloorEur: options.filterFloors?.get(card.id) ?? null,
       signals: card.signals
         .flatMap((s) => {
-          const category = catalog.byId.get(s.tier);
+          const category = catalog?.byId.get(s.tier);
           if (!category) return []; // a retired or unknown category: hidden
           const view = toCategoryView(category, locale);
           const isAmount = category.kind === "amount";
@@ -152,13 +152,13 @@ export async function toListItems(
               kind: s.kind,
               value: s.value,
               category: { kind: view.kind, label: view.label, icon: view.icon, color: view.color, code: view.code },
-              belowFloor: isAmount && !isHighPayAmount(s.value, policy),
+              belowFloor: isAmount && policy !== undefined && !isHighPayAmount(s.value, policy),
               otherRegion: isAmount && otherRegionOfAmount(s.value) !== null,
             },
           ];
         })
-        .sort((a, b) => catalog.order(a.tier) - catalog.order(b.tier)),
-      amountMinAnnualEur: policy.minAnnualEur,
+        .sort((a, b) => (catalog?.order(a.tier) ?? 0) - (catalog?.order(b.tier) ?? 0)),
+      amountMinAnnualEur: policy?.minAnnualEur ?? null,
       ...(showTraps && (card.traps?.traps ?? 0) > 0 ? { trapCount: card.traps?.traps ?? 0 } : {}),
       ...(showVisa && card.visa ? { visa: { status: card.visa.status, kind: card.visa.kind } } : {}),
       ...(showGhost && card.ghost ? { ghost: { level: card.ghost.level, score: card.ghost.score, reasons: ghostReasons(card.ghost.top) } } : {}),

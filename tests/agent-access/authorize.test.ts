@@ -2,9 +2,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { authorize, liveMcpSettings } from "@/lib/agent-access/authorize";
+import { authorize, authorizeCall, liveMcpSettings, STDIO_GRANT, type Grant } from "@/lib/agent-access/authorize";
+import type { Permission } from "@/lib/agent-access/permissions";
 import { ConfigError, loadConfig } from "@/lib/config";
 import { mcpSchema } from "@/lib/config/schemas/mcp";
 
@@ -45,6 +46,68 @@ describe("authorize", () => {
     if (!decision.allowed) throw new Error("expected access");
     expect(decision.settings).toBe(settings);
     expect([...decision.permissions]).toEqual(["jobs:read", "tracking:read"]);
+  });
+});
+
+describe("a token grant", () => {
+  const matrix = mcpSchema.parse({ enabled: true, permissions: ["jobs:read", "tracking:read", "notes:read"], stdio: { permissions: ["jobs:read"] } });
+  const token = (permissions: Permission[]): Grant => ({ kind: "token", tokenId: 5, permissions });
+  const tracking = { id: "list_applications", permission: "tracking:read" } as const;
+
+  it("takes its own list instead of the stdio grant, intersected with the global matrix", () => {
+    const decision = authorize(tracking, () => matrix, token(["tracking:read", "notes:read", "config:write"]));
+    expect(decision.allowed && [...decision.permissions]).toEqual(["tracking:read", "notes:read"]);
+    expect(authorize(capability, () => matrix, token(["tracking:read"]))).toEqual({ allowed: false, reason: "missing_permission", permission: "jobs:read" });
+    expect(authorize(tracking, () => matrix, STDIO_GRANT)).toEqual({ allowed: false, reason: "missing_permission", permission: "tracking:read" });
+  });
+
+  it("is refused when the matrix lacks the permission, and judged by the matrix as it is at the call", () => {
+    let current = matrix;
+    const grant = token(["config:write", "tracking:read"]);
+    expect(authorize({ id: "set_config", permission: "config:write" }, () => current, grant)).toEqual({ allowed: false, reason: "missing_permission", permission: "config:write" });
+    expect(authorize(tracking, () => current, grant).allowed).toBe(true);
+    current = mcpSchema.parse({ enabled: true, permissions: ["jobs:read"] });
+    expect(authorize(tracking, () => current, grant)).toEqual({ allowed: false, reason: "missing_permission", permission: "tracking:read" });
+  });
+
+  it("still needs the server switched on and mcp.yaml readable", () => {
+    expect(authorize(tracking, () => mcpSchema.parse({ permissions: ["tracking:read"] }), token(["tracking:read"]))).toEqual({ allowed: false, reason: "disabled" });
+    expect(authorize(tracking, () => { throw new Error("x"); }, token(["tracking:read"]))).toMatchObject({ allowed: false, reason: "unreadable" });
+  });
+});
+
+describe("authorizeCall", () => {
+  const settings = mcpSchema.parse({ enabled: true, permissions: ["jobs:read", "tracking:read"], stdio: { permissions: ["jobs:read"] } });
+  const grant: Grant = { kind: "token", tokenId: 5, permissions: ["jobs:read", "tracking:read"] };
+
+  it("decides a stdio call as authorize does, without a token read", async () => {
+    const readGrant = vi.fn();
+    await expect(authorizeCall(capability, () => settings, STDIO_GRANT, readGrant)).resolves.toMatchObject({ allowed: true });
+    await expect(authorizeCall(capability, () => settings)).resolves.toMatchObject({ allowed: true });
+    expect(readGrant).not.toHaveBeenCalled();
+  });
+
+  it("reads the token again and judges the call by its current list", async () => {
+    const readGrant = vi.fn(async (): Promise<Grant> => ({ kind: "token", tokenId: 5, permissions: ["tracking:read"] }));
+    await expect(authorizeCall(capability, () => settings, grant, readGrant)).resolves.toEqual({ allowed: false, reason: "missing_permission", permission: "jobs:read" });
+    expect(readGrant).toHaveBeenCalledWith(5);
+  });
+
+  it.each([
+    ["the token is revoked, expired or gone", async () => null],
+    ["the read answers for another token", async (): Promise<Grant> => ({ ...grant, tokenId: 6 })],
+    ["the read answers with the stdio grant", async (): Promise<Grant> => STDIO_GRANT],
+  ])("refuses when %s", async (_case, readGrant) => {
+    await expect(authorizeCall(capability, () => settings, grant, readGrant)).resolves.toEqual({ allowed: false, reason: "token_inactive" });
+  });
+
+  it("refuses a token grant that has no reader", async () => {
+    await expect(authorizeCall(capability, () => settings, grant)).resolves.toEqual({ allowed: false, reason: "token_inactive" });
+  });
+
+  it("lets a failing token read fail the call", async () => {
+    const failure = new Error("database down");
+    await expect(authorizeCall(capability, () => settings, grant, async () => { throw failure; })).rejects.toBe(failure);
   });
 });
 
