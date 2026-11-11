@@ -4,8 +4,9 @@
 # delete any. Each call also adds one metadata row to the local `agent_calls` table (see `audit` below).
 # Privacy: whatever the tools return is handed by your client to the model provider it uses (Anthropic for Claude, ...).
 # What may be returned is fixed in code: job facts, source links, scores and ranks, signals with their JD quotes, the JD after
-# AI-trap cleaning, and the status, dates, next step and interview rounds of your applications. Metadata never includes
-# profile files, emails, local paths or keys. Additional permission-gated text is described in docs/mcp.md.
+# AI-trap cleaning, and the status, dates, next step and interview rounds of your applications. Match and note fields require
+# their own permissions. Never returned: contact/career files, profile snapshots, import drafts, emails, local paths, keys.
+# profile:read shares me/preferences/stories (including salary floor and language levels), interests and read-only previews.
 # With raw:read, get_job_raw returns uncleaned third-party payloads, possibly including recruiter contact data;
 # only their combined length is capped. Its metadata and parse_error are cleaned; private DB columns stay out.
 # Only when writer:read is granted (it gives `get_application_context`): your application questions and answer versions, and the material
@@ -19,10 +20,11 @@ enabled: false
 
 # The global matrix is the most any connection may receive. Tool permissions:
 # search_jobs / get_job: jobs:read; list_applications: tracking:read
+# get_profile / get_interests / preview_deal_breakers / preview_interest_category: profile:read (off by default)
 # get_application_context: writer:read and writer.yaml enabled (shares your chosen application material)
 # save_application_answer: writer:write and writer.yaml enabled (only adds answer versions)
 # get_job_raw: raw:read (off by default; untrusted, uncleaned payloads may include recruiter contact data)
-# Other catalog permission ids are accepted but do not give tools yet.
+# match:read / notes:read add fields to job tools; other catalog ids are accepted but do not give tools yet.
 permissions:
   - jobs:read
   - tracking:read
@@ -34,7 +36,7 @@ stdio:
     - tracking:read
 
 limits:
-  # Most jobs or applications one call returns (1-100); the answer says when more matched
+  # Most jobs, applications or pending interest suggestions one call returns (1-100); the answer says when more matched
   max_results: 20
   # Most characters of a JD one get_job call returns (500-100000); a longer JD is cut and marked as cut
   max_description_chars: 12000

@@ -7,6 +7,7 @@
 import { z } from "zod";
 
 import { ConfigError, interestsSchema, reloadConfig, type InterestsConfig } from "@/lib/config";
+import type { Db } from "@/lib/db/client";
 import { getDb } from "@/lib/db";
 import { countJobsToReview, listRecentJobsForPreview } from "@/lib/db/repos/signals";
 import type { TimeBox } from "@/lib/filter/deal-breakers";
@@ -82,6 +83,7 @@ function perCycleLimit(): number | null {
 }
 
 export interface PreviewOptions {
+  db?: Db;
   /** Clock in milliseconds (tests). */
   now?: () => number;
   /** Where the loop over the jobs runs (default `vmTimeBox`, which interrupts a running expression). */
@@ -122,7 +124,7 @@ export async function previewCategory(raw: unknown, options: PreviewOptions = {}
   const single = { signals: { ...next.signals, categories: [category] }, limits: next.limits };
   const timeBox = options.timeBox ?? vmTimeBox;
   try {
-    const db = getDb();
+    const db = options.db ?? getDb();
     const jobs = await listRecentJobsForPreview(db, next.limits.preview_jobs);
     let hits = 0;
     let scanned = 0;
@@ -149,7 +151,7 @@ export async function previewCategory(raw: unknown, options: PreviewOptions = {}
       }
     }, next.limits.preview_time_budget_ms);
     if (!finished) truncated = true;
-    return { status: "ok", scanned, truncated, hits, samples, review: await estimateReview(current, next) };
+    return { status: "ok", scanned, truncated, hits, samples, review: await estimateReview(current, next, db) };
   } catch {
     return { status: "unavailable" };
   }
@@ -159,10 +161,10 @@ export async function previewCategory(raw: unknown, options: PreviewOptions = {}
  * What saving `next` over `current` costs in AI reviews: nothing when the signals prompt version stays; else the jobs
  * the `signals` step would select with the new version (same conditions as `listJobsToReview`) and the cycles that takes.
  */
-export async function estimateReview(current: InterestsConfig, next: InterestsConfig): Promise<ReviewEstimate | null> {
+export async function estimateReview(current: InterestsConfig, next: InterestsConfig, db?: Db): Promise<ReviewEstimate | null> {
   const spec = signalsPrompt(next);
   if (spec === null || spec.version === (signalsPrompt(current)?.version ?? null)) return null;
-  const jobs = await countJobsToReview(getDb(), { promptVersion: spec.version, withoutCandidates: next.limits.ai_review_without_candidates });
+  const jobs = await countJobsToReview(db ?? getDb(), { promptVersion: spec.version, withoutCandidates: next.limits.ai_review_without_candidates });
   const limit = perCycleLimit();
   return { jobs, rounds: limit === null ? null : Math.ceil(jobs / limit), perCycleLimit: limit };
 }
