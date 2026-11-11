@@ -24,7 +24,9 @@ import { getCompanyOutput, listCompaniesOutput } from "@/lib/mcp/dto/companies";
 import { todayOutput } from "@/lib/mcp/dto/read-jobs";
 import { insightsOutput } from "@/lib/mcp/dto/insights";
 import { getApplicationOutput, listFavoritesOutput } from "@/lib/mcp/dto/read-tracking";
-import { listApplicationsOutput } from "@/lib/mcp/dto/tracking";
+import { listPipelineEntries } from "@/lib/db/queries/pipeline";
+import { shortFieldCleaner } from "@/lib/mcp/guard";
+import { listApplicationsOutput, toApplicationItemDto } from "@/lib/mcp/dto/tracking";
 import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { makeTempConfig } from "../config/helpers";
 
@@ -156,11 +158,18 @@ describe("new read tools through the MCP server", () => {
     if (name === "list_companies") expect(listCompaniesOutput.parse(value).companies).toHaveLength(1);
     if (name === "get_company") { const output = getCompanyOutput.parse(value); expect(output.jobs).toHaveLength(1); expect(output.company.aliases).toHaveLength(1); expect(output.research?.fields).toHaveLength(1); }
     if (name === "get_application") { const output = getApplicationOutput.parse(value); expect(output.tracking.application?.history).toHaveLength(1); expect(output.notes?.event_notes).toHaveLength(1); }
-    if (name === "get_insights") expect(insightsOutput.parse(value).daily).toHaveLength(1);
+    if (name === "get_insights") {
+      const output = insightsOutput.parse(value);
+      expect(output.daily).toHaveLength(7);
+      expect(output.scores.bars.length).toBeGreaterThan(1);
+      expect(output.tracking?.funnel.length).toBeGreaterThan(1);
+    }
     if (name === "list_favorites") expect(listFavoritesOutput.parse(value).favorites).toHaveLength(1);
     if (name === "list_applications") expect(listApplicationsOutput.parse(value).applications).toHaveLength(1);
   });
-  it.each(["table_failure", "not_scanned", "rules_stale", "disabled", "settings_unreadable"])("withholds third-party strings in every new tool for %s", async (failure) => {
+  it.each(["table_failure", "not_scanned", "rules_stale", "disabled", "settings_unreadable"])("withholds research but preserves cleaned short fields for %s", async (failure) => {
+    await getDb().update(schema.jobs).set({ title: "Trap Role\u200b" }).where(eq(schema.jobs.id, ids[0]!));
+    await getDb().update(schema.companies).set({ name: "Example\u200b Company" }).where(eq(schema.companies.id, companyId));
     if (failure === "not_scanned") await getDb().delete(schema.trapScans);
     if (failure === "rules_stale") await getDb().update(schema.trapScans).set({ rulesHash: "stale-rules" });
     if (failure === "table_failure") await getDb().execute(sql`alter table job_traps rename to job_traps_away`);
@@ -169,13 +178,98 @@ describe("new read tools through the MCP server", () => {
       for (const [name, args] of calls()) {
         const value = await call(client, name, args);
         const text = JSON.stringify(value);
-        for (const forbidden of [TRAP, "Example Company", "Trap Role", "Engineer 1", "Build services", "example.invalid/about"]) expect(text, name).not.toContain(forbidden);
-        expect(text, name).toContain("Derived content is unavailable");
+        for (const forbidden of [TRAP, "Build services"]) expect(text, name).not.toContain(forbidden);
+        if (name !== "get_insights") expect(text, name).toContain("Example Company");
+        if (!["list_companies", "get_insights"].includes(name)) expect(text, name).toContain("Trap Role");
+        if (name === "get_company") {
+          const research = getCompanyOutput.parse(value).research;
+          expect(research).toMatchObject({ available: false });
+          expect(research?.fields.every((field) => field.text === null)).toBe(true);
+          expect(research?.fields).toContainEqual({ field: "summary", text: null, source_url: "https://example.invalid/about" });
+          expect(text).toContain("Derived content is unavailable");
+        } else expect(text).not.toContain("Derived content is unavailable");
       }
     } finally {
       if (failure === "table_failure") { await getDb().execute(sql`alter table job_traps_away rename to job_traps`); resetTrapTablesCache(); }
     }
   });
+  it.each(["not_scanned", "rules_stale", "disabled"])("preserves the main application mapping without notes for %s", async (failure) => {
+    const db = getDb();
+    await db.update(schema.jobs).set({ title: "Engineer\u200b" });
+    await db.update(schema.companies).set({ name: "Example\u200b Company" });
+    await db.update(schema.applications).set({ nextAction: "Follow up" });
+    await db.update(schema.jobSources).set({ applyUrl: "https://example.invalid/apply" });
+    if (failure === "not_scanned") await db.delete(schema.trapScans);
+    if (failure === "rules_stale") await db.update(schema.trapScans).set({ rulesHash: "stale-rules" });
+    const settings = failure === "disabled" ? { ...traps, enabled: false } : traps;
+    const entries = await listPipelineEntries(readOnly.db);
+    const applications = entries.map((entry) => toApplicationItemDto(entry, NOW, shortFieldCleaner(settings)));
+    const actual = await call(await connect(["tracking:read"], 100, () => settings), "list_applications");
+    expect(actual).toEqual({ notices: [mcpTranslator("en")("notice.thirdParty")], total: applications.length, returned: applications.length, truncated: false, applications });
+    expect(applications[0]).toMatchObject({ title: "Engineer", company: "Example Company", links: [{ source: "ats", url: expect.any(String), apply_url: "https://example.invalid/apply" }] });
+  });
+
+  it("uses research from its originating job even when another company job is unscanned", async () => {
+    await getDb().update(schema.companyResearch).set({ jobId: ids[1]! }).where(eq(schema.companyResearch.companyId, companyId));
+    await getDb().delete(schema.trapScans).where(eq(schema.trapScans.jobId, ids[0]!));
+    const output = getCompanyOutput.parse(await call(await connect(), "get_company", { company_id: companyId }));
+    expect(output.research).toMatchObject({ available: true, fields: expect.arrayContaining([expect.objectContaining({ field: "industry" })]) });
+    expect(output.company.name).toBe("Example Company");
+  });
+
+  it("keeps configured preference cities and interest categories behind profile permission", async () => {
+    fs.mkdirSync(temp.profileDir, { recursive: true });
+    const preferences = { ...loadConfig("preferences"), home_city: "SENTINEL-PREFERENCE-CITY", places: [] };
+    delete preferences.home_city_id;
+    fs.writeFileSync(path.join(temp.profileDir, "preferences.yaml"), stringify(preferences));
+    fs.writeFileSync(path.join(temp.configDir, "insights.yaml"), stringify({ ...loadConfig("insights"), cities: [] }));
+    const interests = loadConfig("interests");
+    fs.writeFileSync(path.join(temp.configDir, "interests.yaml"), stringify({ ...interests, signals: { ...interests.signals, categories: [
+      { id: "PrivateInterest", kind: "keyword", label: { en: "SENTINEL-INTEREST-NAME" }, color: "neutral", ai_definition: "Test interest", keywords: ["services"] },
+      { id: "PrivateZero", kind: "keyword", label: { en: "SENTINEL-ZERO-MATCH" }, color: "neutral", ai_definition: "Test zero match", keywords: ["missing"] },
+    ] } }));
+    resetConfigCache();
+    await getDb().insert(schema.signals).values({ jobId: ids[1]!, tier: "PrivateInterest", kind: "private_interest", quote: "services", quoteOffset: 15, extractor: "rule" });
+    const basic = insightsOutput.parse(await call(await connect(["jobs:read"]), "get_insights"));
+    const granted = insightsOutput.parse(await call(await connect(["jobs:read", "profile:read"]), "get_insights"));
+    for (const sentinel of ["SENTINEL-PREFERENCE-CITY", "PrivateInterest", "SENTINEL-INTEREST-NAME", "PrivateZero", "SENTINEL-ZERO-MATCH"]) {
+      expect(JSON.stringify(basic)).not.toContain(sentinel);
+      expect(JSON.stringify(granted)).toContain(sentinel);
+    }
+    expect(granted.signals.categories).toContainEqual(expect.objectContaining({ id: "PrivateInterest", jobs: 1 }));
+    expect(granted.signals.categories).toContainEqual(expect.objectContaining({ id: "PrivateZero", jobs: 0 }));
+  });
+
+  it("preserves the default-sized insight series with a result cap of twenty", async () => {
+    fs.writeFileSync(path.join(temp.configDir, "insights.yaml"), stringify({ ...loadConfig("insights"), ranges_days: [30], default_range_days: 30, score_bucket_width: 5, score_bucket_cap: 100 }));
+    resetConfigCache();
+    const value = insightsOutput.parse(await call(await connect([...PERMISSIONS], 20), "get_insights"));
+    const view = await loadInsightsView(null, NOW, "en", readOnly.db);
+    expect(value.daily).toHaveLength(30);
+    expect(value.scores.bars).toHaveLength(21);
+    expect(value.scores.bars).toHaveLength(view.scores.bars.length);
+  });
+
+  it("guards explicit and default saved views and refuses tracking filters without partial results", async () => {
+    const view = { id: "sentinel-saved-view", name: "Saved view", default: true, filters: { app: ["applied"] } };
+    fs.writeFileSync(path.join(temp.configDir, "interests.yaml"), stringify({ ...loadConfig("interests"), views: [view] }));
+    resetConfigCache();
+    const basic = await connect(["jobs:read"]);
+    expect(todayOutput.parse(await call(basic, "get_today")).view).toBeNull();
+    const explicit = await basic.callTool({ name: "get_today", arguments: { view: view.id } });
+    expect(explicit.isError).toBe(true);
+    expect(explicit.structuredContent).toBeUndefined();
+    expect(JSON.stringify(explicit)).toContain("profile:read");
+    const profile = await connect(["jobs:read", "profile:read"]);
+    for (const args of [{}, { view: view.id }]) {
+      const denied = await profile.callTool({ name: "get_today", arguments: args });
+      expect(denied.isError).toBe(true);
+      expect(denied.structuredContent).toBeUndefined();
+      expect(JSON.stringify(denied)).toContain("tracking:read");
+      expect(todayOutput.parse(await call(await connect(["jobs:read", "profile:read", "tracking:read"]), "get_today", args)).view).toBe(view.id);
+    }
+  });
+
   it("not-found and unsupported ranges are category errors without internal details", async () => {
     const client = await connect();
     for (const [name, args] of [["get_company", { company_id: 999999 }], ["get_application", { job_id: 999999 }], ["get_insights", { range: 999 }]] satisfies Array<[string, Record<string, unknown>]>) {

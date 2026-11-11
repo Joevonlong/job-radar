@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const queries = vi.hoisted(() => ({
   listTodayJobs: vi.fn(async () => [{ id: 7 }]),
@@ -8,7 +8,7 @@ const queries = vi.hoisted(() => ({
   getLatestCycleSummary: vi.fn(async () => ({ id: 4 })),
 }));
 vi.mock("@/lib/db", async (original) => ({ ...await original<object>(), ...queries }));
-vi.mock("@/lib/interests/views", () => ({ loadSavedViews: () => [{ id: "focused", name: "Focused", default: true, filters: { company: ["Acme"], minScore: 60, high: true, hideLang: true } }] }));
+vi.mock("@/lib/interests/views", () => ({ loadSavedViews: vi.fn() }));
 vi.mock("@/lib/jobs/cities", () => ({ loadCityGroups: vi.fn(async () => []) }));
 vi.mock("@/lib/jobs/job-filters", async (original) => ({ ...await original<object>(), resolveViewCompanyIds: vi.fn(async () => [[3], [3]]) }));
 vi.mock("@/lib/visa/filter", () => ({ visaFilterAvailable: async () => false }));
@@ -17,12 +17,16 @@ vi.mock("@/lib/dashboard/german", () => ({ germanLevelsToHide: () => ["C1", "C2"
 vi.mock("@/lib/signals/floor", () => ({ loadHighValuePolicy: () => ({ amountHighValue: false, amountId: null, otherIds: ["cert"] }) }));
 vi.mock("@/lib/config", () => ({ loadConfig: () => ({ push_min_score: 71, push_min_score_high_value: 53 }) }));
 
+import { loadSavedViews } from "@/lib/interests/views";
+import { getToday } from "@/lib/mcp/tools/get-today";
+import { readContext } from "../mcp/read-fixtures";
 import type { Db } from "@/lib/db";
 import { loadTodayData } from "@/lib/dashboard/today-data";
 import { detailChecks, detailCheckViews, breakdownViewInput, salaryContextInput, companyResearchInput } from "@/lib/jobs/detail-inputs";
 import { blockDetail, BLOCK_NOW } from "../mcp/job-block-fixtures";
 
 const now = BLOCK_NOW;
+beforeEach(() => vi.mocked(loadSavedViews).mockReturnValue([{ id: "focused", name: "Focused", default: true, filters: { company: ["Acme"], minScore: 60, high: true, hideLang: true } }]));
 afterEach(() => vi.clearAllMocks());
 
 describe("page read assembly characterization", () => {
@@ -51,5 +55,32 @@ describe("page read assembly characterization", () => {
     expect(companyResearchInput(7, { state: "error", problem: "unreadable" }, null, now)).toEqual({ jobId: 7, research: null, ai: null, now });
     expect(detailCheckViews(job, { visa: false, needsVisaSponsorship: false, ghost: false })).toEqual({ visaView: null, ghostView: null });
     expect(detailCheckViews(job, { visa: true, needsVisaSponsorship: true, ghost: true })).toMatchObject({ visaView: { state: "offered" }, ghostView: { state: "dismissed" } });
+  });
+});
+
+describe("MCP saved view permissions", () => {
+  it("omits the default view without profile permission and refuses an explicit saved view", async () => {
+    queries.listTodayJobs.mockResolvedValueOnce([]);
+    const result = await getToday(readContext(), {});
+    expect(result.view).toBeNull();
+    expect(loadSavedViews).not.toHaveBeenCalled();
+    expect(queries.listTodayJobs).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ highValueOnly: false, extra: expect.not.objectContaining({ minRank: 60 }) }));
+    await expect(getToday(readContext(), { view: "focused" })).rejects.toMatchObject({ category: "not_permitted", message: expect.stringContaining("profile:read") });
+  });
+
+  it.each([{}, { view: "focused" }])("uses the saved view with profile permission: %j", async (args) => {
+    queries.listTodayJobs.mockResolvedValueOnce([]);
+    const result = await getToday(readContext(["jobs:read", "profile:read"]), args);
+    expect(result.view).toBe("focused");
+    expect(queries.countTodayJobs).not.toHaveBeenCalled();
+  });
+
+  it.each([{}, { view: "private-status" }])("refuses application filters before any queries: %j", async (args) => {
+    vi.mocked(loadSavedViews).mockReturnValue([{ id: "private-status", name: "Private status", default: true, filters: { app: ["interviewing"] } }]);
+    await expect(getToday(readContext(["jobs:read", "profile:read"]), args)).rejects.toMatchObject({ category: "not_permitted", message: expect.stringContaining("tracking:read") });
+    for (const query of Object.values(queries)) expect(query).not.toHaveBeenCalled();
+    queries.listTodayJobs.mockResolvedValueOnce([]);
+    expect((await getToday(readContext(["jobs:read", "profile:read", "tracking:read"]), args)).view).toBe("private-status");
+    expect(queries.listTodayJobs).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ extra: expect.objectContaining({ applicationStatuses: ["interviewing"] }) }));
   });
 });

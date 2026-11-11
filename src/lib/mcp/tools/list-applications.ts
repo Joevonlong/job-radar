@@ -1,7 +1,6 @@
 import { loadBlocks } from "@/lib/capabilities/blocks";
 import { applicationNotesBlocks } from "../tracking-blocks";
-import { readSourceUrl, readTextAccess, readTextCleaner } from "../read-guard";
-import { readJobTexts } from "@/lib/db/queries/read-texts";
+import { readSourceUrl, readTextCleaner } from "../read-guard";
 import { listApplicationsOutputFor } from "../dto/tracking";
 import { z } from "zod";
 
@@ -58,16 +57,12 @@ export async function listApplications(ctx: McpContext, args: ListApplicationsAr
   const limit = resultLimit(ctx, args.limit);
   const clean = readTextCleaner(readTraps(ctx), ctx.text("notice.redacted"));
   const selected = entries.slice(0, limit);
-  const texts = new Map((await readJobTexts(ctx.db, selected.map((entry) => entry.job.id))).map((job) => [job.jobId, job]));
-  let withheld = false;
-  const applications = await Promise.all(selected.map(async (entry) => {
-    const text = texts.get(entry.job.id);
-    const access = await readTextAccess(ctx, text ? [text] : []);
-    withheld ||= access.reason !== null;
-    const item = toApplicationItemDto(entry, now, clean);
-    return { ...item, title: access.text(entry.job.title) ?? "", company: access.text(entry.job.companyName) ?? "", links: access.reason !== null ? [] : entry.job.sources.map((source) => ({ source: access.text(source.family) ?? "", url: readSourceUrl(source.url, access), apply_url: readSourceUrl(source.applyUrl, access) })), ...await loadBlocks(applicationNotesBlocks, ctx, { ...entry, clean }, undefined) };
-  }));
+  const applications = await Promise.all(selected.map(async (entry) => ({
+    ...toApplicationItemDto(entry, now, clean),
+    links: entry.job.sources.map((source) => ({ source: clean(source.family), url: readSourceUrl(source.url, clean), apply_url: readSourceUrl(source.applyUrl, clean) })),
+    ...await loadBlocks(applicationNotesBlocks, ctx, { ...entry, clean }, undefined),
+  })));
   const truncated = entries.length > applications.length;
-  const notices = [ctx.text("notice.thirdParty"), ...(withheld ? [ctx.text("notice.derivedWithheld")] : []), ...(truncated ? [truncationNotice(ctx, applications.length, entries.length, limit)] : [])];
+  const notices = [ctx.text("notice.thirdParty"), ...(truncated ? [truncationNotice(ctx, applications.length, entries.length, limit)] : [])];
   return listApplicationsOutputFor(ctx.permissions ?? new Set()).parse({ notices, total: entries.length, returned: applications.length, truncated, applications } satisfies ListApplicationsOutput);
 }

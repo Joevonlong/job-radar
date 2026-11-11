@@ -1,14 +1,13 @@
 import type { z } from "zod";
-import { readJobTexts } from "@/lib/db/queries/read-texts";
 import type { JobCard } from "@/lib/db/queries/types";
 import type { McpContext } from "../context";
 import { toReadJobDto } from "../dto/read-jobs";
-import { readTextAccess } from "../read-guard";
-import { truncationNotice } from "./shared";
+import { readTextCleaner } from "../read-guard";
+import { readTraps, truncationNotice } from "./shared";
 
 export async function readCards(ctx: McpContext, cards: readonly JobCard[]) {
-  const texts = new Map((await readJobTexts(ctx.db, cards.map((card) => card.id))).map((job) => [job.jobId, job]));
-  return Promise.all(cards.map(async (card) => toReadJobDto(card, await readTextAccess(ctx, texts.has(card.id) ? [texts.get(card.id)!] : []))));
+  const clean = readTextCleaner(readTraps(ctx), ctx.text("notice.redacted"));
+  return cards.map((card) => toReadJobDto(card, clean));
 }
 
 export function readNotices(ctx: McpContext, returned: number, total: number, limit: number, withheld: boolean) {
@@ -16,18 +15,18 @@ export function readNotices(ctx: McpContext, returned: number, total: number, li
 }
 
 /** Applies the configured result cap to nested collections after the DTO allow-list has been checked. */
-export function limitReadOutput<T extends { notices: string[] }>(ctx: McpContext, schema: z.ZodType<T>, value: T, limit: number): T {
+export function limitReadOutput<T extends { notices: string[] }>(ctx: McpContext, schema: z.ZodType<T>, value: T, limit: number, uncappedPaths: readonly string[] = []): T {
   const parsed = schema.parse(value);
   const notices = [...parsed.notices];
   let truncated = false;
-  const visit = (value: unknown): unknown => {
+  const visit = (value: unknown, path: string): unknown => {
     if (Array.isArray(value)) {
-      if (value.length > limit) { truncated = true; notices.push(truncationNotice(ctx, limit, value.length, limit)); }
-      return value.slice(0, limit).map(visit);
+      if (!uncappedPaths.includes(path) && value.length > limit) { truncated = true; notices.push(truncationNotice(ctx, limit, value.length, limit)); }
+      return (uncappedPaths.includes(path) ? value : value.slice(0, limit)).map((entry) => visit(entry, path));
     }
-    if (value !== null && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, key === "notices" ? entry : visit(entry)]));
+    if (value !== null && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, key === "notices" ? entry : visit(entry, path ? `${path}.${key}` : key)]));
     return value;
   };
-  const capped = schema.parse(visit(parsed));
+  const capped = schema.parse(visit(parsed, ""));
   return schema.parse({ ...capped, ...("truncated" in capped ? { truncated: capped.truncated === true || truncated } : {}), notices: [...new Set(notices)] });
 }

@@ -11,16 +11,17 @@ export const insightsOutput = z.strictObject({
   kpi: z.strictObject({ total: z.number().int(), previous_total: z.number().int(), change: number, passed: z.number().int(), pass_rate: number, previous_pass_rate: number, pass_rate_change_pt: number, salary_rate: number, avg_rank: number }),
   daily: z.array(z.strictObject({ day: z.string(), passed: z.number().int(), filtered: z.number().int(), avg_rank: number })),
   sources: z.array(z.strictObject({ family: z.string().nullable(), total: z.number().int(), passed: z.number().int(), pass_rate: z.number() })),
-  cities: z.array(z.strictObject({ kind: z.enum(["city", "remote", "other"]), city: z.string().nullable(), count: z.number().int(), share: z.number() })),
+  cities: z.array(z.strictObject({ kind: z.enum(["city", "remote", "other"]), city: z.string().nullable(), count: z.number().int(), share: z.number() })).optional(),
   salary: z.strictObject({ passed: z.number().int(), disclosed: z.number().int(), comparable: z.number().int(), rate: number, median_per_year: number, currency: z.string(), bars: z.array(histogram) }),
-  signals: z.strictObject({ passed: z.number().int(), without_signal: z.number().int(), high_value: z.number().int(), avg_rank: number, categories: z.array(z.strictObject({ id: z.string(), label: z.string(), jobs: z.number().int(), share: z.number(), avg_rank: number })) }),
+  signals: z.strictObject({ passed: z.number().int(), without_signal: z.number().int(), high_value: z.number().int(), avg_rank: number, categories: z.array(z.strictObject({ id: z.string(), label: z.string(), jobs: z.number().int(), share: z.number(), avg_rank: number })).optional() }),
   scores: z.strictObject({ scored: z.number().int(), pending: z.number().int(), avg_rank: number, bars: z.array(histogram) }),
   conversion: z.strictObject({ fetched: z.number().int(), passed: z.number().int(), pushable: z.number().int() }),
   match: insightsMatchDto.optional(), tracking: insightsTrackingDto.optional(),
 });
 export function insightsOutputFor(permissions: ReadonlySet<Permission>): z.ZodType<z.infer<typeof insightsOutput>> {
-  if (permissions.has("match:read") && permissions.has("tracking:read")) return insightsOutput;
-  if (permissions.has("match:read")) return insightsOutput.omit({ tracking: true });
-  if (permissions.has("tracking:read")) return insightsOutput.omit({ match: true });
-  return insightsOutput.omit({ match: true, tracking: true });
+  return insightsOutput.omit({
+    ...(!permissions.has("profile:read") ? { cities: true as const } : {}),
+    ...(!permissions.has("match:read") ? { match: true as const } : {}),
+    ...(!permissions.has("tracking:read") ? { tracking: true as const } : {}),
+  }).extend({ signals: permissions.has("profile:read") ? insightsOutput.shape.signals : insightsOutput.shape.signals.omit({ categories: true }) });
 }

@@ -1,4 +1,5 @@
 /** Today selection and tab counts shared by the page and read capabilities, without presentation or URL parsing. */
+import type { ViewFilters } from "@/lib/config/schemas/interests";
 import { loadConfig } from "@/lib/config";
 import { countTodayJobs, countTodayQuickViews, getLatestCycleSummary, hasHighValueCategories, listTodayJobs, type Db, type QuickView } from "@/lib/db";
 import { ghostFilterAvailable } from "@/lib/ghost/filter";
@@ -18,9 +19,11 @@ export interface TodayParams {
   quick?: string | null;
 }
 
-export async function loadTodayData(db: Db, params: TodayParams, options: { now: Date; timezone: string; languageEnabled: boolean }) {
-  const views = loadSavedViews();
+export async function loadTodayData(db: Db, params: TodayParams, options: { now: Date; timezone: string; languageEnabled: boolean; savedViews?: boolean; viewCounts?: boolean; checkFilters?: (filters: ViewFilters) => void }) {
+  const views = options.savedViews === false ? [] : loadSavedViews();
   const { active, filters } = resolveTodayView(views, params.view ?? null, { filtered: params.filtered ?? null, hideLang: params.hideLang ?? null, high: params.high ?? null });
+  options.checkFilters?.(filters);
+  const countedViews = options.viewCounts === false ? [] : views;
   const filtered = filters.filtered === true;
   const hideLang = options.languageEnabled && filters.hideLang === true;
   const highValue = loadHighValuePolicy();
@@ -29,8 +32,8 @@ export async function loadTodayData(db: Db, params: TodayParams, options: { now:
   const allView = views.some((view) => view.default) ? TODAY_ALL_VIEW : null;
   const viewParam = active ? active.id : allView;
   const quick: Exclude<QuickView, "all"> | null = params.quick === "high" || params.quick === "salary" || params.quick === "following" ? params.quick : null;
-  const cityGroups = [filters, ...views.map((view) => view.filters)].some(needsCityGroups) ? await loadCityGroups(db) : null;
-  const [shownCompanyIds, ...viewCompanyIds] = await resolveViewCompanyIds(db, [filters, ...views.map((view) => view.filters)]);
+  const cityGroups = [filters, ...countedViews.map((view) => view.filters)].some(needsCityGroups) ? await loadCityGroups(db) : null;
+  const [shownCompanyIds, ...viewCompanyIds] = await resolveViewCompanyIds(db, [filters, ...countedViews.map((view) => view.filters)]);
   const visa = await visaFilterAvailable(db);
   const ghost = await ghostFilterAvailable(db);
   const notify = loadConfig("notify");
@@ -42,7 +45,7 @@ export async function loadTodayData(db: Db, params: TodayParams, options: { now:
   const [cards, quickCounts, viewCounts] = await Promise.all([
     listTodayJobs(db, { ...base, includeFiltered: filtered, quick: active ? null : quick, quickLines, hideGermanLevels: hideLang ? germanLevelsToHide() : [], highValueOnly: high, extra: toJobFilters(filters, { cityGroups, visa, ghost, companyIds: shownCompanyIds }), visa, ghost }),
     countTodayQuickViews(db, { ...base, quickLines }),
-    Promise.all(views.map((view, index) => countTodayJobs(db, { ...base, includeFiltered: view.filters.filtered === true, hideGermanLevels: view.filters.hideLang === true ? germanLevelsToHide() : [], highValueOnly: view.filters.high === true, extra: toJobFilters(view.filters, { cityGroups, visa, ghost, companyIds: viewCompanyIds[index] }) }))),
+    Promise.all(countedViews.map((view, index) => countTodayJobs(db, { ...base, includeFiltered: view.filters.filtered === true, hideGermanLevels: view.filters.hideLang === true ? germanLevelsToHide() : [], highValueOnly: view.filters.high === true, extra: toJobFilters(view.filters, { cityGroups, visa, ghost, companyIds: viewCompanyIds[index] }) }))),
   ]);
   return { views, active, filtered, hideLang, highValue, canFilterHigh, high, allView, viewParam, quick, visa, ghost, qualifiedMinRank, qualifiedMinRankWithSignals, summary, cards, quickCounts, viewCounts };
 }

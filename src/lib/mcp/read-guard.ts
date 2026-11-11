@@ -1,4 +1,4 @@
-/** Additional read tools withhold all posting-derived strings until every relevant posting has a current trap scan. */
+/** Short fields are cleaned independently; long derived text requires current trap scans. */
 import type { TrapsConfig } from "@/lib/config/schemas/traps";
 import { cleanDescriptionStrict, type JobText } from "@/lib/traps/clean";
 import type { McpContext } from "./context";
@@ -47,15 +47,14 @@ export async function readTextAccess(ctx: McpContext, jobs: readonly JobText[]) 
     },
   };
 }
-export type ReadTextAccess = Awaited<ReturnType<typeof readTextAccess>>;
 
-/** Public source links also pass the stored-span guard, not only the short instruction patterns. */
-export function readSourceUrl(url: string | null, access: ReadTextAccess): string | null {
+/** Public source links reject instructions, private values and credential-bearing URLs without requiring a scan. */
+export function readSourceUrl(url: string | null, clean: (text: string) => string): string | null {
   if (url === null || !/^https?:\/\//i.test(url) || credentialUrl(url)) return null;
   try {
     new URL(url);
   } catch {
     return null;
   }
-  return safeSourceUrl(url, (text) => access.text(text) ?? "");
+  return safeSourceUrl(url, clean);
 }

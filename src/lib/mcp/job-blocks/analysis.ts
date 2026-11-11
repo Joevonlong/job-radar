@@ -5,7 +5,8 @@ import { parseStoredBreakdown, type BreakdownContent } from "@/lib/breakdown/con
 import { getJobBreakdown } from "@/lib/db/repos/breakdowns";
 import { getCompanyResearchForJob } from "@/lib/db/repos/company-research";
 import { getTranslation } from "@/lib/db/repos/translations";
-import { salaryContextInput, detailCheckViews } from "@/lib/jobs/detail-inputs";
+import { salaryContextInput } from "@/lib/jobs/detail-inputs";
+import { buildGhostCheckView } from "@/lib/ghost/view";
 import type { GhostReason } from "@/lib/ghost/types";
 import type { McpContext } from "@/lib/mcp/context";
 import { breakdownBlockDto, companyBlockDto, ghostBlockDto, ghostReasonDto, lifecycleBlockDto, salaryBlockDto, translationBlockDto } from "@/lib/mcp/dto/job-analysis";
@@ -116,8 +117,7 @@ export function toGhostReason(reason: GhostReason, source: JobBlockSource): z.in
 
 export async function loadGhost(_ctx: McpContext, source: JobBlockSource): Promise<z.infer<typeof ghostBlockDto>> {
   if (!jobBlockSettings().ghostEnabled()) return null;
-  const { ghostView: view } = detailCheckViews(source.detail, { ghost: true, visa: false, needsVisaSponsorship: false });
-  if (view === null) return null;
+  const view = buildGhostCheckView(source.detail.ghost);
   return { state: view.state, level: view.level, score: view.score, checked_at: isoOrNull(source.detail.ghost?.checkedAt ?? null), dismissed: source.detail.ghost?.dismissed ?? false, reasons: view.reasons.map((reason) => toGhostReason(reason, source)) };
 }
 
