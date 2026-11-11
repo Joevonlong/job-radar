@@ -1,14 +1,15 @@
 import type { PipelineConfig, PreferencesConfig } from "@/lib/config";
 import type { GermanLevel, JobLocation, JobSalary } from "@/lib/domain/types";
-import { canonicalCity, citySpellings, lookupPlace, placeAreas, placeGeo } from "@/lib/market/places";
+import { canonicalCity, citySpellings, lookupPlace, placeAreas, placeGeo, type PlaceGeo } from "@/lib/market/places";
 import type { Market } from "@/lib/market/types";
 import { buildBlacklistedCompanyKeys, buildWatchedCompanyKeys, isCompanyExcluded, isCompanyWatched } from "@/lib/companies/marks";
 import { visaRulesFor } from "@/lib/visa/rules";
 
-import { compileDealBreakers, type CompiledDealBreakers, type DealBreakerMe } from "./deal-breakers";
+import { compileDealBreakers, type CompiledDealBreakers, type DealBreakerMe, type TimeBox } from "./deal-breakers";
 import { encodeReason } from "./reasons";
 import { salaryBelowFloor } from "./salary";
 import { foldText, foldTransliterated } from "./text";
+import { compileLivePlaces, compileWorkArea, namesLivePlace, readWorkArea, type CompiledWorkArea, type WorkAreaReading } from "./work-area";
 
 export { foldText, foldTransliterated } from "./text";
 
@@ -147,6 +148,12 @@ export interface CompiledFilter {
   outsideStateCode: RegExp | null;
   /** Description phrases saying the posting hires in the home country / region. */
   descriptionInScope: readonly RegExp[];
+  /** The phrases of check 2, the tables they are read with, and the countries a posting may require. */
+  workArea: CompiledWorkArea;
+  geo: PlaceGeo;
+  liveCountries: ReadonlySet<string>;
+  liveOpen: boolean;
+  livePlaces: readonly RegExp[];
   seniorities: readonly string[] | null;
   blacklistedCompanyKeys: ReadonlySet<string>;
   /** Resolved keys of `interests.yaml: watched_companies` (the push step's keys). */
@@ -235,6 +242,11 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
     titleOutside: compilePatterns(cfg.remote.title_outside_patterns),
     outsideStateCode: outsideStateCodes(market, remoteCountries),
     descriptionInScope: compilePatterns(cfg.remote.description_in_scope_patterns),
+    workArea: compileWorkArea(cfg.remote.work_area),
+    geo,
+    liveCountries: areas.liveCountries,
+    liveOpen: areas.liveOpen,
+    livePlaces: compileLivePlaces(areas.liveSpellings),
     seniorities,
     blacklistedCompanyKeys,
     watchedCompanyKeys: buildWatchedCompanyKeys(context.watchedCompanies ?? [], pipeline),
@@ -346,12 +358,90 @@ interface PartialVerdict {
   notes: string[];
 }
 
+/** One filter run's time for reading postings. The phrases can come from a user's pack, so one that is slow on a posting has to be stopped. */
+export interface WorkAreaRun {
+  readonly timeBox: TimeBox;
+  /** Longest one posting may take (ms). */
+  readonly jobMs: number;
+  /** Milliseconds of stopped readings left in this run; used up, postings are not read for the rest of it. */
+  left: number;
+  /** Jobs whose posting was stopped: their verdict is final, so they are not read again until the posting or the settings change. */
+  readonly stopped: Set<number>;
+  /** Jobs not reached once the time was used up: their verdicts must not be kept as final, so a later run reads them. */
+  readonly unread: Set<number>;
+}
+
+/**
+ * What one job's reading needs: the run, the reasons stored for the job, and whether they were judged on this posting and these settings
+ * (`settled`). A settled job keeps its stored reading without being read again, so postings that are always stopped never take the time
+ * of the ones after them; a posting not read now keeps a hide it had.
+ */
+export interface WorkAreaContext {
+  run: WorkAreaRun;
+  jobId: number;
+  previous?: readonly string[] | undefined;
+  settled?: boolean;
+}
+
+/** Start a run with the deal-breakers' limits. */
+export function startWorkAreaRun(filter: CompiledFilter, timeBox: TimeBox): WorkAreaRun {
+  const { match_ms: jobMs, rule_budget_ms: left } = filter.pipeline.filter.deal_breakers;
+  return { timeBox, jobMs, left, stopped: new Set(), unread: new Set() };
+}
+
+/** The reading of a posting, or null when it was stopped, not reached or settled. */
+function readWithinBudget(job: FilterJob, filter: CompiledFilter, context?: WorkAreaContext): WorkAreaReading | null {
+  const read = (): WorkAreaReading => readWorkArea(job.title, job.description, filter.workArea, filter.geo);
+  if (context === undefined) return read();
+  const { run, jobId } = context;
+  if (context.settled === true) return null;
+  if (run.left <= 0) {
+    run.unread.add(jobId);
+    return null;
+  }
+  let reading: WorkAreaReading | null = null;
+  const finished = run.timeBox(() => {
+    reading = read();
+  }, run.jobMs);
+  if (finished) return reading;
+  run.left -= run.jobMs;
+  run.stopped.add(jobId);
+  return null;
+}
+
+/** Check 2, on a remote job check 1 kept: a clear statement of somewhere I don't live and wouldn't move to hides it, unless the posting also names a place I would. Not sure keeps it with a note, which does not lower its rank. */
+function checkWorkArea(job: FilterJob, filter: CompiledFilter, out: PartialVerdict, context?: WorkAreaContext): void {
+  const reading = readWithinBudget(job, filter, context);
+  const hidden = reading === null ? context?.previous?.find((reason) => reason.startsWith("remote_out_of_scope")) : undefined;
+  if (hidden !== undefined) {
+    out.excluded.push(hidden);
+    return;
+  }
+  if (reading === null && context?.settled === true) {
+    if (context.previous?.includes(encodeReason("remote_area_unknown")) === true) out.notes.push(encodeReason("remote_area_unknown"));
+    return;
+  }
+  if (reading === null || !reading.sure) {
+    out.notes.push(encodeReason("remote_area_unknown"));
+    return;
+  }
+  if (reading.countries === null || reading.countries.some((country) => filter.liveCountries.has(country))) return;
+  if (filter.liveOpen || namesLivePlace(job.title, job.description, filter.livePlaces)) out.notes.push(encodeReason("remote_area_unknown"));
+  else out.excluded.push(encodeReason("remote_out_of_scope", reading.quote));
+}
+
+function checkLocation(job: FilterJob, filter: CompiledFilter, out: PartialVerdict, context?: WorkAreaContext): void {
+  const excludedBefore = out.excluded.length;
+  checkStatedLocation(job, filter, out);
+  if (job.workplace === "remote" && out.excluded.length === excludedBefore) checkWorkArea(job, filter, out, context);
+}
+
 /**
  * The location rule. A location naming a wanted city settles it. Then, for a remote job, a title that says which region it hires in ("- US",
  * "US East Coast") wins over the locations and the description. A location in a country that counts as a whole gives way only to a title naming
  * another country: "East Coast" or "Americas" says nothing against it.
  */
-function checkLocation(job: FilterJob, filter: CompiledFilter, out: PartialVerdict): void {
+function checkStatedLocation(job: FilterJob, filter: CompiledFilter, out: PartialVerdict): void {
   const locations = job.locations;
   if (locations.some((l) => isWantedCity(l, filter))) return;
   const marker = job.workplace === "remote" && filter.scopeCountries !== null ? titleOutsideMarker(job.title, filter) : null;
@@ -482,9 +572,9 @@ export function applyOverride(verdict: FilterVerdict, override: FilterOverride |
  * Evaluate one job. Excluded as soon as one rule says so; every rule that applies is listed. `dealBreakerVetoes`: the ids of
  * the deal-breakers that veto the job, from `dealBreakerVetoes` over its batch (required when the filter has deal-breakers).
  */
-export function evaluateJob(job: FilterJob, filter: CompiledFilter, override: FilterOverride | null = null, dealBreakerVetoes?: readonly string[]): FilterVerdict {
+export function evaluateJob(job: FilterJob, filter: CompiledFilter, override: FilterOverride | null = null, dealBreakerVetoes?: readonly string[], workArea?: WorkAreaContext): FilterVerdict {
   const out: PartialVerdict = { excluded: [], notes: [] };
-  checkLocation(job, filter, out);
+  checkLocation(job, filter, out, workArea);
   checkWorkplace(job, filter, out);
   checkContract(job, filter, out);
   checkSalary(job, filter, out);

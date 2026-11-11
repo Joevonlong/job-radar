@@ -966,6 +966,7 @@
       "seniority_mismatch": "级别不符：{detail}",
       "deal_breaker": "一票否决：{detail}",
       "remote_scope_unknown": "远程岗位，但没写明可以在哪里雇佣",
+      "remote_area_unknown": "远程岗位：职位说明没有明确写可以在哪里工作",
       "location_unknown": "岗位没写明城市",
       "remote_scope_description": "远程岗位，地点在你的范围外（{detail}），但正文写明可以在本国或所在区域受雇",
       "location_country_level": "地点只写到国家或区域（{detail}），岗位可能在其中任何地方",

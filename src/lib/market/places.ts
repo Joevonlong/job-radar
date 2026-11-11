@@ -289,6 +289,12 @@ export interface PlaceAreas {
   named: readonly NamedPlace[];
   /** Countries of the listed countries and regions I'd move to: any location there counts. */
   moveCountries: ReadonlySet<string>;
+  /** Where I live or would move to: the home country and the countries of every place I'd move to. A posting that requires one of these can be taken. */
+  liveCountries: ReadonlySet<string>;
+  /** A place I'd move to has no country to compare, an unknown name: a posting that requires somewhere else may still be one I can take. */
+  liveOpen: boolean;
+  /** How a posting writes the places of `liveCountries` and any city I'd move to or live in. */
+  liveSpellings: readonly string[];
   /** Worldwide is listed: a remote job counts wherever it is based. */
   worldwide: boolean;
   /** The home country and the countries of the listed countries and regions. */
@@ -328,7 +334,17 @@ export function placeAreas(preferences: PlacePreferences, geo: PlaceGeo, homeCou
   }
   abroad.delete(homeCountry);
   for (const [id, region] of Object.entries(geo.regions)) if (region.countries.some((country) => abroad.has(country))) wideRegions.add(id);
-  return { anywhereInHome: homeCity === "", named, moveCountries, worldwide, remoteCountries, wideRegions: [...wideRegions] };
+  const liveCountries = new Set([homeCountry, ...moveCountries, ...named.flatMap((place) => (place.relocate ? (place.countries ?? []) : []))]);
+  const liveOpen = named.some((place) => place.relocate && place.countries === null);
+  const liveSpellings = [
+    ...geo.countries.filter((country) => liveCountries.has(country.code)).flatMap((country) => [country.name, ...country.aliases]),
+    ...named.filter((place) => place.relocate).flatMap((place) => citySpellings(place.text, geo)),
+    ...preferences.places.filter((entry) => entry.relocate).flatMap((entry) => {
+      const place = lookupPlace(entry.place, geo);
+      return place?.kind === "region" ? place.spellings : [];
+    }),
+  ];
+  return { anywhereInHome: homeCity === "", named, moveCountries, liveCountries, liveOpen, liveSpellings, worldwide, remoteCountries, wideRegions: [...wideRegions] };
 }
 
 /** One search the location settings ask for. Query ids are made from `location`, `remote` and `remoteScope`, so these stay stable. */
