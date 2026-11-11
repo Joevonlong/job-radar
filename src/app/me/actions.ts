@@ -7,9 +7,8 @@ import { z } from "zod";
 import { readStoryExtractRequest, type StoryExtractErrorCode } from "@/lib/control/story-extract-request";
 import { getDb } from "@/lib/db";
 import { discardStoryDraft } from "@/lib/db/repos/story-drafts";
-import { currentMe } from "@/lib/filter";
-import { loadMarket, loadPipeline } from "@/lib/market";
-import { previewDealBreakerDrafts, previewRequestSchema, type DraftPreviewRule } from "@/lib/profile/deal-breaker-preview";
+import { loadMarket } from "@/lib/market";
+import { previewPersonalDealBreakers, previewRequestSchema, type DraftPreviewRule } from "@/lib/profile/deal-breaker-preview";
 import { invalidProfileRequest, rollbackProfile, saveProfile, saveStories } from "@/lib/profile/service";
 import { enableMarketChannels, type RegistryActionState } from "@/lib/sources/registry/service";
 import type { ProfileActionState } from "@/lib/profile/types";
@@ -75,9 +74,6 @@ export async function enableMarketChannelsAction(): Promise<RegistryActionState>
   return result;
 }
 
-/** Examples per rule in the form's preview. */
-const PREVIEW_SAMPLES = 3;
-
 export type DealBreakerPreviewResult = { status: "done"; total: number; partial: boolean; rules: DraftPreviewRule[] } | { status: "error"; error: "invalid" | "unavailable" };
 
 /** What the form's deal-breakers (drafts, not saved) would veto among the jobs in the database now; nothing is written. */
@@ -85,7 +81,7 @@ export async function previewDealBreakersAction(drafts: unknown): Promise<DealBr
   const parsed = previewRequestSchema.safeParse(drafts);
   if (!parsed.success) return { status: "error", error: "invalid" };
   try {
-    const preview = await previewDealBreakerDrafts(getDb(), parsed.data, { pipeline: loadPipeline(), me: currentMe(), sampleLimit: PREVIEW_SAMPLES });
+    const preview = await previewPersonalDealBreakers(getDb(), parsed.data);
     return { status: "done", ...preview };
   } catch (error) {
     logActionFailure("previewDealBreakersAction", error);

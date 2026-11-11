@@ -152,13 +152,14 @@ own, so the time a pattern may take is limited in three places:
 | `match_ms` | 100 | one deal-breaker pattern on one test text, and the explanation on a job page |
 | `rule_budget_ms` | 2,000 | one rule over all jobs in one filter run or one preview |
 | `preview_ms` | 3,000 | the whole preview on the card |
+| `preview_samples` | 3 | sample jobs per rule in the card and MCP previews (0 gives counts only) |
 
 Saving refuses rules over `max_rules` and `max_pattern_chars`.
 
 ## Checking rules
 
-Each rule on the card shows how many of the open jobs in the database it would veto, with three examples. The same count
-comes from the command line:
+Each rule on the card shows how many of the open jobs in the database it would veto, with up to `preview_samples`
+examples. The same count comes from the command line:
 
 ```bash
 pnpm deal-breakers:check              # every rule: count, time, examples

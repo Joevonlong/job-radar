@@ -560,5 +560,5 @@ test("MCP modules never import career modules and the tool list is unchanged", a
   const career = importedTargets("src/lib/mcp").filter(({ to }) => CAREER.some((directory) => to.startsWith(`${directory}/`)));
   expect(career).toEqual([]);
   const { CAPABILITIES } = await import("@/lib/capabilities/registry");
-  expect(CAPABILITIES.map((capability) => capability.id)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer"]);
+  expect(CAPABILITIES.map((capability) => capability.id)).toEqual(["search_jobs", "get_job", "list_applications", "get_profile", "get_interests", "preview_deal_breakers", "preview_interest_category", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer"]);
 });
