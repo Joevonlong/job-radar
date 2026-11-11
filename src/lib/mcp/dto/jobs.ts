@@ -1,11 +1,18 @@
 /** Job facts, signals and detail outputs are built field by field from query results. */
 import { z } from "zod";
 
+import type { Permission } from "@/lib/agent-access/permissions";
+import { blockShape } from "@/lib/capabilities/blocks";
 import type { JobDetail } from "@/lib/db/queries/job-detail";
 import type { JobCard, JobSignal } from "@/lib/db/queries/types";
 import type { TrapCounts } from "@/lib/db/repos/traps";
 import { LEGACY_BASE_CURRENCY } from "@/lib/domain/types";
+import { getJobBlocks } from "@/lib/mcp/job-blocks";
 
+import { breakdownBlockDto, companyBlockDto, ghostBlockDto, lifecycleBlockDto, salaryBlockDto, translationBlockDto } from "./job-analysis";
+import { matchBlockDto } from "./job-match";
+import { trackingBlockDto } from "./job-tracking";
+import { notesBlockDto } from "./notes";
 import { bounds, iso, isoOf, isoOrNull, linkDto, locationDto, notices, range, rankDto, salaryDto, storedAmount, toLinkDto, toLocationDto, toRankDto, toSalaryDto, type CleanText } from "./shared";
 import { applicationDto, toApplicationDto } from "./tracking";
 
@@ -101,8 +108,24 @@ export const searchJobsOutput = z.strictObject({
 });
 export type SearchJobsOutput = z.infer<typeof searchJobsOutput>;
 
-export const getJobOutput = z.strictObject({ notices, job: jobDetailDto });
+export const getJobOutput = z.strictObject({
+  notices,
+  job: jobDetailDto,
+  translation: translationBlockDto.optional(),
+  breakdown: breakdownBlockDto.optional(),
+  salary: salaryBlockDto.optional(),
+  company: companyBlockDto.optional(),
+  ghost: ghostBlockDto.optional(),
+  lifecycle: lifecycleBlockDto.optional(),
+  match: matchBlockDto.optional(),
+  tracking: trackingBlockDto.optional(),
+  notes: notesBlockDto.optional(),
+});
 export type GetJobOutput = z.infer<typeof getJobOutput>;
+
+export function getJobOutputFor(permissions: ReadonlySet<Permission>): z.ZodType<GetJobOutput> {
+  return z.strictObject({ notices, job: jobDetailDto, ...blockShape(getJobBlocks, permissions) });
+}
 
 export function toJobCardDto(card: JobCard, clean: CleanText): JobCardDto {
   return jobCardDto.parse({

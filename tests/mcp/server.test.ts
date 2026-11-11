@@ -374,7 +374,7 @@ describe("tools come from the registry", () => {
     ctx.writer = { inputs: () => ({ writer: writerSchema.parse({ enabled: true }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: untouchable };
     const reference = new McpServer({ name: "reference", version: "1" }, { capabilities: { tools: {} } });
     for (const cap of CAPABILITIES) {
-      reference.registerTool(cap.id, { title: ctx.text(cap.text.title), description: ctx.text(cap.text.description), inputSchema: cap.input(ctx), outputSchema: cap.output, annotations: cap.annotations }, async () => ({ content: [], isError: true }));
+      reference.registerTool(cap.id, { title: ctx.text(cap.text.title), description: ctx.text(cap.text.description), inputSchema: cap.input(ctx), outputSchema: cap.outputFor?.(new Set(ctx.settings.permissions)) ?? cap.output, annotations: cap.annotations }, async () => ({ content: [], isError: true }));
     }
     const sdk = await connectServer(reference);
     const client = await connectCapabilities(ctx, CAPABILITIES);

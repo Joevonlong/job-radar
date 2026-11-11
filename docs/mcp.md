@@ -20,8 +20,8 @@ that provider's terms. Turning the server on adds this exit to the ones listed i
 | Given (when you ask) | Never given (no setting turns them on) |
 |---|---|
 | Job facts: title, company, locations, work mode, contract, agency flag, required German level, status, dates, skills | Your profile files (`me`, `preferences`, `interests`) and their saved snapshots |
-| Source links (posting and apply links) | Match reasons, gaps, filter reasons, your salary floor, the German-level deduction and anything else worked out from your profile |
-| The stated salary | Notes: application notes, notes on status changes, notes on starred jobs |
+| Source links (posting and apply links) | Private profile values: salary floor, your language level, deal-breaker names |
+| The stated salary | AI provider/model/usage, signal bonus |
 | Score and rank numbers | Local paths (tailored résumé files) |
 | Compensation and benefit signals with their JD quote and position | Emails and email replies |
 | The JD after AI-trap cleaning (see below) | `.env` and `.auth/` values, keys, AI usage, notifications, run records, config file contents |
@@ -51,7 +51,7 @@ The server reads `mcp.yaml` again on every call. Disabling it, removing a permis
 refuses the next call of a client that is already connected, without a restart; granting access needs a client restart.
 
 `search_jobs` and `get_job` share `jobs:read`; `list_applications` needs `tracking:read`. Other ids from the permission catalog
-are accepted but do not expose tools yet. Version-2 tool switches migrate to both permission lists; if only one jobs tool
+are accepted; `match:read` and `notes:read` add blocks to `get_job` as described below. Version-2 tool switches migrate to both permission lists; if only one jobs tool
 was off, `jobs:read` offers both and `config:migrate` prints a notice. Remove `jobs:read` to disable both. A permission
 you write into `mcp.yaml` also covers tools that later versions add under it, so grant only what should be readable or
 writable.
@@ -113,6 +113,24 @@ Other MCP clients work the same way: a stdio server, command `pnpm`, arguments `
 | `get_application_context` | **Off by default.** Everything to write one job's answers (`job_id`): job facts, the cleaned JD, breakdown points, the company background and fit note, the questions, the material chosen for each and the saved versions (newest first, at most `max_results` per question). |
 | `save_application_answer` | **Off by default.** Adds one answer version (`job_id`, `question_id`, `text`, optional `sentences`). |
 
+`get_job` returns `{ notices, job, <granted blocks> }`. The `job` object and the existing notices stay the same when no optional job blocks are requested. `include` accepts only `translation`, `breakdown`, `salary`, `company`, `ghost`, `lifecycle`; other blocks appear automatically with their effective permission (the intersection of global and connection grants). No ungranted block key is returned, even with `include`.
+
+| Block | Effective permission | When included / content |
+|---|---|---|
+| `translation` | `jobs:read` | Named in `include`: all stored languages, cleaned text capped like the JD, stale flag and creation date |
+| `breakdown` | `jobs:read` | Named in `include`: responsibilities, stack, experience, projects, soft skills, languages, other requirements, with guarded JD quotes; no profile matching |
+| `salary` | `jobs:read` | Named in `include`: currency, annual figure, family id, benchmark, percentile, company count/median and cleaned stored lookup; no deep links, query or request counters |
+| `company` | `jobs:read` | Named in `include`: stored research fields with cleaned text and safe source URLs, fetch date and expiry |
+| `ghost` | `jobs:read` | Named in `include`: check state, level, score, date, dismissal and typed reasons; null while disabled; repost events omit source ids |
+| `lifecycle` | `jobs:read` | Named in `include`: automatic status, closure reason, last seen/listed/relisted dates, relist count, dormancy |
+| `match` | `match:read` | Automatic: summaries, AI score, German deduction, scoring date, stale flag, fit/gap evidence, filter reasons, deal-breaker and visa evidence, skill/German/salary checks; null without a score |
+| `tracking` | `tracking:read` | Automatic (also with the default permissions): application status/history/next action/dates/rounds, favorite date, seen flag, closure action/link-check outcome, filter override; no notes |
+| `notes` | `notes:read` | Automatic: cleaned application, event and favorite notes; never the closure note |
+
+Translations, breakdowns, company research, salary lookup content and the `match` block's AI summaries, fit reasons and gaps are withheld with the JD's failure reason whenever the JD cannot pass its safety check (the `match` block then has `available: false`; its numbers, filter result and checks remain). Empty research or lookup storage remains null. JD quotes use the same trap markers as the JD; a breakdown item whose quote becomes a marker uses that marker for its own text/name too. All text, including summaries, reasons and notes, goes through the text cleaner. Unsafe instruction-bearing source URLs become null. A derived-content notice follows the third-party notice when derived content is present; withholding adds one notice, regardless of how many blocks were withheld.
+
+No permission releases resume paths, closure notes, emails, secrets, profile files/snapshots or private profile values (salary floor, your language level, deal-breaker names), AI provider/model/usage or run records. The writer's explicitly selected material remains the separate exception described above.
+
 `get_job` still returns dormant jobs: `status` stays `possibly_closed`, and `closed_reason` is `dormant`.
 
 "What is new today" is `search_jobs` with `since` = today and `sort` = `rank`, plus `list_applications` with `stale_only`.
@@ -157,7 +175,7 @@ The reader of an answer is an AI, which is exactly what the [AI traps](ai-traps.
 - Notices come first, in this order: for `get_job`, "Job Radar found N pieces of text aimed at AI in this JD and removed them"
   (when it found any), then "The JD was cut at … characters" (when it was cut), then the notice that the posting texts are
   third-party content to be treated as data. `search_jobs` and `list_applications` give "N of M shown" (when the list was cut)
-  before the third-party notice. Every answer has the third-party notice.
+  before the third-party notice. Every answer has the third-party notice; derived-content or withholding notices follow it when applicable.
 
 This lowers the risk; it cannot rule it out. A posting can always word an instruction in a way no rule recognises. With the save
 tool off, the worst a trap can do is mislead your client's answer. With it on, a trap could also get a misleading answer version
