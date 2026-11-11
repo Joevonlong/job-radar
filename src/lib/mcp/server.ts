@@ -1,6 +1,8 @@
 /**
- * Registry-generated MCP tools, with a live filtered list and authorization against the current mcp.yaml on every call.
- * The stdio entry point is scripts/mcp-serve.ts.
+ * The MCP server (`pnpm mcp:serve`, docs/mcp.md): tools generated from the capability registry, each authorized against the current
+ * mcp.yaml on every call. Only `save_application_answer` writes, and all it can do is add an answer version. Every capability is
+ * registered with the SDK, but `tools/list` is answered by this file instead of the SDK, so the list follows the current settings
+ * and lists only what a call would accept. The stdio entry point is scripts/mcp-serve.ts.
  */
 import { McpServer, type StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 
@@ -93,6 +95,7 @@ export function buildServer(ctx: McpContext, options: { version?: string; capabi
         runLogged(ctx, cap.id, async () => {
           const decision = authorize(cap, ctx.readSettings);
           if (!decision.allowed) throw accessFailure(decision, cap, t);
+          if (cap.availability && !cap.availability.available(ctx)) throw new ToolFailure(cap.availability.category, t(cap.availability.message));
           const output = await cap.handler({ ...ctx, settings: decision.settings }, args);
           return { result: toolResult(output), count: cap.count(output) };
         }),
@@ -102,12 +105,13 @@ export function buildServer(ctx: McpContext, options: { version?: string; capabi
   server.server.removeRequestHandler("tools/list");
   server.server.setRequestHandler("tools/list", () => ({
     tools: visibleCapabilities(capabilities, ctx).map((cap) => {
+      const inputSchema = cap.input(ctx)["~standard"].jsonSchema.input({ target: "draft-2020-12" });
       const outputSchema = cap.output["~standard"].jsonSchema.output({ target: "draft-2020-12" });
       return {
         name: cap.id,
         title: t(cap.text.title),
         description: t(cap.text.description),
-        inputSchema: { type: "object" as const, ...server.toolInputSchemaJson(cap.id) },
+        inputSchema: { type: "object" as const, ...inputSchema },
         annotations: cap.annotations,
         outputSchema: outputSchema.type === undefined ? { type: "object", ...outputSchema } : outputSchema,
       };

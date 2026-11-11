@@ -14,7 +14,7 @@ import path from "node:path";
 
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
-import { liveMcpSettings } from "../src/lib/agent-access/authorize";
+import { authorize, liveMcpSettings } from "../src/lib/agent-access/authorize";
 import { CAPABILITIES, visibleCapabilities } from "../src/lib/capabilities/registry";
 import { createConnection } from "../src/lib/db/client";
 import { createReadOnlyDb } from "../src/lib/db/read-only-client";
@@ -23,7 +23,7 @@ import { stderrLine } from "../src/lib/mcp/call-log";
 import { buildServer, defaultContext } from "../src/lib/mcp/server";
 import { configProblem, readMcpSettings } from "../src/lib/mcp/settings";
 import { mcpTranslator } from "../src/lib/mcp/text";
-import { readWriterInputs } from "../src/lib/writer/settings";
+import { readWriterEnabled, readWriterInputs } from "../src/lib/writer/settings";
 
 // stdout belongs to the protocol: anything a library logs goes to stderr instead
 console.log = console.error;
@@ -39,6 +39,10 @@ function packageVersion(): string {
   }
 }
 
+/**
+ * The write connection is decided before the offered list, because the writing tool is offered only when it has one: it is opened
+ * when a writing capability is permitted at startup and writer.yaml is on. Switching it on later needs a restart.
+ */
 function main(): void {
   const text = mcpTranslator();
   let settings;
@@ -52,14 +56,17 @@ function main(): void {
     stderrLine(text("serve.disabled"));
     process.exit(1);
   }
-  const tools = visibleCapabilities(CAPABILITIES, { readSettings: liveMcpSettings, writer: { inputs: readWriterInputs, writeDb: null } }).map((capability) => capability.id);
+  const writes = readWriterEnabled() && CAPABILITIES.some((capability) => capability.kind === "write" && authorize(capability, liveMcpSettings).allowed);
+  const writable = writes ? createConnection(loadDatabaseEnv().DATABASE_URL, { max: 1 }) : null;
+  const tools = visibleCapabilities(CAPABILITIES, { readSettings: liveMcpSettings, writer: { inputs: readWriterInputs, writeDb: writable?.db ?? null } }).map(
+    (capability) => capability.id,
+  );
   if (tools.length === 0) {
     stderrLine(text("serve.noTools"));
     process.exit(1);
   }
 
   const database = createReadOnlyDb();
-  const writable = tools.includes("save_application_answer") ? createConnection(loadDatabaseEnv().DATABASE_URL, { max: 1 }) : null;
   const context = defaultContext(database.db, settings, { text, writeDb: writable?.db ?? null });
   const version = packageVersion();
   const handle = serveStdio(() => buildServer(context, { version }), {

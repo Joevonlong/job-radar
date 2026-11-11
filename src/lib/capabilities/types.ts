@@ -17,8 +17,11 @@ export interface Capability {
   count: (output: CapabilityOutput) => number;
   annotations: ToolAnnotations;
   text: { title: MessageKey; description: MessageKey };
-  /** Whether it can be offered at all right now, besides permissions (the application writer switched on, ...). */
-  available?: (ctx: Pick<McpContext, "writer">) => boolean;
+  /**
+   * Whether it can be offered and called at all right now, besides permissions (the application writer switched on, ...), and the
+   * failure a call gets when it cannot. The list and the call apply the same rule.
+   */
+  availability?: { available: (ctx: Pick<McpContext, "writer">) => boolean; category: string; message: MessageKey };
 }
 
 type CapabilityDefinition<I extends z.ZodObject, O extends z.ZodType<CapabilityOutput>> = Omit<Capability, "input" | "output" | "handler" | "count"> & {

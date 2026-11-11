@@ -30,5 +30,5 @@ export function visibleCapabilities(capabilities: readonly Capability[], ctx: Pi
     if ("error" in read) throw read.error;
     return read.settings;
   };
-  return capabilities.filter((capability) => authorize(capability, once).allowed && (capability.available?.(ctx) ?? true));
+  return capabilities.filter((capability) => authorize(capability, once).allowed && (capability.availability?.available(ctx) ?? true));
 }

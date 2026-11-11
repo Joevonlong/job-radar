@@ -13,5 +13,5 @@ export const get_application_context = defineCapability({
   count: (output) => output.questions.length,
   annotations: READ_ONLY,
   text: { title: "tools.get_application_context.title", description: "tools.get_application_context.description" },
-  available: (ctx) => ctx.writer?.inputs().writer?.enabled === true,
+  availability: { available: (ctx) => ctx.writer?.inputs().writer?.enabled === true, category: "disabled", message: "errors.writerDisabled" },
 });

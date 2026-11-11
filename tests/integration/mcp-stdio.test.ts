@@ -169,6 +169,26 @@ describe("mcp:serve over stdio", () => {
     expect(session.code).toBe(0);
   }, 60_000);
 
+  it("offers the save tool when it and the writer are on at start, which needs the write connection opened before the list", async () => {
+    const configDir = path.join(userDir, "writer-on");
+    fs.mkdirSync(configDir);
+    fs.writeFileSync(path.join(configDir, "mcp.yaml"), "enabled: true\ntools:\n  get_application_context: true\n  save_application_answer: true\n");
+    fs.writeFileSync(path.join(configDir, "writer.yaml"), "enabled: true\n");
+    const session = await converse(
+      [
+        { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "writer-test", version: "1" } } },
+        { jsonrpc: "2.0", method: "notifications/initialized" },
+        { jsonrpc: "2.0", id: 2, method: "tools/list" },
+      ],
+      serverEnv(configDir),
+    );
+    const replies = session.stdout.map((line) => JSON.parse(line) as { id: number; result?: { tools?: Array<{ name: string }> } });
+    const all = ["search_jobs", "get_job", "list_applications", "get_application_context", "save_application_answer"];
+    expect(replies.find((reply) => reply.id === 2)?.result?.tools?.map((tool) => tool.name)).toEqual(all);
+    expect(session.stderr).toContain(mcpTranslator()("serve.ready", { tools: all.join(", ") }));
+    expect(session.code).toBe(0);
+  }, 60_000);
+
   it("switched off (the default): says so on stderr, writes nothing to stdout and exits with 1", () => {
     const configDir = path.join(userDir, "off");
     fs.mkdirSync(configDir);

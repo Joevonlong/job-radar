@@ -80,7 +80,7 @@ describe("tools/list", () => {
   });
   describe("the writer tools", () => {
     const on = { tools: { search_jobs: true, get_job: true, list_applications: true, get_application_context: true, save_application_answer: true } };
-    const withWriter = (enabled: boolean) => ({ ...context(on), writer: { inputs: () => ({ writer: writerSchema.parse({ enabled }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: null } });
+    const withWriter = (enabled: boolean, writeDb: Db | null = untouchable) => ({ ...context(on), writer: { inputs: () => ({ writer: writerSchema.parse({ enabled }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb } });
     const names = async (ctx: McpContext) => (await (await connect(ctx)).listTools()).tools;
 
     it("are offered with their switch and the writer on; only the save tool says it writes, and that it destroys nothing", async () => {
@@ -97,9 +97,19 @@ describe("tools/list", () => {
       expect((await names({ ...withWriter(true), settings: context().settings, readSettings: context().readSettings })).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications"]);
     });
     it("a save without a writable connection is refused before anything is read", async () => {
-      const client = await connect(withWriter(true));
+      const client = await connect(withWriter(true, null));
       const result = await client.callTool({ name: "save_application_answer", arguments: { job_id: 1, question_id: 1, text: "An answer." } });
       expect(result.isError).toBe(true);
+    });
+    it("a save switched on after start, with no write connection opened, is not listed and a direct call is refused", async () => {
+      const lines: string[] = [];
+      const ctx = { ...withWriter(true, null), log: (line: string) => lines.push(line) };
+      const client = await connect(ctx);
+      expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_application_context"]);
+      const result = await client.callTool({ name: "save_application_answer", arguments: { job_id: 1, question_id: 1, text: "An answer." } });
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toBe(ctx.text("errors.writerDisabled"));
+      expect(lines).toEqual([expect.stringMatching(/^\[mcp\] save_application_answer fail disabled items=0 ms=\d+$/)]);
     });
   });
   it("leaves out a tool mcp.yaml switches off", async () => {
@@ -247,9 +257,23 @@ describe("tools come from the registry", () => {
     expect(lines).toEqual([expect.stringMatching(/^\[mcp\] registry_probe fail not_permitted items=0 ms=\d+$/)]);
   });
 
+  it("applies a capability's availability to the call as well as the list, before its handler runs", async () => {
+    const lines: string[] = [];
+    let ran = false;
+    const unavailable = { ...fake, handler: async () => { ran = true; return { notices: [], value: "", limit: 0 }; }, availability: { available: () => false, category: "disabled", message: "errors.writerDisabled" as const } };
+    const ctx = context({}, lines);
+    const client = await connectCapabilities(ctx, [...CAPABILITIES, unavailable]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).not.toContain(fake.id);
+    const result = await client.callTool({ name: fake.id, arguments: { value: "hello" } });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toBe(ctx.text("errors.writerDisabled"));
+    expect(ran).toBe(false);
+    expect(lines).toEqual([expect.stringMatching(/^\[mcp\] registry_probe fail disabled items=0 ms=\d+$/)]);
+  });
+
   it("lists byte-identical tool definitions to the SDK for all five tools", async () => {
     const ctx = context({ tools: { search_jobs: true, get_job: true, list_applications: true, get_application_context: true, save_application_answer: true } });
-    ctx.writer = { inputs: () => ({ writer: writerSchema.parse({ enabled: true }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: null };
+    ctx.writer = { inputs: () => ({ writer: writerSchema.parse({ enabled: true }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: untouchable };
     const reference = new McpServer({ name: "reference", version: "1" }, { capabilities: { tools: {} } });
     for (const cap of CAPABILITIES) {
       reference.registerTool(cap.id, { title: ctx.text(cap.text.title), description: ctx.text(cap.text.description), inputSchema: cap.input(ctx), outputSchema: cap.output, annotations: cap.annotations }, async () => ({ content: [], isError: true }));
