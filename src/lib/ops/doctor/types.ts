@@ -109,7 +109,7 @@ export interface DoctorProbes {
   configWrites(): Promise<ConfigWritesPlan>;
   /** traps.yaml and the trap counts (`stats` null when the tables are not migrated). Throws when the database cannot be read. */
   traps(now: Date): Promise<TrapsProbe>;
-  /** mcp.yaml: whether the MCP server is switched on and which tools (or why the file cannot be read). Never throws. */
+  /** mcp.yaml: whether the MCP server is enabled, its global matrix and effective stdio permissions (or why the file cannot be read). Never throws. */
   mcp(): Promise<McpProbe>;
   /** replies.yaml, the mailbox credentials (only whether they are set) and the replies waiting. Never throws on a bad file. */
   replies(now: Date): Promise<RepliesProbe>;
@@ -148,8 +148,8 @@ export type TrapsProbe =
   | { state: "ok"; enabled: boolean; backlogWarn: number; recentDays: number; stats: { jobsWithTraps: number; recentJobsWithTraps: number; backlog: number } | null }
   | { state: "config_error"; problem: string };
 
-/** What `data.mcp` reads: the switch and the switched-on tools of mcp.yaml, or why it cannot be read. */
-export type McpProbe = { state: "ok"; enabled: boolean; tools: string[] } | { state: "config_error"; problem: string };
+/** What `data.mcp` reads: the switch, global matrix and effective stdio permissions of mcp.yaml, or why it cannot be read. */
+export type McpProbe = { state: "ok"; enabled: boolean; permissions: readonly string[]; effective: readonly string[] } | { state: "config_error"; problem: string };
 
 /** What `data.replies` reads: the switch, the label, when it was last read and the replies older than `doctor.pending_warn_days`. */
 export type RepliesProbe =

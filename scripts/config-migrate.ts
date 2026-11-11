@@ -134,6 +134,7 @@ async function main(): Promise<number> {
     const shown = displayConfigPath(item.path);
     console.log(`\n~ ${shown}  config_version ${item.from} -> ${item.to}`);
     for (const step of item.steps) console.log(`    ${step.from} -> ${step.to}${step.description ? `: ${step.description}` : ""}`);
+    for (const notice of item.notices) console.log(`    note: ${notice}`);
     if (item.conversion) {
       for (const [label, keys] of Object.entries(item.conversion)) if (keys.length > 0) console.log(`    ${label} (${keys.length}): ${keys.join(", ")}`);
     }

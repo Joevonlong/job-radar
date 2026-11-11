@@ -8,8 +8,8 @@ client starts `pnpm mcp:serve` as a local child process and talks to it over std
 
 - **Off by default.** Nothing happens until you set `enabled: true` in `mcp.yaml`.
 - **Local only.** No port is opened and there is no token: only a program you configure on this computer can start it.
-- **Read-only, with one switchable exception.** The tools read over read-only database sessions. The only tool that can write,
-  `save_application_answer`, is off until you switch it on, and all it can do is add an answer version. The server never starts a
+- **Read-only, with one permission-controlled exception.** The tools read over read-only database sessions. The only tool that can write,
+  `save_application_answer`, requires `writer:write`, and all it can do is add an answer version. The server never starts a
   collection or an AI call.
 
 ## What leaves your machine
@@ -32,7 +32,7 @@ The career profile itself (its files, documents, contact details and drafts) is 
 The list is fixed in code (`src/lib/mcp/dto.ts`); each answer is built field by field, so a new database column never shows up
 by itself.
 
-**Switching on `get_application_context` adds your own writing material to what leaves:** the job's breakdown points, its
+**Granting `writer:read`, which gives `get_application_context`, adds your own writing material to what leaves:** the job's breakdown points, its
 application questions and settings, the saved answer versions with their sentence statuses and evidence quotes, and for each
 question what you chose for it: your profile summary, skills and languages, the chosen stories, the emphasis note. Stories that **Apply to matching** wrote from the [career profile](career-profile.md) count like any other story: sent only when chosen. Stories you did
 not choose, the rest of your profile files, coach reviews and saved snapshots stay out. It also gives the company background (AI web search,
@@ -41,14 +41,30 @@ made, even if they are no longer chosen.
 
 ## Turning it on
 
-1. Open `mcp.yaml` (Settings → Advanced, or `data/config/mcp.yaml`) and set `enabled: true`. Each tool can be switched off on
-   its own under `tools`; `limits` caps how many items one call returns (`max_results`, at most 100) and how long a JD may be
+1. Open `mcp.yaml` (Settings → Advanced, or `data/config/mcp.yaml`) and set `enabled: true`. The global `permissions` matrix caps every connection; the local grant is
+   `stdio.permissions`, and only their intersection is effective. Both default to `jobs:read` and `tracking:read`; `limits` caps how many items one call returns (`max_results`, at most 100) and how long a JD may be
    (`max_description_chars`).
-2. Check it: `pnpm run doctor` shows `data.mcp` as on, with the tools.
+2. Check it: `pnpm run doctor` shows `data.mcp` as on, with the global matrix and effective stdio permissions.
 3. Add the server to your client (below), then restart the client.
 
-The server reads `mcp.yaml` again on every call. Switching it off, switching a tool off, or a file that can no longer be read
-refuses the next call of a client that is already connected, without a restart; switching something on needs a client restart.
+The server reads `mcp.yaml` again on every call. Disabling it, removing a permission, or a file that can no longer be read
+refuses the next call of a client that is already connected, without a restart; granting access needs a client restart.
+
+`search_jobs` and `get_job` share `jobs:read`; `list_applications` needs `tracking:read`. Other ids from the permission catalog
+are accepted but do not expose tools yet. Version-2 tool switches migrate to both permission lists; if only one jobs tool
+was off, `jobs:read` offers both and `config:migrate` prints a notice. Remove `jobs:read` to disable both.
+
+```yaml
+config_version: 3
+enabled: true
+permissions:
+  - jobs:read
+  - tracking:read
+stdio:
+  permissions:
+    - jobs:read
+    - tracking:read
+```
 
 The server reads the database the same way the host-side `ai-worker` does: from `.env` in the project directory (or the
 `POSTGRES_*` defaults, port 5433). The stack has to be running (`docker compose up -d`).
@@ -104,7 +120,8 @@ Every answer says how many items matched (`total`) and how many it returns (`ret
 
 ## Writing answers from your client
 
-Set `get_application_context` and `save_application_answer` to `true` under `tools` (they also need `writer.yaml: enabled`; while
+Add `writer:read` (for `get_application_context`) and `writer:write` (for `save_application_answer`) to both `permissions` and
+`stdio.permissions` (they also need `writer.yaml: enabled`; while
 the writer is off they are not offered). Then your client's own model can write an answer and add it to the question on the job's
 apply page, where you review, change or finalise it as usual ([application-writer.md](application-writer.md)).
 
@@ -119,7 +136,7 @@ apply page, where you review, change or finalise it as usual ([application-write
   "External, unverified".
 - Invisible characters are removed before saving. The version is labelled "From your AI client" and records no provider or model.
 
-It uses a database connection of its own, opened only when the tool is on. All other tools stay on the read-only sessions. With the
+It uses a database connection of its own, opened only when `writer:write` is effective and the writer is enabled. All other tools stay on the read-only sessions. With the
 [read-only role](#optional-a-database-role-that-can-only-read) below, saving fails with a database error: that role cannot write.
 
 ## AI traps and the JD
@@ -178,9 +195,9 @@ config file; keep that file private.
 |---|---|
 | The client says the server exited; its log shows "The Job Radar MCP server is switched off" | `mcp.yaml: enabled` is `false`. Set it to `true` and restart the client. |
 | "mcp.yaml cannot be read" | `pnpm config:check` names the setting. |
-| A call fails with "has not granted …" or "is switched off in mcp.yaml" | `mcp.yaml` was changed while the client was connected: that tool is off now. Switch it back on and restart the client. |
-| "Every tool is switched off" | All `tools` are `false`. |
-| `get_application_context` or `save_application_answer` is not offered | It is `false` under `tools`, or `writer.yaml: enabled` is `false`. Restart the client after changing either. |
+| A call fails with "has not granted …" | The required permission is missing from `permissions` or `stdio.permissions`. Add it to both and restart the client. |
+| "No tools are available" | The effective permission set grants no available tools. Check both permission lists and `writer.yaml: enabled`. |
+| `get_application_context` or `save_application_answer` is not offered | Its permission is absent from either list, or `writer.yaml: enabled` is `false`. Restart the client after changing either. |
 | "text does not match sentences" | The client sent two different answers. Send the same one in both, or leave `sentences` out. |
 | "already holds … versions" | See [Writing answers from your client](#writing-answers-from-your-client). |
 | `command not found` / `spawn pnpm ENOENT` | The client does not find `pnpm` or `node`: use absolute paths and set `PATH` in `env` (see Claude Desktop above). |

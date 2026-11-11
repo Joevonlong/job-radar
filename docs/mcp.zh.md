@@ -7,7 +7,7 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 - **默认关闭。** 在 `mcp.yaml` 里设 `enabled: true` 之前什么都不会发生。
 - **只在本机。** 不开端口、没有 token：只有你在这台电脑上配置的程序能启动它。
-- **只读，有一个可以打开的例外。** 工具都通过只读的数据库会话读取。唯一能写的工具 `save_application_answer` 默认关闭，打开后也只能新增答案版本。服务从不触发采集或 AI 调用。
+- **只读，有一个由权限控制的例外。** 工具都通过只读的数据库会话读取。唯一能写的工具 `save_application_answer` 需要 `writer:write` 权限，也只能新增答案版本。服务从不触发采集或 AI 调用。
 
 ## 哪些数据会离开本机
 
@@ -27,15 +27,29 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 这份清单写死在代码里（`src/lib/mcp/dto.ts`）；每个回答都逐字段构建，数据库加了新列也不会自己出现在回答里。
 
-**打开 `get_application_context` 后，离开本机的内容会多出你自己的写作材料：** 岗位的拆解要点、申请问题和设置、已保存的答案版本及其每句状态和证据引用，以及你为每道题选的内容：画像摘要、技能和语言、选中的故事、强调说明。[职业档案](career-profile.zh.md)经**应用到匹配**写入的故事和其他故事一样，只有被选中时才给出。没选的故事、画像文件的其余部分、教练审阅和保存的快照都不给。 它还给出公司背景（AI 网页搜索，未核对）和契合要点，并提示这些是引用数据；要点保留生成时所选经历的短引用，即使它们后来不再被选中。
+**授予 `writer:read`（它提供 `get_application_context`）后，离开本机的内容会多出你自己的写作材料：** 岗位的拆解要点、申请问题和设置、已保存的答案版本及其每句状态和证据引用，以及你为每道题选的内容：画像摘要、技能和语言、选中的故事、强调说明。[职业档案](career-profile.zh.md)经**应用到匹配**写入的故事和其他故事一样，只有被选中时才给出。没选的故事、画像文件的其余部分、教练审阅和保存的快照都不给。 它还给出公司背景（AI 网页搜索，未核对）和契合要点，并提示这些是引用数据；要点保留生成时所选经历的短引用，即使它们后来不再被选中。
 
 ## 打开它
 
-1. 打开 `mcp.yaml`（设置 → 高级，或 `data/config/mcp.yaml`），设 `enabled: true`。`tools` 下每个工具可以单独关；`limits` 限制每次调用返回的条数（`max_results`，最多 100）和 JD 长度（`max_description_chars`）。
-2. 检查：`pnpm run doctor` 的 `data.mcp` 显示已打开和工具列表。
+1. 打开 `mcp.yaml`（设置 → 高级，或 `data/config/mcp.yaml`），设 `enabled: true`。全局 `permissions` 是所有连接的权限上限，本机连接的授权写在 `stdio.permissions`，只有两者的交集生效；两者默认都是 `jobs:read` 和 `tracking:read`。`limits` 限制每次调用返回的条数（`max_results`，最多 100）和 JD 长度（`max_description_chars`）。
+2. 检查：`pnpm run doctor` 的 `data.mcp` 显示已打开、全局矩阵和 stdio 的有效权限。
 3. 把服务加到你的客户端（见下），然后重启客户端。
 
-服务每次调用都重读 `mcp.yaml`。把它关掉、关掉某个工具，或者文件读不出来，已经连上的客户端下一次调用就会被拒，不用重启；打开什么则要重启客户端。
+服务每次调用都重读 `mcp.yaml`。把它关掉、移除某个权限，或者文件读不出来，已经连上的客户端下一次调用就会被拒，不用重启；新增授权则要重启客户端。
+
+`search_jobs` 和 `get_job` 共用 `jobs:read`，`list_applications` 需要 `tracking:read`。权限目录中的其他 id 也能填写，但暂不提供工具。版本 2 的工具开关会迁移为两份权限列表；如果此前只关了一个岗位工具，`jobs:read` 会同时提供两个，`config:migrate` 会打印提示。移除 `jobs:read` 可以同时关闭两个。
+
+```yaml
+config_version: 3
+enabled: true
+permissions:
+  - jobs:read
+  - tracking:read
+stdio:
+  permissions:
+    - jobs:read
+    - tracking:read
+```
 
 服务读数据库的方式和宿主机上的 `ai-worker` 一样：读项目目录里的 `.env`（或 `POSTGRES_*` 默认值，端口 5433）。需要整套服务在运行（`docker compose up -d`）。
 
@@ -87,7 +101,7 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 
 ## 从客户端写答案
 
-在 `tools` 下把 `get_application_context` 和 `save_application_answer` 设为 `true`（还需要 `writer.yaml: enabled`；写作功能关着时不提供这两个工具）。之后你的客户端可以用它自己的模型写答案，并加到岗位申请页的问题上，由你照常复核、修改或定稿（[application-writer.zh.md](application-writer.zh.md)）。
+在 `permissions` 和 `stdio.permissions` 中都加入 `writer:read`（`get_application_context`）和 `writer:write`（`save_application_answer`）（还需要 `writer.yaml: enabled`；写作功能关着时不提供这两个工具）。之后你的客户端可以用它自己的模型写答案，并加到岗位申请页的问题上，由你照常复核、修改或定稿（[application-writer.zh.md](application-writer.zh.md)）。
 
 `save_application_answer` 只能新增：
 
@@ -96,7 +110,7 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 - 谁都不能指定状态。传 `sentences`（每句带 `text`、`about` 和从材料逐字复制的证据引用）时，Job Radar 用和工作台相同的规则，按这道题当前选中的材料逐句核对。`text` 必须和 `sentences` 是同一份答案，否则不保存。不传 `sentences` 时，每句都记为“外部，未核对”。
 - 保存前去掉不可见字符。这个版本标为“来自你的 AI 客户端”，不记录提供方或模型。
 
-它用一条单独的数据库连接，只在这个工具打开时才建立，其他工具都仍走只读会话。用下面的[只读角色](#可选只能读的数据库角色)时，保存会报数据库错误：这个角色不能写。
+它用一条单独的数据库连接，只在 `writer:write` 生效且写作功能开启时才建立，其他工具都仍走只读会话。用下面的[只读角色](#可选只能读的数据库角色)时，保存会报数据库错误：这个角色不能写。
 
 ## AI 陷阱与 JD
 
@@ -141,9 +155,9 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO job_radar_ro
 |---|---|
 | 客户端说服务退出了，日志里是"Job Radar 的 MCP 服务没有打开" | `mcp.yaml: enabled` 是 `false`。改成 `true` 再重启客户端。 |
 | "mcp.yaml 读不出来" | `pnpm config:check` 会指出是哪一项。 |
-| 调用失败，说"没有给这个连接授权 …"或"在 mcp.yaml（tools）里关掉了" | 客户端连着的时候 `mcp.yaml` 改过：这个工具现在是关的。打开它，再重启客户端。 |
-| "所有工具都关了" | `tools` 下每一项都是 `false`。 |
-| 客户端里没有 `get_application_context` 或 `save_application_answer` | 它在 `tools` 下是 `false`，或 `writer.yaml: enabled` 是 `false`。改完要重启客户端。 |
+| 调用失败，说"没有给这个连接授权 …" | 所需权限不在 `permissions` 或 `stdio.permissions` 中。两处都加入后重启客户端。 |
+| "没有可用工具" | 有效权限没有授予可用工具。检查两份权限列表和 `writer.yaml: enabled`。 |
+| 客户端里没有 `get_application_context` 或 `save_application_answer` | 所需权限不在两份列表中，或 `writer.yaml: enabled` 是 `false`。改完要重启客户端。 |
 | "text 和 sentences 对不上" | 客户端发了两份不同的答案。两边发同一份，或者不传 `sentences`。 |
 | "已有 … 个版本" | 见[从客户端写答案](#从客户端写答案)。 |
 | `command not found` / `spawn pnpm ENOENT` | 客户端找不到 `pnpm` 或 `node`：用绝对路径，并在 `env` 里设 `PATH`（见上面 Claude Desktop 一节）。 |

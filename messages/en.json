@@ -6378,7 +6378,8 @@
         },
         "mcp": {
           "title": "MCP server for AI clients",
-          "on": "On: an MCP client you configured can read jobs and applications (tools: {tools}). Its model provider receives what the tools return, see docs/mcp.md",
+          "on": "On: an MCP client you configured can use these permissions: {effective} (allowed overall: {matrix}). Its model provider receives what the tools return, see docs/mcp.md",
+          "none": "none",
           "off": "Off (mcp.yaml enabled: false, the default)",
           "configError": "mcp.yaml cannot be read: {problem}",
           "configHint": "pnpm config:check shows which setting"
@@ -7356,7 +7357,7 @@
     "serve": {
       "disabled": "The Job Radar MCP server is switched off. Set enabled: true in mcp.yaml (in data/config/, or on Settings → Advanced), then restart your MCP client. See docs/mcp.md.",
       "configError": "mcp.yaml cannot be read: {problem}. Run pnpm config:check to see which setting.",
-      "noTools": "Every tool is switched off in mcp.yaml (tools): there is nothing to serve.",
+      "noTools": "No tools are available with the effective permissions in mcp.yaml: there is nothing to serve.",
       "ready": "Job Radar MCP server ready (stdio). Tools: {tools}",
       "stopped": "Job Radar MCP server stopped",
       "failed": "The Job Radar MCP server stopped after an error ({category})"
@@ -7378,7 +7379,6 @@
       "settingsUnreadable": "mcp.yaml cannot be read ({problem}), so no call is allowed until it is fixed. Run pnpm config:check to see which setting.",
       "serverOff": "The Job Radar MCP server is switched off (mcp.yaml enabled), so this call was refused.",
       "notPermitted": "The owner has not granted {permission} to this connection (mcp.yaml), so this call was refused.",
-      "toolSwitchedOff": "{tool} is switched off in mcp.yaml (tools), so this call was refused.",
       "notFound": "No job with id {id}.",
       "searchTimeout": "Searching job descriptions took too long and was stopped (search_timeout). Narrow the query or the filters, or search without search_in: \"all\".",
       "failed": "The query failed ({category}). Your MCP client's log for this server has the line of this call.",

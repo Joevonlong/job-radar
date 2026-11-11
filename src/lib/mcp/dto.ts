@@ -6,11 +6,11 @@
  *
  * Given: job facts, source links, score numbers and rank, compensation and benefit signals with their JD quotes, the JD after
  * AI-trap cleaning, and the status, status dates, next step and interview rounds of the user's applications.
- * Given only by `get_application_context`, which is off until mcp.yaml switches it on: a job's breakdown points; its application
+ * Given only by `get_application_context`, which requires effective writer:read in mcp.yaml: a job's breakdown points; its application
  * questions and their settings; for each question the material chosen for it (profile summary, skills and languages, the chosen
  * stories, the emphasis note); the fields of the company background (AI web search, unverified) and the fit note made from them; and
  * the answer versions with their sentence statuses and evidence quotes.
- * Never given (no switch turns them on): the profile files as such and profile snapshots; stories not chosen for a question (a fit note keeps short quotes of the stories chosen when it was made, whatever is chosen now); anything derived from the profile (match reasons,
+ * Never given (no permission exposes them): the profile files as such and profile snapshots; stories not chosen for a question (a fit note keeps short quotes of the stories chosen when it was made, whatever is chosen now); anything derived from the profile (match reasons,
  * gaps, filter reasons, the salary floor, the German-level deduction, the signal bonus, deal-breaker hits and visa matches); notes
  * of any kind (application notes, event notes, favorite notes); local paths (resume variants); emails; secrets; AI usage,
  * notifications and run records.

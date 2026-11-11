@@ -7,19 +7,25 @@
 # match reasons and gaps, filter reasons and your salary floor, notes, emails, local paths, keys.
 
 # Version of this file's structure; don't edit by hand (a migration script upgrades it when the structure changes)
-config_version: 1
+config_version: 3
 
 # Master switch. false: `pnpm mcp:serve` refuses to start and says why (your client shows the message)
 enabled: false
 
-# Each tool can be switched off on its own (it is then not offered to the client)
-tools:
-  # Search jobs by keyword, city, work mode, minimum rank, minimum salary, date and application status; ranked cards, no JD text
-  search_jobs: true
-  # One job in detail: facts, source links, score and rank, signals with quotes, trap counts, the cleaned JD
-  get_job: true
-  # Your applications by status; `stale_only` lists the ones waiting longer than the reminder thresholds of notify.yaml
-  list_applications: true
+# The global matrix is the most any connection may receive. Tool permissions:
+# search_jobs / get_job: jobs:read; list_applications: tracking:read
+# get_application_context: writer:read and writer.yaml enabled (shares your chosen application material)
+# save_application_answer: writer:write and writer.yaml enabled (only adds answer versions)
+# Other catalog permission ids are accepted but do not give tools yet.
+permissions:
+  - jobs:read
+  - tracking:read
+
+# The local stdio connection receives only the intersection of this list and the global matrix above.
+stdio:
+  permissions:
+    - jobs:read
+    - tracking:read
 
 limits:
   # Most jobs or applications one call returns (1-100); the answer says when more matched

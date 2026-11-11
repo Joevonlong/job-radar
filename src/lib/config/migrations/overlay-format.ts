@@ -1,5 +1,5 @@
 /**
- * The last step of a layered file's chain: from this version on the user's file holds only the keys that differ from the
+ * The format boundary in a layered file's chain: from this version on the user's file holds only the keys that differ from the
  * shipped file. The step itself changes nothing in the document (the conversion in `files.ts` does); it is `convertOnly`,
  * so the loader and the writer stop before it and only `config:migrate --write --convert-overlays` crosses it.
  */

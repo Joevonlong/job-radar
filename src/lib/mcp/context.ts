@@ -13,8 +13,8 @@ export interface McpWriterAccess {
   /** writer.yaml, me.yaml and stories.yaml as they are now. */
   inputs: () => WriterInputs;
   /**
-   * The only connection that can write, used by `save_application_answer` and by nothing else. Null unless that tool is switched
-   * on and the application writer is on.
+   * The only connection that can write, used by `save_application_answer` and by nothing else. Null unless writer:write is
+   * effective and the application writer is on.
    */
   writeDb: Db | null;
 }
