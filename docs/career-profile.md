@@ -88,7 +88,7 @@ Files written by the app have mode `0600`. The directory is created on the first
 save button and stale-file check. They are overwritten without history: old contact values are never copied into career
 history. The contact photo field is not used; résumé documents use the shared photo uploaded in the document editor.
 
-The contact file is not sent to AI. A city or other personal detail in source text can still be sent if it remains in the confirmed preview. The manual editor sends no career content to AI, Telegram or MCP and writes no database profile snapshots. Profile text can itself contain
+The contact file is not sent to AI. A city or other personal detail in source text can still be sent if it remains in the confirmed preview. The manual editor sends no career content to AI or Telegram and writes no database profile snapshots. Separately, explicitly granted `career:read` while career is enabled lets MCP read redacted profiles/documents and their history, proposals and checks from the host directory; contact fields and links become bracket placeholders, images are presence flags only, and no PDF is returned (see [MCP](mcp.md#career-and-replies-off-by-default)). Profile text can itself contain
 contact details; its warning is advisory. Saved files, including contact details, can remain in backups.
 
 ## History and restoration

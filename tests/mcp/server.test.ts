@@ -416,6 +416,7 @@ describe("tools come from the registry", () => {
   it("lists byte-identical tool definitions to the SDK for every registered tool", async () => {
     const ctx = context({ permissions: [...PERMISSIONS], stdio: { permissions: [...PERMISSIONS] } });
     ctx.writer = { inputs: () => ({ writer: writerSchema.parse({ enabled: true }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: untouchable };
+    ctx.features = { careerEnabled: () => true, repliesEnabled: () => true };
     const reference = new McpServer({ name: "reference", version: "1" }, { capabilities: { tools: {} } });
     for (const cap of CAPABILITIES) {
       reference.registerTool(cap.id, { title: ctx.text(cap.text.title), description: ctx.text(cap.text.description), inputSchema: cap.input(ctx), outputSchema: cap.outputFor?.(new Set(ctx.settings.permissions)) ?? cap.output, annotations: cap.annotations }, async () => ({ content: [], isError: true }));

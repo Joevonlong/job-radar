@@ -46,6 +46,8 @@ export interface McpContext {
   log: LogLine;
   /** Absent: the writer tools are not offered. */
   writer?: McpWriterAccess;
+  /** Absent readers close the corresponding feature gates. */
+  features?: { careerEnabled: () => boolean; repliesEnabled: () => boolean };
   /**
    * The caller's effective permissions for this call, from the authorization decision (the server sets it; never read settings a
    * second time). Absent: no field block is given.
@@ -59,6 +61,11 @@ export interface McpContext {
   /** Re-reads a token grant before each call; a token grant without it is refused. */
   readGrant?: GrantReader;
   auditCall?: { success: (count: number) => AuditEntry; committed: boolean };
+  /**
+   * Runs one tool call. The HTTP route keeps the request's concurrency slot until every call it runs has settled, even
+   * after the client disconnects. Absent (stdio): the call just runs.
+   */
+  track?: <T>(call: () => Promise<T>) => Promise<T>;
 }
 
 type ErrorResult = ReturnType<typeof errorResult>;

@@ -18,12 +18,13 @@ Job Radar is a single-user tool that you run on your own machine:
 
 - The web interface binds to `127.0.0.1` only and, by default, has no login. An optional password
   (`JOB_RADAR_WEB_PASSWORD_HASH`, made with `pnpm web:password`; `docs/configuration.md`, "Web access") puts a sign-in
-  page in front of every page, API route and Server Action; set it before anybody else can reach the web (a shared
+  page in front of protected pages, API routes and Server Actions; set it before anybody else can reach the web (a shared
   tailnet, the LAN through `JOB_RADAR_WEB_BIND`, a reverse proxy). The password is stored as an scrypt hash, compared
   in constant time and never logged; sessions are HMAC-signed `HttpOnly`, `SameSite=Lax` cookies (`Secure` and the
   `__Host-` prefix over https) that end when the password changes or on "Sign out everywhere"; failed logins are rate-limited per source and globally before any hash is
   computed. Do not publish port 3000 to a network you do not trust without it; for phone access use a private overlay
   network such as Tailscale, not a public tunnel.
+- The exact path `/api/mcp`, methods `POST`, `GET` and `DELETE`, without a `Next-Action` header bypasses the browser session gate. All methods reaching the route require both MCP switches and a usable web password first (404/503 otherwise). POST checks its own agent token, including localhost; GET/DELETE return only static 405 `{"error":"method_not_allowed"}` with `Allow: POST`, without token lookup, throttling or database work. Other path spellings, methods and requests with `Next-Action` retain the normal session rules. Host and Origin checks run first. POST has independent failure throttling, bounded bodies and concurrency, no CORS, and dedicated database pools. Disconnects cancel body reads but keep the concurrency slot until awaited work settles. Refusal logs use a short keyed hash that changes on restart: the first eight hex characters of HMAC-SHA256 with a random per-process key generated on first use, never logged or persisted. The endpoint is meant for localhost or Tailscale only; Tailscale encrypts the link and `tailscale serve` adds HTTPS. Plain HTTP on an ordinary LAN or Internet address sends the bearer token in clear text. See [MCP HTTP](docs/mcp.md#reaching-it-from-other-devices-http).
 - With a password set, requests from the machine itself skip the login: the decision rests on request headers (the
   `Host`, the forwarded client address, the absence of proxy headers), because the web cannot see the real peer address
   inside Docker, and a client can send any of these headers itself. The exemption is therefore on only when

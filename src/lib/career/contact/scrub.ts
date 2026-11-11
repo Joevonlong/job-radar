@@ -18,8 +18,7 @@ function contactForScrub(): CareerContact {
   catch { throw new CareerStoreError("contact_invalid"); }
 }
 
-function storedValues(): StoredValues {
-  const contact = contactForScrub();
+function storedValues(contact = contactForScrub()): StoredValues {
   const min = loadConfig("career").import.stored_value_min_chars;
   const values: { value: string; kind: ScrubKind; highlightOnly?: boolean }[] = [];
   for (const kind of ["name", "address", "email", "phone", "work_auth", "availability"] as const) {
@@ -40,6 +39,10 @@ function storedValues(): StoredValues {
 }
 
 export function scrubCareerFinal(text: string) { return scrubFinal(text, storedValues()); }
+export function careerOutboundScrubber(contact?: CareerContact): (text: string) => string {
+  const stored = storedValues(contact);
+  return (text) => scrubOutbound(text, stored).text;
+}
 export function scrubCareerOutbound(text: string) { return scrubOutbound(text, storedValues()); }
 export function outboundCareerText(text: string) { return toOutbound(text, storedValues()); }
 export function confirmCareerText(text: string) { return confirmedOutbound(text, storedValues()); }

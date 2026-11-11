@@ -181,14 +181,22 @@ export const trapsCheck: DoctorCheck = {
 
 const mcpSpec = { id: "data.mcp", group: "data" } as const;
 
-/** Whether the MCP server (`pnpm mcp:serve`) is enabled, with its global matrix and effective stdio permissions; off is the default and fine. */
+/** MCP transports and permissions, with a warning while HTTP lacks its web-password precondition. */
 export const mcpCheck: DoctorCheck = {
   ...mcpSpec,
   async run(ctx) {
     const probe = await ctx.probes.mcp();
     if (probe.state === "config_error") return warn(mcpSpec, ctx.t("checks.data.mcp.configError", { problem: probe.problem }), ctx.t("checks.data.mcp.configHint"));
-    if (!probe.enabled) return ok(mcpSpec, ctx.t("checks.data.mcp.off"));
-    return ok(mcpSpec, ctx.t("checks.data.mcp.on", { effective: probe.effective.join(", ") || ctx.t("checks.data.mcp.none"), matrix: probe.permissions.join(", ") || ctx.t("checks.data.mcp.none"), days: probe.auditRetentionDays }));
+    const summary = probe.enabled
+      ? ctx.t("checks.data.mcp.on", { effective: probe.effective.join(", ") || ctx.t("checks.data.mcp.none"), matrix: probe.permissions.join(", ") || ctx.t("checks.data.mcp.none"), days: probe.auditRetentionDays })
+      : ctx.t("checks.data.mcp.off");
+    const detail = `${summary} ${ctx.t("checks.data.mcp.http", {
+      enabled: String(probe.httpEnabled),
+      count: probe.activeTokens === null ? ctx.t("checks.data.mcp.unknown") : String(probe.activeTokens),
+      expiry: probe.activeTokens === null ? ctx.t("checks.data.mcp.unknown") : probe.nearestExpiry?.toISOString() ?? ctx.t("checks.data.mcp.none"),
+    })}`;
+    if (probe.enabled && probe.httpEnabled && !probe.webPasswordUsable) return warn(mcpSpec, `${detail} ${ctx.t("checks.data.mcp.passwordRequired")}`, ctx.t("checks.data.mcp.passwordHint"));
+    return ok(mcpSpec, detail);
   },
 };
 

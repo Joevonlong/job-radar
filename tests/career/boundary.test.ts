@@ -273,8 +273,18 @@ test("all source dependencies respect the career and engine boundaries", () => {
   expect(coreCareerImports(sources)).toEqual(CORE_IMPORTING_CAREER);
 });
 
-test("the core career import whitelist contains only the card, the job page entry and career handler registration", () => {
-  expect(CORE_IMPORTING_CAREER).toEqual({ "src/app/jobs/[id]/page.tsx": ["src/components/career/job-entry.tsx"], "src/app/me/page.tsx": ["src/components/career/career-card.tsx"], "src/lib/control/ai-handlers.ts": ["src/lib/career/extract/handler.ts", "src/lib/career/tailor/handler.ts"] });
+test("core career consumers are limited to UI entries, handlers and read capabilities with redacted DTOs", () => {
+  expect(Object.keys(CORE_IMPORTING_CAREER).sort()).toEqual([
+    "src/app/jobs/[id]/page.tsx",
+    "src/app/me/page.tsx",
+    "src/lib/capabilities/career/check-career-document.ts",
+    "src/lib/capabilities/career/get-career-document.ts",
+    "src/lib/capabilities/career/get-career-profile.ts",
+    "src/lib/capabilities/career/list-career-documents.ts",
+    "src/lib/capabilities/career/shared.ts",
+    "src/lib/control/ai-handlers.ts",
+    "src/lib/mcp/dto/career.ts",
+  ]);
 });
 
 test("core career import comparison rejects unlisted imports and unused whitelist entries", () => {
@@ -556,9 +566,13 @@ test("the resume-kit import is reachable only from web routes and pages, never f
   expect([...new Set(users)].sort()).toEqual(["src/app/api/career/import/route.ts", "src/components/career/kit-import.tsx"]);
 });
 
-test("MCP modules and capabilities never import career modules and expose only the expected tools", async () => {
-  const career = ["src/lib/mcp", "src/lib/capabilities"].flatMap(importedTargets).filter(({ to }) => isCareer(to));
-  expect(career).toEqual([]);
+test("MCP exposes only redacted career schemas and the registered read capabilities", async () => {
+  const career = importedTargets("src/lib/mcp").filter(({ to }) => CAREER.some((directory) => to.startsWith(`${directory}/`)));
+  expect(career).toEqual([
+    { file: "src/lib/mcp/dto/career.ts", to: "src/lib/career/contact/redact-profile.ts" },
+    { file: "src/lib/mcp/dto/career.ts", to: "src/lib/career/document/redact.ts" },
+    { file: "src/lib/mcp/dto/career.ts", to: "src/lib/career/tailor/proposal-schema.ts" },
+  ]);
   const { CAPABILITIES } = await import("@/lib/capabilities/registry");
-  expect(CAPABILITIES.map((capability) => capability.id)).toEqual(["search_jobs", "get_job", "get_job_raw", "list_applications", "get_profile", "get_interests", "preview_deal_breakers", "preview_interest_category", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer", "get_system_status", "list_cycles", "list_channels", "get_activity_log", "get_ai_usage"]);
+  expect(CAPABILITIES.map((capability) => capability.id)).toEqual(["search_jobs", "get_job", "get_job_raw", "list_applications", "get_profile", "get_interests", "preview_deal_breakers", "preview_interest_category", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer", "get_career_profile", "list_career_documents", "get_career_document", "check_career_document", "list_replies", "get_system_status", "list_cycles", "list_channels", "get_activity_log", "get_ai_usage"]);
 });

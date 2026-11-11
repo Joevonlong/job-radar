@@ -1,12 +1,15 @@
 # MCP server (docs/mcp.md): lets an MCP client you configure yourself (Claude Desktop, Claude Code, ...) query your jobs and
-# applications. The client starts `pnpm mcp:serve` as a local child process and talks to it over stdio; no port is opened. Nothing
+# applications. Local clients start `pnpm mcp:serve` over stdio; optional HTTP uses the web port and agent tokens. Nothing
 # can be written, except that `save_application_answer`, when you grant writer:write, adds answer versions; it cannot change or
 # delete any. Each call also adds one metadata row to the local `agent_calls` table (see `audit` below).
 # Privacy: whatever the tools return is handed by your client to the model provider it uses (Anthropic for Claude, ...).
 # What may be returned is fixed in code: job facts, source links, scores and ranks, signals with their JD quotes, the JD after
 # AI-trap cleaning, and the status, dates, next step and interview rounds of your applications. Match and note fields require
-# their own permissions. Never returned: contact/career files, profile snapshots, import drafts, emails, local paths, keys.
+# their own permissions. Never returned: contact files, profile snapshots, import drafts, mail content/identifiers, local paths, keys.
 # profile:read shares me/preferences/stories (including salary floor and language levels), interests and read-only previews.
+# career:read shares redacted career profiles, versions, documents, proposals and checks; no contact values, images or PDFs.
+# Contact rules use bracket placeholders such as [email], [phone] and [link]; location and short work/availability values remain.
+# replies:read shares only reply classifications, match/state/time and linked application metadata.
 # With raw:read, get_job_raw returns uncleaned third-party payloads, possibly including recruiter contact data;
 # only their combined length is capped. Its metadata and parse_error are cleaned; private DB columns stay out.
 # Only when writer:read is granted (it gives `get_application_context`): your application questions and answer versions, and the material
@@ -24,6 +27,9 @@ enabled: false
 # The global matrix is the most any connection may receive. Tool permissions:
 # search_jobs / get_job: jobs:read; list_applications: tracking:read
 # get_profile / get_interests / preview_deal_breakers / preview_interest_category: profile:read (off by default)
+# get_career_profile / list_career_documents / get_career_document / check_career_document: career:read and career.yaml enabled
+# list_replies: replies:read and replies.yaml enabled (no mail subject, body, sender, quotes or mail ids)
+# Feature switches hide these tools; direct calls while off report disabled. stdio reads the profile directory on its host.
 # get_application_context: writer:read and writer.yaml enabled (shares your chosen application material)
 # save_application_answer: writer:write and writer.yaml enabled (only adds answer versions)
 # get_job_raw: raw:read (off by default; untrusted, uncleaned payloads may include recruiter contact data)
@@ -40,8 +46,35 @@ stdio:
     - jobs:read
     - tracking:read
 
+# Optional HTTP on the existing web port; off by default and requires a usable web password (pnpm web:password).
+http:
+  # Both this and the master enabled switch must be true
+  enabled: false
+  # Largest request body in bytes (1024-4194304), also enforced for chunked uploads
+  max_body_bytes: 262144
+  # Dedicated database pools, separate from the web pool; restart the web process after changing pool sizes
+  pool:
+    # Maximum read-only connections (1-20)
+    read_max: 3
+    # Maximum writable connections for token last-use and permitted writes (1-10)
+    write_max: 2
+    # Requests served concurrently (1-64), including response streams; excess gets 503 and Retry-After: 1
+    max_concurrent: 8
+  # Authentication failures use independent process-memory counters, separate from web login
+  throttle:
+    # Failures from one source before lockout (1-100)
+    max_failures: 5
+    # Rolling failure window in minutes (1-1440)
+    window_minutes: 10
+    # Source lockout and maximum global wait in minutes (1-1440)
+    lockout_minutes: 15
+    # Failures across all sources before a global wait (1-10000)
+    global_max_failures: 50
+    # Initial global wait in seconds (1-3600), doubles on further failures up to lockout_minutes
+    global_delay_seconds: 2
+
 limits:
-  # Most results per list or usage dimension (1-100), also expanded runs, activity spans, events and pending interest suggestions; truncation is marked
+  # Most results per list or usage dimension (1-100), also expanded runs, activity spans, events, jobs, applications, replies and pending interest suggestions; truncation is marked and the answer says when more matched
   max_results: 20
   # Most characters of a JD one get_job call returns (500-100000); a longer JD is cut and marked as cut
   max_description_chars: 12000

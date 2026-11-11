@@ -15,9 +15,12 @@
  * the answer versions with their sentence statuses and evidence quotes.
  * profile:read gives selected me/preferences/stories drafts with their web form hashes, interest vocabulary, saved views,
  * watched companies, pending suggestions and read-only rule previews. No history or import drafts are included.
+ * career:read gives redacted career profiles, documents, versions, source status, proposals and checks; image presence only.
+ * Contact values and links become bracket placeholders. The contact file, image bytes, HTML and PDF are never returned.
+ * replies:read gives classification, match/state/time and the linked application's job; its status needs tracking:read; no mail content or transport identifiers.
  * Operations require ops:read: safe doctor summaries, cycle/channel/activity codes and counts, and aggregate AI usage.
- * Never given under any permission: local paths (resume variants), emails, secrets, profile snapshots, AI provider/model at job level, job-level AI usage,
- * raw errors, raw run payloads and notifications. Writer material is the explicitly selected subset described above; unselected stories are never given by writer:read alone (a fit note
+ * Never given under any permission: local paths (resume variants), mail content, secrets, profile snapshots, AI provider/model at job level, job-level AI usage, notifications,
+ * raw errors and raw run payloads. Writer material is the explicitly selected subset described above; unselected stories are never given by writer:read alone (a fit note
  * can retain short quotes selected when it was made).
  *
  * Posting strings go through the caller's `clean` (invisible characters removed, an instruction to an AI replaced by the trap
@@ -25,7 +28,7 @@
  * instructions. Only their combined length is capped; metadata including parse_error is cleaned independently.
  */
 export { linkDto, locationDto, salaryDto, rankDto, toLinkDto, toLocationDto, toSalaryDto, type CleanText } from "./shared";
-export { jobCardDto, amountDto, signalDto, descriptionDto, jobDetailDto, searchJobsOutput, searchJobsOutputFor, getJobOutput, getJobOutputFor, toJobCardDto, toSignalDto, toJobDetailDto, type JobCardDto, type DescriptionDto, type JobDetailDto, type SearchJobsOutput, type GetJobOutput, type QuoteGuard } from "./jobs";
+export { jobCardDto, amountDto, signalDto, descriptionDto, jobDetailDto, searchJobsOutput, searchJobsOutputFor, getJobOutput, getJobOutputFor, releasedJobCard, releasedJobDetail, toJobCardDto, toSignalDto, toJobDetailDto, type JobCardDto, type DescriptionDto, type JobDetailDto, type SearchJobsOutput, type GetJobOutput, type QuoteGuard } from "./jobs";
 export { translationBlockDto, breakdownBlockDto, salaryBlockDto, companyBlockDto, ghostBlockDto, ghostReasonDto, lifecycleBlockDto } from "./job-analysis";
 export { cardMatchBlockDto, cardTrackingBlockDto } from "./job-card-blocks";
 export { matchBlockDto } from "./job-match";
@@ -35,4 +38,7 @@ export { applicationDto, historyDto, applicationItemDto, listApplicationsOutput,
 export { writerVersionDto, writerJdPointDto, writerStoryDto, writerQuestionDto, getApplicationContextOutput, saveApplicationAnswerOutput, type WriterVersionDto, type WriterQuestionDto, type GetApplicationContextOutput, type SaveApplicationAnswerOutput } from "./writer";
 export { systemStatusOutput, listCyclesOutput, listChannelsOutput, activityLogOutput, aiUsageOutput } from "./ops";
 export { getProfileOutput, getInterestsOutput, previewDealBreakersOutput, previewInterestCategoryOutput, toMeDto, toPreferencesDto, toStoriesDto, toInterestSettingsDto, toSuggestionDto, toDealBreakerPreviewDto, toCategoryPreviewDto, type GetProfileOutput, type GetInterestsOutput } from "./profile";
+
+export { getCareerProfileOutput, listCareerDocumentsOutput, getCareerDocumentOutput, checkCareerDocumentOutput } from "./career";
+export { listRepliesOutput, listRepliesOutputFor } from "./replies";
 export { rawPostingDto, getJobRawOutput, toRawPostingDtos } from "./raw";
