@@ -86,7 +86,24 @@ describe("installed MCP SDK HTTP protocols", () => {
     } finally { warn.mockRestore(); }
   });
 
-  it("negotiates the modern protocol with the real client and lists only effective tools", async () => {
+  it("drops only the SDK json-mode notice during construction and restores console.warn", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const deps = fakeDeps();
+      const createHandler = vi.fn<McpHttpDependencies["createHandler"]>((factory, options) => {
+        console.warn("unrelated construction warning");
+        return deps.createHandler(factory, options);
+      });
+      expect((await snapshot(await handleMcpHttpRequest(rpcRequest(), { ...deps, createHandler }))).status).toBe(200);
+      expect(createHandler.mock.calls[0]![1]).toMatchObject({ responseMode: "json" });
+      expect(warn.mock.calls).toEqual([["unrelated construction warning"]]);
+      expect(console.warn).toBe(warn);
+      console.warn("after construction");
+      expect(warn).toHaveBeenLastCalledWith("after construction");
+    } finally { warn.mockRestore(); }
+  });
+
+  it("negotiates the modern protocol with the real client, lists only effective tools and answers a tool call with plain JSON", async () => {
     const deps = fakeDeps();
     const responses: Awaited<ReturnType<typeof snapshot>>[] = [];
     const transport = new StreamableHTTPClientTransport(new URL("http://mcp.example.test/api/mcp"), {
@@ -107,6 +124,10 @@ describe("installed MCP SDK HTTP protocols", () => {
     const tools = (await client.listTools()).tools.map((tool) => tool.name);
     expect(tools).toContain("get_job");
     expect(tools).not.toContain("list_applications");
+    await client.callTool({ name: "get_job", arguments: { job_id: 1 } });
+    const call = responses.at(-1)!;
+    expect(call.headers["content-type"]).toBe("application/json");
+    expect(JSON.parse(call.body)).toMatchObject({ jsonrpc: "2.0", result: { content: expect.any(Array) } });
     expect(responses.every((response) => response.headers["content-type"]?.includes("application/json"))).toBe(true);
     expect(JSON.stringify(responses)).not.toContain(SECRET);
   });

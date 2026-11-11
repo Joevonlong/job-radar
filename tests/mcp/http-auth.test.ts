@@ -81,7 +81,7 @@ describe("HTTP bearer verification", () => {
     const deps = fakeDeps();
     deps.markUsed.mockRejectedValue(new Error(SECRET));
     const createHandler = vi.fn<McpHttpDependencies["createHandler"]>((factory, options) => {
-      expect(options).toMatchObject({ responseMode: "auto", maxRequestBodySize: settings().http.max_body_bytes });
+      expect(options).toMatchObject({ responseMode: "json", maxRequestBodySize: settings().http.max_body_bytes });
       const real = deps.createHandler(factory, options);
       return { ...real, fetch: async (request, input) => {
         expect(input?.authInfo).toEqual({ token: "", clientId: String(grant.tokenId), scopes: ["jobs:read"], expiresAt: 253402300799 });

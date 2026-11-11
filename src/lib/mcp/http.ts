@@ -166,10 +166,24 @@ export async function handleMcpHttpRequest(request: Request, deps: McpHttpDepend
   }
 }
 
+const SDK_JSON_MODE_WARNING = "responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.";
+
+/**
+ * The SDK prints this notice on every construction in "json" mode. Responses here are plain JSON by design and a handler
+ * is built per request, so exactly that message is dropped during the synchronous construction; every other warning
+ * passes and console.warn is restored before returning.
+ */
+function createJsonHandler(create: McpHttpDependencies["createHandler"], ...args: Parameters<McpHttpDependencies["createHandler"]>) {
+  const original = console.warn;
+  console.warn = (...message: unknown[]) => {
+    if (message.length !== 1 || message[0] !== SDK_JSON_MODE_WARNING) original.apply(console, message);
+  };
+  try { return create(...args); } finally { console.warn = original; }
+}
+
 /**
  * Builds a fresh SDK handler and server for every request, so one token's grant, results and audit context cannot reach
- * another request; the handler is closed together with the request slot. The SDK constructor warns only in its "json"
- * response mode; "auto" answers plain JSON unless a tool emits a notification before its result.
+ * another request; the handler is closed together with the request slot.
  */
 async function authenticatedResponse(request: Request, deps: McpHttpDependencies, settings: McpConfig, key: string, throttle: LoginThrottle, adopt: (close: () => void) => void): Promise<Response> {
   const secret = bearerAgentToken(request.headers.get("authorization"));
@@ -205,12 +219,12 @@ async function authenticatedResponse(request: Request, deps: McpHttpDependencies
     grant, readGrant: deps.readGrant(readDb, deps.now), writeDb: writes ? deps.writeDb(settings) : null,
   });
   context.now = deps.now;
-  const handler = deps.createHandler(() => {
+  const handler = createJsonHandler(deps.createHandler, () => {
     const server = buildServer(context, { version });
     server.server.registerCapabilities({ tools: { listChanged: false } });
     return server;
   }, {
-    responseMode: "auto", maxRequestBodySize: settings.http.max_body_bytes, maxSubscriptions: 0,
+    responseMode: "json", maxRequestBodySize: settings.http.max_body_bytes, maxSubscriptions: 0,
     onerror: (error) => deps.log(`[mcp] http transport error: ${errorCategory(error)}`),
   });
   adopt(() => { void handler.close().catch((error: unknown) => deps.log(`[mcp] http close error: ${errorCategory(error)}`)); });
