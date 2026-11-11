@@ -86,12 +86,15 @@ export interface StoredFilterResult {
   filterConfigHash: string | null;
 }
 
-/** The filter result already stored for these jobs under this profile snapshot. */
+/** The filter result already stored for these jobs under this profile snapshot. Before the hash columns exist, no result is final. */
 export async function getFilterResults(db: Executor, snapshotId: number, jobIds: readonly number[]): Promise<Map<number, StoredFilterResult>> {
   const out = new Map<number, StoredFilterResult>();
   if (jobIds.length === 0) return out;
+  const hashes = await changeFingerprintsReady(db)
+    ? { filterInputHash: scores.filterInputHash, filterConfigHash: scores.filterConfigHash }
+    : { filterInputHash: sql<string | null>`null`, filterConfigHash: sql<string | null>`null` };
   const rows = await db
-    .select({ scoreId: scores.id, jobId: scores.jobId, filterResult: scores.filterResult, filterReasons: scores.filterReasons, filterInputHash: scores.filterInputHash, filterConfigHash: scores.filterConfigHash })
+    .select({ scoreId: scores.id, jobId: scores.jobId, filterResult: scores.filterResult, filterReasons: scores.filterReasons, ...hashes })
     .from(scores)
     .where(and(eq(scores.profileSnapshotId, snapshotId), inArray(scores.jobId, [...jobIds])));
   for (const row of rows) out.set(row.jobId, row);
