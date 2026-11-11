@@ -45,3 +45,5 @@ audit:
   connect_timeout_seconds: 2
   statement_timeout_ms: 1500
   lock_timeout_ms: 200
+  # Longest a call waits for its audit row (100-10000), queueing included; also the longest shutdown waits for the last rows
+  write_timeout_ms: 2000

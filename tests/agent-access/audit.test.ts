@@ -18,11 +18,18 @@ const entry: AuditEntry = {
   outcome: "ok", error_category: null, returned_count: 1, duration_ms: 7,
 };
 const db = {} as Executor;
+const WRITE_TIMEOUT_MS = 1000;
+const text = mcpTranslator("en");
 
 function fixture() {
-  const close = vi.fn(async () => undefined);
+  const opened: Array<{ db: Executor; end: ReturnType<typeof vi.fn<(options: { timeout: number }) => Promise<void>>> }> = [];
+  const open = vi.fn(() => {
+    const connection = { db: opened.length === 0 ? db : ({ connection: opened.length } as unknown as Executor), end: vi.fn<(options: { timeout: number }) => Promise<void>>(async () => undefined) };
+    opened.push(connection);
+    return connection;
+  });
   const log = vi.fn();
-  return { close, log, recorder: createAuditRecorder({ db, close }, { log, text: mcpTranslator("en") }) };
+  return { open, opened, log, recorder: createAuditRecorder(open, { log, text, writeTimeoutMs: WRITE_TIMEOUT_MS }) };
 }
 
 describe("audit recorder", () => {
@@ -40,7 +47,7 @@ describe("audit recorder", () => {
     const { recorder, log } = fixture();
     vi.mocked(insertAgentCall).mockRejectedValueOnce(Object.assign(new Error("SENTINEL-ARG-private"), { code: "08006" }));
     await expect(recorder.record(entry)).resolves.toBeUndefined();
-    expect(log).toHaveBeenCalledExactlyOnceWith(mcpTranslator("en")("serve.auditFailed", { category: "database" }));
+    expect(log).toHaveBeenCalledExactlyOnceWith(text("serve.auditFailed", { category: "database" }));
     expect(JSON.stringify(log.mock.calls)).not.toContain("SENTINEL");
     await recorder.close();
   });
@@ -66,25 +73,33 @@ describe("audit recorder", () => {
   });
 
   it.each([false, true])("drains pending fire-and-forget inserts before closing exactly once (failure %s)", async (fails) => {
-    const { recorder, close } = fixture();
+    const { recorder, opened } = fixture();
     const gate = Promise.withResolvers<void>();
     vi.mocked(insertAgentCall).mockReturnValueOnce(gate.promise);
     void recorder.record(entry);
     const closing = recorder.close();
     await Promise.resolve();
-    expect(close).not.toHaveBeenCalled();
+    await Promise.resolve();
+    expect(opened).toHaveLength(1);
+    expect(opened[0]!.end).not.toHaveBeenCalled();
     if (fails) gate.reject(new Error("private"));
     else gate.resolve();
     await closing;
     await recorder.close();
-    expect(close).toHaveBeenCalledTimes(1);
+    expect(opened[0]!.end).toHaveBeenCalledExactlyOnceWith({ timeout: 0 });
+  });
+
+  it("opens no connection until a row is written and closes cleanly without one", async () => {
+    const { recorder, open } = fixture();
+    await recorder.close();
+    expect(open).not.toHaveBeenCalled();
   });
 
   it.each([false, true])("waits for a running call to produce its audit before closing (call failure %s)", async (fails) => {
-    const { recorder, close, log } = fixture();
+    const { recorder, opened, log } = fixture();
     const gate = Promise.withResolvers<void>();
-    const ctx = defaultContext({} as Db, mcpSchema.parse({}), { audit: recorder, log: () => undefined, text: mcpTranslator("en") });
-    vi.mocked(insertAgentCall).mockImplementation(async () => { expect(close).not.toHaveBeenCalled(); });
+    const ctx = defaultContext({} as Db, mcpSchema.parse({}), { audit: recorder, log: () => undefined, text });
+    vi.mocked(insertAgentCall).mockImplementation(async () => { expect(opened[0]!.end).not.toHaveBeenCalled(); });
     const call = runLogged(ctx, "get_job", async () => {
       await gate.promise;
       if (fails) throw new Error("private");
@@ -92,11 +107,86 @@ describe("audit recorder", () => {
     });
     const closing = recorder.close();
     await Promise.resolve();
-    expect(close).not.toHaveBeenCalled();
+    expect(opened).toHaveLength(0);
     gate.resolve();
     await Promise.all([call, closing]);
     expect(insertAgentCall).toHaveBeenCalledTimes(1);
-    expect(close).toHaveBeenCalledTimes(1);
+    expect(opened[0]!.end).toHaveBeenCalledTimes(1);
     expect(log).not.toHaveBeenCalled();
+  });
+});
+
+describe("audit recorder deadlines", () => {
+  afterEach(() => vi.useRealTimers());
+  const never = () => new Promise<void>(() => undefined);
+
+  it("returns a read on time when its row stalls, logs one timeout line and destroys the stalled connection", async () => {
+    vi.useFakeTimers();
+    const { recorder, opened, log } = fixture();
+    vi.mocked(insertAgentCall).mockImplementationOnce(never);
+    const ctx = defaultContext({} as Db, mcpSchema.parse({}), { audit: recorder, log: () => undefined, text });
+    let answered = false;
+    const call = runLogged(ctx, "get_job", async () => ({ result: "read", count: 1 })).then((result) => { answered = true; return result; });
+    await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS - 1);
+    expect(answered).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(call).resolves.toBe("read");
+    expect(log).toHaveBeenCalledExactlyOnceWith(text("serve.auditFailed", { category: "timeout" }));
+    expect(opened[0]!.end).toHaveBeenCalledExactlyOnceWith({ timeout: 0 });
+  });
+
+  it("writes the next row once on a new connection and never repeats the stalled insert", async () => {
+    vi.useFakeTimers();
+    const { recorder, opened, log } = fixture();
+    vi.mocked(insertAgentCall).mockImplementationOnce(never).mockResolvedValue(undefined);
+    const stalled = recorder.record(entry);
+    await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS);
+    await stalled;
+    await recorder.record({ ...entry, target: { type: "job", id: 43 } });
+    expect(opened).toHaveLength(2);
+    expect(insertAgentCall).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(insertAgentCall).mock.calls.map(([executor, row]) => [executor, row.targetId])).toEqual([[opened[0]!.db, 42], [opened[1]!.db, 43]]);
+    expect(opened[1]!.end).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts the wait in line against each row's deadline", async () => {
+    vi.useFakeTimers();
+    const { recorder, opened, log } = fixture();
+    vi.mocked(insertAgentCall).mockImplementation(never);
+    const first = recorder.record(entry);
+    await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS / 2);
+    let queuedDone = false;
+    const queued = recorder.record({ ...entry, target: { type: "job", id: 43 } }).then(() => { queuedDone = true; });
+    await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS / 2);
+    await first;
+    expect(opened).toHaveLength(2);
+    expect(insertAgentCall).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS / 2 - 1);
+    expect(queuedDone).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await queued;
+    expect(opened[1]!.end).toHaveBeenCalledExactlyOnceWith({ timeout: 0 });
+    expect(log.mock.calls).toEqual([[text("serve.auditFailed", { category: "timeout" })], [text("serve.auditFailed", { category: "timeout" })]]);
+  });
+
+  it("closes within the deadline when a call never ends and a row never answers, and writes nothing afterwards", async () => {
+    vi.useFakeTimers();
+    const { recorder, opened, log } = fixture();
+    vi.mocked(insertAgentCall).mockImplementationOnce(never).mockResolvedValue(undefined);
+    const ctx = defaultContext({} as Db, mcpSchema.parse({}), { audit: recorder, log: () => undefined, text });
+    const hanging = runLogged(ctx, "get_job", () => new Promise<never>(() => undefined));
+    void recorder.record(entry);
+    let closed = false;
+    const closing = recorder.close().then(() => { closed = true; });
+    await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS);
+    await closing;
+    expect(closed).toBe(true);
+    expect(opened[0]!.end).toHaveBeenCalledWith({ timeout: 0 });
+    void hanging;
+    await recorder.record({ ...entry, target: { type: "job", id: 45 } });
+    expect(insertAgentCall).toHaveBeenCalledTimes(1);
+    expect(opened).toHaveLength(1);
+    expect(log).toHaveBeenLastCalledWith(text("serve.auditFailed", { category: "closed" }));
   });
 });

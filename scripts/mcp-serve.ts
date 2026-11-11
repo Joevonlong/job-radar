@@ -8,6 +8,8 @@
  * Off by default: with mcp.yaml `enabled: false` (or no available tool permissions, or an unreadable mcp.yaml) it says why on stderr and
  * exits with 1, which the client shows in its log. stdout carries protocol messages only; every other line goes to stderr.
  * Settings are re-read on every call: disabling mcp.yaml (or removing a permission, or breaking the file) refuses the next call without a restart.
+ * When the client goes away it waits at most mcp.yaml `audit.write_timeout_ms` for running calls and their audit rows, then closes
+ * the database connections, giving a query that is still running at most 5 seconds.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -69,12 +71,16 @@ function main(): void {
   }
 
   const database = createReadOnlyDb();
-  const auditConnection = openAgentCallsConnection(loadDatabaseEnv().DATABASE_URL, {
-    connectTimeoutSeconds: settings.audit.connect_timeout_seconds,
-    statementTimeoutMs: settings.audit.statement_timeout_ms,
-    lockTimeoutMs: settings.audit.lock_timeout_ms,
-  });
-  const audit = createAuditRecorder({ db: auditConnection.db, close: () => auditConnection.sql.end({ timeout: settings.audit.connect_timeout_seconds }) }, { text, log: stderrLine });
+  const { audit: auditSettings } = settings;
+  const openAudit = () => {
+    const connection = openAgentCallsConnection(loadDatabaseEnv().DATABASE_URL, {
+      connectTimeoutSeconds: auditSettings.connect_timeout_seconds,
+      statementTimeoutMs: auditSettings.statement_timeout_ms,
+      lockTimeoutMs: auditSettings.lock_timeout_ms,
+    });
+    return { db: connection.db, end: (options: { timeout: number }) => connection.sql.end(options) };
+  };
+  const audit = createAuditRecorder(openAudit, { text, log: stderrLine, writeTimeoutMs: auditSettings.write_timeout_ms });
   const context = defaultContext(database.db, settings, { text, writeDb: writable?.db ?? null, audit });
   const version = packageVersion();
   const handle = serveStdio(() => buildServer(context, { version }), {

@@ -1,9 +1,11 @@
+import net from "node:net";
+
 import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
-import { createAuditRecorder, type AuditRecorder } from "@/lib/agent-access/audit";
+import { createAuditRecorder, type AuditConnection, type AuditRecorder } from "@/lib/agent-access/audit";
 import { loadConfig, meSchema, storySchema, writerSchema } from "@/lib/config";
 import { mcpSchema, type McpConfig } from "@/lib/config/schemas/mcp";
 import { closeDb, getDb, schema } from "@/lib/db";
@@ -37,8 +39,14 @@ function settings(): McpConfig {
   return mcpSchema.parse({ enabled: true, permissions, stdio: { permissions } });
 }
 
-async function connect(): Promise<Client> {
-  const ctx = defaultContext(readOnly.db, current, { audit: recorder, text, log: (line) => callLines.push(line), readSettings: () => current });
+const WRITE_TIMEOUT_MS = 2000;
+
+function auditConnection(target: ReturnType<typeof openAgentCallsConnection>): AuditConnection {
+  return { db: target.db, end: (options) => target.sql.end(options) };
+}
+
+async function connect(audit: AuditRecorder = recorder): Promise<Client> {
+  const ctx = defaultContext(readOnly.db, current, { audit, text, log: (line) => callLines.push(line), readSettings: () => current });
   ctx.now = () => NOW;
   ctx.timezone = () => "Europe/Berlin";
   ctx.writer = { inputs: () => ({ writer, me, stories, storiesUnreadable: false, breakdownEnabled: true }), writeDb: getDb() };
@@ -80,7 +88,7 @@ beforeEach(async () => {
   current = settings();
   await getDb().delete(schema.agentCalls);
   connection = openAgentCallsConnection(url, { connectTimeoutSeconds: 2, statementTimeoutMs: 1500, lockTimeoutMs: 200 });
-  recorder = createAuditRecorder({ db: connection.db, close: () => connection.sql.end({ timeout: 2 }) }, { text, log: (line) => auditLines.push(line) });
+  recorder = createAuditRecorder(() => auditConnection(connection), { text, log: (line) => auditLines.push(line), writeTimeoutMs: WRITE_TIMEOUT_MS });
   await seedDatabase(getDb(), { now: NOW, timezone: "Europe/Berlin" });
   const [job] = await getDb().select({ id: schema.jobs.id }).from(schema.jobs).where(eq(schema.jobs.status, "active")).orderBy(schema.jobs.id).limit(1);
   if (!job) throw new Error("no active seed job");
@@ -228,3 +236,144 @@ describe("MCP audit persistence", () => {
     await expect(readOnly.db.insert(schema.agentCalls).values({ capability: "get_job", outcome: "ok", returnedCount: 1, durationMs: 0 })).rejects.toMatchObject({ cause: { code: "25006" } });
   });
 });
+
+/** A TCP proxy in front of the test database that can hold back the server's replies while still forwarding queries. */
+async function pausingProxy() {
+  const target = new URL(url);
+  const sockets = new Set<net.Socket>();
+  const held: Array<() => void> = [];
+  let paused = false;
+  const server = net.createServer((client) => {
+    const upstream = net.connect(Number(target.port || 5432), target.hostname);
+    sockets.add(client).add(upstream);
+    client.on("data", (chunk) => upstream.write(chunk));
+    upstream.on("data", (chunk) => {
+      if (paused) held.push(() => { if (!client.destroyed) client.write(chunk); });
+      else client.write(chunk);
+    });
+    const end = () => { client.destroy(); upstream.destroy(); sockets.delete(client); sockets.delete(upstream); };
+    client.on("close", end).on("error", end);
+    upstream.on("close", end).on("error", end);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("proxy has no TCP address");
+  const proxied = new URL(url);
+  proxied.hostname = "127.0.0.1";
+  proxied.port = String(address.port);
+  return {
+    url: proxied.toString(),
+    connections: () => sockets.size / 2,
+    pause: () => { paused = true; },
+    resume: () => {
+      paused = false;
+      for (const flush of held.splice(0)) flush();
+    },
+    close: async () => {
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
+
+describe("MCP audit waits are bounded", () => {
+  const FAST_TIMEOUT_MS = 400;
+  let proxy: Awaited<ReturnType<typeof pausingProxy>>;
+  let opened: Array<ReturnType<typeof openAgentCallsConnection>>;
+  let bounded: AuditRecorder;
+
+  beforeEach(async () => {
+    proxy = await pausingProxy();
+    opened = [];
+    bounded = createAuditRecorder(() => {
+      const next = openAgentCallsConnection(proxy.url, { connectTimeoutSeconds: 2, statementTimeoutMs: 1500, lockTimeoutMs: 200 });
+      opened.push(next);
+      return auditConnection(next);
+    }, { text, log: (line) => auditLines.push(line), writeTimeoutMs: FAST_TIMEOUT_MS });
+  });
+
+  afterEach(async () => {
+    proxy.resume();
+    await bounded.close();
+    await Promise.all(opened.map((next) => next.sql.end({ timeout: 0 })));
+    await proxy.close();
+  });
+
+  it("answers a read within the deadline when the audit reply stalls, then writes the next row on a new session without repeating the stalled one", async () => {
+    const client = await connect(bounded);
+    expect((await client.callTool({ name: "get_job", arguments: { job_id: jobId } })).isError).not.toBe(true);
+    expect(await rows()).toHaveLength(1);
+
+    proxy.pause();
+    const started = performance.now();
+    const stalled = await client.callTool({ name: "get_job", arguments: { job_id: jobId } });
+    const elapsed = performance.now() - started;
+    expect(stalled.isError).not.toBe(true);
+    expect(stalled.structuredContent).toMatchObject({ job: { id: jobId } });
+    expect(elapsed).toBeGreaterThanOrEqual(FAST_TIMEOUT_MS - 50);
+    expect(elapsed).toBeLessThan(FAST_TIMEOUT_MS + 1000);
+    expect(auditLines).toEqual([text("serve.auditFailed", { category: "timeout" })]);
+
+    proxy.resume();
+    expect((await client.callTool({ name: "get_job", arguments: { job_id: jobId } })).isError).not.toBe(true);
+    expect(opened).toHaveLength(2);
+    await bounded.close();
+    const recorded = await rows();
+    expect(recorded).toHaveLength(3);
+    expect(recorded.every((row) => row.capability === "get_job" && row.outcome === "ok")).toBe(true);
+    expect(auditLines).toHaveLength(1);
+  });
+
+  it("closes within the deadline while a row is stalled and leaves no proxied session open", async () => {
+    const client = await connect(bounded);
+    expect((await client.callTool({ name: "get_job", arguments: { job_id: jobId } })).isError).not.toBe(true);
+    proxy.pause();
+    const call = client.callTool({ name: "get_job", arguments: { job_id: jobId } });
+    await new Promise((resolve) => setTimeout(resolve, FAST_TIMEOUT_MS / 4));
+    const started = performance.now();
+    await bounded.close();
+    expect(performance.now() - started).toBeLessThan(FAST_TIMEOUT_MS + 1000);
+    expect((await call).isError).not.toBe(true);
+    await expect.poll(() => proxy.connections(), { timeout: 2000 }).toBe(0);
+    const before = auditLines.length;
+    await bounded.record({ caller: "stdio", token_id: null, transport: "stdio", capability: "get_job", target: null, outcome: "ok", error_category: null, returned_count: 1, duration_ms: 1 });
+    expect(auditLines.slice(before)).toEqual([text("serve.auditFailed", { category: "closed" })]);
+    expect(opened).toHaveLength(1);
+  });
+
+  it("stops waiting for a row held up by a lock on agent_calls and keeps a later row once the lock is gone", async () => {
+    const holder = openAgentCallsConnection(url, { connectTimeoutSeconds: 2, statementTimeoutMs: 60_000, lockTimeoutMs: 60_000 });
+    const lockedRecorder = createAuditRecorder(() => {
+      const next = openAgentCallsConnection(url, { connectTimeoutSeconds: 2, statementTimeoutMs: 60_000, lockTimeoutMs: 60_000 });
+      opened.push(next);
+      return auditConnection(next);
+    }, { text, log: (line) => auditLines.push(line), writeTimeoutMs: FAST_TIMEOUT_MS });
+    const release = Promise.withResolvers<void>();
+    const locked = Promise.withResolvers<void>();
+    const holding = holder.sql.begin(async (tx) => {
+      await tx`lock table agent_calls in access exclusive mode`;
+      locked.resolve();
+      await release.promise;
+    });
+    const client = await connect(lockedRecorder);
+    try {
+      await locked.promise;
+      const started = performance.now();
+      const result = await client.callTool({ name: "get_job", arguments: { job_id: jobId } });
+      expect(result.isError).not.toBe(true);
+      expect(performance.now() - started).toBeLessThan(FAST_TIMEOUT_MS + 1000);
+      expect(auditLines).toEqual([text("serve.auditFailed", { category: "timeout" })]);
+    } finally {
+      release.resolve();
+      await holding;
+      await holder.sql.end({ timeout: 1 });
+    }
+    expect((await client.callTool({ name: "get_job", arguments: { job_id: jobId } })).isError).not.toBe(true);
+    await lockedRecorder.close();
+    expect(auditLines).toHaveLength(1);
+    expect(opened).toHaveLength(2);
+    expect((await rows()).length).toBeLessThanOrEqual(2);
+    expect(await rows()).toContainEqual(expect.objectContaining({ capability: "get_job", outcome: "ok" }));
+  });
+});
+
