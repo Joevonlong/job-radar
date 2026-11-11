@@ -3,6 +3,8 @@
  * and the salary lookup by itself, and what that run may do. Never throws: the user's click or the cycle must not depend on it.
  */
 import { newId } from "@/lib/activity/ids";
+import { giveBackAgentBudget, takeIndirectBudget } from "@/lib/agent-access/budget";
+import type { AgentCaller } from "@/lib/agent-access/caller";
 import type { ActivityProcess } from "@/lib/activity/types";
 import { createDbHealthStore } from "@/lib/ai/health";
 import { COMPANY_RESEARCH_PROMPT_VERSION } from "@/lib/ai/prompts/company-research";
@@ -32,7 +34,8 @@ import { descriptionHash } from "@/lib/translation/hash";
 
 const log = createProcessLogger({ fields: { component: "research" } });
 
-export type AutoResearchOutcome = "off" | "recent" | "all_cached" | "nothing_to_run" | "deferred_quota" | "cap_reached" | "queued" | "failed";
+export type AutoResearchOutcome = "off" | "recent" | "all_cached" | "nothing_to_run" | "deferred_quota" | "cap_reached" | "budget_skipped" | "queued" | "failed";
+export type AutoResearchResult = { outcome: AutoResearchOutcome; items: ResearchAutoItems };
 /** What happened to one part: asked for (`queued`), nothing to do, or why it did not run. */
 export type AutoResearchItemState = "queued" | "cached" | "disabled" | "no_web_provider" | "no_description" | "deferred_quota" | "failed";
 
@@ -127,7 +130,7 @@ async function itemNeed(db: Db, item: ResearchItem, input: { jobId: number; now:
   return cached && cached.expiresAt > input.now ? "cached" : "run";
 }
 
-async function run(db: Db, input: { jobId: number; event: ResearchAutoTrigger; now: Date }, deps: AutoResearchDeps): Promise<{ outcome: AutoResearchOutcome; items: ResearchAutoItems }> {
+async function run(db: Db, input: { jobId: number; event: ResearchAutoTrigger; now: Date; caller?: AgentCaller }, deps: AutoResearchDeps): Promise<AutoResearchResult> {
   const research = deps.research();
   if (!shouldAutoResearch(input.event, research)) return { outcome: "off", items: {} };
   const record = async (outcome: AutoResearchOutcome, queued: number): Promise<void> => {
@@ -170,35 +173,43 @@ async function run(db: Db, input: { jobId: number; event: ResearchAutoTrigger; n
     return { outcome: states.includes("cached") ? "all_cached" : "nothing_to_run", items };
   }
 
-  const cap = input.event === "high_score_new" ? research.auto.high_score.max_per_day : research.auto.max_per_day;
-  const reserved = await reserveAutoResearchRun(db, { jobId: input.jobId, trigger: input.event, items, maxPerDay: cap, now: input.now });
-  if (reserved.state === "recent") return report("recent", items);
-  if (reserved.state === "cap_reached") return report("cap_reached", items);
+  const budget = input.caller === undefined ? null : await takeIndirectBudget(db, { caller: input.caller, action: "research_company" });
+  if (budget?.decision === "skip") return report("budget_skipped", items);
+  let added = 0;
+  try {
+    const cap = input.event === "high_score_new" ? research.auto.high_score.max_per_day : research.auto.max_per_day;
+    const reserved = await reserveAutoResearchRun(db, { jobId: input.jobId, trigger: input.event, items, maxPerDay: cap, now: input.now });
+    if (reserved.state === "recent") return report("recent", items);
+    if (reserved.state === "cap_reached") return report("cap_reached", items);
 
-  let queued = 0;
-  for (const item of toQueue) {
-    const common = { jobId: input.jobId, force: false, origin: "auto" as const };
-    const result =
-      item === "company"
-        ? await requestCompanyResearch(db, { ...common, research, ai, now: input.now })
-        : item === "breakdown"
-          ? await requestBreakdownJob(db, { ...common, settings: breakdown })
-          : await requestSalaryLookup(db, { ...common, salary: salary.state === "ok" ? salary.config : null, ai, now: input.now });
-    if (result.state === "queued") {
-      items[item] = "queued";
-      queued += 1;
-    } else items[item] = result.state === "cached" ? "cached" : "failed";
+    let queued = 0;
+    for (const item of toQueue) {
+      const common = { jobId: input.jobId, force: false, origin: "auto" as const };
+      const result =
+        item === "company"
+          ? await requestCompanyResearch(db, { ...common, research, ai, now: input.now })
+          : item === "breakdown"
+            ? await requestBreakdownJob(db, { ...common, settings: breakdown })
+            : await requestSalaryLookup(db, { ...common, salary: salary.state === "ok" ? salary.config : null, ai, now: input.now });
+      if (result.state === "queued") {
+        items[item] = "queued";
+        queued += 1;
+        if (!result.existing) added += 1;
+      } else items[item] = result.state === "cached" ? "cached" : "failed";
+    }
+    await updateAutoRunItems(db, reserved.runId, items);
+    if (Object.values(items).includes("deferred_quota")) await record("deferred_quota", 0);
+    return report("queued", items, queued);
+  } finally {
+    if (budget?.decision === "go" && added === 0) await giveBackAgentBudget(db, budget.ticket);
   }
-  await updateAutoRunItems(db, reserved.runId, items);
-  // a part held back by the usage cap in a run that queued the others: the log says so too
-  if (Object.values(items).includes("deferred_quota")) await record("deferred_quota", 0);
-  return report("queued", items, queued);
 }
 
 /** One event's research. Everything that goes wrong ends in `failed` and a log line. */
-export async function requestAutoResearch(db: Db, input: { jobId: number; event: ResearchAutoTrigger; now?: Date }, deps: AutoResearchDeps = defaultDeps("web")): Promise<{ outcome: AutoResearchOutcome; items: ResearchAutoItems }> {
+export async function requestAutoResearch(db: Db, input: { jobId: number; event: ResearchAutoTrigger; now?: Date; caller?: AgentCaller }, deps: AutoResearchDeps = defaultDeps("web")): Promise<AutoResearchResult> {
   try {
-    return await run(db, { jobId: input.jobId, event: input.event, now: input.now ?? new Date() }, deps);
+    const request = { ...input, now: input.now ?? new Date() };
+    return input.caller === undefined ? await run(db, request, deps) : await db.transaction((tx) => run(tx, request, deps));
   } catch (error) {
     if (!(error instanceof ConfigError)) log.warn("automatic research failed", { jobId: input.jobId, error: error instanceof Error ? error.name : "unknown" });
     return { outcome: "failed", items: {} };
@@ -209,6 +220,6 @@ export async function requestAutoResearch(db: Db, input: { jobId: number; event:
 export const autoResearchDeps = defaultDeps;
 
 /** Fire and forget from a Server Action: the user's click does not wait for the checks, and nothing can reject. */
-export function triggerAutoResearch(db: Db, input: { jobId: number; event: ResearchAutoTrigger }): Promise<void> {
-  return requestAutoResearch(db, input).then(() => undefined, () => undefined);
+export function triggerAutoResearch(db: Db, input: { jobId: number; event: ResearchAutoTrigger; caller?: AgentCaller }): Promise<AutoResearchResult> {
+  return requestAutoResearch(db, input);
 }

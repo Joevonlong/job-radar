@@ -17,7 +17,7 @@ afterEach(() => vi.restoreAllMocks());
 const tx = {} as Executor;
 
 function fixture() {
-  const audit = { record: vi.fn<AuditRecorder["record"]>(async () => undefined), inTransaction: vi.fn<AuditRecorder["inTransaction"]>(async () => undefined), close: vi.fn(async () => undefined) };
+  const audit = { record: vi.fn<AuditRecorder["record"]>(async () => undefined), inTransaction: vi.fn<AuditRecorder["inTransaction"]>(async () => 1), close: vi.fn(async () => undefined) };
   const settings = mcpSchema.parse({ enabled: true });
   const log = vi.fn();
   const ctx = defaultContext({} as Db, settings, { audit, log, text: mcpTranslator("en"), readSettings: () => settings });

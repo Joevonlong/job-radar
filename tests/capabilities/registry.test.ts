@@ -9,7 +9,7 @@ import { CAPABILITIES } from "@/lib/capabilities/registry";
 describe("capability registry", () => {
   it("contains exactly one definition for each tool, in tool-list order", () => {
     const ids = CAPABILITIES.map((capability) => capability.id);
-    expect(ids).toEqual(["search_jobs", "get_job", "list_applications", "get_application_context", "save_application_answer"]);
+    expect(ids).toEqual(["search_jobs", "get_job", "list_applications", "get_application_context", "save_application_answer", "set_application_status", "mark_applied", "set_next_action", "set_interview_rounds", "undo_change"]);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -20,6 +20,11 @@ describe("capability registry", () => {
       { id: "list_applications", permission: "tracking:read", kind: "read" },
       { id: "get_application_context", permission: "writer:read", kind: "read" },
       { id: "save_application_answer", permission: "writer:write", kind: "write" },
+      { id: "set_application_status", permission: "tracking:write", kind: "write" },
+      { id: "mark_applied", permission: "tracking:write", kind: "write" },
+      { id: "set_next_action", permission: "tracking:write", kind: "write" },
+      { id: "set_interview_rounds", permission: "tracking:write", kind: "write" },
+      { id: "undo_change", permission: "tracking:write", kind: "write" },
     ]);
   });
 

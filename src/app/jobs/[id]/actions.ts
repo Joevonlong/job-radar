@@ -7,10 +7,10 @@ import { z } from "zod";
 import { requestTranslateJob, readTranslateRequest, type TranslateErrorCode } from "@/lib/control/translate-request";
 import type { ControlQueueView } from "@/lib/control/request-view-schema";
 import { requestScoreJobs, type ControlActionState } from "@/lib/control/service";
-import { MARK_APPLIED_FROM } from "@/lib/dashboard/apply";
+import { withoutCaller } from "@/lib/agent-access/caller";
+import { changeApplicationStatus, markApplied } from "@/lib/applications/service";
 import { NOTES_MAX_CHARS } from "@/lib/dashboard/limits";
-import { getDb, jobExists, setApplicationNotes, setApplicationStatus, APPLICATION_STATUSES, type ApplicationStatus } from "@/lib/db";
-import { statusStartsResearch, triggerAutoResearch } from "@/lib/research/auto";
+import { getDb, jobExists, setApplicationNotes, APPLICATION_STATUSES, type ApplicationStatus } from "@/lib/db";
 import type { JobTranslation, PartialTranslation } from "@/lib/translation/service";
 
 /**
@@ -41,14 +41,12 @@ function refreshViews(): void {
 
 /** Set the application status of a job (creates the application when there is none) and record an event. */
 export async function setApplicationStatusAction(input: { jobId: number; status: string }): Promise<StatusActionResult> {
-  const parsed = statusInputSchema.safeParse(input);
+  const parsed = statusInputSchema.safeParse(withoutCaller(input));
   if (!parsed.success) return { ok: false, error: "invalid" };
   try {
-    const db = getDb();
-    if (!(await jobExists(db, parsed.data.jobId))) return { ok: false, error: "not_found" };
-    const change = await setApplicationStatus(db, parsed.data.jobId, parsed.data.status);
+    const change = await changeApplicationStatus(getDb(), parsed.data, undefined);
+    if (!change.ok) return { ok: false, error: change.error === "not_allowed" ? "failed" : change.error };
     refreshViews();
-    if (change.changed && statusStartsResearch(change.status)) void triggerAutoResearch(db, { jobId: parsed.data.jobId, event: "status" });
     return { ok: true, previous: change.previous, status: change.status, changed: change.changed };
   } catch (error) {
     logActionFailure("setApplicationStatusAction", error);
@@ -68,15 +66,12 @@ export type MarkAppliedResult =
  * and an already applied one is a no-op (`changed: false`, no event).
  */
 export async function markAppliedAction(input: { jobId: number }): Promise<MarkAppliedResult> {
-  const parsed = markAppliedInputSchema.safeParse(input);
+  const parsed = markAppliedInputSchema.safeParse(withoutCaller(input));
   if (!parsed.success) return { ok: false, error: "invalid" };
   try {
-    const db = getDb();
-    if (!(await jobExists(db, parsed.data.jobId))) return { ok: false, error: "not_found" };
-    const change = await setApplicationStatus(db, parsed.data.jobId, "applied", null, { allowFrom: MARK_APPLIED_FROM });
-    if (change.rejected) return { ok: false, error: "not_allowed" };
+    const change = await markApplied(getDb(), parsed.data, undefined);
+    if (!change.ok) return change;
     refreshViews();
-    if (change.changed) void triggerAutoResearch(db, { jobId: parsed.data.jobId, event: "status" });
     return { ok: true, previous: change.previous, status: "applied", changed: change.changed };
   } catch (error) {
     logActionFailure("markAppliedAction", error);

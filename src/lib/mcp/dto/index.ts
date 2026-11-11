@@ -30,3 +30,4 @@ export { trackingBlockDto } from "./job-tracking";
 export { notesBlockDto } from "./notes";
 export { applicationDto, historyDto, applicationItemDto, listApplicationsOutput, toApplicationDto, toApplicationItemDto, type ApplicationItemDto, type ListApplicationsOutput } from "./tracking";
 export { writerVersionDto, writerJdPointDto, writerStoryDto, writerQuestionDto, getApplicationContextOutput, saveApplicationAnswerOutput, type WriterVersionDto, type WriterQuestionDto, type GetApplicationContextOutput, type SaveApplicationAnswerOutput } from "./writer";
+export { trackingWriteOutput, undoChangeOutput } from "./tracking-writes";

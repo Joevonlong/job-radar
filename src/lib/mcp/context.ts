@@ -1,3 +1,4 @@
+import { callerKey, type AgentCaller } from "@/lib/agent-access/caller";
 import type { Permission } from "@/lib/agent-access/permissions";
 import type { McpConfig } from "@/lib/config/schemas/mcp";
 import type { TrapsConfig } from "@/lib/config/schemas/traps";
@@ -15,8 +16,7 @@ export interface McpWriterAccess {
   /** writer.yaml, me.yaml and stories.yaml as they are now. */
   inputs: () => WriterInputs;
   /**
-   * The answer-writing connection, used by `save_application_answer` and by nothing else. Null unless writer:write is
-   * effective and the application writer is on.
+   * Write-pool access for `save_application_answer`. Null unless writer:write is effective and the application writer is on.
    */
   writeDb: Db | null;
 }
@@ -45,13 +45,15 @@ export interface McpContext {
   log: LogLine;
   /** Absent: the writer tools are not offered. */
   writer?: McpWriterAccess;
+  /** Present only when tracking:write was granted a write connection. */
+  tracking?: { writeDb: Db | null };
   /**
    * The caller's effective permissions for this call, from the authorization decision (the server sets it; never read settings a
    * second time). Absent: no field block is given.
    */
   permissions?: ReadonlySet<Permission>;
   audit?: AuditRecorder;
-  caller?: { caller: "stdio"; tokenId: number | null; transport: "stdio" };
+  caller?: { caller: AgentCaller; tokenId: number | null; transport: "stdio" | "http" };
   auditCall?: { success: (count: number) => AuditEntry; committed: boolean };
 }
 
@@ -92,7 +94,7 @@ export function auditFailure(error: unknown): AuditOutcome {
 
 export function auditEntry(ctx: Pick<McpContext, "caller">, capability: string, target: AuditTarget | null, outcome: AuditOutcome, count: number, durationMs: number): AuditEntry {
   return {
-    caller: ctx.caller?.caller ?? "stdio",
+    caller: callerKey(ctx.caller?.caller ?? "stdio"),
     token_id: ctx.caller?.tokenId ?? null,
     transport: ctx.caller?.transport ?? "stdio",
     capability,

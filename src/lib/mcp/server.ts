@@ -1,6 +1,6 @@
 /**
  * The MCP server (`pnpm mcp:serve`, docs/mcp.md): tools generated from the capability registry, each authorized against the current
- * mcp.yaml on every call. Only `save_application_answer` writes, and all it can do is add an answer version. Every capability is
+ * mcp.yaml on every call. Write capabilities use separately granted connections and commit their audit with the change. Every capability is
  * registered with the SDK, but `tools/list` is answered by this file instead of the SDK, so the list follows the current settings
  * and lists only what a call would accept. The stdio entry point is scripts/mcp-serve.ts.
  */
@@ -26,7 +26,7 @@ import { mcpTranslator, type McpTranslator } from "./text";
 export const MCP_SERVER_NAME = "job-radar";
 
 /** The context with the real loaders (config files, the city groups of the database); `readSettings` defaults to mcp.yaml read fresh from disk. */
-export function defaultContext(db: Db, settings: McpConfig, options: { text?: McpTranslator; log?: LogLine; writeDb?: Db | null; readSettings?: () => McpConfig; audit?: McpContext["audit"]; caller?: McpContext["caller"] } = {}): McpContext {
+export function defaultContext(db: Db, settings: McpConfig, options: { text?: McpTranslator; log?: LogLine; writeDb?: Db | null; trackingWriteDb?: Db | null; readSettings?: () => McpConfig; audit?: McpContext["audit"]; caller?: McpContext["caller"] } = {}): McpContext {
   return {
     db,
     settings,
@@ -44,6 +44,7 @@ export function defaultContext(db: Db, settings: McpConfig, options: { text?: Mc
     text: options.text ?? mcpTranslator(),
     log: options.log ?? stderrLine,
     writer: { inputs: readWriterInputs, writeDb: options.writeDb ?? null },
+    tracking: { writeDb: options.trackingWriteDb ?? null },
     audit: options.audit,
     caller: options.caller,
   };

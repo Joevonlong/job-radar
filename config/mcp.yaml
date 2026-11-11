@@ -1,7 +1,7 @@
 # MCP server (docs/mcp.md): lets an MCP client you configure yourself (Claude Desktop, Claude Code, ...) query your jobs and
-# applications. The client starts `pnpm mcp:serve` as a local child process and talks to it over stdio; no port is opened. Nothing
-# can be written, except that `save_application_answer`, when you grant writer:write, adds answer versions; it cannot change or
-# delete any. Each call also adds one metadata row to the local `agent_calls` table (see `audit` below).
+# applications. The client starts `pnpm mcp:serve` as a local child process and talks to it over stdio; no port is opened.
+# writer:write adds answer versions; tracking:write updates application fields and can undo its own writes.
+# Each call also adds one metadata row to the local `agent_calls` table (see `audit` below).
 # Privacy: whatever the tools return is handed by your client to the model provider it uses (Anthropic for Claude, ...).
 # What may be returned is fixed in code: job facts, source links, scores and ranks, signals with their JD quotes, the JD after
 # AI-trap cleaning, and the status, dates, next step and interview rounds of your applications. Never returned: your profile,
@@ -19,6 +19,7 @@ enabled: false
 # search_jobs / get_job: jobs:read; list_applications: tracking:read
 # get_application_context: writer:read and writer.yaml enabled (shares your chosen application material)
 # save_application_answer: writer:write and writer.yaml enabled (only adds answer versions)
+# set_application_status / mark_applied / set_next_action / set_interview_rounds / undo_change: tracking:write
 # Other catalog permission ids are accepted but do not give tools yet.
 permissions:
   - jobs:read

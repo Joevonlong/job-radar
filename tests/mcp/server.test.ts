@@ -382,8 +382,9 @@ describe("tools come from the registry", () => {
     expect(lines).toEqual([expect.stringMatching(/^\[mcp\] registry_probe fail disabled items=0 ms=\d+$/)]);
   });
 
-  it("lists byte-identical tool definitions to the SDK for all five tools", async () => {
-    const ctx = context({ permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"], stdio: { permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"] } });
+  it("lists byte-identical tool definitions to the SDK for every tool", async () => {
+    const ctx = context({ permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write", "tracking:write"], stdio: { permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write", "tracking:write"] } });
+    ctx.tracking = { writeDb: untouchable };
     ctx.writer = { inputs: () => ({ writer: writerSchema.parse({ enabled: true }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: untouchable };
     const reference = new McpServer({ name: "reference", version: "1" }, { capabilities: { tools: {} } });
     for (const cap of CAPABILITIES) {
