@@ -29,10 +29,10 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 这两列说的是结构化字段。有两个权限还会给出字段清单拦不住的自由文本：
 
-- 有 `match:read` 时，AI 写的摘要、匹配理由和差距是根据你的画像和 JD 写成的自由文本，可能提到你的语言等级、期望薪资之类的内容。过滤原因带硬性筛选规则的 id 和命中的黑名单关键词（不给你为规则起的显示名称）。
+- 有 `match:read` 时，AI 写的摘要、匹配理由和差距是根据你的画像和 JD 写成的自由文本，可能提到你的语言等级、期望薪资之类的内容。过滤原因带硬性筛选规则的 id 和命中的黑名单关键词，也可能间接透露排除公司、地点、级别、合同类型等其他偏好；这些只是例子，并非完整清单。不给规则的显示名称字段。
 - 有 `notes:read` 时，申请备注、事件备注和收藏备注是你自己写的文字，按原文给出。
 
-这些文字只去掉不可见字符和针对 AI 的指令，别的不改。只有在这些文字可以离开本机时才授予这两个权限。
+这些文字会去除不可见字符和针对 AI 的指令。新增读取工具和 `list_applications` 还会遮盖自由文本中可识别的邮箱、本机路径和凭据赋值。清理无法保证识别所有个人信息；只有在剩余文字可以离开本机时才授予权限。
 
 这份清单写死在代码里（`src/lib/mcp/dto/index.ts`）；每个回答都逐字段构建，数据库加了新列也不会自己出现在回答里。
 
@@ -105,7 +105,13 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 |---|---|
 | `search_jobs` | 按排名返回岗位卡片，过滤方式和岗位列表一样：`query`（标题、公司名与别名、城市/地点和国家）、`search_in`（默认 `summary`；`all` 加搜原始 JD 和有效译文）、`country`（1–20 个两字母国家代码，不区分大小写、精确匹配，OR）、`city`、`workplace`、`min_rank`、`min_annual_salary`（市场基准货币）、`since` / `until`（首次发现日期，`YYYY-MM-DD`）、`application_status`、`sort`（`relevance`、`rank`、`posted`、`first_seen`；有 query 默认 relevance，无 query 默认 rank）、`limit`。始终隐藏硬过滤排除的岗位；默认范围还隐藏关闭和休眠岗位，范围等新增参数见下文。不含 JD 正文。 |
 | `get_job` | 一个岗位（`job_id`）的详情：上面所有字段，加上资历、语言、带引用的信号、发现的 AI 陷阱数量、你的申请，以及清洗后的 JD。 |
-| `list_applications` | 你的申请，排名高的在前；`status` 过滤；`stale_only: true` 只列超过每日提醒阈值（`notify.yaml: reminders.interested_days` / `applied_days`）还没动静的，等得最久的在前。 |
+| `list_applications` | 你的申请，排名高的在前；`status` 过滤；`stale_only: true` 只列超过每日提醒阈值（`notify.yaml: reminders.interested_days` / `applied_days`）还没动静的，等得最久的在前。有效 `notes:read` 增加每项的 `notes.application_notes`；没有它时原字段集合不变。 |
+| `get_today` | `jobs:read`：今日岗位和 all/high/salary/following 的 `quick_counts`。参数：`view`（保存视图 id 或 `all`）、`quick`（`high`、`salary`、`following`）、`include_filtered`、`hide_language`、`high_value`、`limit`。复用页面视图、合格分数和高价值规则；选中保存视图时它优先于快捷视图。没有显式开关且省略 view 时采用默认保存视图。 |
+| `list_companies` | `jobs:read`：默认岗位列表中的公司、关注和黑名单标记、岗位数和最高分。参数：`query`（显示名称）、`sort`（`jobs`、`score`、`recent`）、`limit`。 |
+| `get_company` | `jobs:read`：参数 `company_id` 和可选 `limit`；返回别名、已存官网域名及用户确认或推断来源、关注和黑名单、带来源 URL 的已有背景研究，以及默认当前列表中的在招岗位。不会启动研究。 |
+| `get_insights` | `jobs:read`：`range` 为 `insights.yaml: ranges_days` 提供的天数，省略用配置默认值；可选 `limit`。包含每日、来源、城市、薪资和分数直方图、信号及转化统计。`tracking:read` 增加申请与漏斗汇总，`match:read` 增加过滤原因统计。不含个人薪资底线数值和页面跳转链接。 |
+| `get_application` | `tracking:read`：按 `job_id` 读取申请状态、日期、下一步、轮数、历史、收藏和已读、关闭与过滤覆盖。`notes:read` 增加申请和事件备注。可选 `limit` 限制历史和事件备注；不给关闭备注或简历路径。 |
+| `list_favorites` | `tracking:read`：全部收藏岗位，含已关闭、被过滤和忽略的岗位。`sort` 为默认的 `starred`（最新优先）或 `rank`，可传 `limit`；`notes:read` 增加每项的 `notes.favorite_note`。 |
 | `get_application_context` | **默认关闭。** 写一个岗位答案所需的全部材料（`job_id`）：岗位事实、清洗后的 JD、拆解要点、公司背景和契合要点、问题、每题选中的材料和已保存的版本（最新的在前，每题最多 `max_results` 个）。 |
 | `save_application_answer` | **默认关闭。** 新增一个答案版本（`job_id`、`question_id`、`text`，可选 `sentences`）。 |
 
@@ -133,9 +139,18 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 
 `get_job` 仍能返回休眠岗位：`status` 仍是 `possibly_closed`，`closed_reason` 为 `dormant`。
 
-"今天有什么新的"就是 `search_jobs`（`since` = 今天，`sort` = `rank`）加 `list_applications`（`stale_only`）。
+使用 `get_today` 获取页面的今日视图；按首次发现日期查询可用 `search_jobs`（`since` = 今天）。等待中的申请用 `list_applications`（`stale_only`）。
 
-每个回答都写明匹配了多少条（`total`）、返回了多少条（`returned`）；截断时 `truncated` 为 true，并有一句说明。参数不合法时返回错误结果，指出是哪个字段。
+列表回答报告匹配数量（`total`）和返回数量（`returned`）；截断时 `truncated` 为 true，并给说明。参数不合法时返回类别错误。
+
+
+新增读取工具的每个集合（含别名、研究字段、链接、历史、洞察序列）都受 `limit` 与 `limits.max_results` 的较小值限制。嵌套集合截断也设置 `truncated` 并给提示；统计总数和快捷计数仍为完整数量。列表的 `total` / `returned` 分别是总数和返回数；`get_company` 对应在招岗位，`get_application` 对应历史事件。洞察返回 `range_days`、`window` 和 `truncated`。
+
+六个新增工具在相关陷阱扫描缺失、过期、读失败或关闭时，扣留岗位派生文字，包括职位名、公司名、别名、域名和链接；对应字符串为 null 或集合为空，`text_withheld` 说明原因。公司文字要求全部关联岗位扫描有效；洞察文字标签采用选定窗口内首次发现的全部岗位作为检查依据。数字统计、用户自写备注仍按权限提供，备注经过短字段清理。不返回原始载荷、不依赖 `raw:read`，权限预设不变。
+
+`list_applications` 在没有当前且可读的陷阱扫描时也扣留职位名、公司名和链接。为保持原 schema，扣留的标题和名称是空字符串，链接为空列表，并给说明；用户自写备注和下一步仍按权限经过文字清理后提供。
+
+今日和公司概览的数据组装由领域读取函数共享；详情页和岗位字段块共用检查与薪资输入；洞察明确接收 MCP 只读连接。网页保留原展示和翻译。在 `/jobs`，仅选中高价值筛选时才强制读取其策略；兴趣配置不可读时隐藏信号装饰，其他列表继续工作。
 
 ## 从客户端写答案
 

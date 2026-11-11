@@ -1,3 +1,6 @@
+import { blockList } from "../blocks";
+import { applicationNotesBlocks } from "@/lib/mcp/tracking-blocks";
+import { listApplicationsOutputFor } from "@/lib/mcp/dto/tracking";
 import { listApplicationsOutput } from "@/lib/mcp/dto";
 import { listApplications, listApplicationsInput } from "@/lib/mcp/tools/list-applications";
 
@@ -9,6 +12,8 @@ export const list_applications = defineCapability({
   permission: "tracking:read",
   input: listApplicationsInput,
   output: listApplicationsOutput,
+  outputFor: listApplicationsOutputFor,
+  blocks: blockList(applicationNotesBlocks),
   handler: listApplications,
   count: (output) => output.returned,
   annotations: READ_ONLY,
