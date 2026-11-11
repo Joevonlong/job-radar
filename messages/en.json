@@ -620,7 +620,7 @@
         "placeholder": "Type a city, then pick it…",
         "change": "Type to pick another city…",
         "clear": "Clear home city {city}",
-        "unknown": "\"{name}\" isn't a known place, so it's matched as written. Clear it and pick the city again from the list."
+        "unknown": "\"{name}\" isn't in the place dictionary, so it's matched as written. You can keep it that way (a town under 15,000 people can't be picked), or clear it and pick the city again from the list."
       },
       "places": {
         "label": "Locations outside home city",
@@ -632,7 +632,7 @@
         "switch": "{place}: {state}. Click to switch",
         "fixed": "{place}: always remote only",
         "remove": "Remove {place}",
-        "unknown": "\"{name}\" isn't a known place, so it's matched as written. Remove it and pick the place again from the list.",
+        "unknown": "\"{name}\" isn't in the place dictionary, so it's matched as written. You can keep it that way (a town under 15,000 people can't be picked), or remove it and pick the place again from the list.",
         "ruleMove": "A city you add starts as \"I'd move here\" (solid); a country or region starts as \"Remote only\" (dashed).",
         "ruleWorldwide": "Worldwide is always remote only.",
         "searches": "{count, plural, one {· # search per keyword group} other {· # searches per keyword group}}",
@@ -643,7 +643,7 @@
         "kind": {
           "country": "Country",
           "region": "Region",
-          "worldwide": "Everywhere"
+          "worldwide": "Worldwide"
         }
       },
       "workplace": {

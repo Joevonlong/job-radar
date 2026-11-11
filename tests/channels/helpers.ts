@@ -5,6 +5,7 @@ import type { ChannelContext } from "@/lib/channels/types";
 import { configRegistry, type ChannelsConfig, type ScheduleConfig, type SearchConfig } from "@/lib/config";
 
 import { queryPlaces, type QueryPlaces } from "@/lib/channels/query";
+import { placeDictionary } from "@/lib/market/geo";
 
 import { shippedPipeline } from "../pipeline/helpers";
 import { shippedYaml } from "../config/helpers";
@@ -19,7 +20,7 @@ export function shippedSearch(): SearchConfig {
 
 /** Location settings for a test: a home city, one place to move to in the home country, every kind of work. */
 export function testPlaces(overrides: Partial<QueryPlaces["preferences"]> = {}): QueryPlaces {
-  return queryPlaces({ home_city: "Berlin", places: [{ place: "München", relocate: true }], workplace: ["onsite", "hybrid", "remote"], ...overrides }, shippedPipeline());
+  return queryPlaces({ home_city: "Berlin", places: [{ place: "München", relocate: true }], workplace: ["onsite", "hybrid", "remote"], ...overrides }, shippedPipeline(), placeDictionary());
 }
 
 /** One on-site search per keyword group: the query shape many tests count on. */

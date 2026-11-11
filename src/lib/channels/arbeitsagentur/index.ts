@@ -1,9 +1,12 @@
 import { arbeitsagenturSettingsSchema, type ArbeitsagenturSettings } from "@/lib/config";
+import { loadPipeline } from "@/lib/market/effective";
+import { placeDictionary } from "@/lib/market/geo";
+import { placeGeo, type PlaceGeo } from "@/lib/market/places";
+import { MarketUnresolvedError } from "@/lib/market/resolve";
 
 import { detailLayoutError } from "../details";
 import { ChannelError, settlePostings } from "../errors";
 import { loadKnownDetails, storedDetailOf } from "../known";
-import { placeGeoForChannel } from "../market";
 import { placeFreeRequestKey, searchKind } from "../query";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
 import { COMPANY_PARAMS, fetchDetail, fetchSearchPage, germanLocation, type CompanyParam } from "./client";
@@ -174,3 +177,13 @@ export const arbeitsagenturChannel: Channel = {
   collect,
   parse: parseArbeitsagenturPayload,
 };
+
+/** The market's place tables with the place dictionary, for the German names of the places searched; an unresolved market fails the run like `marketForChannel`. */
+export function placeGeoForChannel(): PlaceGeo {
+  try {
+    return placeGeo(loadPipeline(), placeDictionary());
+  } catch (error) {
+    if (error instanceof MarketUnresolvedError) throw new ChannelError("unknown", error.message, { retryable: false });
+    throw error;
+  }
+}

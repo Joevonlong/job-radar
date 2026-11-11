@@ -45,9 +45,18 @@ describe("pnpm config:check on the location settings", () => {
     expect(run.out).not.toMatch(/Amsterdam[^\n]*not in the place dictionary/);
   });
 
+  it("says Arbeitsagentur's old location_names list is no longer read", () => {
+    const file = path.join(tmp.configDir, "sources.yaml");
+    const shipped = parse(fs.readFileSync(path.join(tmp.defaultsDir, "sources.yaml"), "utf8")) as { config_version: number };
+    fs.writeFileSync(file, stringify({ config_version: shipped.config_version, sources: { arbeitsagentur: { location_names: { munich: "München" } } } }));
+    const run = runConfigScript(tmp, "config-check.ts");
+    expect(run.out).toContain("sources.arbeitsagentur.location_names: no longer read");
+  });
+
   it("stays quiet about it without the old keys", () => {
     const run = runConfigScript(tmp, "config-check.ts");
     expect(run.out).not.toContain("searched now");
     expect(run.out).not.toContain("not in preferences.yaml places");
+    expect(run.out).not.toContain("location_names");
   });
 });

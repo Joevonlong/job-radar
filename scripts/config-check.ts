@@ -364,6 +364,15 @@ if (fs.existsSync(path.join(getProfileDir(), "preferences.yaml"))) {
   }
 }
 
+// sources.yaml: Arbeitsagentur's German city names come from the place dictionary now; an old list is accepted and not read
+try {
+  if (readEffectiveConfig("channels").sources.arbeitsagentur.location_names !== undefined) {
+    console.log("! sources.yaml sources.arbeitsagentur.location_names: no longer read; German city names come from the place dictionary. The list can be deleted");
+  }
+} catch {
+  // an unreadable file is reported by its own check above
+}
+
 // preferences.yaml deal_breakers: the limits of pipeline.yaml filter.deal_breakers, and a language gate needs the language step
 // (nothing to check before the profile exists)
 if (fs.existsSync(path.join(getProfileDir(), "preferences.yaml"))) {

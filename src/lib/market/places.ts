@@ -17,6 +17,8 @@ export interface PlaceGeo {
   regions: Readonly<Record<string, { name: string; countries: readonly string[] }>>;
   /** The place dictionary; absent or null when only the tables are read. */
   dictionary?: PlaceSource | null;
+  /** The home market's country: a name without an id means a place there first, and the largest one worldwide only when it has none. */
+  home?: string | null;
 }
 
 export type PlaceKind = "city" | "country" | "region" | "worldwide";
@@ -45,9 +47,9 @@ export interface Place {
 const WORLDWIDE = "worldwide";
 
 /** The tables of a pipeline config, with the place dictionary (null: the tables alone). */
-export function placeGeo(pipeline: { filter: { city_aliases: PlaceGeo["cityAliases"] }; market: Pick<PlaceGeo, "cities" | "countries" | "regions"> }, dictionary: PlaceSource | null): PlaceGeo {
-  const { cities, countries, regions } = pipeline.market;
-  return { cityAliases: pipeline.filter.city_aliases, cities, countries, regions, dictionary };
+export function placeGeo(pipeline: { filter: { city_aliases: PlaceGeo["cityAliases"] }; market: Pick<PlaceGeo, "cities" | "countries" | "regions"> & { country?: string } }, dictionary: PlaceSource | null): PlaceGeo {
+  const { cities, countries, regions, country } = pipeline.market;
+  return { cityAliases: pipeline.filter.city_aliases, cities, countries, regions, dictionary, home: country ?? null };
 }
 
 /** Lower case, accents folded, spaces collapsed: "  ÖSTERREICH " and "osterreich" compare equal. */
@@ -134,15 +136,24 @@ function cityEntry(text: string, geo: Pick<PlaceGeo, "cityAliases" | "cities">):
   return index.exact.get(key) ?? index.folded.get(citySpellingKey(text)) ?? null;
 }
 
-type CityGeo = Pick<PlaceGeo, "cityAliases" | "cities" | "dictionary">;
+type CityGeo = Pick<PlaceGeo, "cityAliases" | "cities" | "dictionary" | "home">;
+
+/** The dictionary's place of this name without an id: in the home country first ("Marburg" in Germany, not Maribor), else the largest anywhere. */
+function matchByName(text: string, geo: CityGeo, kinds?: readonly Geoname["kind"][]): Geoname | null {
+  const dictionary = geo.dictionary ?? null;
+  if (dictionary === null) return null;
+  const options = kinds === undefined ? {} : { kinds };
+  const atHome = geo.home === null || geo.home === undefined ? undefined : dictionary.matchPlaceName(text, { ...options, country: geo.home })[0];
+  return atHome ?? dictionary.matchPlaceName(text, options)[0] ?? null;
+}
 
 /** A city the tables or the dictionary know by this spelling; the tables first, so a name that is also a country stays a city here. */
 function cityOf(text: string, geo: CityGeo): Place | null {
   const entry = cityEntry(text, geo);
   const dictionary = geo.dictionary ?? null;
   if (entry !== null) return cityPlace(entry, dictionary === null ? null : geonameOfCity(entry, dictionary));
-  const found = dictionary?.matchPlaceName(text, { kinds: ["city"] })[0];
-  return found === undefined ? null : cityPlace(tableCityOf(found, geo), found);
+  const found = matchByName(text, geo, ["city"]);
+  return found === null ? null : cityPlace(tableCityOf(found, geo), found);
 }
 
 /** The tables' name of a city ("Munich" -> "München", "慕尼黑" -> "München"), else the text as written. */
@@ -213,7 +224,7 @@ function placeOfGeoname(geoname: Geoname, geo: PlaceGeo, written: string): Place
 /**
  * What `text` names: Worldwide, then a region, a country, a city. A saved entry's `id` settles which place a shared name
  * means (Cambridge in England or in Massachusetts); without one, the tables come first, then the dictionary's largest place of
- * that name. Null when neither knows it: an old file may hold such a name, and it is then matched as written.
+ * that name in the home country, then anywhere. Null when neither knows it: an old file may hold such a name, and it is then matched as written.
  */
 export function lookupPlace(text: string, geo: PlaceGeo, id: PlaceId | null = null): Place | null {
   const written = text.trim();
@@ -232,8 +243,8 @@ export function lookupPlace(text: string, geo: PlaceGeo, id: PlaceId | null = nu
   if (country !== null) return countryPlace(country.code, country, dictionary?.getCountry(country.code) ?? null, written);
   const city = cityEntry(written, geo);
   if (city !== null) return cityPlace(city, dictionary === null ? null : geonameOfCity(city, dictionary));
-  const found = dictionary?.matchPlaceName(written)[0];
-  return found === undefined ? null : placeOfGeoname(found, geo, written);
+  const found = matchByName(written, geo);
+  return found === null ? null : placeOfGeoname(found, geo, written);
 }
 
 /** The id of a region the tables name. */

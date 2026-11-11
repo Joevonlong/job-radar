@@ -62,6 +62,14 @@ describe("lookupPlace with the dictionary", () => {
     expect(samePlaceKey("Cambridge", geo, 1002)).not.toBe(samePlaceKey("Cambridge", geo, 1003));
   });
 
+  it("reads a shared name without an id as the place in the home country, and the largest anywhere only when home has none", () => {
+    const inYb: PlaceGeo = { ...geo, home: "YB" };
+    expect(lookupPlace("Cambridge", inYb)).toMatchObject({ countries: ["YB"], id: 1003 });
+    expect(lookupPlace("Bigtown", inYb)).toMatchObject({ countries: ["XA"], id: 1001 });
+    expect(lookupPlace("Cambridge", inYb, 1002)?.countries).toEqual(["XA"]);
+    expect(homeCityAbroad("Cambridge", inYb, "YB")).toBeNull();
+  });
+
   it("stores a country by its code and a city by its name", () => {
     expect(storedPlaceName("Ybaria", geo)).toBe("YB");
     expect(storedPlaceName("Großstadt", geo)).toBe("Bigtown");
@@ -109,6 +117,11 @@ describe("resolvePlaces", () => {
   it("keeps the place an id names, and an unknown name as written without an id", () => {
     const out = resolvePlaces({ home_city: "", home_city_id: 1001, places: [{ place: "Cambridge", relocate: true, id: 1003 }, { place: " Atlantis ", relocate: true }] }, geo, false);
     expect(out).toEqual({ home_city: "", places: [{ place: "Cambridge", relocate: true, id: 1003 }, { place: "Atlantis", relocate: true }] });
+  });
+
+  it("gives an old name without an id the home country's place when a later save adds the ids", () => {
+    const out = resolvePlaces({ home_city: "Cambridge", places: [{ place: "Cambridge", relocate: true }] }, { ...geo, home: "YB" }, false);
+    expect(out).toEqual({ home_city: "Cambridge", home_city_id: 1003, places: [] });
   });
 });
 

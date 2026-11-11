@@ -8,6 +8,7 @@ import { ensureProfileFiles, getConfigPath, mutateConfig, reloadConfig, setOnPro
 import { meConfigToDraft } from "@/lib/profile/draft";
 import { countryDefaults, loadSetupView, profileDraft, readinessOf } from "@/lib/setup/view";
 import { resetPackCache } from "@/lib/market";
+import { searchPlaces } from "@/lib/market/geo";
 import { readSetupState, resetSetupStateCache } from "@/lib/setup/state";
 import { saveAiStep } from "@/lib/setup/steps/ai";
 import { saveLanguageStep } from "@/lib/setup/steps/language";
@@ -77,22 +78,22 @@ describe("market", () => {
     const prefs = reloadConfig("preferences");
     expect(prefs.market).toEqual({ pack: "generic", country: "NL", currency: "EUR", home_language: "nl" });
     expect(prefs.home_city).toBe("Amsterdam");
-    expect(prefs.places).toEqual([{ place: "Utrecht", relocate: true }, { place: "eu", relocate: false }]);
+    expect(prefs.places).toEqual([{ place: "Utrecht", relocate: true, id: expect.any(Number) }, { place: "eu", relocate: false, id: "eu" }]);
     expect(snapshot("search")).toEqual(before);
     expect(reloadConfig("schedule").timezone).toBe("Europe/Amsterdam");
     expect(stepStatus("market")).toBe("done");
   });
 
   it("stores places as the form does, whatever the command line wrote, each once", async () => {
-    const places = [{ place: "European Union", relocate: false }, { place: "eu", relocate: false }, { place: "netherlands", relocate: false }, { place: "Poing", relocate: true }];
+    const places = [{ place: "European Union", relocate: false }, { place: "eu", relocate: false }, { place: "netherlands", relocate: false }, { place: "Haarlem", relocate: true }];
     expect(await saveMarketStep({ ...MARKET, places })).toEqual({ status: "saved", step: "market" });
-    expect(reloadConfig("preferences").places).toEqual([{ place: "eu", relocate: false }, { place: "NL", relocate: false }, { place: "Poing", relocate: true }]);
+    expect(reloadConfig("preferences").places).toEqual([{ place: "eu", relocate: false, id: "eu" }, { place: "NL", relocate: false, id: expect.any(Number) }, { place: "Haarlem", relocate: true, id: expect.any(Number) }]);
   });
 
   it("keeps a ✈ given on any spelling of a place, and leaves out the home city", async () => {
     const places = [{ place: "NL", relocate: false }, { place: "netherlands", relocate: true }, { place: "amsterdam", relocate: true }];
     expect(await saveMarketStep({ ...MARKET, places })).toEqual({ status: "saved", step: "market" });
-    expect(reloadConfig("preferences").places).toEqual([{ place: "NL", relocate: true }]);
+    expect(reloadConfig("preferences").places).toEqual([{ place: "NL", relocate: true, id: expect.any(Number) }]);
   });
 
   it("the profile step is not offered a country or region as a city", async () => {
@@ -133,7 +134,7 @@ describe("market: places", () => {
   it("Worldwide is saved as remote only, and a place named twice once, ✈ winning", async () => {
     const input: MarketInput = { ...MARKET, places: [{ place: "Worldwide", relocate: true }, { place: "Utrecht", relocate: false }, { place: "utrecht", relocate: true }] };
     expect(await saveMarketStep(input)).toEqual({ status: "saved", step: "market" });
-    expect(reloadConfig("preferences").places).toEqual([{ place: "Worldwide", relocate: false }, { place: "Utrecht", relocate: true }]);
+    expect(reloadConfig("preferences").places).toEqual([{ place: "Worldwide", relocate: false, id: "worldwide" }, { place: "Utrecht", relocate: true, id: expect.any(Number) }]);
   });
 
   it("keeps a workplace without remote when only the time zone changes", async () => {
@@ -146,7 +147,9 @@ describe("market: places", () => {
   });
 
   it("takes more than 50 places, as the file before places did", async () => {
-    const places = Array.from({ length: 80 }, (_, i) => ({ place: `Town ${i}`, relocate: i % 2 === 0 }));
+    const cities = [...new Map("abcdefghiklmnoprstuwz".split("").flatMap((letter) => searchPlaces(letter, { country: "DE", kinds: ["city"], limit: 6 })).map((city) => [city.names.en, city])).values()];
+    const places = cities.slice(0, 80).map((city, i) => ({ place: city.names.en, relocate: i % 2 === 0, id: city.id }));
+    expect(places).toHaveLength(80);
     expect(await saveMarketStep({ ...MARKET, places })).toEqual({ status: "saved", step: "market" });
     expect(reloadConfig("preferences").places).toHaveLength(80);
   });

@@ -7,7 +7,7 @@ import type { CycleStepContext, StepResult } from "@/lib/cycle/steps";
 import { registerCycleStep } from "@/lib/cycle/steps";
 import { loadConfig, parseConfigText, readProfileText, type MeConfig, type PipelineConfig, type PreferencesConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
-import { placeDictionary } from "@/lib/market/geo";
+import { placeDictionary, type PlaceDictionary } from "@/lib/market/geo";
 import type { Db } from "@/lib/db/client";
 import {
   getFilterResults,
@@ -86,6 +86,16 @@ export function currentWatchedCompanies(logger?: ChannelLogger): string[] {
   }
 }
 
+/** The place dictionary, or null when its file cannot be read: places are then read with the market's tables alone. */
+function currentPlaceDictionary(logger?: ChannelLogger): PlaceDictionary | null {
+  try {
+    return placeDictionary();
+  } catch (error) {
+    logger?.warn("place dictionary not read; places are read with the market's tables alone", { error: error instanceof Error ? error.message : String(error) });
+    return null;
+  }
+}
+
 /** `jobs` row -> the fields the rules read. */
 export function toFilterJob(row: FilterCandidate): FilterJob {
   return {
@@ -141,9 +151,9 @@ const sameReasons = (a: readonly string[], b: readonly string[]): boolean => a.l
  */
 export async function runFilter(db: Db, options: FilterOptions): Promise<FilterRunResult> {
   const watchedCompanies = options.watchedCompanies ?? currentWatchedCompanies(options.logger);
-  const places = placeDictionary();
+  const places = currentPlaceDictionary(options.logger);
   // Version the evaluator along with all configuration it reads, including inputs outside the preference snapshot.
-  const configHash = createHash("sha256").update(JSON.stringify([4, options.preferences, options.pipeline, options.me, watchedCompanies, places.meta.fetched])).digest("hex");
+  const configHash = createHash("sha256").update(JSON.stringify([5, options.preferences, options.pipeline, options.me, watchedCompanies, places?.meta.fetched ?? null])).digest("hex");
   const compiled: CompiledFilter = compileFilter(options.preferences, options.pipeline, { me: options.me, watchedCompanies, places });
   const dealBreakers = startDealBreakerRun(compiled.dealBreakers, options.timeBox ?? vmTimeBox);
   const workAreaRun = startWorkAreaRun(compiled, options.timeBox ?? vmTimeBox);
