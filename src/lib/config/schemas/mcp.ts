@@ -5,6 +5,7 @@ import { DEFAULT_PERMISSIONS, permissionSchema } from "@/lib/agent-access/permis
 /** Bounds of the limits: a typo cannot turn a tool into a dump of the whole database. */
 export const MCP_MAX_RESULTS_CAP = 100;
 export const MCP_MAX_DESCRIPTION_CHARS_CAP = 100_000;
+export const MCP_MAX_RAW_CHARS_CAP = 1_000_000;
 export const MCP_MAX_DAILY_CAP = 100_000;
 
 export const AGENT_ACTIONS = [
@@ -70,8 +71,10 @@ export const mcpSchema = z.strictObject({
       max_results: z.number().int().min(1).max(MCP_MAX_RESULTS_CAP).default(20),
       /** Most characters of a JD one `get_job` call returns; a longer JD is cut and marked as cut. */
       max_description_chars: z.number().int().min(500).max(MCP_MAX_DESCRIPTION_CHARS_CAP).default(12_000),
+      /** Total serialized payload characters across all sources of one raw-posting call. */
+      max_raw_chars: z.number().int().min(500).max(MCP_MAX_RAW_CHARS_CAP).default(20_000),
     })
-    .default({ max_results: 20, max_description_chars: 12_000 }),
+    .default({ max_results: 20, max_description_chars: 12_000, max_raw_chars: 20_000 }),
   budgets: budgetsSchema,
 });
 

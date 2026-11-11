@@ -20,8 +20,9 @@
  * raw errors, raw run payloads and notifications. Writer material is the explicitly selected subset described above; unselected stories are never given by writer:read alone (a fit note
  * can retain short quotes selected when it was made).
  *
- * Every string that comes from a job posting goes through the caller's `clean` (invisible characters removed, an instruction to an
- * AI replaced by the trap marker) before it is put in a DTO.
+ * Posting strings go through the caller's `clean` (invisible characters removed, an instruction to an AI replaced by the trap
+ * marker), except `get_job_raw` under raw:read: its JSON payloads are uncleaned and may contain recruiter contact data or AI
+ * instructions. Only their combined length is capped; metadata including parse_error is cleaned independently.
  */
 export { linkDto, locationDto, salaryDto, rankDto, toLinkDto, toLocationDto, toSalaryDto, type CleanText } from "./shared";
 export { jobCardDto, amountDto, signalDto, descriptionDto, jobDetailDto, searchJobsOutput, searchJobsOutputFor, getJobOutput, getJobOutputFor, toJobCardDto, toSignalDto, toJobDetailDto, type JobCardDto, type DescriptionDto, type JobDetailDto, type SearchJobsOutput, type GetJobOutput, type QuoteGuard } from "./jobs";
@@ -34,3 +35,4 @@ export { applicationDto, historyDto, applicationItemDto, listApplicationsOutput,
 export { writerVersionDto, writerJdPointDto, writerStoryDto, writerQuestionDto, getApplicationContextOutput, saveApplicationAnswerOutput, type WriterVersionDto, type WriterQuestionDto, type GetApplicationContextOutput, type SaveApplicationAnswerOutput } from "./writer";
 export { systemStatusOutput, listCyclesOutput, listChannelsOutput, activityLogOutput, aiUsageOutput } from "./ops";
 export { getProfileOutput, getInterestsOutput, previewDealBreakersOutput, previewInterestCategoryOutput, toMeDto, toPreferencesDto, toStoriesDto, toInterestSettingsDto, toSuggestionDto, toDealBreakerPreviewDto, toCategoryPreviewDto, type GetProfileOutput, type GetInterestsOutput } from "./profile";
+export { rawPostingDto, getJobRawOutput, toRawPostingDtos } from "./raw";

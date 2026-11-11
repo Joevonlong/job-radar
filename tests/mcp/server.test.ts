@@ -430,6 +430,7 @@ describe("permissions decide visibility", () => {
   const cases = [
     { name: "search_jobs", permission: "jobs:read", args: {} },
     { name: "get_job", permission: "jobs:read", args: { job_id: 1 } },
+    { name: "get_job_raw", permission: "raw:read", args: { job_id: 1 } },
     { name: "list_applications", permission: "tracking:read", args: {} },
     { name: "get_application_context", permission: "writer:read", args: { job_id: 1 } },
     { name: "save_application_answer", permission: "writer:write", args: { job_id: 1, question_id: 1, text: "An answer." } },
