@@ -16,8 +16,8 @@ const bin = path.join(tmp, "bin");
 fs.mkdirSync(bin);
 fs.writeFileSync(path.join(bin, "pnpm"), '#!/bin/sh\necho "cwd=$(pwd -P) args=$*" >&2\n', { mode: 0o755 });
 
-function run(command: string, env: Record<string, string>) {
-  return spawnSync(command, ["--extra"], { cwd: tmp, env, encoding: "utf8" });
+function run(command: string, env: Partial<NodeJS.ProcessEnv>) {
+  return spawnSync(command, ["--extra"], { cwd: tmp, env: env as NodeJS.ProcessEnv, encoding: "utf8" });
 }
 
 describe("scripts/mcp-stdio.sh", () => {
