@@ -23,6 +23,7 @@ test("every page has its own title in the form 'Page · Job Radar'", async ({ pa
     ["/pipeline", "申请 · Job Radar"],
     ["/settings", "设置 · Job Radar"],
     ["/settings/agents", "Agent 接入 · Job Radar"],
+    ["/settings/agents/activity", "Agent 活动 · Job Radar"],
     ["/me", "我的画像 · Job Radar"],
     ["/sources/ai-usage", "AI 用量 · Job Radar"],
     ["/sources/logs", "操作日志 · Job Radar"],

@@ -579,6 +579,15 @@ Details: [deploy.md](deploy.md), "The ai-worker runs from a release directory".
 These keys may be missing (the defaults apply); a file without them needs no migration. The `companies` block may also be
 omitted. Edit the overview page size in YAML or the advanced editor.
 
+## Agent activity (`ui.yaml`)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `agent_activity.page_size` | 50 | Rows per page of `/settings/agents/activity`; 1 to 500 |
+| `agent_activity.default_range` | `7d` | The time range the page opens on: `today`, `7d`, `30d` or `all` |
+
+The whole block may be missing, and so may each key (the defaults apply); a file without them needs no migration. `ui.yaml` is strict, so a version older than this one refuses a file that holds `agent_activity`: remove the block before switching back.
+
 Rolling back to a version without the company filter: `interests.yaml` views and `ui.yaml` are strict, so the older
 version refuses a file that holds the new keys (and the push step cannot read `interests.yaml` either). Before switching:
 

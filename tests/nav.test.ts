@@ -38,10 +38,11 @@ describe("nav config", () => {
 });
 
 describe("palette subpages", () => {
-  it("lists fourteen destinations including activity logs and agent access without changing main navigation", () => {
+  it("lists fifteen destinations including activity logs and agent access without changing main navigation", () => {
     expect(NAV_ITEMS.length).toBe(10);
-    expect(NAV_ITEMS.length + PALETTE_SUBPAGES.length).toBe(14);
+    expect(NAV_ITEMS.length + PALETTE_SUBPAGES.length).toBe(15);
     expect(PALETTE_SUBPAGES.find((page) => page.key === "access")?.href).toBe("/settings/agents");
+    expect(PALETTE_SUBPAGES.find((page) => page.key === "activity")?.href).toBe("/settings/agents/activity");
     expect(PALETTE_SUBPAGES.find((page) => page.key === "logs")?.href).toBe("/sources/logs");
     expect(zh.sources.subnav.logs).toBe("操作日志");
     expect(zh.sources.subnav.logsKeywords).toContain("logs");

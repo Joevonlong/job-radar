@@ -477,6 +477,12 @@ giving a query that is still running at most 5 more seconds. The `audit` timeout
 retention is read afresh by the runner. Existing config files get these defaults without a version change. `pnpm run
 doctor` reports the audit retention days in `data.mcp` when MCP is on.
 
+### Agent activity page
+
+Settings → Agent access → Agent activity (`/settings/agents/activity`, also in the command palette) lists these rows, newest first: when, which connection (the local stdio process or a token, revoked tokens included and marked), which tool with a read, write or run tag, the job it touched, the result (an error shows its category), how many items came back and how long it took. A target that is a job, an application or a question links to its job page with the title and company; one that cannot be resolved (the job was deleted) shows `#id`. The page never shows arguments or returned content, because none is stored.
+
+The filters are in the URL, so a view can be bookmarked or shared: connection, tool, result and time (today, 7 days, 30 days, all). The count and the bar of calls per result above the table follow the filters. "Older calls" pages through the rows without repeating or skipping any, also when several share the same instant, and keeps the filters. On a phone the rows become cards. The page opens on the range set in `ui.yaml` (`agent_activity.default_range`, default 7 days) with `agent_activity.page_size` rows (default 50); see [configuration.md](configuration.md#agent-activity-uiyaml). Rows older than `audit.retention_days` are gone, so a longer range shows no more than that. The page is read only and has no session gate of its own beyond the web password.
+
 ## Optional: a database role that can only read
 
 The read-only sessions guard against a mistaken write, but they are not a security boundary. For a hard one, give the server

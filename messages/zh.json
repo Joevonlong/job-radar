@@ -9551,7 +9551,8 @@
   "agents": {
     "subnav": {
       "label": "Agent 设置",
-      "access": "Agent 接入"
+      "access": "Agent 接入",
+      "activity": "Agent 活动"
     },
     "page": {
       "title": "Agent 接入",
@@ -9720,6 +9721,100 @@
       "cancel": "取消",
       "save": "保存",
       "saving": "正在保存…"
+    },
+    "activity": {
+      "title": "Agent 活动",
+      "description": "每次调用都会记一条：谁调用的、用了哪个工具、动了哪一条、结果和耗时。不记录参数和返回内容。",
+      "retention": "调用记录保留 {days} 天。",
+      "filtersLabel": "筛选 agent 调用",
+      "filters": {
+        "connection": {
+          "label": "连接",
+          "all": "全部连接",
+          "stdio": "本机 stdio",
+          "revoked": "{name}（已吊销）"
+        },
+        "tool": {
+          "label": "工具",
+          "all": "全部工具"
+        },
+        "result": {
+          "label": "结果",
+          "all": "全部结果"
+        },
+        "range": {
+          "label": "时间",
+          "today": "今天",
+          "7d": "7 天",
+          "30d": "30 天",
+          "all": "全部"
+        },
+        "apply": "应用",
+        "clear": "清除筛选"
+      },
+      "area": {
+        "actions": "触发动作",
+        "import": "导入岗位"
+      },
+      "result": {
+        "ok": "成功",
+        "not_permitted": "无权限",
+        "invalid_input": "输入无效",
+        "error": "出错"
+      },
+      "errorWith": "{result}：{category}",
+      "summary": {
+        "total": "{count} 次调用",
+        "bar": "按结果的调用数",
+        "segment": "{result}：{count}"
+      },
+      "columns": {
+        "time": "时间",
+        "connection": "连接",
+        "tool": "工具",
+        "target": "目标",
+        "result": "结果",
+        "returned": "条数",
+        "duration": "耗时",
+        "undo": "撤销"
+      },
+      "kind": {
+        "read": "读",
+        "write": "写",
+        "trigger": "触发"
+      },
+      "connection": {
+        "stdio": "本机 stdio",
+        "unknownToken": "Token #{id}",
+        "revoked": "已吊销"
+      },
+      "target": {
+        "job": "岗位",
+        "application": "申请",
+        "question": "问题",
+        "unresolved": "#{id}"
+      },
+      "undo": {
+        "undoable": "可撤销",
+        "undone": "已撤销",
+        "not_undoable": "不可撤销"
+      },
+      "list": "Agent 调用记录",
+      "duration": "{ms} 毫秒",
+      "older": "更早的",
+      "newest": "回到最新",
+      "empty": {
+        "none": {
+          "title": "还没有 agent 调用",
+          "body": "agent 连上并用了工具之后，调用会显示在这里。",
+          "link": "去设置 agent 接入"
+        },
+        "filtered": {
+          "title": "没有符合筛选的调用",
+          "clear": "清除筛选"
+        }
+      },
+      "error": "无法从数据库读取 agent 活动。"
     }
   }
 }

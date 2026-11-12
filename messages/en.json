@@ -9551,7 +9551,8 @@
   "agents": {
     "subnav": {
       "label": "Agent settings",
-      "access": "Agent access"
+      "access": "Agent access",
+      "activity": "Agent activity"
     },
     "page": {
       "title": "Agent access",
@@ -9720,6 +9721,100 @@
       "cancel": "Cancel",
       "save": "Save",
       "saving": "Saving…"
+    },
+    "activity": {
+      "title": "Agent activity",
+      "description": "Every agent call is recorded: who made it, which tool, which item it touched, the result and how long it took. Arguments and returned content are not recorded.",
+      "retention": "Calls are kept for {days, plural, one {# day} other {# days}}.",
+      "filtersLabel": "Filter agent calls",
+      "filters": {
+        "connection": {
+          "label": "Connection",
+          "all": "All connections",
+          "stdio": "This machine (stdio)",
+          "revoked": "{name} (revoked)"
+        },
+        "tool": {
+          "label": "Tool",
+          "all": "All tools"
+        },
+        "result": {
+          "label": "Result",
+          "all": "All results"
+        },
+        "range": {
+          "label": "Time",
+          "today": "Today",
+          "7d": "7 days",
+          "30d": "30 days",
+          "all": "All"
+        },
+        "apply": "Apply",
+        "clear": "Clear filters"
+      },
+      "area": {
+        "actions": "Run actions",
+        "import": "Import jobs"
+      },
+      "result": {
+        "ok": "OK",
+        "not_permitted": "Not permitted",
+        "invalid_input": "Invalid input",
+        "error": "Error"
+      },
+      "errorWith": "{result}: {category}",
+      "summary": {
+        "total": "{count, plural, =0 {No calls} one {# call} other {# calls}}",
+        "bar": "Calls by result",
+        "segment": "{result}: {count}"
+      },
+      "columns": {
+        "time": "Time",
+        "connection": "Connection",
+        "tool": "Tool",
+        "target": "Target",
+        "result": "Result",
+        "returned": "Items",
+        "duration": "Duration",
+        "undo": "Undo"
+      },
+      "kind": {
+        "read": "read",
+        "write": "write",
+        "trigger": "run"
+      },
+      "connection": {
+        "stdio": "This machine (stdio)",
+        "unknownToken": "Token #{id}",
+        "revoked": "revoked"
+      },
+      "target": {
+        "job": "Job",
+        "application": "Application",
+        "question": "Question",
+        "unresolved": "#{id}"
+      },
+      "undo": {
+        "undoable": "Can be undone",
+        "undone": "Undone",
+        "not_undoable": "Cannot be undone"
+      },
+      "list": "Agent calls",
+      "duration": "{ms} ms",
+      "older": "Older calls",
+      "newest": "Back to the newest",
+      "empty": {
+        "none": {
+          "title": "No agent calls yet",
+          "body": "Calls show up here once an agent connects and uses a tool.",
+          "link": "Set up agent access"
+        },
+        "filtered": {
+          "title": "No calls match these filters",
+          "clear": "Clear filters"
+        }
+      },
+      "error": "The agent activity could not be read from the database."
     }
   }
 }

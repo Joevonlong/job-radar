@@ -25,6 +25,7 @@ import { REASON_EVIDENCE_VERSION, type ReasonEvidence } from "@/lib/scoring/evid
 
 import type { Executor } from "./executor";
 import { seedSalary } from "./seed-salary";
+import { seedAgentCalls } from "./seed-agent-calls";
 import { removeSeedActivity, seedActivity } from "./seed-activity";
 import { setApplicationNotes, setApplicationStatus, type ApplicationStatus } from "./repos/applications";
 import { addFavorite } from "./repos/favorites";
@@ -870,6 +871,7 @@ export async function seedDatabase(db: Executor, options: SeedOptions): Promise<
   await runGhostCheck(db, { ...ghostCheckConfig(pipeline), channels: ghostChannelsOf(undefined), limit: jobIds.length, jobIds, force: true, now, logger: { warn: () => {}, error: () => {} } });
   // The salary benchmark of the seeded jobs and one fictional lookup
   await seedSalary(db, { now, currency: pipeline.market.currency });
+  await seedAgentCalls(db, { now, jobIds });
   return result;
 }
 

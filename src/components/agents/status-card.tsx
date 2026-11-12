@@ -1,6 +1,7 @@
 "use client";
 
 import { Copy } from "lucide-react";
+import Link from "next/link";
 import { useFormatter, useTranslations } from "next-intl";
 import { useId, useOptimistic, useRef, useTransition } from "react";
 
@@ -13,6 +14,7 @@ import { DocLink } from "@/components/ui/doc-link";
 import { Switch } from "@/components/ui/switch";
 import type { AgentAccessConfig, AgentAccessStatus } from "@/lib/agent-access/settings-view";
 import type { McpVerdict } from "@/lib/ops/doctor/mcp-verdict";
+import { AGENTS_ACTIVITY_PAGE } from "@/lib/settings/tabs";
 import { toastTone } from "@/lib/toast";
 
 import { useReportResult } from "./use-report-result";
@@ -125,7 +127,15 @@ export function StatusCard({ config, status, passwordUsable, locked, address, no
       </CardContent>
       <CardFooter className="flex-wrap gap-x-4 gap-y-1 font-mono text-data text-ink-2">
         <span data-testid="agents-active-tokens">{status.activeTokens === null ? t("tokensUnknown") : t("tokens", { count: status.activeTokens })}</span>
-        <span data-testid="agents-last-call">{lastCall}</span>
+        <span data-testid="agents-last-call">
+          {status.lastCallAt === null ? (
+            lastCall
+          ) : (
+            <Link href={AGENTS_ACTIVITY_PAGE} className="underline decoration-dotted underline-offset-4">
+              {lastCall}
+            </Link>
+          )}
+        </span>
       </CardFooter>
     </Card>
   );

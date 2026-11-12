@@ -23,6 +23,11 @@ export const PLACE_PICKER_DEFAULTS = { candidates: 8 } as const;
 /** Rows per page of /companies when a user ui.yaml predates the company overview. */
 export const COMPANIES_PAGE_DEFAULTS = { page_size: 50 } as const;
 
+/** The agent activity log (/settings/agents/activity) when ui.yaml has no `agent_activity` block. */
+export const AGENT_ACTIVITY_RANGES = ["today", "7d", "30d", "all"] as const;
+export type AgentActivityRange = (typeof AGENT_ACTIVITY_RANGES)[number];
+export const AGENT_ACTIVITY_DEFAULTS: { page_size: number; default_range: AgentActivityRange } = { page_size: 50, default_range: "7d" };
+
 /** The optional web password: what the code uses when ui.yaml has no `web_access` block. */
 export const WEB_ACCESS_DEFAULTS = {
   session_days: 30,
@@ -122,6 +127,13 @@ export const uiSchema = z
     companies: z
       .strictObject({ page_size: positiveInt.max(500).default(COMPANIES_PAGE_DEFAULTS.page_size) })
       .default(COMPANIES_PAGE_DEFAULTS),
+    /** The agent activity log: rows per page (1-500) and the time range it opens on. */
+    agent_activity: z
+      .strictObject({
+        page_size: positiveInt.max(500).default(AGENT_ACTIVITY_DEFAULTS.page_size),
+        default_range: z.enum(AGENT_ACTIVITY_RANGES).default(AGENT_ACTIVITY_DEFAULTS.default_range),
+      })
+      .default(AGENT_ACTIVITY_DEFAULTS),
     /** The place picker of /me and the setup wizard. */
     place_picker: z
       .strictObject({ candidates: positiveInt.max(50).default(PLACE_PICKER_DEFAULTS.candidates) })

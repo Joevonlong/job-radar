@@ -428,6 +428,15 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 
 这些键都可以不写（用默认值），不写的文件不用迁移；整个 `companies` 段也可以省略。公司总览的每页行数在 YAML 或高级编辑器中修改。
 
+## Agent 活动（`ui.yaml`）
+
+| 键 | 默认 | 含义 |
+|---|---|---|
+| `agent_activity.page_size` | 50 | `/settings/agents/activity` 每页行数；1 到 500 |
+| `agent_activity.default_range` | `7d` | 页面默认打开的时间范围：`today`、`7d`、`30d` 或 `all` |
+
+整段和每个键都可以不写（用默认值），不写的文件不用迁移。`ui.yaml` 是严格模式，比本版本旧的版本读到 `agent_activity` 会拒绝整个文件：切回旧版本前先删掉这一段。
+
 回退到没有公司筛选的版本：`interests.yaml` 的视图和 `ui.yaml` 都是严格模式，旧版本读到新键会拒绝整个文件（推送步骤也读不了 `interests.yaml`）。切换前：
 
 1. 停写：`docker compose -p job-radar stop web runner`，等正在跑的处理轮结束。

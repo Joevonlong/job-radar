@@ -52,6 +52,7 @@ export const ACTIONS_TAB = "actions" as const;
 export const ADVANCED_TAB = "advanced" as const;
 /** The agent access page: a link at the end of the tab bar (it is a page of its own, not a tab). */
 export const AGENTS_PAGE = "/settings/agents" as const;
+export const AGENTS_ACTIVITY_PAGE = "/settings/agents/activity" as const;
 /** Every tab of the page, in display order: the config tabs, then (after a divider) the operations tab and the advanced editor. */
 export const PAGE_TABS = [...CONFIG_PAGE_TABS, ACTIONS_TAB, ADVANCED_TAB] as const;
 export type PageTab = (typeof PAGE_TABS)[number];

@@ -1,17 +1,20 @@
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
-import { AGENTS_PAGE } from "@/lib/settings/tabs";
+import { AGENTS_ACTIVITY_PAGE, AGENTS_PAGE } from "@/lib/settings/tabs";
 
 import "../ai-usage/ai-usage.css";
 
-export type AgentsSubpage = "access";
+export type AgentsSubpage = "access" | "activity";
 
 /**
  * The sub-pages of the agent settings, styled like the /sources sub-nav. Additive: the activity log and the approvals each add one
  * entry here. The current one carries `aria-current="location"`.
  */
-const ITEMS: readonly { id: AgentsSubpage; href: string }[] = [{ id: "access", href: AGENTS_PAGE }];
+const ITEMS: readonly { id: AgentsSubpage; href: string }[] = [
+  { id: "access", href: AGENTS_PAGE },
+  { id: "activity", href: AGENTS_ACTIVITY_PAGE },
+];
 
 export function AgentsSubnav({ current }: { current: AgentsSubpage }) {
   const t = useTranslations("agents.subnav");
