@@ -9756,6 +9756,75 @@
       "cancel": "Cancel",
       "save": "Save",
       "saving": "Saving…"
+    },
+    "tokens": {
+      "create": "New token",
+      "noPassword": "Tokens are for HTTP access, which needs a web password: set one first, or create a token on the command line. <doc>How HTTP access works</doc>",
+      "empty": "No tokens yet. A token lets an agent on another device connect over HTTP.",
+      "unreadable": "The tokens cannot be read: the database is not reachable.",
+      "inactive": "Revoked or expired ({count})",
+      "revoke": "Revoke",
+      "activity": "View activity",
+      "neverUsed": "Never",
+      "revokedOn": "Revoked {date}",
+      "prefixHint": "The first characters, to tell tokens apart. The full token is not stored.",
+      "state": {
+        "active": "Active",
+        "revoked": "Revoked",
+        "expired": "Expired"
+      },
+      "dialog": {
+        "title": "New token",
+        "description": "For one agent or device. It gets its own permissions intersected with the global matrix.",
+        "name": "Name",
+        "nameHint": "Up to {max} characters, unique among tokens that are not revoked, e.g. \"laptop\".",
+        "permissions": "Permissions",
+        "presetsLabel": "Presets",
+        "matrixEmpty": "The global matrix allows nothing yet: tick permissions there first.",
+        "expires": "Expires",
+        "expiresNever": "Never",
+        "expiresOn": "On",
+        "expiresDay": "Last valid day",
+        "cancel": "Cancel",
+        "submit": "Create token",
+        "creating": "Creating…",
+        "errors": {
+          "session_required": "Creating a token needs a sign-in with the web password, even on this machine.",
+          "password_required": "Tokens are for HTTP access, which needs a web password. Set one first.",
+          "invalid": "The request was not valid; nothing was created.",
+          "name_invalid": "Give a name of 1 to {max} characters without control characters, and not a token.",
+          "permissions_missing": "Choose at least one permission.",
+          "expires_invalid": "The expiry date is not a valid date.",
+          "expires_past": "The expiry date must be after today.",
+          "name_taken": "A token with this name already exists. Pick another name, or revoke the old one first.",
+          "not_in_matrix": "A chosen permission is no longer allowed by the global matrix. Reload the page.",
+          "unreadable": "mcp.yaml cannot be read. Repair it in the advanced editor first.",
+          "failed": "Could not create the token; nothing was stored."
+        }
+      },
+      "secret": {
+        "title": "Token \"{name}\" created",
+        "description": "Copy it now and put it in your agent's configuration.",
+        "label": "Token (shown only this once)",
+        "copy": "Copy",
+        "copied": "Token copied",
+        "copyFailed": "Copying is not available here: the token is selected, copy it with the keyboard.",
+        "address": "HTTP address",
+        "example": "Claude Code (put the token in place of TOKEN)",
+        "warning": "Once you close this, the token can never be shown again. If you lose it, revoke it and create a new one.",
+        "done": "I have saved it"
+      },
+      "revokeDialog": {
+        "title": "Revoke \"{name}\"?",
+        "description": "This cannot be undone. The next request with this token is refused; the agent needs a new token to connect again.",
+        "cancel": "Cancel",
+        "confirm": "Revoke token",
+        "revoking": "Revoking…",
+        "done": "Token revoked. Its next request is refused.",
+        "notFound": "The token was already revoked.",
+        "sessionRequired": "Revoking needs a sign-in with the web password, even on this machine.",
+        "failed": "Could not revoke the token; it still works."
+      }
     }
   }
 }

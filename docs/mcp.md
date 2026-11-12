@@ -190,6 +190,27 @@ Once a web password is set, these changes need a real session. Every other page 
 
 What the session gate does not cover: it stops processes that only reach the dashboard over the network. A process running as your user with access to the files can edit `mcp.yaml` directly, gate or not. Use a strong web password. When the page shows the HTTP address as plain `http://` to another host, a client using it sends its bearer token in clear text: use it only on localhost or over Tailscale (HTTPS).
 
+### Tokens on the web
+
+The **Connections** card lists the local stdio process first, then the tokens that can still be used: name, display prefix
+(`jrat_` and 8 characters), permissions, created, last used and expiry. A permission the global matrix does not allow is drawn
+dashed and struck through: it gives nothing until the matrix allows it. Revoked and expired tokens are folded into "Revoked or
+expired", read-only. **View activity** opens the activity page filtered to that token.
+
+**New token** asks for a name (unique among tokens that are not revoked, the same rules as `pnpm agent:token`), permissions
+(a preset and check boxes, listing only what the matrix allows; the default is the read-only preset within the matrix) and an
+expiry (never, or a last valid day after today in the schedule's time zone). The token is then shown **once** in the same
+dialog, with a copy button (when the clipboard is unavailable the text is selected), the HTTP address and a Claude Code example.
+It is not in the URL, a notification, browser storage, the page's data or any log, and the database keeps only its hash: after
+you close the dialog it cannot be shown again. Lost it? Revoke it and create a new one.
+
+**Revoke** asks for confirmation; it cannot be undone. The next HTTP request with the token gets 401, and a connection that is
+already open is refused from its next tool call. Revoking works while MCP or HTTP is off.
+
+Creating a token needs a web password and a sign-in on this page (tokens are only for HTTP, which needs the password); without a
+password the button is disabled and `pnpm agent:token create` still works. Revoking needs a sign-in once a password is set: a
+process on the same machine must not be able to cut off every HTTP client.
+
 ## Reaching it from other devices (HTTP)
 
 `POST /api/mcp` serves the same tools in the web process. It is optional and stateless: it opens no additional listening port.
@@ -209,7 +230,7 @@ unsupported session operations without triggering browser login or OAuth discove
 Other path spellings and requests with `Next-Action` keep the normal session rules. Every method reaching the route first
 returns 404 if either switch is off or settings are unreadable, or 503 if the web password is unusable.
 
-Create one token for each client on the host:
+Create one token for each client, on the settings page (above) or on the host:
 
 ```bash
 pnpm agent:token create --name laptop --permissions jobs:read,tracking:read --expires 2027-12-31
