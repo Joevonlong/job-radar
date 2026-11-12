@@ -1,4 +1,5 @@
 import {
+  Activity,
   Bot,
   Briefcase,
   Building2,
@@ -74,6 +75,7 @@ export const PALETTE_SUBPAGES = [
   { key: "aiUsage", href: "/sources/ai-usage", icon: Coins, labels: "sources" },
   { key: "logs", href: "/sources/logs", icon: ScrollText, labels: "sources" },
   { key: "access", href: "/settings/agents", icon: Bot, labels: "agents" },
+  { key: "activity", href: "/settings/agents/activity", icon: Activity, labels: "agents" },
 ] as const;
 
 /** `/` only matches exactly; other items also match their sub-routes (e.g. /jobs/123). */

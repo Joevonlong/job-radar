@@ -61,6 +61,12 @@ filters:
 companies:
   page_size: 50
 
+# Agent activity log (/settings/agents/activity): rows per page (1-500) and the time range it opens on (today, 7d, 30d or all).
+# Missing block or key uses these defaults.
+agent_activity:
+  page_size: 50
+  default_range: "7d"
+
 # Place picker (home city and places on /me and in the setup wizard): candidates listed at most while you type (1-50)
 place_picker:
   candidates: 8
