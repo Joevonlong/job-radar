@@ -21,7 +21,18 @@ export function AgentAccessPage({ view, address, now }: { view: AgentAccessView;
       {locked ? <SessionBanner next={AGENTS_PAGE} /> : null}
       <StatusCard config={config} status={view.status} passwordUsable={view.passwordUsable} locked={locked} address={address} now={now} />
       <MatrixCard key={baseHash ?? "unreadable"} saved={matrix} baseHash={baseHash} locked={locked} tools={view.tools} grants={[stdio, ...(view.tokenGrants ?? [])]} />
-      <ConnectionsCard key={`stdio-${baseHash ?? "unreadable"}`} stdio={stdio} matrix={matrix} baseHash={baseHash} locked={locked} />
+      <ConnectionsCard
+        key={`stdio-${baseHash ?? "unreadable"}`}
+        stdio={stdio}
+        matrix={matrix}
+        baseHash={baseHash}
+        session={view.session}
+        tokens={view.tokens}
+        address={address}
+        now={now}
+        timeZone={view.timezone}
+        today={view.today}
+      />
     </div>
   );
 }

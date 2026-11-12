@@ -9720,6 +9720,75 @@
       "cancel": "取消",
       "save": "保存",
       "saving": "正在保存…"
+    },
+    "tokens": {
+      "create": "新建 token",
+      "noPassword": "token 用于 HTTP 接入，而 HTTP 要先设网页口令；也可以在命令行建 token。<doc>HTTP 接入说明</doc>",
+      "empty": "还没有 token。别的设备上的 agent 要用 token 经 HTTP 接入。",
+      "unreadable": "读不到 token：数据库连不上。",
+      "inactive": "已失效（{count}）",
+      "revoke": "吊销",
+      "activity": "看活动",
+      "neverUsed": "从未",
+      "revokedOn": "{date} 已吊销",
+      "prefixHint": "前几位，用来区分 token；完整的 token 不保存。",
+      "state": {
+        "active": "有效",
+        "revoked": "已吊销",
+        "expired": "已过期"
+      },
+      "dialog": {
+        "title": "新建 token",
+        "description": "给一个 agent 或一台设备用。它得到的是自己的权限和全局矩阵的交集。",
+        "name": "名称",
+        "nameHint": "最多 {max} 个字符，不能和未吊销的 token 重名，例如“laptop”。",
+        "permissions": "权限",
+        "presetsLabel": "预设",
+        "matrixEmpty": "全局矩阵还什么都没开：先在矩阵里勾选权限。",
+        "expires": "到期",
+        "expiresNever": "不过期",
+        "expiresOn": "到某天",
+        "expiresDay": "最后有效的一天",
+        "cancel": "取消",
+        "submit": "建 token",
+        "creating": "正在建…",
+        "errors": {
+          "session_required": "建 token 要先用网页口令登录，本机访问也一样。",
+          "password_required": "token 用于 HTTP 接入，而 HTTP 要先设网页口令。",
+          "invalid": "请求无效，什么都没建。",
+          "name_invalid": "名称要 1 到 {max} 个字符，不能有控制字符，也不能像 token。",
+          "permissions_missing": "至少选一项权限。",
+          "expires_invalid": "到期日不是有效的日期。",
+          "expires_past": "到期日必须晚于今天。",
+          "name_taken": "已有同名的 token。换个名称，或先吊销旧的。",
+          "not_in_matrix": "选中的权限已不在全局矩阵里。请刷新页面。",
+          "unreadable": "mcp.yaml 读不出来。先在高级编辑器里修好。",
+          "failed": "没能建 token，什么都没存。"
+        }
+      },
+      "secret": {
+        "title": "已建 token “{name}”",
+        "description": "现在复制，填进 agent 的配置里。",
+        "label": "token（只显示这一次）",
+        "copy": "复制",
+        "copied": "已复制 token",
+        "copyFailed": "这里不能用剪贴板：token 已选中，请用键盘复制。",
+        "address": "HTTP 地址",
+        "example": "Claude Code（把 TOKEN 换成上面的 token）",
+        "warning": "关掉后再也看不到。丢了就吊销，再建一个新的。",
+        "done": "我已保存"
+      },
+      "revokeDialog": {
+        "title": "吊销“{name}”？",
+        "description": "不能撤回。之后带这个 token 的请求都会被拒绝；agent 要用新 token 才能再接入。",
+        "cancel": "取消",
+        "confirm": "吊销 token",
+        "revoking": "正在吊销…",
+        "done": "已吊销。它的下一次请求会被拒绝。",
+        "notFound": "这个 token 已经吊销过了。",
+        "sessionRequired": "吊销要先用网页口令登录，本机访问也一样。",
+        "failed": "没能吊销，这个 token 仍然有效。"
+      }
     }
   }
 }

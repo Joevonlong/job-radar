@@ -77,6 +77,8 @@ test("on this machine without a session, a Server Action posted by hand past the
     ["setAgentSwitchAction", { key: "http", value: true }],
     ["saveAgentMatrixAction", { permissions: ["jobs:read", "config:write"], baseHash: "0" }],
     ["saveStdioPermissionsAction", { permissions: ["jobs:read"], baseHash: "0" }],
+    ["createAgentTokenAction", { name: "sneaky", permissions: ["jobs:read"], expires: null }],
+    ["revokeAgentTokenAction", { id: 1 }],
   ] as const;
   for (const [name, argument] of calls) {
     const answer = await page.evaluate(
@@ -140,6 +142,66 @@ test("the advanced editor points mcp.yaml to this page", async ({ page }) => {
   await page.goto("/settings");
   await page.getByTestId("tab-agents-link").click();
   await expect(page).toHaveURL(/\/settings\/agents$/);
+});
+
+test("tokens: the seeded ones are listed; create shows the token once, then only its prefix; revoke refuses its next HTTP request", async ({ page, context }) => {
+  // HTTP on, so the new token can be tried against /api/mcp (the run has a web password)
+  fs.writeFileSync(MCP, fs.readFileSync(MCP, "utf8").replace("enabled: false", "enabled: true\nhttp:\n  enabled: true"));
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await signIn(page);
+  await expect(page.getByTestId("agents-connections-card")).toBeVisible();
+  await expect(page.getByTestId("agents-connections-card").getByText("Example laptop")).toBeVisible();
+  const folded = page.getByTestId("tokens-inactive");
+  await expect(folded).toContainText("Old tablet");
+  await expect(folded.getByText("Old tablet")).toBeHidden();
+
+  const name = `e2e-${Date.now()}`;
+  await page.getByTestId("token-create").click();
+  await page.getByTestId("token-name-input").fill(name);
+  const answer = page.waitForResponse((response) => response.request().method() === "POST" && response.request().headers()["next-action"] === actionId("createAgentTokenAction"));
+  await page.getByTestId("token-create-submit").click();
+  const response = await answer;
+  const secret = await page.getByTestId("token-secret").inputValue();
+  expect(secret).toMatch(/^jrat_[A-Za-z0-9_-]{43}$/);
+  expect(response.headers()["cache-control"]).toContain("no-store");
+  expect(await response.text()).toContain(secret);
+
+  await page.getByTestId("token-copy").click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(secret);
+
+  const mcp = (token: string) =>
+    page.request.post("/api/mcp", {
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18" },
+      data: { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "e2e", version: "1" } } },
+    });
+  expect((await mcp(secret)).status()).toBe(200);
+
+  await page.getByTestId("token-secret-done").click();
+  await expect(page.getByTestId("token-secret")).toHaveCount(0);
+  const row = page.getByTestId("agents-connections-card").locator("li", { hasText: name });
+  await expect(row.getByTestId("token-prefix")).toHaveText(`${secret.slice(0, 13)}…`);
+  const seen = async () => ({
+    html: await page.content(),
+    url: page.url(),
+    storage: await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage })),
+  });
+  for (const text of Object.values(await seen())) expect(text).not.toContain(secret.slice(13));
+  const flight: string[] = [];
+  page.on("response", (reply) => {
+    if (reply.url().includes("/settings/agents")) void reply.text().then((body) => flight.push(body), () => undefined);
+  });
+  await page.reload();
+  await expect(row.getByTestId("token-prefix")).toBeVisible();
+  for (const text of Object.values(await seen())) expect(text).not.toContain(secret.slice(13));
+
+  await row.getByTestId("token-revoke").click();
+  await expect(page.getByTestId("token-revoke-dialog")).toBeVisible();
+  await page.getByTestId("token-revoke-confirm").click();
+  await expect(page.getByTestId("token-revoke-dialog")).toHaveCount(0);
+  await expect(folded).toContainText(name);
+  expect((await mcp(secret)).status()).toBe(401);
+  await expect.poll(() => flight.length).toBeGreaterThan(0);
+  for (const body of flight) expect(body).not.toContain(secret.slice(13));
 });
 
 test("390px, light and dark: no horizontal scroll, the matrix keeps its three columns", async ({ page }) => {

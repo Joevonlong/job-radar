@@ -2,8 +2,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PERMISSION_PRESETS, PERMISSIONS } from "@/lib/agent-access/permissions";
-import { endOfDayInZone, EXIT_FAILED, EXIT_OK, EXIT_USAGE, parsePermissionList, redact, runAgentToken, type AgentTokenCliInput } from "@/lib/agent-access/token-cli";
-import { generateAgentToken } from "@/lib/agent-access/tokens";
+import { EXIT_FAILED, EXIT_OK, EXIT_USAGE, parsePermissionList, redact, runAgentToken, type AgentTokenCliInput } from "@/lib/agent-access/token-cli";
+import { endOfDayInZone, generateAgentToken } from "@/lib/agent-access/tokens";
 import type { Executor } from "@/lib/db/executor";
 import type { AgentTokenSummary, NewAgentToken } from "@/lib/db/repos/agent-tokens";
 import { translatorFor } from "@/lib/i18n/node";

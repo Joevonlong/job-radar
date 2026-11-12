@@ -12,6 +12,7 @@ import { parseArgs } from "node:util";
 import { loadConfig } from "../src/lib/config";
 import { closeDb, getDb } from "../src/lib/db";
 import { seedDatabase } from "../src/lib/db/seed";
+import { seedAgentTokens } from "../src/lib/db/seed-agent-tokens";
 
 function fail(message: string): never {
   console.error(`db:seed: ${message}`);
@@ -33,9 +34,10 @@ async function main(): Promise<void> {
 
   const { timezone } = loadConfig("schedule");
   const result = await seedDatabase(getDb(), { timezone });
+  const tokens = await seedAgentTokens(getDb());
   console.log(
     `db:seed: ${result.jobs} jobs (${result.sources} sources, ${result.companies} companies, ${result.applications} applications, ` +
-      `${result.scores} scores, ${result.signals} signals), ${result.cycles} cycles with ${result.runs} runs` +
+      `${result.scores} scores, ${result.signals} signals), ${result.cycles} cycles with ${result.runs} runs, ${tokens} example agent tokens` +
       (result.replacedJobs > 0 ? `; replaced ${result.replacedJobs} jobs of a previous seed` : ""),
   );
 }
