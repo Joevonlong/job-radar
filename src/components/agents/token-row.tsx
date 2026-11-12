@@ -21,7 +21,8 @@ export function tokenActivityHref(id: number): string {
 
 /**
  * One token: its name, display prefix (never more of the token: the rest exists nowhere), grant, times and state. An active token can
- * be revoked; a revoked or expired one is read-only.
+ * be revoked; a revoked or expired one is read-only. Expiry is stored as the first instant after the last valid day, so the day
+ * shown is the one just before it.
  */
 export function TokenRow({ token, allowed, now, timeZone, locked, onRevoke }: { token: AgentTokenRow; allowed: ReadonlySet<Permission>; now: string; timeZone: string; locked: boolean; onRevoke?: () => void }) {
   const t = useTranslations("agents.connections");
@@ -88,7 +89,6 @@ export function TokenRow({ token, allowed, now, timeZone, locked, onRevoke }: { 
         ) : token.expiresAt === null ? (
           t("noExpiry")
         ) : (
-          // stored as the first instant after the last valid day
           <span title={full(token.expiresAt)}>{day(new Date(Date.parse(token.expiresAt) - 1).toISOString())}</span>
         )}
       </Field>

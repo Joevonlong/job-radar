@@ -14,13 +14,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { PERMISSION_NOTES, PRESET_IDS, normalizePermissions, presetOf, presetSelection, type PresetId } from "@/lib/agent-access/matrix";
 import type { Permission } from "@/lib/agent-access/permissions";
+import { AGENT_TOKEN_NAME_MAX as NAME_MAX } from "@/lib/agent-access/token-limits";
 import type { CreateAgentTokenFailure } from "@/lib/agent-access/token-service";
 import { toastTone } from "@/lib/toast";
 
 import { SHEET_ON_PHONE } from "./stdio-dialog";
-
-/** Kept in step with the shared name rule in src/lib/agent-access/tokens.ts; the server checks it again. */
-const NAME_MAX = 64;
 
 /** The day after `day` (YYYY-MM-DD): the earliest expiry the form offers. */
 function nextDay(day: string): string {
@@ -251,11 +249,13 @@ interface TokenCreateDialogProps {
   today: string;
 }
 
-/** Name, permissions and expiry; after the server created the token the same dialog shows it once. */
+/**
+ * Name, permissions and expiry; after the server created the token the same dialog shows it once. The token is forgotten as soon
+ * as the dialog closes, and while it is shown only the buttons close the dialog, so a stray click outside cannot lose it.
+ */
 export function TokenCreateDialog({ open, onOpenChange, matrix, address, today }: TokenCreateDialogProps) {
   const t = useTranslations("agents.tokens");
   const [created, setCreated] = useState<{ secret: string; name: string } | null>(null);
-  // Forget the secret as soon as the dialog closes (adjusting state during render, not in an effect).
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
@@ -266,7 +266,6 @@ export function TokenCreateDialog({ open, onOpenChange, matrix, address, today }
       <DialogContent
         className={SHEET_ON_PHONE}
         data-testid="token-create-dialog"
-        // While the token is shown, only the buttons close the dialog: a stray click outside would lose it.
         onInteractOutside={(event) => {
           if (created !== null) event.preventDefault();
         }}

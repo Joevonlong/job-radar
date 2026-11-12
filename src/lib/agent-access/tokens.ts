@@ -19,6 +19,7 @@ import {
 import type { Grant, GrantReader } from "./authorize";
 import { normalizePermissions } from "./matrix";
 import { isPermission, permissionSchema, type Permission } from "./permissions";
+import { AGENT_TOKEN_NAME_MAX } from "./token-limits";
 
 export const AGENT_TOKEN_PREFIX = "jrat_";
 const SECRET_BYTES = 32;
@@ -112,7 +113,7 @@ export function agentTokenGrantReader(db: Executor, now: () => Date): GrantReade
 
 // ---- Creating a token: the rules the command line and the settings page share ----
 
-export const AGENT_TOKEN_NAME_MAX = 64;
+export { AGENT_TOKEN_NAME_MAX };
 /** Anything that could be (part of) a token. A name must not look like one, and text shown back is redacted with it. */
 export const TOKEN_SHAPED_PATTERN = /jrat_[A-Za-z0-9_-]{20,}/;
 
