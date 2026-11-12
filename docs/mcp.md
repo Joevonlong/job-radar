@@ -456,6 +456,8 @@ long it took, and whether it worked. Never the arguments or the results. Errors 
 Add `tracking:write` to both `permissions` and `stdio.permissions`, then restart the MCP client so the server can open
 its write connection. Without both the effective permission and that connection, none of these tools is offered. Removing
 the permission or switching the server off refuses subsequent calls without a restart. The application writer switch is independent.
+Over HTTP, access is the global `permissions` matrix intersected with the token's grant (`stdio.permissions` does not apply),
+and the writer switch is not involved.
 
 The four tracking tools call the same services as the web. A successful receipt contains only `audit_id`, `job_id`, `field`,
 `undoable`, `research` and notices. It does not echo the new or previous text. Blank next-step text clears it; null or an empty

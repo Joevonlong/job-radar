@@ -165,6 +165,24 @@ describe("installed MCP SDK HTTP protocols", () => {
     expect(deps.writeDb).toHaveBeenCalledTimes(writeConnections);
   });
 
+  it("refuses a tracking write per call for a token without tracking:write, even when the matrix allows it", async () => {
+    const deps = fakeDeps();
+    deps.readSettings.mockReturnValue(mcpSchema.parse({ enabled: true, permissions: ["jobs:read", "tracking:read", "tracking:write"], http: { enabled: true } }));
+    const tokenGrant = { kind: "token", tokenId: 7, permissions: ["jobs:read", "tracking:read"] } as const;
+    deps.verify.mockImplementation(async () => ({ ok: true, grant: { ...tokenGrant, permissions: [...tokenGrant.permissions] } }));
+    deps.readGrant.mockReturnValue(vi.fn(async () => ({ ...tokenGrant, permissions: [...tokenGrant.permissions] })));
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "mark_applied", arguments: { job_id: 1 } } });
+    const result = await snapshot(await handleMcpHttpRequest(rpcRequest({ headers: { "mcp-protocol-version": "2025-06-18" }, body }), deps));
+    const json = result.body.split("\n").find((line) => line.startsWith("data: "))!.slice(6);
+    const call = JSON.parse(json).result as { isError: boolean; content: { text: string }[] };
+    expect(call.isError).toBe(true);
+    expect(call.content[0]!.text).toContain("tracking:write");
+    expect(deps.writeDb).toHaveBeenCalledTimes(1);
+    const audit = deps.audit.mock.results[0]!.value as { record: { mock: { calls: unknown[][] } }; inTransaction: { mock: { calls: unknown[][] } } };
+    expect(audit.inTransaction.mock.calls).toEqual([]);
+    expect(audit.record.mock.calls).toEqual([[expect.objectContaining({ capability: "mark_applied", outcome: "not_permitted", token_id: 7 })]]);
+  });
+
   it.each([
     { permissions: ["jobs:read", "actions:run"], listed: true, writeConnections: 2 },
     { permissions: ["jobs:read"], listed: false, writeConnections: 1 },

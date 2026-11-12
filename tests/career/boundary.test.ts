@@ -566,7 +566,7 @@ test("the resume-kit import is reachable only from web routes and pages, never f
   expect([...new Set(users)].sort()).toEqual(["src/app/api/career/import/route.ts", "src/components/career/kit-import.tsx"]);
 });
 
-test("MCP exposes only redacted career schemas and the registered read capabilities", async () => {
+test("MCP exposes only redacted career schemas and the registered capabilities", async () => {
   const career = importedTargets("src/lib/mcp").filter(({ to }) => CAREER.some((directory) => to.startsWith(`${directory}/`)));
   expect(career).toEqual([
     { file: "src/lib/mcp/dto/career.ts", to: "src/lib/career/contact/redact-profile.ts" },
