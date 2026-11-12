@@ -175,3 +175,13 @@ data does not remove them. Disabling retains the data and performs no cleanup. D
 files only: backups, before-restore copies and content already sent to an AI provider remain. An older backup can
 restore data deleted later. Retention differs for scheduled, manual and system backups; see
 [Backup and restore](backup-restore.md#career-profile-copies) and [Career profile](career-profile.md).
+
+## Agent action metadata
+
+With `actions:run`, the MCP client receives only request ids, queue/cache state, remaining budget and reset time, notices,
+and the status of its own action requests. Status contains timestamps, queue position, worker online state, allow-listed
+error codes/counts and collection progress; never payloads or free-text results. Action tools use the existing collection
+and AI queue, with the same outbound data and payload scrubbing as the corresponding web buttons.
+
+`agent_budget_usage` stores caller/action/local-day counters; `agent_budget_tickets` stores refundable reservations with their
+units and day. The runner prunes both using `mcp.yaml: audit.retention_days`. An `over_budget` audit row contains no arguments.

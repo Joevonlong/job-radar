@@ -16,11 +16,11 @@ function context(granted: boolean, global: boolean, connected: boolean) {
 }
 
 describe("tracking write tool boundary", () => {
-  it.each([[false, true, true], [true, false, true], [true, true, false]])("hides tools with grant %s, global permission %s and connection %s", (granted, global, connected) => {
-    expect(visibleCapabilities(writes, context(granted, global, connected))).toEqual([]);
+  it.each([[false, true, true], [true, false, true], [true, true, false]])("hides tools with grant %s, global permission %s and connection %s", async (granted, global, connected) => {
+    expect(await visibleCapabilities(writes, context(granted, global, connected))).toEqual([]);
   });
-  it("offers all writes with effective permission and a connection, independently of the writer", () => {
-    expect(visibleCapabilities(writes, context(true, true, true)).map((cap) => cap.id)).toEqual(names);
+  it("offers all writes with effective permission and a connection, independently of the writer", async () => {
+    expect((await visibleCapabilities(writes, context(true, true, true))).map((cap) => cap.id)).toEqual(names);
     for (const cap of writes) expect(cap.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false });
   });
   it("rejects caller spoofing, invalid ids, invalid dates, statuses and rounds", () => {

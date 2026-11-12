@@ -37,9 +37,9 @@ describe("MCP daily budget schema", () => {
     const partial = mcpSchema.parse({ budgets: { total: 5 } });
     partial.budgets.per_caller.translate_job = 1;
     const next = mcpSchema.parse({});
-    expect(next.budgets.per_caller.score_jobs).toBe(100);
-    expect(next.budgets.per_caller.translate_job).toBe(20);
-    expect(next.budgets.total).toBe(150);
+    expect(next.budgets.per_caller.score_jobs).toBe(300);
+    expect(next.budgets.per_caller.translate_job).toBe(60);
+    expect(next.budgets.total).toBe(200);
     expect(Object.isFrozen(next.budgets.per_caller)).toBe(false);
     expect(next.budgets.per_caller).not.toBe(mcpSchema.parse({}).budgets.per_caller);
   });

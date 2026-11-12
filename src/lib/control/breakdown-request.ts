@@ -2,6 +2,7 @@
  * Web side of the breakdown button: the web app never calls an AI provider itself. It leaves a `breakdown_job`
  * request for the ai-worker and then asks for its state. Server only; `app/jobs/[id]/breakdown-actions.ts` calls it.
  */
+import type { AgentCaller } from "@/lib/agent-access/caller";
 import type { BreakdownSettingsState } from "@/lib/breakdown/settings";
 import { BREAKDOWN_PROMPT_VERSION } from "@/lib/ai/prompts/breakdown";
 import type { Db } from "@/lib/db/client";
@@ -37,7 +38,7 @@ export type BreakdownRequestOutcome =
   | { state: "queued"; requestId: number; existing: boolean }
   | { state: "error"; error: "disabled" | "config_error" | "not_found" | "no_description" };
 
-export async function requestBreakdownJob(db: Db, input: { jobId: number; force: boolean; origin?: "auto"; settings: BreakdownSettingsState }): Promise<BreakdownRequestOutcome> {
+export async function requestBreakdownJob(db: Db, input: { jobId: number; force: boolean; caller?: AgentCaller; origin?: "auto"; settings: BreakdownSettingsState }): Promise<BreakdownRequestOutcome> {
   if (input.settings.state === "error") return { state: "error", error: "config_error" };
   if (!input.settings.config.enabled) return { state: "error", error: "disabled" };
   const job = await getJobForBreakdown(db, input.jobId);
@@ -53,7 +54,7 @@ export async function requestBreakdownJob(db: Db, input: { jobId: number; force:
     if (input.origin === undefined) await clearControlRequestOrigin(db, open.id);
     return { state: "queued", requestId: open.id, existing: true };
   }
-  const created = await insertControlRequest(db, { kind: "breakdown_job", payload: { jobId: input.jobId, force: input.force, ...(input.origin ? { origin: input.origin } : {}) } });
+  const created = await insertControlRequest(db, { kind: "breakdown_job", payload: { jobId: input.jobId, force: input.force, ...(input.caller === undefined ? {} : { caller: input.caller }), ...(input.origin ? { origin: input.origin } : {}) } });
   log.info(input.origin === "auto" ? "automatic request queued" : "manual request queued", { request: created.id, kind: created.kind, jobId: input.jobId });
   return { state: "queued", requestId: created.id, existing: false };
 }

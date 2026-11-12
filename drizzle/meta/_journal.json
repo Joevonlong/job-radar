@@ -442,6 +442,13 @@
       "when": 1794406629537,
       "tag": "0062_agent_undo",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1794519504869,
+      "tag": "0063_agent_call_over_budget",
+      "breakpoints": true
     }
   ]
 }

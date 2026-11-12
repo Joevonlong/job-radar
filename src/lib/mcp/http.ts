@@ -8,6 +8,7 @@ import { authorize, liveMcpSettings } from "@/lib/agent-access/authorize";
 import type { Permission } from "@/lib/agent-access/permissions";
 import { agentTokenGrantReader, bearerAgentToken, verifyAgentToken } from "@/lib/agent-access/tokens";
 import { CAPABILITIES } from "@/lib/capabilities/registry";
+import type { Capability } from "@/lib/capabilities/types";
 import type { McpConfig } from "@/lib/config/schemas/mcp";
 import { getMcpAuditRecorder, getMcpReadDb, getMcpWriteDb } from "@/lib/db/mcp-pools";
 import { markAgentTokenUsed } from "@/lib/db/repos/agent-tokens";
@@ -235,15 +236,17 @@ async function authenticatedResponse(
   try { await deps.markUsed(deps.writeDb(settings), grant.tokenId, deps.now()); }
   catch (error) { deps.log(`[mcp] http last use failed: ${errorCategory(error)}`); }
   request.signal.throwIfAborted();
-  const allowed = (permission: Permission) =>
-    CAPABILITIES.some((capability) => capability.kind === "write" && capability.permission === permission && authorize(capability, deps.readSettings, grant).allowed);
-  const writerWrites = allowed("writer:write") && deps.writerEnabled();
-  const trackingWrites = allowed("tracking:write");
-  const writeDb = writerWrites || trackingWrites ? deps.writeDb(settings) : null;
+  const allowed = (kind: Capability["kind"], permission?: Permission) =>
+    CAPABILITIES.some((capability) => capability.kind === kind && (!permission || capability.permission === permission) && authorize(capability, deps.readSettings, grant).allowed);
+  const writerWrites = allowed("write", "writer:write") && deps.writerEnabled();
+  const trackingWrites = allowed("write", "tracking:write");
+  const actionWrites = allowed("trigger");
+  const writeDb = writerWrites || trackingWrites || actionWrites ? deps.writeDb(settings) : null;
   const context = defaultContext(readDb, settings, {
     audit: deps.audit(settings), log: deps.log, readSettings: deps.readSettings,
     caller: { caller: "token", tokenId: grant.tokenId, transport: "http" },
     grant, readGrant: deps.readGrant(readDb, deps.now), writeDb: writerWrites ? writeDb : null, trackingWriteDb: trackingWrites ? writeDb : null,
+    actionDb: actionWrites && writeDb ? writeDb : undefined,
   });
   context.now = deps.now;
   context.track = slot.track;

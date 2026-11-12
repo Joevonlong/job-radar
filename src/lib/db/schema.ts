@@ -1412,13 +1412,13 @@ export const agentCalls = pgTable("agent_calls", {
   capability: text("capability").notNull(),
   targetType: text("target_type", { enum: ["job", "application", "question"] }),
   targetId: bigint("target_id", { mode: "number" }),
-  outcome: text("outcome", { enum: ["ok", "not_permitted", "invalid_input", "error"] }).notNull(),
+  outcome: text("outcome", { enum: ["ok", "not_permitted", "invalid_input", "over_budget", "error"] }).notNull(),
   errorCategory: text("error_category"),
   returnedCount: integer("returned_count").notNull(),
   durationMs: integer("duration_ms").notNull(),
 }, (t) => [
   index("agent_calls_called_at_idx").on(t.calledAt),
-  check("agent_calls_outcome_check", sql`${t.outcome} in ('ok', 'not_permitted', 'invalid_input', 'error')`),
+  check("agent_calls_outcome_check", sql`${t.outcome} in ('ok', 'not_permitted', 'invalid_input', 'over_budget', 'error')`),
   check("agent_calls_error_category_check", sql`(${t.outcome} = 'error' and ${t.errorCategory} is not null) or (${t.outcome} <> 'error' and ${t.errorCategory} is null)`),
 ]);
 

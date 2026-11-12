@@ -45,7 +45,7 @@ export async function readBudgetUsage(db: Executor, input: { day: string; keys: 
   return input.keys.map((key) => ({ ...key, used: rows.find((row) => row.caller === key.caller && row.action === key.action)?.used ?? 0 }));
 }
 
-export async function pruneAgentBudgetUsage(db: Executor, beforeDay: string): Promise<number> {
+export async function pruneAgentBudgetRows(db: Executor, beforeDay: string): Promise<number> {
   const counters = await db.delete(usage).where(lt(usage.day, beforeDay));
   const held = await db.delete(tickets).where(lt(tickets.day, beforeDay));
   return counters.count + held.count;

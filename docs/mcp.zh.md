@@ -7,7 +7,7 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 - **默认关闭。** 在 `mcp.yaml` 里设 `enabled: true` 之前什么都不会发生。
 - **本机 stdio 或可选 HTTP。** stdio 不开端口、不需要 token；HTTP 使用 Web 端口，每个 POST 请求都必须验证 agent token。
-- **读取和明确授权的写入。** 数据库读取使用只读会话，个人数据读取还会访问本机画像文件。`writer:write` 可新增答案版本；`tracking:write` 可修改申请状态、下一步和面试轮次，并撤销自己的修改。写入使用单独连接。状态变化可能排队自动调研；MCP 进程本身不触发采集，也不调用 AI 服务商。
+- **写入由权限控制。** 数据库读取使用只读会话，个人数据读取还会访问本机画像文件。`writer:write` 可新增答案版本；`tracking:write` 可修改申请状态、下一步和面试轮次，并撤销自己的修改。写入使用单独连接，状态变化可能排队自动调研。获得 `actions:run` 后，动作工具通过与网页按钮相同的函数提交采集和 AI 请求，由执行器异步处理。
 
 服务还会通过单独的审计连接，把调用元数据存在本机的 `agent_calls` 表里（见[调用审计](#调用审计)）。
 
@@ -24,6 +24,7 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 | 薪酬 / 福利信号及其 JD 引用和位置 | 邮件正文、主题、发件人、引用和邮件标识符 |
 | 经 AI 陷阱清洗的 JD（见下文） | `.env` 和 `.auth/` 里的值、密钥、通知、原始运行载荷、运行记录、配置文件原文 |
 | 你的申请：状态、最近一次变更时间、在该状态停留的天数、下一步及日期、面试轮数、状态历史 | |
+| 授予 `actions:run` 后：请求 id、状态、时间戳、队列位置、执行器在线状态、安全的结果计数和错误码、采集进度及每日额度元数据 | |
 
 有效 `career:read` 加上 `career.yaml: enabled` 可读取去标识职业档案和文档；有效 `replies:read` 加上 `replies.yaml: enabled` 可读取回信分类及关联申请元数据。两个权限默认都关闭。
 
@@ -98,13 +99,13 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 `search_jobs` 和 `get_job` 共用 `jobs:read`，`list_applications` 需要 `tracking:read`。权限目录中的其他 id 也能填写；`match:read` 为搜索卡片和详情增加匹配字段块，`notes:read` 为 `get_job` 增加备注字段块。版本 2 的工具开关会迁移为两份权限列表；如果此前只关了一个岗位工具，`jobs:read` 会同时提供两个，`config:migrate` 会打印提示。移除 `jobs:read` 可以同时关闭两个。写进 `mcp.yaml` 的权限也适用于以后版本在它下面新增的工具，所以只授予应当可读或可写的权限。
 
-`budgets` 设置 agent 动作的每日额度。
-`per_caller` 分别计算本地 stdio 连接和每个 token 的额度，限制采集请求、岗位翻译、拆解、薪资查询、公司查询、回答起草和简历定制；`score_jobs` 按批次里的每个岗位计数。
+`budgets` 为下列七个触发工具和 agent 写入触发的自动调研执行每日上限。读取工具（包括 `get_request_status`）和 `save_application_answer` 不消耗这些额度。
+`per_caller` 分别计算本地 stdio 连接和每个 token 的额度，限制采集请求、岗位翻译、拆解、薪资查询、公司查询和回答起草；`score_jobs` 按批次里的每个岗位计数。
 agent 写入触发自动调研时，每项公司查询占用 `research_company` 的 1 单位，每项薪资查询占用 `research_salary` 的 1 单位，仅对新排队的任务计费。
 每次写入所需的预算必须全部获准：任何一个额度桶拒绝，就跳过该次写入的全部调研（`research: "budget_skipped"`）。
 未新增入队的任务会退回额度；由此触发的岗位拆解不计费。某项额度为 `0` 就禁止 agent 触发该动作。
 `total` 统计所有 caller、所有动作的请求数，不是岗位数：一次给 40 个岗位打分的 `score_jobs` 批量请求占该 caller `score_jobs` 额度的 40，只占 `total` 的 1。`0` 禁止全部 agent 动作。
-日期与下次重置时间遵循 `schedule.yaml` 的时区及夏令时。runner 每小时清理早于「当前本地日期减去 `audit.retention_days`」的计数行。
+日期与下次重置时间遵循 `schedule.yaml` 的时区及夏令时。runner 每小时清理早于「当前本地日期减去 `audit.retention_days`」的计数行和票据行。
 这些设置有默认值，仍使用 `config_version: 3`。
 
 ```yaml
@@ -288,7 +289,8 @@ curl -i 'https://<machine>.<tailnet>.ts.net/api/mcp' \
 
 HTTP 额外使用最多 `read_max + write_max + 1` 个数据库连接（默认六个），与 Web 共享池及各 stdio 进程独立，
 连接池和审计连接都延迟打开。认证通过且声明大小未超限后更新 `agent_tokens.last_used_at`；更新失败只记错误类别，
-不阻止调用。写池用于最后使用时间，只有满足与 stdio 相同的写作开关和权限规则时，才会传给工具。
+不阻止调用。写池用于最后使用时间；只有 token 能做的写入才会把它交给工具：保存答案（`writer:write` 且写作开关打开）、
+追踪写入（`tracking:write`）和动作触发（`actions:run`）。
 HTTP 工具审计行带 `caller: token`、token id 和 `transport: http`，不含 token 文本、哈希或前缀。
 
 `pnpm run doctor` 的 `data.mcp` 增加 HTTP 开关、可用密码状态（缺失时警告 503 并提示 `pnpm web:password`）、
@@ -345,7 +347,7 @@ HTTP 工具审计行带 `caller: token`、token id 和 `transport: http`，不�
 
 JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查询内容，以及 `match` 块里 AI 写的摘要、匹配理由和差距一起扣留，并给出与 JD 一致的原因（此时 `match` 的 `available` 为 false，分数、过滤结果和三项检查照常给出）；未存储的研究或查询仍为 null。JD 引用沿用陷阱标记，职位拆解条目、匹配理由或差距的引用被标记替换时，其正文 / 名称也使用同一标记。所有文字（包括摘要、理由和备注）都经过清洗。含 AI 指令的来源链接变成 null。返回衍生内容时，在第三方提示之后追加说明；扣留多个块也只追加一条扣留提示。
 
-任何权限都不提供简历路径、关闭备注、邮件内容和邮件标识符、密钥、画像快照、导入草稿、AI 服务商 / 模型 / 用量、运行记录。完整的匹配画像值需要 `profile:read`。`match:read` 和 `notes:read` 给出的自由文本见本页开头表格下的说明。写作工具只提供上文明确选中的材料。
+任何权限都不提供简历路径、关闭备注、邮件内容和邮件标识符、密钥、画像快照、导入草稿、AI 服务商 / 模型 / 用量、运行记录。动作工具只返回下文说明的请求元数据。完整的匹配画像值需要 `profile:read`。`match:read` 和 `notes:read` 给出的自由文本见本页开头表格下的说明。写作工具只提供上文明确选中的材料。
 
 `get_job` 仍能返回休眠岗位：`status` 仍是 `possibly_closed`，`closed_reason` 为 `dormant`。
 
@@ -380,7 +382,7 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 - 谁都不能指定状态。传 `sentences`（每句带 `text`、`about` 和从材料逐字复制的证据引用）时，Job Radar 用和工作台相同的规则，按这道题当前选中的材料逐句核对。`text` 必须和 `sentences` 是同一份答案，否则不保存。不传 `sentences` 时，每句都记为“外部，未核对”。
 - 保存前去掉不可见字符。这个版本标为“来自你的 AI 客户端”，不记录提供方或模型。
 
-它用一条单独的数据库连接，只在 `writer:write` 生效且写作功能开启时才建立，其他工具都仍走只读会话。用下面的[只读角色](#可选只能读的数据库角色)时，保存会报数据库错误：这个角色不能写。
+它用一条单独的数据库连接，只在 `writer:write` 生效且写作功能开启时才建立。读取工具仍走只读会话，动作触发工具使用独立的动作写连接。用下面的[只读角色](#可选只能读的数据库角色)时，保存会报数据库错误：这个角色不能写。
 
 ## AI 陷阱与 JD
 
@@ -402,6 +404,7 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 
 在 `permissions` 和 `stdio.permissions` 中都加入 `tracking:write`，然后重启客户端，让服务打开写连接。
 缺少有效权限或写连接时，这些工具都不在列表中。撤掉权限或关闭 MCP 后，后续调用立即拒绝，无需重启。写作功能开关与此独立。
+经 HTTP 访问时，权限是全局 `permissions` 与 token 授权的交集（不看 `stdio.permissions`），与写作功能开关无关。
 
 四个工具调用网页使用的同一组服务。成功回执仅含 `audit_id`、`job_id`、`field`、`undoable`、`research` 和提示，不回显新旧文字。
 空白下一步文字会清除文字；空值或空日期字符串会清除日期。状态变化保留备注、追加事件，并按网页规则唤醒休眠岗位。
@@ -425,11 +428,79 @@ agent 预算预留、排队任务和写入审计一起提交，事务失败一�
 有写权限的 agent 读到恶意文字后仍可能把申请进度改乱。撤销帮助恢复，不能预防，后来的修改也可能造成撤销冲突。
 撤掉写权限或关闭 MCP 可阻止后续调用；使用 token 的连接应吊销 token 止损。本版本提供本机 stdio，应关闭该连接或撤掉它的权限。
 
+## 动作工具和每日上限
+
+八个工具都需要 `permissions` 和 `stdio.permissions` 两份列表交集中的 `actions:run`。
+`draft_answer` 还需要两处的 `writer:write`。缺少权限时工具不列出，
+直接调用返回 `not_permitted` 并指出缺少的权限。关闭功能后，工具隐藏，直接调用在扣额度前返回 `disabled`。
+七个触发工具还需要动作写连接：首次授予动作权限后重启客户端。stdio 服务仅在启动时有动作能力获授权的情况下，
+打开一条独立写连接（`max: 1`），关闭时释放；读取继续使用只读连接。
+经 HTTP 访问时，权限是全局 `permissions` 与 token 授权的交集（不看 `stdio.permissions`），触发工具使用 HTTP 写池，不另开连接。
+
+| 工具 | 输入 | 行为和额外开关 |
+|---|---|---|
+| `run_collection` | 可选 `channel_ids`（1–50 个已配置字符串）、`backfill_hours` | 提交手动采集；补抓受 `collect.max_backfill_hours` 和采集忙碌检查限制 |
+| `score_jobs` | `job_ids`（1–50 个正整数）或 `backlog: true`，必须且只能选一项 | 提交打分；指定岗位逐个计数；积压模式预留 `ai.yaml: scoring.backlog_per_run`，至少一个单位 |
+| `translate_job` | `job_id`、可选 `force`（默认 false） | 提交 JD 翻译或复用有效缓存 |
+| `breakdown_job` | `job_id`、可选 `force`（默认 false） | 提交 JD 拆解或复用有效缓存；需要 `breakdown.yaml: enabled` |
+| `research_salary` | `job_id`、可选 `force`（默认 false） | 提交薪资查询或复用有效缓存；需要 `salary.yaml: lookup.enabled` |
+| `research_company` | `job_id`、可选 `force`（默认 false） | 提交公司研究或复用有效缓存；需要 `research.yaml: enabled` |
+| `draft_answer` | `job_id`、`question_id`、`mode`（`draft` 或 `polish`）；polish 还需 `option`（`align_to_job` 或 `language_only`）和 `text` | 需要 `writer:write` 和 `writer.yaml: enabled`；文本受 `draft_max_chars` 限制，材料选择和载荷清理沿用网页写作流程。在 polish 模式下，agent 提供的 `text` 会作为所有者的“你的草稿”发送，粘贴什么内容由 agent 决定。 |
+| `get_request_status` | 正整数 `request_id` | 只读、不消耗每日额度；查询当前连接自己的动作请求状态与白名单结果元数据 |
+
+数字 id 必须为正整数。输入拒绝未知字段，包括 `caller`。调用方由服务器通过独立参数设置。
+合并到已有请求不会改变原调用方。
+
+| 每日额度 | 每个调用方的默认值 |
+|---|---:|
+| `run_collection` | 2 |
+| `score_jobs`（岗位数） | 300 |
+| `translate_job` | 60 |
+| `breakdown_job` | 20 |
+| `research_salary` | 10 |
+| `research_company` | 10 |
+| `draft_answer` | 20 |
+| `tailor_resume`（预留，尚无工具使用） | 5 |
+| `total`（所有调用方和动作的请求数） | 200 |
+
+在 `data/config/mcp.yaml` 或设置 → 高级中覆盖 `budgets`，例如：
+
+```yaml
+budgets:
+  per_caller:
+    score_jobs: 300
+    translate_job: 60
+  total: 200
+```
+
+功能开关在预留额度前检查；配额、去重、忙碌和补抓检查沿用网页流程，请求被拒绝时退回已扣额度。
+这是额外的一层限制。已有路径中实施的手动触发最小间隔、薪资/公司每日配额、AI 用量窗口、冷却、API 预算和
+`another_cycle_running` 仍然有效。重复采集会加入已有且覆盖本次范围的开放请求；现有采集入队函数没有增加最小间隔检查。
+有开放采集请求时补抓被拒，执行阶段继续检查处理轮锁。执行阶段失败可通过状态查询获取。
+
+入队前先预留额度，只有新建请求保留扣减。合并开放请求、命中缓存、入队错误和异常都退回票据，且一张票只退一次。
+成功入队后执行器失败仍保留扣减。批量超过剩余额度时整批以 `over_budget` 拒绝：消息包含动作名、上限、剩余单位
+（打分为岗位数，总额度拒绝为请求数）、本次需求量、下次本地重置时间及时区，不提交任何请求。
+`total` 按请求计，一批打分只占一个总额度单位。按 schedule 时区的本地午夜重置。单项为零禁止该动作，`total: 0` 禁止全部动作。
+
+七个触发工具只返回 `request_id`（可空）、`state`（`queued`、`joined_existing`、`cached`）、`existing`、
+`budget`（`action`、`remaining`、ISO 格式 `resets_at`）和 `notices`。缓存命中不排队，也没有请求 id。
+
+`get_request_status` 只查七种动作产生的请求（`run_cycle`、`score_jobs`、`translate_job`、`breakdown_job`、
+`salary_lookup`、`company_research`、`writer_job`），并要求 `payload.caller` 与当前连接精确相等。
+其他调用方、网页、定时任务、不支持的种类和不存在的 id 全部返回同样的「未找到请求」。工具合并了网页请求也一样：
+会返回其 id，但当前调用方无权查询。结果包含 `pending`、`running`、`done` 或 `failed`、时间戳、排队 `ahead`、
+`worker_online`（完成后这两项为 null），以及白名单错误码、`resume_at`、`scored` / `failed` / `remaining` / `fetched` / `new`
+计数、`stopped` 和采集轮进度。不返回载荷、结果文本、供应商详情或错误详情，未知错误文字替换为 `other`。
+
+提交与查询各走正常审计路径。超额度记录 `outcome: over_budget`，`error_category: null`；审计从不含参数。
+单岗位工具以岗位为目标，起草以问题为目标；采集、批量打分和状态查询没有审计目标。
+
 ## 调用审计
 
 每次工具调用还会在本机的 `agent_calls` 表里加一行，`tools/list` 不记。每行只有数字 id、调用时间（`called_at`）、
 调用方（`stdio` 或 `token`）、传输方式（`stdio` 或 `http`）、可空的 `token_id`（stdio 为空，HTTP 为 token id）、capability id、可选的目标类型和数字 id
-（`job`、`application` 或 `question`）、结果（`ok`、`not_permitted`、`invalid_input` 或 `error`）、返回条数和毫秒耗时。
+（`job`、`application` 或 `question`）、结果（`ok`、`not_permitted`、`invalid_input`、`over_budget` 或 `error`）、返回条数和毫秒耗时。
 只有 `error` 行有 `error_category`，值是 `database`、`not_found` 这样的固定类别。参数不合法时没有目标。
 从不存参数、返回内容或消息文字，错误消息也不存。
 

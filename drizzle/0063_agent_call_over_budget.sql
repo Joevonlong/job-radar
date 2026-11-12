@@ -1,0 +1,2 @@
+ALTER TABLE "agent_calls" DROP CONSTRAINT IF EXISTS "agent_calls_outcome_check";--> statement-breakpoint
+ALTER TABLE "agent_calls" ADD CONSTRAINT "agent_calls_outcome_check" CHECK ("agent_calls"."outcome" in ('ok', 'not_permitted', 'invalid_input', 'over_budget', 'error'));

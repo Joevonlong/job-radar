@@ -9,7 +9,7 @@ import { CAPABILITIES, visibleCapabilities } from "@/lib/capabilities/registry";
 describe("capability registry", () => {
   it("contains exactly one definition for each tool, in tool-list order", () => {
     const ids = CAPABILITIES.map((capability) => capability.id);
-    expect(ids).toEqual(["search_jobs", "get_job", "get_job_raw", "list_applications", "get_profile", "get_interests", "preview_deal_breakers", "preview_interest_category", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer", "get_career_profile", "list_career_documents", "get_career_document", "check_career_document", "list_replies", "get_system_status", "list_cycles", "list_channels", "get_activity_log", "get_ai_usage", "set_application_status", "mark_applied", "set_next_action", "set_interview_rounds", "undo_change"]);
+    expect(ids).toEqual(["search_jobs", "get_job", "get_job_raw", "list_applications", "get_profile", "get_interests", "preview_deal_breakers", "preview_interest_category", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer", "get_career_profile", "list_career_documents", "get_career_document", "check_career_document", "list_replies", "get_system_status", "list_cycles", "list_channels", "get_activity_log", "get_ai_usage", "set_application_status", "mark_applied", "set_next_action", "set_interview_rounds", "undo_change", "run_collection", "score_jobs", "translate_job", "breakdown_job", "research_salary", "research_company", "draft_answer", "get_request_status"]);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -46,6 +46,14 @@ describe("capability registry", () => {
       { id: "set_next_action", permission: "tracking:write", kind: "write" },
       { id: "set_interview_rounds", permission: "tracking:write", kind: "write" },
       { id: "undo_change", permission: "tracking:write", kind: "write" },
+      { id: "run_collection", permission: "actions:run", kind: "trigger" },
+      { id: "score_jobs", permission: "actions:run", kind: "trigger" },
+      { id: "translate_job", permission: "actions:run", kind: "trigger" },
+      { id: "breakdown_job", permission: "actions:run", kind: "trigger" },
+      { id: "research_salary", permission: "actions:run", kind: "trigger" },
+      { id: "research_company", permission: "actions:run", kind: "trigger" },
+      { id: "draft_answer", permission: "actions:run", kind: "trigger" },
+      { id: "get_request_status", permission: "actions:run", kind: "read" },
     ]);
   });
 
@@ -63,7 +71,7 @@ it("readers require their own permission and raw access stays separate", async (
   const tracking = ["get_application", "list_favorites"];
   for (const permission of ["jobs:read", "tracking:read", "notes:read", "raw:read"] as const) {
     const settings = mcpSchema.parse({ enabled: true, permissions: [permission], stdio: { permissions: [permission] } });
-    const ids = visibleCapabilities(CAPABILITIES, { readSettings: () => settings }).map((item) => item.id);
+    const ids = (await visibleCapabilities(CAPABILITIES, { readSettings: () => settings })).map((item) => item.id);
     expect(ids.includes("get_job_raw")).toBe(permission === "raw:read");
     expect(ids.filter((id) => [...jobs, ...tracking].includes(id))).toEqual(permission === "jobs:read" ? jobs : permission === "tracking:read" ? tracking : []);
   }
@@ -78,10 +86,10 @@ it("offers raw only when explicitly granted, never through reader or assistant p
   const { PERMISSIONS, PERMISSION_PRESETS } = await import("@/lib/agent-access/permissions");
   for (const permissions of [PERMISSIONS.filter((p) => p !== "raw:read"), PERMISSION_PRESETS.read_only, PERMISSION_PRESETS.assistant]) {
     const settings = mcpSchema.parse({ enabled: true, permissions, stdio: { permissions } });
-    expect(visibleCapabilities(CAPABILITIES, { readSettings: () => settings }).map((item) => item.id)).not.toContain("get_job_raw");
+    expect((await visibleCapabilities(CAPABILITIES, { readSettings: () => settings })).map((item) => item.id)).not.toContain("get_job_raw");
   }
   const settings = mcpSchema.parse({ enabled: true, permissions: ["raw:read"], stdio: { permissions: ["raw:read"] } });
-  expect(visibleCapabilities(CAPABILITIES, { readSettings: () => settings }).map((item) => item.id)).toEqual(["get_job_raw"]);
+  expect((await visibleCapabilities(CAPABILITIES, { readSettings: () => settings })).map((item) => item.id)).toEqual(["get_job_raw"]);
   settings.stdio.permissions = ["jobs:read"];
-  expect(visibleCapabilities(CAPABILITIES, { readSettings: () => settings })).toEqual([]);
+  expect(await visibleCapabilities(CAPABILITIES, { readSettings: () => settings })).toEqual([]);
 });

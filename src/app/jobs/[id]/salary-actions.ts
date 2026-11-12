@@ -4,7 +4,7 @@ import { logActionFailure } from "@/lib/logging/action-failure";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { ConfigError, reloadConfig, type AiConfig } from "@/lib/config";
+import { readSalaryActionSettings } from "@/lib/control/action-settings";
 import { readSalaryLookupRequest, requestSalaryLookup } from "@/lib/control/salary-request";
 import type { ControlQueueView } from "@/lib/control/request-view-schema";
 import { getDb } from "@/lib/db";
@@ -39,24 +39,14 @@ export type SalaryLookupStatusResult =
   | { ok: true; state: "done" }
   | { ok: false; error: SalaryActionErrorKey; detail?: string | null; resumeAt?: string | null };
 
-function readAi(): AiConfig | null {
-  try {
-    return reloadConfig("ai");
-  } catch (error) {
-    logActionFailure("readAi", error);
-    if (error instanceof ConfigError) return null;
-    throw error;
-  }
-}
-
 /** Look up a job's salary (the button in the salary panel): queue the request, or report that a current lookup exists. */
 export async function lookupSalaryAction(input: { jobId: number; force?: boolean }): Promise<SalaryLookupActionResult> {
   const parsed = lookupInputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
   try {
-    const settings = readSalarySettings();
+    const settings = readSalaryActionSettings();
     const db = getDb();
-    const outcome = await requestSalaryLookup(db, { jobId: parsed.data.jobId, force: parsed.data.force ?? false, salary: settings.state === "ok" ? settings.config : null, ai: readAi() });
+    const outcome = await requestSalaryLookup(db, { jobId: parsed.data.jobId, force: parsed.data.force ?? false, ...settings });
     if (outcome.state === "error") return { ok: false, error: outcome.error };
     if (outcome.state === "cached") return { ok: true, queued: false };
     return { ok: true, queued: true, requestId: outcome.requestId, usedToday: await countSalaryLookupRequests(db, new Date()) };
