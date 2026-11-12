@@ -4,7 +4,7 @@
  * write capabilities use a separate connection, granted only for their effective write permissions. Permitted action
  * triggers use another single-session write connection for budgets and the existing control queue.
  *
- *   pnpm --silent mcp:serve
+ *   scripts/mcp-stdio.sh   (from any directory; or `pnpm --silent mcp:serve` inside the project)
  *
  * Off by default: with mcp.yaml `enabled: false` (or no available tool permissions, or an unreadable mcp.yaml) it says why on stderr and
  * exits with 1, which the client shows in its log. stdout carries protocol messages only; every other line goes to stderr.

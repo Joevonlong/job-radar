@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, i
 import { stringify } from "yaml";
 
 import { liveMcpSettings } from "@/lib/agent-access/authorize";
+import { createAgentTokenFromWeb, revokeAgentTokenFromWeb } from "@/lib/agent-access/token-service";
 import { generateAgentToken, type TokenGrant } from "@/lib/agent-access/tokens";
 import { mcpSchema, type McpConfig } from "@/lib/config/schemas/mcp";
 import { closeDb, getDb, schema } from "@/lib/db";
@@ -183,6 +184,17 @@ describe("HTTP MCP against PostgreSQL", () => {
     expect(await snapshot(await handleMcpHttpRequest(rpcRequest({ token: expired.secret }), deps))).toMatchObject({ status: 401, body: '{"error":"unauthorized"}' });
     expect(await getDb().select().from(schema.agentCalls).where(eq(schema.agentCalls.tokenId, expired.id))).toEqual([]);
     expect(await getDb().select().from(schema.agentCalls).where(eq(schema.agentCalls.tokenId, tokenId))).toEqual([]);
+  });
+
+  it("a token created on the settings page works over HTTP, and revoking it there refuses the very next request", async () => {
+    const web = { db: getDb, now: () => NOW, timezone: () => "Europe/Berlin", matrix: () => settings.permissions, generate: generateAgentToken };
+    const created = await createAgentTokenFromWeb({ name: `web-${crypto.randomUUID()}`, permissions: ["jobs:read"], expires: null }, "ok", web);
+    if (created.status !== "created") throw new Error(created.status);
+    const ok = await snapshot(await handleMcpHttpRequest(rpcRequest({ token: created.secret }), deps));
+    expect(ok.status).toBe(200);
+    expect(await revokeAgentTokenFromWeb({ id: created.token.id }, "ok", web)).toEqual({ status: "revoked" });
+    expect(await snapshot(await handleMcpHttpRequest(rpcRequest({ token: created.secret }), deps))).toMatchObject({ status: 401, body: '{"error":"unauthorized"}' });
+    expect(lines.join("\n")).not.toContain(created.secret);
   });
 
   it("re-reads the token before each tool call inside a legacy batch", async () => {

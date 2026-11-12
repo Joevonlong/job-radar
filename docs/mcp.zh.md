@@ -125,7 +125,7 @@ stdio:
 ### Claude Code
 
 ```bash
-claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:serve
+claude mcp add job-radar -- /absolute/path/to/job-radar/scripts/mcp-stdio.sh
 ```
 
 加 `--scope user` 可以在所有项目里用。`claude mcp list` 显示是否连上。
@@ -138,19 +138,18 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 {
   "mcpServers": {
     "job-radar": {
-      "command": "/absolute/path/to/pnpm",
-      "args": ["--silent", "--dir", "/absolute/path/to/job-radar", "mcp:serve"],
-      "env": { "PATH": "/folder/of/node:/usr/bin:/bin" }
+      "command": "/absolute/path/to/job-radar/scripts/mcp-stdio.sh",
+      "env": { "PATH": "/folder/of/pnpm:/folder/of/node:/usr/bin:/bin" }
     }
   }
 }
 ```
 
-- 用绝对路径：从程序坞启动的应用拿不到你 shell 里的 `PATH`。`which pnpm` 给出命令；`dirname "$(which node)"` 给出要放进 `PATH` 的目录（pnpm 需要 `node`）。
-- `--silent` 让 pnpm 不往 stdout 打印自己的标题行，stdout 只属于协议。
+- 用绝对路径：从程序坞启动的应用拿不到你 shell 里的 `PATH`。脚本会运行 `pnpm`，而 pnpm 需要 `node`：把 `which pnpm` 和 `which node` 所在的目录（`dirname`）都放进 `PATH`。
+- `scripts/mcp-stdio.sh` 会先进入项目目录再运行 `pnpm --silent mcp:serve`：不论客户端从哪个目录启动都能用（pnpm 按当前目录选版本），并且 pnpm 的标题行不会进 stdout（stdout 只属于协议）。不要让客户端直接调用 `pnpm --dir <项目> mcp:serve`：在 corepack 下会失败。
 - **项目在外接磁盘上**（macOS）：首次启动可能被拦下，直到你允许 Claude 访问可移除宗卷（系统设置 → 隐私与安全性 → 文件与文件夹）。这时客户端里该服务的日志会显示权限错误。
 
-其他 MCP 客户端同理：stdio 服务，命令 `pnpm`，参数 `--silent --dir <项目目录> mcp:serve`。
+其他 MCP 客户端同理：stdio 服务，命令 `/absolute/path/to/job-radar/scripts/mcp-stdio.sh`，不带参数。
 
 ## 在网页上管理
 
@@ -159,6 +158,16 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 设了网页口令后，这些修改要有真实的登录会话。其他页面允许本机访问免登录，但同机的其他进程可能借此放大 agent 的权限，所以这页要再输一次口令：页面显示一张登录卡片，走正常的登录，登录后回到本页。高级编辑器里的 `mcp.yaml`（保存、恢复默认、修复）同样遵守这条规则。没设网页口令时这页不用登录就能改，HTTP 则保持关闭，因为 HTTP 需要口令。在本机手动编辑 `data/config/mcp.yaml` 不受影响。
 
 这道会话闸管不到的情况：它只拦得住通过网络访问面板的进程。以你的系统用户运行、能读写文件的进程，可以绕过它直接改 `mcp.yaml`。网页口令要设得足够强。如果页面给出的 HTTP 地址是指向其他主机的明文 `http://`，客户端用它时 bearer token 会明文传输：只在 localhost 或 Tailscale（HTTPS）上使用。
+
+### 在网页上管理 token
+
+**连接**卡第一行是本机 stdio，下面是还能用的 token：名称、显示前缀（`jrat_` 加 8 个字符）、权限、创建时间、最后使用和到期。不在全局矩阵里的权限画成虚线加删除线：矩阵开了它才生效。已吊销和已过期的 token 折叠在“已失效”里，只读。**看活动**打开按这个 token 筛选的活动页。
+
+**新建 token** 要填名称（不能和未吊销的 token 重名，规则和 `pnpm agent:token` 相同）、权限（预设加复选框，只列矩阵里有的；默认是只读预设和矩阵的交集）和到期（不过期，或按计划时区的某一天为最后有效日，必须晚于今天）。建好后同一个弹窗**只显示这一次** token，带复制按钮（剪贴板不可用时会选中文本），下面是 HTTP 地址和一行 Claude Code 示例。token 不进 URL、通知、浏览器存储、页面数据和任何日志，数据库只存它的哈希：关掉弹窗后再也看不到。丢了就吊销，再建一个。
+
+**吊销**会先确认，不能撤回。之后带这个 token 的 HTTP 请求返回 401，已经连着的连接在下一次调用工具时被拒绝。MCP 或 HTTP 关着时也能吊销。
+
+建 token 要先设网页口令，并在这页登录（token 只给 HTTP 用，HTTP 需要口令）；没设口令时按钮禁用，`pnpm agent:token create` 照常可用。设了口令后，吊销也要登录：同机的进程不能借本机免登录把所有 HTTP 客户端都断掉。
 
 ## 从其他设备访问（HTTP）
 
@@ -177,7 +186,7 @@ GET 和 DELETE 让客户端探测不支持的会话操作，不触发浏览器�
 其他路径拼写及带 `Next-Action` 的请求保留正常会话规则。所有到达路由的方法都先检查前提：任一开关关闭或配置不可读返回 404，
 Web 密码不可用返回 503。
 
-在宿主机为每个客户端单独创建 token：
+为每个客户端单独创建 token，可以在上面的设置页，也可以在宿主机：
 
 ```bash
 pnpm agent:token create --name laptop --permissions jobs:read,tracking:read --expires 2027-12-31
@@ -565,6 +574,7 @@ GRANT USAGE ON SEQUENCE agent_calls_id_seq TO job_radar_ro;
 | 客户端里没有 `get_application_context` 或 `save_application_answer` | 所需权限不在两份列表中，或 `writer.yaml: enabled` 是 `false`。改完要重启客户端。 |
 | "text 和 sentences 对不上" | 客户端发了两份不同的答案。两边发同一份，或者不传 `sentences`。 |
 | "已有 … 个版本" | 见[从客户端写答案](#从客户端写答案)。 |
+| 客户端显示“连接已关闭”或服务立刻退出，日志里有 pnpm 版本提示（“This project is configured to use … of pnpm”） | pnpm 是从别的目录启动的，corepack 选了另一个 pnpm 版本。按上文改用 `scripts/mcp-stdio.sh` 启动，不要用 `pnpm --dir … mcp:serve`。 |
 | `command not found` / `spawn pnpm ENOENT` | 客户端找不到 `pnpm` 或 `node`：用绝对路径，并在 `env` 里设 `PATH`（见上面 Claude Desktop 一节）。 |
 | "查询失败（database）" | 整套服务没在运行，或 `.env` 里的数据库地址从宿主机连不上。`pnpm run doctor` 两项都会查。 |
 | 客户端日志里有"MCP 调用记录写不进去（…）" | 调用本身已经回答，只是少了审计行。`database`：服务用的是只有 SELECT 权限的角色（给 `agent_calls` 授 `INSERT`，见[上文](#可选只能读的数据库角色)），或数据库还没迁移到这个版本（用 `scripts/ops/deploy.sh` 部署这次更新，见 [upgrade.zh.md](upgrade.zh.md)）；迁移之前 `save_application_answer` 会整个失败，报"查询失败（database）"，因为答案和它的审计行一起保存。`agent_calls` 表被锁住（比如正在迁移）或语句太慢，默认设置下也报 `database`，因为 `audit.lock_timeout_ms` 和 `audit.statement_timeout_ms` 比 `audit.write_timeout_ms` 先到。`timeout`：数据库或网络在 `audit.write_timeout_ms` 内没有回应，或写入队列太长。原因消除后，之后的调用会照常写入。 |

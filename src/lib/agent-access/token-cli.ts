@@ -5,21 +5,26 @@
  */
 import { parseArgs } from "node:util";
 
-import { z } from "zod";
-
 import type { Executor } from "@/lib/db/executor";
-import { findUnrevokedAgentTokens, insertAgentToken, listAgentTokens, revokeAgentToken, type AgentTokenSummary } from "@/lib/db/repos/agent-tokens";
+import { findUnrevokedAgentTokens, listAgentTokens, revokeAgentToken, type AgentTokenSummary } from "@/lib/db/repos/agent-tokens";
 import type { translatorFor } from "@/lib/i18n/node";
 
 import { isPermission, PERMISSION_PRESETS, PERMISSIONS, type Permission } from "./permissions";
-import { agentTokenState, generateAgentToken, storedPermissions } from "./tokens";
+import {
+  AGENT_TOKEN_NAME_MAX,
+  TOKEN_SHAPED_PATTERN,
+  agentTokenState,
+  checkAgentTokenRequest,
+  createAgentToken,
+  generateAgentToken,
+  redactTokens,
+  storedPermissions,
+} from "./tokens";
 
 export const EXIT_OK = 0;
 export const EXIT_FAILED = 1;
 export const EXIT_USAGE = 2;
 
-const NAME_MAX = 64;
-const TOKEN_SHAPED_PATTERN = /jrat_[A-Za-z0-9_-]{20,}/;
 const PRESET_NAMES = Object.keys(PERMISSION_PRESETS) as (keyof typeof PERMISSION_PRESETS)[];
 
 export interface AgentTokenCliInput {
@@ -33,9 +38,6 @@ export interface AgentTokenCliInput {
   err: (line: string) => void;
   generate?: typeof generateAgentToken;
 }
-
-const nameSchema = z.string().trim().min(1).max(NAME_MAX).regex(/^[^\p{C}]+$/u).refine((value) => !TOKEN_SHAPED_PATTERN.test(value));
-const daySchema = z.iso.date();
 
 function isPreset(value: string): value is keyof typeof PERMISSION_PRESETS {
   return (PRESET_NAMES as string[]).includes(value);
@@ -54,31 +56,12 @@ export function parsePermissionList(values: readonly string[]): { ok: true; perm
   return { ok: true, permissions: PERMISSIONS.filter((permission) => chosen.has(permission)) };
 }
 
-function zoneOffsetMs(at: Date, timeZone: string): number {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
-      .formatToParts(at)
-      .map((part) => [part.type, part.value]),
-  );
-  const wall = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
-  return wall - Math.floor(at.getTime() / 1000) * 1000;
-}
-
-/** The first instant after `day` (YYYY-MM-DD) in `timeZone`: a token that expires on that day is valid until the day is over. */
-export function endOfDayInZone(day: string, timeZone: string): Date {
-  const next = new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000);
-  const guess = next.getTime() - zoneOffsetMs(next, timeZone);
-  return new Date(next.getTime() - zoneOffsetMs(new Date(guess), timeZone));
-}
-
 function shownTime(at: Date | null, timeZone: string, never: string): string {
   if (at === null) return never;
   return new Intl.DateTimeFormat("sv-SE", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at);
 }
 
-export function redact(text: string): string {
-  return text.replace(new RegExp(TOKEN_SHAPED_PATTERN.source, "g"), "<redacted>");
-}
+export const redact = redactTokens;
 
 const oneLine = (text: string): string => redact(text).replace(/[\p{C}\s]+/gu, " ").trim();
 
@@ -94,34 +77,24 @@ async function create(input: AgentTokenCliInput, args: string[]): Promise<number
     input.err(t("usage"));
     return EXIT_USAGE;
   }
-  const name = nameSchema.safeParse(values.name ?? "");
-  if (!name.success) {
-    input.err(t("nameInvalid", { max: NAME_MAX }));
-    return EXIT_USAGE;
-  }
   const permissions = parsePermissionList(values.permissions ?? []);
-  if (!permissions.ok) {
-    input.err(permissions.invalid.length > 0 ? t("permissionsInvalid", { invalid: permissions.invalid.map(oneLine).join(", ") }) : t("permissionsMissing"));
-    input.err(t("permissionsValid", { presets: PRESET_NAMES.join(", "), permissions: PERMISSIONS.join(", ") }));
-    return EXIT_USAGE;
-  }
-  const day = values.expires === undefined ? undefined : daySchema.safeParse(values.expires);
-  if (day && !day.success) {
-    input.err(t("expiresInvalid"));
-    return EXIT_USAGE;
-  }
   const zone = input.timezone();
-  const expiresAt = day ? endOfDayInZone(day.data, zone) : null;
-  if (expiresAt !== null && expiresAt.getTime() <= input.now().getTime()) {
-    input.err(t("expiresPast"));
+  const checked = checkAgentTokenRequest({ name: values.name ?? "", permissions: permissions.ok ? permissions.permissions : [], expires: values.expires ?? null }, input.now(), zone);
+  if (!checked.ok) {
+    if (checked.problem === "name_invalid") input.err(t("nameInvalid", { max: AGENT_TOKEN_NAME_MAX }));
+    else if (checked.problem === "permissions_missing") {
+      const invalid = permissions.ok ? [] : permissions.invalid;
+      input.err(invalid.length > 0 ? t("permissionsInvalid", { invalid: invalid.map(oneLine).join(", ") }) : t("permissionsMissing"));
+      input.err(t("permissionsValid", { presets: PRESET_NAMES.join(", "), permissions: PERMISSIONS.join(", ") }));
+    } else input.err(t(checked.problem === "expires_past" ? "expiresPast" : "expiresInvalid"));
     return EXIT_USAGE;
   }
-  const token = (input.generate ?? generateAgentToken)();
-  const row = await insertAgentToken(input.db, { name: name.data, tokenHash: token.hash, tokenPrefix: token.prefix, permissions: permissions.permissions, expiresAt });
-  if (!row) {
-    input.err(t("nameTaken", { name: oneLine(name.data) }));
+  const created = await createAgentToken(input.db, checked.value, input.generate ?? generateAgentToken);
+  if (!created.ok) {
+    input.err(t("nameTaken", { name: oneLine(checked.value.name) }));
     return EXIT_FAILED;
   }
+  const { secret, token: row } = created;
   input.err(t(row.expiresAt === null ? "createdNoExpiry" : "created", {
     name: oneLine(row.name),
     prefix: oneLine(row.tokenPrefix),
@@ -129,7 +102,7 @@ async function create(input: AgentTokenCliInput, args: string[]): Promise<number
     expires: shownTime(row.expiresAt, zone, t("never")),
     zone: oneLine(zone),
   }));
-  input.out(token.secret);
+  input.out(secret);
   input.err(t("shownOnce", { prefix: oneLine(row.tokenPrefix) }));
   return EXIT_OK;
 }

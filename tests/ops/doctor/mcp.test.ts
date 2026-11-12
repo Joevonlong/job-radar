@@ -29,6 +29,12 @@ describe("data.mcp", () => {
     expect(r.detail).toContain("Audit retention: 17 days");
     expect(r.detail).toContain("/settings/agents");
   });
+  it("separates the guide pointer from the HTTP sentence", async () => {
+    for (const [locale, guide] of [["en", "docs/mcp.md"], ["zh", "docs/mcp.zh.md"]] as const) {
+      const r = await only(mcpCheck, makeContext({ locale, probes: { mcp: async () => ({ state: "ok", enabled: true, httpEnabled: true, webPasswordUsable: true, activeTokens: 2, nearestExpiry: null, auditRetentionDays: 17, permissions: ["jobs:read"], effective: ["jobs:read"] }) } }));
+      expect(r.detail).toMatch(new RegExp(`${guide.replace(".", "\\.")}[.。] `));
+    }
+  });
   it("the agent access page's verdict is the doctor's", () => {
     const base = { state: "ok", enabled: true, httpEnabled: false, webPasswordUsable: false, activeTokens: null, nearestExpiry: null, auditRetentionDays: 1, permissions: [], effective: [] } as const;
     expect(mcpVerdict({ state: "config_error", problem: "x" })).toBe("config_error");
