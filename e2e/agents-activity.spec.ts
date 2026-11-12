@@ -53,13 +53,13 @@ test("the filters narrow the list alone and together, and live in the URL", asyn
 
 test("the connection filter lists a revoked token and its calls are marked", async ({ page }) => {
   await open(page, "?range=all");
-  const option = page.getByTestId("agents-activity-filter-connection").locator("option", { hasText: "Sample old notebook" });
+  const option = page.getByTestId("agents-activity-filter-connection").locator("option", { hasText: "Old tablet" });
   await expect(option).toHaveCount(1);
   await page.getByTestId("agents-activity-filter-connection").selectOption({ label: await option.innerText() });
   await page.getByTestId("agents-activity-apply").click();
   const table = page.getByTestId("agents-activity-table");
   await expect(table.getByTestId("agents-activity-row").first()).toBeVisible();
-  for (const text of await table.locator("tbody tr td:nth-child(2)").allTextContents()) expect(text).toContain("Sample old notebook");
+  for (const text of await table.locator("tbody tr td:nth-child(2)").allTextContents()) expect(text).toContain("Old tablet");
   await expect(table.getByText(/已吊销/).first()).toBeVisible();
 });
 

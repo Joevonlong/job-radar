@@ -1,17 +1,13 @@
 /**
- * Fictional agent audit rows for development and the preview: local stdio calls and calls from two sample tokens (one active,
+ * Fictional agent audit rows for development and the preview: local stdio calls and calls from the two example agent tokens (one active,
  * one revoked), every result, spread over ten days with a few rows sharing an instant. Replaces what an earlier seed run wrote;
  * like the rest of the seed it is only for disposable and development databases.
  */
 import { eq, inArray, or } from "drizzle-orm";
 
 import type { Executor } from "./executor";
-import { agentCalls, agentTokens, applications } from "./schema";
-
-const SAMPLE_TOKENS = [
-  { name: "Sample laptop agent", hash: "seed-sample-token-laptop", prefix: "jr_seed1", revoked: false },
-  { name: "Sample old notebook", hash: "seed-sample-token-notebook", prefix: "jr_seed2", revoked: true },
-] as const;
+import { seedAgentTokenHash, SEED_AGENT_TOKENS } from "./seed-agent-tokens";
+import { agentCalls, agentTokens, applications, jobs } from "./schema";
 
 type Row = typeof agentCalls.$inferInsert;
 type Target = Pick<Row, "targetType" | "targetId">;
@@ -29,27 +25,24 @@ const TOOLS = [
   { id: "get_system_status", target: null },
 ] as const;
 
-export async function seedAgentCalls(db: Executor, input: { now: Date; jobIds: number[] }): Promise<number> {
-  const { now, jobIds } = input;
-  const names = SAMPLE_TOKENS.map((token) => token.name);
-  const previous = await db.select({ id: agentTokens.id }).from(agentTokens).where(inArray(agentTokens.name, names));
-  const previousIds = previous.map((row) => row.id);
-  await db.delete(agentCalls).where(previousIds.length > 0 ? or(eq(agentCalls.caller, "stdio"), inArray(agentCalls.tokenId, previousIds)) : eq(agentCalls.caller, "stdio"));
-  if (previousIds.length > 0) await db.delete(agentTokens).where(inArray(agentTokens.id, previousIds));
+/**
+ * Run after `seedAgentTokens` and the job seed, from the seed entry points only (not from `seedDatabase`, which integration
+ * tests run and then count the audit table from empty). Gives the example tokens' calls and the local stdio calls back as they
+ * were; returns the rows written.
+ */
+export async function seedAgentCalls(db: Executor, input: { now: Date }): Promise<number> {
+  const { now } = input;
   const tokens = await db
-    .insert(agentTokens)
-    .values(SAMPLE_TOKENS.map((token) => ({
-      name: token.name,
-      tokenHash: token.hash,
-      tokenPrefix: token.prefix,
-      permissions: ["jobs:read", "tracking:read", "writer:write"],
-      revokedAt: token.revoked ? new Date(now.getTime() - 2 * 86_400_000) : null,
-      lastUsedAt: new Date(now.getTime() - (token.revoked ? 3 * 86_400_000 : 3_600_000)),
-    })))
-    .returning({ id: agentTokens.id, name: agentTokens.name });
-  const laptop = tokens.find((token) => token.name === SAMPLE_TOKENS[0].name)?.id ?? null;
-  const notebook = tokens.find((token) => token.name === SAMPLE_TOKENS[1].name)?.id ?? null;
-  const applicationRows = jobIds.length === 0 ? [] : await db.select({ id: applications.id }).from(applications).where(inArray(applications.jobId, jobIds)).limit(6);
+    .select({ id: agentTokens.id, hash: agentTokens.tokenHash })
+    .from(agentTokens)
+    .where(inArray(agentTokens.tokenHash, SEED_AGENT_TOKENS.map((token) => seedAgentTokenHash(token.label))));
+  const idOf = (label: string) => tokens.find((token) => token.hash === seedAgentTokenHash(label))?.id ?? null;
+  const laptop = idOf(SEED_AGENT_TOKENS[0].label);
+  const notebook = idOf(SEED_AGENT_TOKENS[1].label);
+  const tokenIds = tokens.map((token) => token.id);
+  await db.delete(agentCalls).where(tokenIds.length > 0 ? or(eq(agentCalls.caller, "stdio"), inArray(agentCalls.tokenId, tokenIds)) : eq(agentCalls.caller, "stdio"));
+  const jobIds = (await db.select({ id: jobs.id }).from(jobs).orderBy(jobs.id).limit(20)).map((row) => row.id);
+  const applicationRows = await db.select({ id: applications.id }).from(applications).orderBy(applications.id).limit(6);
   const applicationIds = applicationRows.map((row) => row.id);
 
   const targetFor = (type: (typeof TOOLS)[number]["target"], n: number): Target => {
