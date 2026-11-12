@@ -93,8 +93,8 @@ it("lists summaries in descending time order and isolates corrupt documents", as
   fs.writeFileSync(careerDocumentPath(brokenId), "private-sentinel: [broken");
   fs.writeFileSync(path.join(careerDocumentsDir(), `${b.document.id}.proposals.yaml`), "not a document");
   expect(await listDocuments()).toEqual([
-    { id: b.document.id, title: b.document.title, kind: "general", updatedAt: b.document.updated_at, lang: b.document.layout.lang },
-    { id: a.document.id, title: a.document.title, kind: "general", updatedAt: earlier.updated_at, lang: earlier.layout.lang },
+    { id: b.document.id, title: b.document.title, kind: "general", updatedAt: b.document.updated_at, lang: b.document.layout.lang, jobId: null },
+    { id: a.document.id, title: a.document.title, kind: "general", updatedAt: earlier.updated_at, lang: earlier.layout.lang, jobId: null },
     { id: brokenId, invalid: true },
   ]);
   await expect(loadDocument(brokenId)).rejects.toThrow("document_invalid");

@@ -7435,7 +7435,10 @@
       "personalUnavailable": "The requested personal data could not be read.",
       "companyNotFound": "No company with id {id}.",
       "applicationNotFound": "No application for job {id}.",
-      "insightsRange": "The requested range is not offered by insights.yaml."
+      "insightsRange": "The requested range is not offered by insights.yaml.",
+      "careerDisabled": "The career feature is not enabled.",
+      "repliesDisabled": "The replies feature is not enabled.",
+      "careerNotFound": "The career document or version was not found."
     },
     "tools": {
       "search_jobs": {
@@ -7474,6 +7477,26 @@
         "title": "Preview interest category",
         "description": "Try a category in a complete vocabulary draft against recent jobs using the same preview as /interests. Nothing is saved and no AI runs."
       },
+      "get_system_status": {
+        "title": "System status",
+        "description": "Read safe doctor summaries, process heartbeats, running cycles, pending requests and disk level. Requires ops:read."
+      },
+      "list_cycles": {
+        "title": "Recent cycles",
+        "description": "Read recent cycles and step counts; optionally expand one cycle into bounded channel runs. Requires ops:read."
+      },
+      "list_channels": {
+        "title": "Channel health",
+        "description": "Read channel health, breakers, current-month budget usage and latest runs. Requires ops:read."
+      },
+      "get_activity_log": {
+        "title": "Activity log",
+        "description": "Read activity root records or one record with codes and counts only. Requires ops:read."
+      },
+      "get_ai_usage": {
+        "title": "AI usage",
+        "description": "Read daily, task and model aggregates of calls, tokens, duration and cost. No individual calls or job identifiers. Requires ops:read."
+      },
       "get_today": {
         "title": "Get today’s jobs",
         "description": "Today’s selected or default saved view and quick-view counts. Saved views win over quick views; explicit toggles without view select all jobs. Posting text needs current trap scans."
@@ -7497,6 +7520,26 @@
       "list_favorites": {
         "title": "List favorites",
         "description": "All starred jobs, including closed, filtered and ignored jobs. Favorite notes require notes:read. Posting text requires current trap scans."
+      },
+      "get_career_profile": {
+        "title": "Get career profile",
+        "description": "Read the redacted career profile and its versions from the host profile directory. Contact values become bracket placeholders; images are presence flags only."
+      },
+      "list_career_documents": {
+        "title": "List career documents",
+        "description": "List stored resume and letter documents, including invalid entries. Returns redacted titles and metadata, never local paths."
+      },
+      "get_career_document": {
+        "title": "Get career document",
+        "description": "Read a redacted stored document or version, its source status and open tailoring proposals. No contact file, image content or local paths."
+      },
+      "check_career_document": {
+        "title": "Check career document",
+        "description": "Preview and check a stored resume or letter without contact or images. Returns redacted plain text, findings, uncovered font characters and a page budget; no HTML or PDF."
+      },
+      "list_replies": {
+        "title": "List replies",
+        "description": "Read reply classifications, match and decision states, received times and linked applications. Never returns mail subject, body, sender, quotes or mail identifiers."
       },
       "get_job_raw": {
         "title": "Get raw job postings",
@@ -7542,7 +7585,40 @@
       "companySort": "Company order: jobs, score or recent.",
       "companyId": "Company id from list_companies.",
       "favoriteSort": "Favorites order: starred (newest first) or rank.",
-      "insightsRange": "Number of days offered in insights.yaml ranges_days; omit for the configured default."
+      "insightsRange": "Number of days offered in insights.yaml ranges_days; omit for the configured default.",
+      "careerDocumentId": "Stored career document id.",
+      "careerVersion": "Optional stored version id; omit for the current file.",
+      "careerDoc": "Check the resume or letter.",
+      "replyState": "Filter by reply state.",
+      "replyCategory": "Filter by effective reply category, including user corrections.",
+      "replySince": "Only replies received at or after this ISO datetime."
+    },
+    "ops": {
+      "checkSummary": {
+        "ok": "Check passed.",
+        "warn": "Check needs attention.",
+        "fail": "Check failed."
+      },
+      "params": {
+        "cycleId": "Cycle to expand into channel runs",
+        "rootId": "Activity root to inspect",
+        "page": "Page number (starting at 1)",
+        "offset": "Number of channels to skip",
+        "scope": "Activity scope",
+        "status": "Activity status filter",
+        "from": "First day, inclusive, in the schedule time zone",
+        "to": "Last day, inclusive, in the schedule time zone",
+        "level": "Activity event level",
+        "issues": "Only activity with issues",
+        "range": "Usage window; custom requires from and to",
+        "provider": "AI provider",
+        "task": "AI task"
+      },
+      "errors": {
+        "cycleNotFound": "not_found: cycle_not_found",
+        "range": "invalid_input: invalid_range",
+        "activityUnavailable": "database: activity_unavailable"
+      }
     }
   },
   "dealBreakers": {

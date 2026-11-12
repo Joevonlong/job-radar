@@ -3,7 +3,7 @@ import { API_PROVIDER_IDS } from "@/lib/ai/usage";
 import { loadModelCatalog } from "@/lib/ai/catalog";
 import { AI_PROVIDER_KIND, type AiProviderId } from "@/lib/ai/types";
 import { findCatalogModel, reloadConfig, type ModelsConfig } from "@/lib/config";
-import { getAiUsageGroups, getDb, getDbNow, listAiUsageCalls, type AiUsageCall, type AiUsageFilter } from "@/lib/db";
+import { getAiUsageGroups, getDb, getDbNow, listAiUsageCalls, type AiUsageCall, type AiUsageFilter, type Db } from "@/lib/db";
 import { dayInZone } from "@/lib/insights/range";
 
 import { aiUsageHref, loadAiUsageSearchParams, pageOf, type AiUsageUrlState } from "./params";
@@ -38,12 +38,11 @@ interface Resolved {
   catalog: ModelsConfig | null;
 }
 
-async function resolve(searchParams: SearchParams, at?: Date): Promise<Resolved> {
-  const state = await loadAiUsageSearchParams(searchParams);
-  // the web process has no config watcher and these files are meant to be edited while the page is open
+/** Reload settings on each read because the web process has no config watcher. */
+async function resolve(state: AiUsageUrlState, db: Db, at?: Date): Promise<Resolved> {
   const settings = reloadConfig("ui").ai_usage;
   const timeZone = reloadConfig("schedule").timezone;
-  const now = at ?? (await getDbNow(getDb()));
+  const now = at ?? (await getDbNow(db));
   const today = dayInZone(now, timeZone);
   const range = resolveAiUsageRange(state, { today, defaultRange: settings.default_range, customMaxDays: settings.custom_max_days });
   const filter: AiUsageFilter = {
@@ -57,10 +56,16 @@ async function resolve(searchParams: SearchParams, at?: Date): Promise<Resolved>
   return { state, range, filter, timeZone, today, settings, catalog: loadModelCatalog() };
 }
 
+export async function loadAiUsageData(state: AiUsageUrlState, options: { db?: Db; at?: Date } = {}) {
+  const db = options.db ?? getDb();
+  const resolved = await resolve(state, db, options.at);
+  const groups = await getAiUsageGroups(db, resolved.filter, API_PROVIDER_IDS);
+  return { ...resolved, groups };
+}
+
 export async function loadAiUsagePage(searchParams: SearchParams, at?: Date): Promise<AiUsagePageData> {
-  const { state, range, filter, timeZone, today, settings, catalog } = await resolve(searchParams, at);
+  const { state, range, filter, timeZone, today, settings, catalog, groups } = await loadAiUsageData(await loadAiUsageSearchParams(searchParams), { at });
   const db = getDb();
-  const groups = await getAiUsageGroups(db, filter, API_PROVIDER_IDS);
   const view = buildAiUsageView({
     groups,
     range,
@@ -87,7 +92,7 @@ export async function loadAiUsagePage(searchParams: SearchParams, at?: Date): Pr
 
 /** The export route: the newest `csv_max_rows` calls of the current range and filters. */
 export async function loadAiUsageCsvRows(searchParams: SearchParams): Promise<{ from: string; to: string; timeZone: string; rows: AiUsageCall[] }> {
-  const { range, filter, timeZone, settings } = await resolve(searchParams);
+  const { range, filter, timeZone, settings } = await resolve(await loadAiUsageSearchParams(searchParams), getDb());
   const rows = await listAiUsageCalls(getDb(), filter, { limit: settings.csv_max_rows, offset: 0 });
   return { from: range.from, to: range.to, timeZone, rows };
 }

@@ -1,8 +1,33 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { computeHeartbeatAgeSeconds, shapeHealth } from "@/lib/health";
+vi.mock("@/lib/db", () => ({ getDb: vi.fn(), pingDb: vi.fn(), readLatestHeartbeatAt: vi.fn() }));
+import { pingDb, readLatestHeartbeatAt, type Db } from "@/lib/db";
+import { computeHeartbeatAgeSeconds, loadHealth, shapeHealth } from "@/lib/health";
 
 const now = new Date("2026-01-01T12:00:00.000Z");
+afterEach(() => { vi.restoreAllMocks(); vi.resetAllMocks(); });
+
+describe("loadHealth database failures", () => {
+  it.each(["factory", "ping"])("returns an unavailable response and logs only the error class when the %s throws", async (failure) => {
+    const error = new TypeError("postgres://private-host/private-database");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const onReachable = vi.fn();
+    const db = vi.fn((): Db => {
+      if (failure === "factory") throw error;
+      return {} as Db;
+    });
+    vi.mocked(pingDb).mockRejectedValue(error);
+    expect(await loadHealth({ db, at: now, onReachable })).toEqual({
+      status: 503,
+      body: { db: "error", lastHeartbeatAt: null, heartbeatAgeSeconds: null },
+    });
+    expect(onReachable).not.toHaveBeenCalled();
+    expect(readLatestHeartbeatAt).not.toHaveBeenCalled();
+    expect(pingDb).toHaveBeenCalledTimes(failure === "ping" ? 1 : 0);
+    expect(log.mock.calls).toEqual([["[health] database unavailable:", "TypeError"]]);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(error.message);
+  });
+});
 
 describe("computeHeartbeatAgeSeconds", () => {
   it("returns null without a heartbeat", () => {

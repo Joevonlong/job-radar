@@ -1,6 +1,8 @@
+import fs from "node:fs";
+import path from "node:path";
+import { stringify } from "yaml";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/career/contact/store", () => ({ loadContact: async () => ({ contact: emptyContact() }) }));
 vi.mock("@/lib/career/store/images", () => ({ loadImages: async () => ({}) }));
 vi.mock("@/lib/dashboard/context", () => ({ getDisplayTimeZone: () => "UTC" }));
 vi.mock("next-intl/server", () => ({ getTranslations: async () => (key: string) => key }));
@@ -14,7 +16,7 @@ import { tempCareer } from "./fixtures";
 
 let temp: ReturnType<typeof tempCareer>;
 beforeEach(() => { temp = tempCareer(); });
-afterEach(() => { temp.cleanup(); });
+afterEach(() => { vi.useRealTimers(); temp.cleanup(); });
 
 function draft(kind: "resume" | "letter"): CareerDocument {
   const unsaved = document();
@@ -89,4 +91,24 @@ it("returns export hints for both buttons while keeping checks scoped to the pre
       findings: expect.arrayContaining([expect.objectContaining({ code: "career.lint.placeholder" })]),
     },
   });
+});
+
+
+it.each(["resume", "letter"] as const)("pins the complete %s preview response with stored contact", async (kind) => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-01-15T12:00:00Z"));
+  fs.mkdirSync(path.join(temp.profileDir, "career"), { recursive: true });
+  const contact = {
+    ...emptyContact(), name: "Fictional Preview Person", email: "preview@example.test",
+    phone: "+49 555 12345678", address: "42 Fictional Avenue",
+  };
+  fs.writeFileSync(path.join(temp.profileDir, "career/contact.yaml"), stringify(contact));
+  const response = await preview(request(draft(kind), kind));
+  const body = await response.json();
+  expect(response.status).toBe(200);
+  expect(Object.keys(body).sort()).toEqual(["exportHints", "findings", "html", "ok", "uncovered"]);
+  for (const value of [contact.name, contact.email, contact.phone, contact.address]) expect(body.html).toContain(value);
+  expect(body).toMatchSnapshot();
+  const invalid = await preview(request(draft(kind), kind === "resume" ? "letter" : "resume"));
+  expect({ status: invalid.status, body: await invalid.json() }).toMatchSnapshot();
 });
