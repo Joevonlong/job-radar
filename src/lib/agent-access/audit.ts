@@ -20,7 +20,7 @@ export type AuditEntry = AuditOutcome & {
 export interface AuditRecorder {
   beginCall?(): () => void;
   record(entry: AuditEntry): Promise<void>;
-  inTransaction(tx: Executor, entry: AuditEntry): Promise<void>;
+  inTransaction(tx: Executor, entry: AuditEntry): Promise<number>;
   close(): Promise<void>;
 }
 

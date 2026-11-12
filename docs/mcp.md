@@ -8,7 +8,10 @@ client can start `pnpm mcp:serve` locally over stdin / stdout, or connect to the
 
 - **Off by default.** Nothing happens until you set `enabled: true` in `mcp.yaml`.
 - **Local stdio or optional HTTP.** Stdio opens no port and needs no token. HTTP uses the web port and requires an agent token on every POST request.
-- **Permissions control writes.** Database reads use read-only sessions; personal-data reads also read local profile files. `save_application_answer` requires `writer:write` and adds an answer version. With `actions:run`, action tools queue collection and AI work through the same functions as the web buttons. Workers perform the work asynchronously.
+- **Permissions control writes.** Database reads use read-only sessions; personal-data reads also read local profile files.
+  `writer:write` can add answer versions; `tracking:write` can update application status, next steps and interview rounds, and
+  undo its own changes. These use a separate write connection; status changes may queue automatic research. With `actions:run`,
+  action tools queue collection and AI work through the same functions as the web buttons. Workers perform the work asynchronously.
 
 The server also stores local call metadata in `agent_calls`, over a separate audit connection (see [Audit trail](#audit-trail)).
 
@@ -122,11 +125,15 @@ was off, `jobs:read` offers both and `config:migrate` prints a notice. Remove `j
 you write into `mcp.yaml` also covers tools that later versions add under it, so grant only what should be readable or
 writable.
 
-`budgets` enforces daily limits for the seven trigger tools below. Read tools, including `get_request_status`, and `save_application_answer` do not consume them.
+`budgets` enforces daily limits for the seven trigger tools below and for automatic research queued by agent writes. Read tools,
+including `get_request_status`, and `save_application_answer` do not consume them.
 `per_caller` counts the local stdio connection and each token separately. It caps collection requests, job translations,
 breakdowns, salary lookups, company lookups and answer drafts; `score_jobs` counts each job in a batch.
-The same counters support indirect salary and company research through `takeIndirectBudget`. An action cap of `0` forbids that
-action. `total` counts requests, not jobs, across all callers and actions: a `score_jobs` batch of 40 jobs uses 40 of the
+An agent write that queues automatic research uses one `research_company` unit per company lookup and one `research_salary`
+unit per salary lookup, only for work it newly queues. Reservations for each write are all-or-nothing: any refused bucket
+skips all research for that write (`research: "budget_skipped"`). Units for work not newly queued are returned; breakdowns
+started this way are not counted. An action cap of `0` forbids that action.
+`total` counts requests, not jobs, across all callers and actions: a `score_jobs` batch of 40 jobs uses 40 of the
 caller's `score_jobs` cap but only 1 of `total`. `0` forbids all agent actions.
 The day and next reset follow `schedule.yaml`'s time zone, including daylight saving changes. The runner prunes counter and ticket rows older
 than the current local day minus `audit.retention_days` once an hour. These settings have defaults and keep `config_version: 3`.
@@ -347,6 +354,11 @@ URL; restrict that role only if it can still perform the web's required operatio
 | `list_favorites` | `tracking:read`: all starred jobs, including closed, filtered and ignored ones. `sort`: `starred` (default, newest first) or `rank`; optional `limit`. `notes:read` adds each item’s `notes.favorite_note`. |
 | `get_application_context` | **Off by default.** Everything to write one job's answers (`job_id`): job facts, the cleaned JD, breakdown points, the company background and fit note, the questions, the material chosen for each and the saved versions (newest first, at most `max_results` per question). |
 | `save_application_answer` | **Off by default.** Adds one answer version (`job_id`, `question_id`, `text`, optional `sentences`). |
+| `set_application_status` | `tracking:write`: sets `job_id` to `status`, creating its application if needed. All web-selectable statuses are allowed. |
+| `mark_applied` | `tracking:write`: marks `job_id` applied from `new`, `interested`, `preparing` or `archived`. Already applied is a no-op; later stages are refused. |
+| `set_next_action` | `tracking:write`: sets `job_id`, `next_action` and `next_action_date` (`YYYY-MM-DD` or null); requires an existing application. |
+| `set_interview_rounds` | `tracking:write`: sets `job_id` and `rounds`, with the web's input limits; requires an existing application. |
+| `undo_change` | `tracking:write`: restores one of this caller's changes by `audit_id`, subject to the rules below. |
 
 `search_jobs` uses the same URL-state filters as `/jobs`; absent scope keeps the legacy current-jobs rule, and dates compare first seen. As on the web, reversed `since` / `until` bounds are swapped; the previous MCP path returned no matches for such a range. Its search plan remains lenient: unreadable pipeline settings leave text search working without market vocabulary. Every explicit MCP sort has a web equivalent; MCP keeps rank as its default without a query, including archive (the web archive defaults to last listed).
 
@@ -439,6 +451,41 @@ Each call writes one line to stderr (your client keeps it in its log of the serv
 long it took, and whether it worked. Never the arguments or the results. Errors name a category only (`database`, `not_found`,
 `invalid_input`, ...), never an address or a path.
 
+## Tracking writes and undo
+
+Add `tracking:write` to both `permissions` and `stdio.permissions`, then restart the MCP client so the server can open
+its write connection. Without both the effective permission and that connection, none of these tools is offered. Removing
+the permission or switching the server off refuses subsequent calls without a restart. The application writer switch is independent.
+
+The four tracking tools call the same services as the web. A successful receipt contains only `audit_id`, `job_id`, `field`,
+`undoable`, `research` and notices. It does not echo the new or previous text. Blank next-step text clears it; null or an empty
+date clears the date. Status changes preserve notes, append events and wake dormant jobs under the web's existing rules.
+Notes, favorites, seen state, closure, filters and replies have no write tools in this release.
+
+`undo_change` takes the write's `audit_id`. It requires the same caller and the original data area's write permission.
+The server locks and fingerprints the current field; if it differs from the value after that write, undo returns a conflict
+and restores nothing. Other fields are left alone. Status fingerprints also include the status clock and newest event so
+moving away and back does not hide later history. A successful undo can happen only once, gets its own audit row and cannot
+itself be undone. No-op writes are audited but are not undoable. Expired audit rows have no remaining undo data.
+
+Status undo appends a reverse change event; it never deletes history or uses the web toast's fallback that overwrites a later
+status. If the original write created the application, undo restores status `new` and retains the application and its history.
+There is no delete tool. The undo response names the restored field and audit ids, plus research outcome and notices; it
+never returns previous private text, even with read permissions. Owner activity-page undo controls are not included here.
+
+A qualifying status change, including restoration, may start automatic research under `research.yaml`. An agent write uses
+one `research_company` unit per company lookup and one `research_salary` unit per salary lookup, only for work it newly queues.
+Before queuing, it reserves those units through the shared daily budget gate. Reservations for each write are all-or-nothing:
+any refused bucket or unavailable budget leaves the tracking write successful, skips all research for that write, and returns
+`research: "budget_skipped"` with a notice. Units for work not newly queued (including cached or merged work) are returned.
+Breakdowns started this way are not counted. Owner/web clicks never spend agent budget. Existing research limits still apply.
+Agent budget reservations and queued work commit with the write and its audit; failures roll them back.
+Undo does not cancel queued research, refund work already queued or spent, or retract content already sent to a model.
+
+A write-enabled agent that reads malicious text can still corrupt application tracking. Undo helps recover changes; it cannot
+prevent them, and later edits can make undo conflict. Remove its write grant or disable MCP to stop subsequent calls. For a
+token-based connection, revoke its token to stop it; this release serves local stdio, so disable that connection or its grants.
+
 ## Action tools and daily limits
 
 All eight tools require effective `actions:run` in both `permissions` and `stdio.permissions`. Add `writer:write` for
@@ -527,12 +574,15 @@ of the call, time spent behind other rows included. If the row fails or the dead
 normally and writes one additional stderr line with the failure category only (`timeout` for a passed deadline). A row
 that timed out is not sent again, because the database may already have saved it; the server drops that session and the
 next row opens a new one. A saved answer version and its success audit row are written in the same
-transaction on the answer's write connection: both are saved or neither is. If that audit insert fails, the answer is
+transaction on the answer's write connection: both are saved or neither is. Tracking writes additionally store local
+before-values and after-fingerprints in `agent_undo` in that same transaction; failure of either insert rolls back the write.
+The activity query derives `undoable` / `undone` / `not_undoable` from the presence of that row and its `undone_at`, so there
+is no duplicated status to drift. If that audit insert fails, the answer is
 rolled back, the call fails and the server attempts to record the error over the audit connection. The existing stderr
 call-log line is unchanged.
 
 In `mcp.yaml`, `audit.retention_days` defaults to **90** (1–3650). The runner periodically deletes older rows, including
-while MCP is off; without a running runner, they remain. Old database backups can still hold deleted rows. The other
+while MCP is off; the foreign key cascades deletion to the associated `agent_undo` rows, including private before-values. Without a running runner, they remain. Old database backups can still hold deleted rows. The other
 `audit` keys bound the dedicated connection's waits:
 
 | Key | Default | Bounds |
@@ -552,7 +602,7 @@ doctor` reports the audit retention days in `data.mcp` when MCP is on.
 ## Optional: a database role that can only read
 
 The read-only sessions guard against a mistaken write, but they are not a security boundary. For a hard one, give the server
-its own role with `SELECT` rights only (`save_application_answer` then cannot save):
+its own role with `SELECT` rights only (write tools then cannot save):
 
 ```bash
 docker compose exec db psql -U jobradar -d jobradar

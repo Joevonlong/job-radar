@@ -1,7 +1,8 @@
 # MCP server (docs/mcp.md): lets an MCP client you configure yourself (Claude Desktop, Claude Code, ...) query your jobs and
 # applications and queue permitted actions. Local clients start `pnpm mcp:serve` over stdio; optional HTTP uses the web port
-# and agent tokens. No permission that writes is granted by default. `save_application_answer` needs writer:write and adds
-# answer versions. Action tools need actions:run and use the existing control queue.
+# and agent tokens. No permission that writes is granted by default. writer:write adds answer versions
+# (save_application_answer cannot change or delete any); tracking:write updates application fields and can undo its own
+# writes. Action tools need actions:run and use the existing control queue.
 # Each call adds metadata to `agent_calls` (see `audit` below).
 # Privacy: whatever the tools return is handed by your client to the model provider it uses (Anthropic for Claude, ...).
 # What may be returned is fixed in code: job facts, source links, scores and ranks, signals with their JD quotes, the JD after
@@ -37,6 +38,7 @@ enabled: false
 # get_job_raw: raw:read (off by default; untrusted, uncleaned payloads may include recruiter contact data)
 # get_system_status / list_cycles / list_channels / get_activity_log / get_ai_usage: ops:read (opt-in)
 # Operations expose codes, counts and usage aggregates only; no raw errors, paths or job-level usage.
+# set_application_status / mark_applied / set_next_action / set_interview_rounds / undo_change: tracking:write
 # run_collection / score_jobs / translate_job / breakdown_job / research_salary / research_company: actions:run
 # draft_answer: actions:run + writer:write
 # get_request_status: actions:run; only this caller's requests, no daily charge

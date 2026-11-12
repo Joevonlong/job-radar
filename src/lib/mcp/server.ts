@@ -1,7 +1,8 @@
 /**
  * The MCP server (`pnpm mcp:serve`, docs/mcp.md): tools generated from the capability registry, each authorized on every call
- * against the current mcp.yaml and, for a connection made with an agent token, the token's current row. Answer writes add versions;
- * action triggers use the shared control queue with daily budgets. Every capability is registered with the SDK, but
+ * against the current mcp.yaml and, for a connection made with an agent token, the token's current row. Write capabilities use
+ * separately granted connections and commit their audit with the change; action triggers use the shared control queue with
+ * daily budgets. Every capability is registered with the SDK, but
  * `tools/list` is answered by this file instead of the SDK, so the list follows the current settings and lists only what a call
  * would accept. The stdio entry point is scripts/mcp-serve.ts.
  */
@@ -39,6 +40,7 @@ export function defaultContext(
     text?: McpTranslator;
     log?: LogLine;
     writeDb?: Db | null;
+    trackingWriteDb?: Db | null;
     actionDb?: Db;
     readSettings?: () => McpConfig;
     audit?: McpContext["audit"];
@@ -65,6 +67,7 @@ export function defaultContext(
     log: options.log ?? stderrLine,
     features: { careerEnabled: () => featureEnabled("career"), repliesEnabled: () => featureEnabled("replies") },
     writer: { inputs: readWriterInputs, writeDb: options.writeDb ?? null },
+    tracking: { writeDb: options.trackingWriteDb ?? null },
     actions: options.actionDb ? { db: options.actionDb } : undefined,
     audit: options.audit,
     caller: options.caller,

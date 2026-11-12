@@ -1,8 +1,8 @@
 /**
  * The MCP server over stdio (docs/mcp.md): an MCP client you configure (Claude Desktop, Claude Code, ...) starts this as a child
- * process and talks to it on stdin / stdout. No port is opened. Tool calls write metadata-only audit rows; the tool
- * `save_application_answer`, when granted writer:write, adds answer versions over a connection of its own. Permitted action
- * triggers use a separate single-session write connection for budgets and the existing control queue.
+ * process and talks to it on stdin / stdout. No port is opened. Tool calls write metadata-only audit rows;
+ * write capabilities use a separate connection, granted only for their effective write permissions. Permitted action
+ * triggers use another single-session write connection for budgets and the existing control queue.
  *
  *   pnpm --silent mcp:serve
  *
@@ -46,7 +46,7 @@ function packageVersion(): string {
 
 /**
  * The write connection is decided before the offered list, because the writing tool is offered only when it has one: it is opened
- * when a writing capability is permitted at startup and writer.yaml is on. Switching it on later needs a restart.
+ * when tracking:write is permitted, or writer:write is permitted and writer.yaml is on. Switching it on later needs a restart.
  */
 async function main(): Promise<void> {
   const text = mcpTranslator();
@@ -61,11 +61,15 @@ async function main(): Promise<void> {
     stderrLine(text("serve.disabled"));
     process.exit(1);
   }
-  const writes = readWriterEnabled() && CAPABILITIES.some((capability) => capability.kind === "write" && authorize(capability, liveMcpSettings).allowed);
+  const writerWrites = readWriterEnabled() && authorize({ id: "save_application_answer", permission: "writer:write" }, liveMcpSettings).allowed;
+  const trackingWrites = authorize({ id: "set_application_status", permission: "tracking:write" }, liveMcpSettings).allowed;
+  const writes = writerWrites || trackingWrites;
   const writable = writes ? createConnection(loadDatabaseEnv().DATABASE_URL, { max: 1 }) : null;
+  const writerDb = writerWrites ? writable?.db ?? null : null;
+  const trackingDb = trackingWrites ? writable?.db ?? null : null;
   const actionWrites = CAPABILITIES.some((capability) => capability.kind === "trigger" && authorize(capability, liveMcpSettings).allowed);
   const actionConnection = actionWrites ? createConnection(loadDatabaseEnv().DATABASE_URL, { max: 1 }) : null;
-  const tools = (await visibleCapabilities(CAPABILITIES, { readSettings: liveMcpSettings, writer: { inputs: readWriterInputs, writeDb: writable?.db ?? null }, actions: actionConnection ? { db: actionConnection.db } : undefined })).map(
+  const tools = (await visibleCapabilities(CAPABILITIES, { readSettings: liveMcpSettings, writer: { inputs: readWriterInputs, writeDb: writerDb }, tracking: { writeDb: trackingDb }, actions: actionConnection ? { db: actionConnection.db } : undefined })).map(
     (capability) => capability.id,
   );
   if (tools.length === 0) {
@@ -86,7 +90,7 @@ async function main(): Promise<void> {
     return { db: connection.db, end: (options: { timeout: number }) => connection.sql.end(options) };
   };
   const audit = createAuditRecorder(openAudit, { text, log: stderrLine, writeTimeoutMs: auditSettings.write_timeout_ms });
-  const context = defaultContext(database.db, settings, { text, writeDb: writable?.db ?? null, actionDb: actionConnection?.db, audit });
+  const context = defaultContext(database.db, settings, { text, writeDb: writerDb, trackingWriteDb: trackingDb, actionDb: actionConnection?.db, audit });
   const version = packageVersion();
   const handle = serveStdio(() => buildServer(context, { version }), {
     onerror: (error) => stderrLine(`[mcp] transport error: ${error.name}`),

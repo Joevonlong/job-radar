@@ -136,10 +136,10 @@ export type IndirectBudgetDecision =
   | { decision: "go"; ticket: BudgetTicket }
   | { decision: "skip"; reason: BudgetRefusal["reason"] | "unavailable"; refusal: BudgetRefusal | null };
 
-/** The caller does its write either way; on "skip" it does not queue research and says why in its answer. */
+/** A failed budget query rolls back its savepoint; the caller can still commit its write and report skipped research. */
 export async function takeIndirectBudget(db: Db, input: { caller: AgentCaller; action: AgentAction }, deps: BudgetDeps = defaultDeps): Promise<IndirectBudgetDecision> {
   try {
-    const result = await takeAgentBudget(db, { ...input, units: 1 }, deps);
+    const result = await db.transaction((tx) => takeAgentBudget(tx, { ...input, units: 1 }, deps));
     return result.ok ? { decision: "go", ticket: result.ticket } : { decision: "skip", reason: result.refusal.reason, refusal: result.refusal };
   } catch {
     return { decision: "skip", reason: "unavailable", refusal: null };

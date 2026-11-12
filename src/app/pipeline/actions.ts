@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { getFormatter, getTranslations } from "next-intl/server";
 import { z } from "zod";
 
+import { withoutCaller } from "@/lib/agent-access/caller";
+import { setNextAction, setInterviewRounds } from "@/lib/applications/service";
 import { loadConfig } from "@/lib/config";
 import type { RepliesConfig } from "@/lib/config/schemas/replies";
 import { getDisplayTimeZone } from "@/lib/dashboard/context";
@@ -13,7 +15,7 @@ import { PICKABLE_CATEGORIES } from "@/lib/replies/types";
 
 import { nextActionDateToTimestamp } from "@/lib/dashboard/board";
 import { INTERVIEW_ROUNDS_MAX, NEXT_ACTION_MAX_CHARS } from "@/lib/dashboard/limits";
-import { APPLICATION_STATUSES, getDb, jobExists, revertApplicationStatus, setApplicationNextAction, setInterviewRounds, type ApplicationStatus } from "@/lib/db";
+import { APPLICATION_STATUSES, getDb, jobExists, revertApplicationStatus, type ApplicationStatus } from "@/lib/db";
 import { isCalendarDate } from "@/lib/jobs/search-params";
 
 /**
@@ -41,15 +43,16 @@ const roundsSchema = z.object({ jobId: jobIdSchema, rounds: z.number().int().min
 
 /** Save the next step (text and date) of a job's application; blank values clear them. */
 export async function saveNextActionAction(input: { jobId: number; nextAction: string; nextActionDate: string | null }): Promise<PipelineActionResult> {
-  const parsed = nextActionSchema.safeParse(input);
+  const parsed = nextActionSchema.safeParse(withoutCaller(input));
   if (!parsed.success) return { ok: false, error: "invalid" };
   try {
     const text = parsed.data.nextAction.trim();
     const date = parsed.data.nextActionDate;
-    const found = await setApplicationNextAction(getDb(), parsed.data.jobId, {
+    const found = await setNextAction(getDb(), {
+      jobId: parsed.data.jobId,
       nextAction: text === "" ? null : text,
       nextActionAt: date ? nextActionDateToTimestamp(date) : null,
-    });
+    }, undefined);
     if (!found) return { ok: false, error: "not_found" };
     revalidatePath("/pipeline");
     return { ok: true };
@@ -61,10 +64,10 @@ export async function saveNextActionAction(input: { jobId: number; nextAction: s
 
 /** Set the interview rounds of a job's application. */
 export async function setInterviewRoundsAction(input: { jobId: number; rounds: number }): Promise<PipelineActionResult<{ rounds: number }>> {
-  const parsed = roundsSchema.safeParse(input);
+  const parsed = roundsSchema.safeParse(withoutCaller(input));
   if (!parsed.success) return { ok: false, error: "invalid" };
   try {
-    const rounds = await setInterviewRounds(getDb(), parsed.data.jobId, parsed.data.rounds, INTERVIEW_ROUNDS_MAX);
+    const rounds = await setInterviewRounds(getDb(), parsed.data, undefined);
     if (rounds === null) return { ok: false, error: "not_found" };
     revalidatePath("/pipeline");
     return { ok: true, rounds };

@@ -5,6 +5,7 @@ import { createMcpHandler } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
 import { authorize, liveMcpSettings } from "@/lib/agent-access/authorize";
+import type { Permission } from "@/lib/agent-access/permissions";
 import { agentTokenGrantReader, bearerAgentToken, verifyAgentToken } from "@/lib/agent-access/tokens";
 import { CAPABILITIES } from "@/lib/capabilities/registry";
 import type { McpConfig } from "@/lib/config/schemas/mcp";
@@ -234,11 +235,15 @@ async function authenticatedResponse(
   try { await deps.markUsed(deps.writeDb(settings), grant.tokenId, deps.now()); }
   catch (error) { deps.log(`[mcp] http last use failed: ${errorCategory(error)}`); }
   request.signal.throwIfAborted();
-  const writes = deps.writerEnabled() && CAPABILITIES.some((capability) => capability.kind === "write" && authorize(capability, deps.readSettings, grant).allowed);
+  const allowed = (permission: Permission) =>
+    CAPABILITIES.some((capability) => capability.kind === "write" && capability.permission === permission && authorize(capability, deps.readSettings, grant).allowed);
+  const writerWrites = allowed("writer:write") && deps.writerEnabled();
+  const trackingWrites = allowed("tracking:write");
+  const writeDb = writerWrites || trackingWrites ? deps.writeDb(settings) : null;
   const context = defaultContext(readDb, settings, {
     audit: deps.audit(settings), log: deps.log, readSettings: deps.readSettings,
     caller: { caller: "token", tokenId: grant.tokenId, transport: "http" },
-    grant, readGrant: deps.readGrant(readDb, deps.now), writeDb: writes ? deps.writeDb(settings) : null,
+    grant, readGrant: deps.readGrant(readDb, deps.now), writeDb: writerWrites ? writeDb : null, trackingWriteDb: trackingWrites ? writeDb : null,
   });
   context.now = deps.now;
   context.track = slot.track;
