@@ -16,7 +16,7 @@ const bin = path.join(tmp, "bin");
 fs.mkdirSync(bin);
 fs.writeFileSync(path.join(bin, "pnpm"), '#!/bin/sh\necho "cwd=$(pwd -P) args=$*" >&2\n', { mode: 0o755 });
 
-function run(command: string, env: NodeJS.ProcessEnv) {
+function run(command: string, env: Record<string, string>) {
   return spawnSync(command, ["--extra"], { cwd: tmp, env, encoding: "utf8" });
 }
 
