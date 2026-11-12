@@ -18,6 +18,7 @@ import { careerDocumentHistoryDir, careerDocumentPath, careerDocumentsDir } from
 
 export type DocumentSummary = {
   id: string; title: string; kind: CareerDocument["kind"]; updatedAt: string; lang: CareerDocument["layout"]["lang"];
+  jobId: number | null;
 } | { id: string; invalid: true };
 export interface LoadedDocument { document: CareerDocument; baseHash: string }
 export type DocumentSaveResult = ({ ok: true; warnings: "history_failed"[] } & LoadedDocument) | { ok: false; code: "stale" };
@@ -36,7 +37,10 @@ export async function listDocuments(): Promise<DocumentSummary[]> {
     if (!file.endsWith(".yaml") || !documentIdSchema.safeParse(id).success) continue;
     try {
       const { document } = await loadDocument(id);
-      summaries.push({ id, title: document.title, kind: document.kind, updatedAt: document.updated_at, lang: document.layout.lang });
+      summaries.push({
+        id, title: document.title, kind: document.kind, updatedAt: document.updated_at, lang: document.layout.lang,
+        jobId: document.job?.id ?? null,
+      });
     } catch {
       summaries.push({ id, invalid: true });
     }

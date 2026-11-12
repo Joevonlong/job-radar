@@ -6,6 +6,7 @@ import { requestRescoreStale, requestRunCycle, requestScoreJobs, type ControlAct
 import { previewAdvanced, resetAdvanced, saveAdvanced, validateAdvanced } from "@/lib/settings/advanced/service";
 import type { AdvancedFileEntry, AdvancedLoad, AdvancedPreview, AdvancedResetResult, AdvancedSaveResult, AdvancedValidation } from "@/lib/settings/advanced/types";
 import { loadAdvancedFile, loadAdvancedIndex } from "@/lib/settings/advanced/view";
+import { requestOwnerSession } from "@/lib/security/owner-session";
 import { saveSettings } from "@/lib/settings/service";
 import { saveWorkflow } from "@/lib/settings/workflow/service";
 import type { WorkflowActionState } from "@/lib/settings/workflow/types";
@@ -65,13 +66,13 @@ export async function previewAdvancedAction(request: unknown): Promise<AdvancedP
 }
 
 export async function saveAdvancedAction(request: unknown): Promise<AdvancedSaveResult> {
-  const result = await saveAdvanced(request);
+  const result = await saveAdvanced(request, { ownerSession: await requestOwnerSession() });
   if (result.status === "saved") revalidateAfterConfigWrite();
   return result;
 }
 
 export async function resetAdvancedAction(request: unknown): Promise<AdvancedResetResult> {
-  const result = await resetAdvanced(request);
+  const result = await resetAdvanced(request, { ownerSession: await requestOwnerSession() });
   if (result.status === "reset") revalidateAfterConfigWrite();
   return result;
 }

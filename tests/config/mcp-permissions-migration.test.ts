@@ -49,6 +49,9 @@ function verify(text: string, tools: typeof defaults, version: number) {
   expect(value.permissions).toEqual(expected);
   expect(value.stdio.permissions).toEqual(expected);
   const effective = effectivePermissions(value.stdio.permissions, value.permissions);
+  expect(value.permissions).not.toContain("profile:read");
+  expect(value.stdio.permissions).not.toContain("profile:read");
+  expect(effective.has("profile:read")).toBe(false);
   for (const capability of CAPABILITIES.filter((candidate) => candidate.id in tools)) {
     const old = tools[capability.id as OldTool];
     const expanded = capability.permission === "jobs:read" && tools.search_jobs !== tools.get_job;

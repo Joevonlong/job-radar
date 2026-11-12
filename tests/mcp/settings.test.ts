@@ -19,11 +19,12 @@ afterEach(() => {
 describe("mcp.yaml schema", () => {
   it("defaults to off, the read tools on, the writer tools off, 20 results, 12000 JD characters and the daily agent budgets", () => {
     expect(mcpSchema.parse({})).toEqual({
+      http: mcpSchema.parse({ http: {} }).http,
       enabled: false,
       permissions: ["jobs:read", "tracking:read"],
       stdio: { permissions: ["jobs:read", "tracking:read"] },
       audit: { retention_days: 90, connect_timeout_seconds: 2, statement_timeout_ms: 1500, lock_timeout_ms: 200, write_timeout_ms: 2000 },
-      limits: { max_results: 20, max_description_chars: 12_000 },
+      limits: { max_results: 20, max_description_chars: 12_000, max_raw_chars: 20_000 },
       budgets: {
         per_caller: {
           run_collection: 2, score_jobs: 300, translate_job: 60, breakdown_job: 20,
@@ -37,7 +38,7 @@ describe("mcp.yaml schema", () => {
     const parsed = mcpSchema.parse({ enabled: true, permissions: ["writer:read"], stdio: {}, limits: { max_results: 5 } });
     expect(parsed.permissions).toEqual(["writer:read"]);
     expect(parsed.stdio.permissions).toEqual(["jobs:read", "tracking:read"]);
-    expect(parsed.limits).toEqual({ max_results: 5, max_description_chars: 12_000 });
+    expect(parsed.limits).toEqual({ max_results: 5, max_description_chars: 12_000, max_raw_chars: 20_000 });
   });
   it("defaults missing audit keys without a configuration migration", () => {
     expect(mcpSchema.parse({ audit: { retention_days: 7 } }).audit).toEqual({ retention_days: 7, connect_timeout_seconds: 2, statement_timeout_ms: 1500, lock_timeout_ms: 200, write_timeout_ms: 2000 });
@@ -54,6 +55,9 @@ describe("mcp.yaml schema", () => {
     ["max_results not an integer", { limits: { max_results: 2.5 } }],
     ["max_description_chars below 500", { limits: { max_description_chars: 499 } }],
     ["max_description_chars above the cap", { limits: { max_description_chars: 100_001 } }],
+    ["max_raw_chars below 500", { limits: { max_raw_chars: 499 } }],
+    ["max_raw_chars above the cap", { limits: { max_raw_chars: 1_000_001 } }],
+    ["max_raw_chars not an integer", { limits: { max_raw_chars: 500.5 } }],
     ["the removed tools key", { tools: { search_jobs: true } }],
     ["an unknown key (no transport / http / include)", { transport: "http" }],
     ["enabled not a boolean", { enabled: "yes" }],

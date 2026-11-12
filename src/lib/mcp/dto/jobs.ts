@@ -42,6 +42,19 @@ const jobCardShape = {
 export const jobCardDto = z.strictObject(jobCardShape);
 export type JobCardDto = z.infer<typeof jobCardDto>;
 
+/** Base fields that are tracking data (application status and history, the user's closure judgement): released only with tracking:read. */
+const CARD_TRACKING_FIELDS = { application_status: true } as const;
+const DETAIL_TRACKING_FIELDS = { application_status: true, closed_reason: true, application: true } as const;
+
+function withoutFields<T extends object, K extends string>(value: T, fields: Readonly<Record<K, true>>): Omit<T, K> {
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !(key in fields))) as Omit<T, K>;
+}
+
+/** The card as the given permissions release it; key order stays that of the full card. */
+export function releasedJobCard(card: JobCardDto, permissions: ReadonlySet<Permission>): JobCardDto | Omit<JobCardDto, keyof typeof CARD_TRACKING_FIELDS> {
+  return permissions.has("tracking:read") ? card : withoutFields(card, CARD_TRACKING_FIELDS);
+}
+
 export const amountDto = z.strictObject({
   currency: z.string(),
   /** Per year in `currency`. */
@@ -101,22 +114,31 @@ export const jobDetailDto = z.strictObject({
 });
 export type JobDetailDto = z.infer<typeof jobDetailDto>;
 
+export function releasedJobDetail(job: JobDetailDto, permissions: ReadonlySet<Permission>): JobDetailDto | Omit<JobDetailDto, keyof typeof DETAIL_TRACKING_FIELDS> {
+  return permissions.has("tracking:read") ? job : withoutFields(job, DETAIL_TRACKING_FIELDS);
+}
+
+/** The registered schema accepts both releases; each call is checked against the strict schema of its permissions. */
 export const searchJobsOutput = z.strictObject({
   notices,
   total: z.number().int(),
   returned: z.number().int(),
   truncated: z.boolean(),
-  jobs: z.array(jobCardDto.extend({ match: cardMatchBlockDto.optional(), tracking: cardTrackingBlockDto.optional() })),
+  jobs: z.array(jobCardDto.partial(CARD_TRACKING_FIELDS).extend({ match: cardMatchBlockDto.optional(), tracking: cardTrackingBlockDto.optional() })),
 });
 export type SearchJobsOutput = z.infer<typeof searchJobsOutput>;
 
+function cardShapeFor(permissions: ReadonlySet<Permission>) {
+  return permissions.has("tracking:read") ? jobCardDto.shape : jobCardDto.omit(CARD_TRACKING_FIELDS).shape;
+}
+
 export function searchJobsOutputFor(permissions: ReadonlySet<Permission>): z.ZodType<SearchJobsOutput> {
-  return searchJobsOutput.extend({ jobs: z.array(z.strictObject({ ...jobCardShape, ...blockShape(searchJobCardBlocks, permissions) })) });
+  return searchJobsOutput.extend({ jobs: z.array(z.strictObject({ ...cardShapeFor(permissions), ...blockShape(searchJobCardBlocks, permissions) })) });
 }
 
 export const getJobOutput = z.strictObject({
   notices,
-  job: jobDetailDto,
+  job: jobDetailDto.partial(DETAIL_TRACKING_FIELDS),
   translation: translationBlockDto.optional(),
   breakdown: breakdownBlockDto.optional(),
   salary: salaryBlockDto.optional(),
@@ -130,7 +152,8 @@ export const getJobOutput = z.strictObject({
 export type GetJobOutput = z.infer<typeof getJobOutput>;
 
 export function getJobOutputFor(permissions: ReadonlySet<Permission>): z.ZodType<GetJobOutput> {
-  return z.strictObject({ notices, job: jobDetailDto, ...blockShape(getJobBlocks, permissions) });
+  const job = permissions.has("tracking:read") ? jobDetailDto : jobDetailDto.omit(DETAIL_TRACKING_FIELDS);
+  return z.strictObject({ notices, job, ...blockShape(getJobBlocks, permissions) });
 }
 
 export function toJobCardDto(card: JobCard, clean: CleanText): JobCardDto {

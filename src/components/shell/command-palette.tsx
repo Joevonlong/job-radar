@@ -87,6 +87,8 @@ export function CommandPalette({ minChars }: { minChars: number }) {
   const tNav = useTranslations("nav");
   const navItems = useNavItems();
   const tSub = useTranslations("sources.subnav");
+  const tAgents = useTranslations("agents.subnav");
+  const subpageLabel = (page: (typeof PALETTE_SUBPAGES)[number]): string => (page.labels === "agents" ? tAgents(page.key) : tSub(page.key));
   const tShell = useTranslations("shell");
   const modifier = useModifierKey();
 
@@ -128,7 +130,7 @@ export function CommandPalette({ minChars }: { minChars: number }) {
   const resultsArrived = canSearchJobs && result.query === text;
   const shownJobs = resultsArrived ? result.jobs : [];
   const pages = navItems.filter(({ key, href }) => !text || defaultFilter(`${tNav(key)} ${href}`, text) > 0);
-  const subpages = PALETTE_SUBPAGES.filter(({ key, href }) => !text || defaultFilter(`${tSub(key)} ${href} ${key === "logs" ? tSub("logsKeywords") : ""}`, text) > 0);
+  const subpages = PALETTE_SUBPAGES.filter((page) => !text || defaultFilter(`${subpageLabel(page)} ${page.href} ${page.key === "logs" ? tSub("logsKeywords") : ""}`, text) > 0);
 
   const go = useCallback(
     (href: string) => {
@@ -181,13 +183,16 @@ export function CommandPalette({ minChars }: { minChars: number }) {
                 <span className="ml-auto font-mono text-data-sm opacity-75">{href}</span>
               </CommandItem>
             ))}
-            {subpages.map(({ key, href, icon: Icon }) => (
-              <CommandItem key={key} value={`${tSub(key)} ${href} ${key === "logs" ? tSub("logsKeywords") : ""}`} onSelect={() => go(href)} className="group/item" data-testid={key === "logs" ? "activity-log-palette" : `palette-page-${key}`}>
-                <Icon aria-hidden />
-                <span>{tSub(key)}</span>
-                <span className="ml-auto font-mono text-data-sm opacity-75">{href}</span>
-              </CommandItem>
-            ))}
+            {subpages.map((page) => {
+              const { key, href, icon: Icon } = page;
+              return (
+                <CommandItem key={key} value={`${subpageLabel(page)} ${href} ${key === "logs" ? tSub("logsKeywords") : ""}`} onSelect={() => go(href)} className="group/item" data-testid={key === "logs" ? "activity-log-palette" : `palette-page-${key}`}>
+                  <Icon aria-hidden />
+                  <span>{subpageLabel(page)}</span>
+                  <span className="ml-auto font-mono text-data-sm opacity-75">{href}</span>
+                </CommandItem>
+              );
+            })}
           </CommandGroup> : null}
           {canSearchJobs ? (
             <CommandGroup heading={t("jobsGroup")} data-testid="palette-jobs">

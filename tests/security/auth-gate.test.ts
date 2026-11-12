@@ -1,9 +1,13 @@
 // @vitest-environment node
+import fs from "node:fs";
+import path from "node:path";
+import ts from "typescript";
+
 import { describe, expect, it } from "vitest";
 
 import { authDecision, isPublicRoute, loginRedirectTarget, safeNextPath, type AuthInput } from "@/lib/security/auth-gate";
 
-const base: AuthInput = { pathname: "/jobs", method: "GET", accept: "text/html", local: false, configured: true, sessionValid: false };
+const base: AuthInput = { pathname: "/jobs", method: "GET", accept: "text/html", local: false, configured: true, sessionValid: false, serverAction: false };
 const decide = (extra: Partial<AuthInput>) => authDecision({ ...base, ...extra });
 
 describe("authDecision", () => {
@@ -68,5 +72,50 @@ describe("safeNextPath", () => {
     expect(loginRedirectTarget("/jobs", "?view=table&x=1")).toBe("/login?next=%2Fjobs%3Fview%3Dtable%26x%3D1");
     expect(loginRedirectTarget("/", "")).toBe("/login");
     expect(loginRedirectTarget("/api/x", "")).toBe("/login");
+  });
+});
+
+
+describe("exact MCP gate exemption", () => {
+  it("passes only exact POST, GET and DELETE without a Server Action header", () => {
+    for (const method of ["POST", "GET", "DELETE"]) {
+      expect(decide({ pathname: "/api/mcp", method })).toBe("pass");
+      expect(decide({ pathname: "/api/mcp", method, accept: "application/json", serverAction: true })).toBe("unauthorized");
+    }
+    for (const pathname of ["/api/mcp/", "/api/mcp/x", "/api/mcpx", "/API/mcp", "/api/mcp%2F"]) {
+      for (const method of ["POST", "GET", "DELETE"]) expect(decide({ pathname, method, accept: "application/json" })).toBe("unauthorized");
+      expect(decide({ pathname, method: "GET" })).toBe("login_redirect");
+    }
+    for (const method of ["PUT", "OPTIONS", "HEAD", "PATCH", "post", "get", "delete"]) {
+      expect(decide({ pathname: "/api/mcp", method, accept: "application/json" })).toBe("unauthorized");
+    }
+    expect(decide({ pathname: "/api/mcp", method: "POST", serverAction: true })).toBe("unauthorized");
+    expect(decide({ pathname: "/settings", method: "POST", serverAction: true })).toBe("unauthorized");
+  });
+
+  it("protects every exported API method except the exact public routes, and preserves owner sessions", () => {
+    const root = path.resolve(import.meta.dirname, "../../src/app/api");
+    const methods = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]);
+    const routes = fs.readdirSync(root, { recursive: true, withFileTypes: true }).filter((entry) => entry.name === "route.ts");
+    expect(routes.length).toBeGreaterThan(10);
+    for (const route of routes) {
+      const file = path.join(route.parentPath, route.name);
+      const pathname = "/api/" + path.relative(root, route.parentPath).split(path.sep).join("/");
+      const source = ts.createSourceFile(file, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
+      const exports: string[] = [];
+      for (const node of source.statements) {
+        if (ts.isExportDeclaration(node) && node.exportClause && ts.isNamedExports(node.exportClause)) exports.push(...node.exportClause.elements.map((item) => item.name.text));
+        if (!ts.canHaveModifiers(node) || !ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue;
+        if (ts.isFunctionDeclaration(node) && node.name) exports.push(node.name.text);
+        if (ts.isVariableStatement(node)) exports.push(...node.declarationList.declarations.filter((declaration) => ts.isIdentifier(declaration.name)).map((declaration) => declaration.name.getText(source)));
+      }
+      const verbs = exports.filter((name) => methods.has(name));
+      expect(verbs.length, file).toBeGreaterThan(0);
+      for (const method of verbs) {
+        const isOpen = (pathname === "/api/health" && ["GET", "HEAD"].includes(method)) || (pathname === "/api/auth/login" && method === "POST") || (pathname === "/api/mcp" && ["POST", "GET", "DELETE"].includes(method));
+        expect(decide({ pathname, method, accept: "application/json" }), `${pathname} ${method}`).toBe(isOpen ? "pass" : "unauthorized");
+        expect(decide({ pathname, method, accept: "application/json", sessionValid: true, serverAction: true })).toBe("pass");
+      }
+    }
   });
 });

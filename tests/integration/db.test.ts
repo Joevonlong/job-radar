@@ -22,6 +22,7 @@ const EXPECTED_TABLES = [
   "agent_budget_tickets",
   "agent_budget_usage",
   "agent_calls",
+  "agent_tokens",
   "ai_usage",
   "application_answer_versions",
   "application_events",

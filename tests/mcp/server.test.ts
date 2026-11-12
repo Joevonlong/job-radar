@@ -217,6 +217,37 @@ describe("tools/list", () => {
   });
 });
 
+describe("a connection made with an agent token", () => {
+  const matrix = { permissions: ["jobs:read", "tracking:read"] as Permission[], stdio: { permissions: [] as Permission[] } };
+  const tokenContext = (permissions: Permission[], readGrant: McpContext["readGrant"]): McpContext => ({
+    ...context(matrix),
+    grant: { kind: "token", tokenId: 3, permissions },
+    readGrant,
+  });
+
+  it("lists only what the token and the global matrix both allow, regardless of the stdio grant", async () => {
+    const client = await connect(tokenContext(["tracking:read", "writer:read"], async () => null));
+    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["list_applications", "get_application", "list_favorites"]);
+  });
+
+  it("refuses a call once the token is no longer valid, before the tool runs", async () => {
+    const lines: string[] = [];
+    const ctx = { ...tokenContext(["jobs:read"], async () => null), log: (line: string) => lines.push(line) };
+    const client = await connect(ctx);
+    const result = await client.callTool({ name: "get_job", arguments: { job_id: 1 } });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toBe(ctx.text("errors.tokenInactive"));
+    expect(lines).toEqual([expect.stringMatching(/^\[mcp\] get_job fail not_permitted items=0 ms=\d+$/)]);
+  });
+
+  it("judges a call by the token's list as read at the call", async () => {
+    const ctx = tokenContext(["jobs:read"], async (tokenId) => ({ kind: "token", tokenId, permissions: ["tracking:read"] }));
+    const client = await connect(ctx);
+    const result = await client.callTool({ name: "get_job", arguments: { job_id: 1 } });
+    expect(textOf(result)).toBe(ctx.text("errors.notPermitted", { permission: "jobs:read" }));
+  });
+});
+
 describe("invalid arguments", () => {
   it.each([
     ["search_jobs", { limit: 101 }, "limit"],
@@ -382,9 +413,10 @@ describe("tools come from the registry", () => {
     expect(lines).toEqual([expect.stringMatching(/^\[mcp\] registry_probe fail disabled items=0 ms=\d+$/)]);
   });
 
-  it("lists byte-identical tool definitions to the SDK for available capabilities", async () => {
-    const ctx = context({ permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"], stdio: { permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"] } });
+  it("lists byte-identical tool definitions to the SDK for every registered tool", async () => {
+    const ctx = context({ permissions: [...PERMISSIONS], stdio: { permissions: [...PERMISSIONS] } });
     ctx.writer = { inputs: () => ({ writer: writerSchema.parse({ enabled: true }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: untouchable };
+    ctx.features = { careerEnabled: () => true, repliesEnabled: () => true };
     const reference = new McpServer({ name: "reference", version: "1" }, { capabilities: { tools: {} } });
     for (const { capability: cap, permissions } of await listedCapabilities(CAPABILITIES, ctx)) {
       reference.registerTool(cap.id, { title: ctx.text(cap.text.title), description: ctx.text(cap.text.description), inputSchema: cap.input(ctx), outputSchema: cap.outputFor?.(permissions) ?? cap.output, annotations: cap.annotations }, async () => ({ content: [], isError: true }));
@@ -399,6 +431,7 @@ describe("permissions decide visibility", () => {
   const cases = [
     { name: "search_jobs", permission: "jobs:read", args: {} },
     { name: "get_job", permission: "jobs:read", args: { job_id: 1 } },
+    { name: "get_job_raw", permission: "raw:read", args: { job_id: 1 } },
     { name: "list_applications", permission: "tracking:read", args: {} },
     { name: "get_application_context", permission: "writer:read", args: { job_id: 1 } },
     { name: "save_application_answer", permission: "writer:write", args: { job_id: 1, question_id: 1, text: "An answer." } },
@@ -470,5 +503,29 @@ describe("authorization on every call", () => {
     expect(lines.at(-1)).toContain("fail settings_unreadable");
     expect(lines).toHaveLength(4);
     expect((await client.listTools()).tools).toEqual([]);
+  });
+});
+
+
+describe("personal read permissions", () => {
+  const personal = ["get_profile", "get_interests", "preview_deal_breakers", "preview_interest_category"];
+  it.each(([[], ["writer:read"], ["career:read"], ["profile:read"], [...PERMISSIONS]] as Permission[][]).map((permissions) => ({ permissions })))("lists only the effective personal reads: $permissions", async ({ permissions }) => {
+    const ctx = context({ permissions, stdio: { permissions } });
+    const client = await connect(ctx);
+    const listed = (await client.listTools()).tools.map((t) => t.name);
+    expect(listed.filter((id) => personal.includes(id))).toEqual(permissions.includes("profile:read") ? personal : []);
+    if (!permissions.includes("profile:read")) {
+      for (const name of personal) {
+        const args = name === "preview_deal_breakers" ? { rules: [] } : name === "preview_interest_category" ? { draft: { categories: [], retired: [], bonusCap: "0" }, categoryId: "test" } : {};
+        const result = await client.callTool({ name, arguments: args });
+        expect(result.isError).toBe(true);
+        expect(result.structuredContent).toBeUndefined();
+        expect(textOf(result)).toContain("profile:read");
+      }
+    }
+  });
+  it("intersects global and connection permissions", async () => {
+    const client = await connect(context({ permissions: ["profile:read"], stdio: { permissions: ["career:read"] } }));
+    expect((await client.listTools()).tools.map((t) => t.name)).toEqual([]);
   });
 });

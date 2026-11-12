@@ -1,15 +1,16 @@
 /**
- * The MCP server (`pnpm mcp:serve`, docs/mcp.md): tools generated from the capability registry, each authorized against the current
- * mcp.yaml on every call. Answer writes add versions; action triggers use the shared control queue with daily budgets. Every capability is
- * registered with the SDK, but `tools/list` is answered by this file instead of the SDK, so the list follows the current settings
- * and lists only what a call would accept. The stdio entry point is scripts/mcp-serve.ts.
+ * The MCP server (`pnpm mcp:serve`, docs/mcp.md): tools generated from the capability registry, each authorized on every call
+ * against the current mcp.yaml and, for a connection made with an agent token, the token's current row. Answer writes add versions;
+ * action triggers use the shared control queue with daily budgets. Every capability is registered with the SDK, but
+ * `tools/list` is answered by this file instead of the SDK, so the list follows the current settings and lists only what a call
+ * would accept. The stdio entry point is scripts/mcp-serve.ts.
  */
 import { McpServer, type StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 
-import { authorize, liveMcpSettings, type AccessDecision } from "@/lib/agent-access/authorize";
+import { authorizeCall, liveMcpSettings, type AccessDecision } from "@/lib/agent-access/authorize";
 import { CAPABILITIES, listedCapabilities } from "@/lib/capabilities/registry";
 import type { Capability } from "@/lib/capabilities/types";
-import { loadConfig } from "@/lib/config";
+import { loadConfig, reloadConfig } from "@/lib/config";
 import type { McpConfig } from "@/lib/config/schemas/mcp";
 import type { Db } from "@/lib/db/client";
 import { cityMembers } from "@/lib/jobs/city-groups";
@@ -23,10 +24,29 @@ import { auditEntry, runLogged, ToolFailure, type McpContext } from "./context";
 import { toolResult } from "./guard";
 import { mcpTranslator, type McpTranslator } from "./text";
 
+function featureEnabled(name: "career" | "replies"): boolean {
+  try { return reloadConfig(name).enabled; }
+  catch { return false; }
+}
+
 export const MCP_SERVER_NAME = "job-radar";
 
 /** The context with the real loaders (config files, the city groups of the database); `readSettings` defaults to mcp.yaml read fresh from disk. */
-export function defaultContext(db: Db, settings: McpConfig, options: { text?: McpTranslator; log?: LogLine; writeDb?: Db | null; actionDb?: Db; readSettings?: () => McpConfig; audit?: McpContext["audit"]; caller?: McpContext["caller"] } = {}): McpContext {
+export function defaultContext(
+  db: Db,
+  settings: McpConfig,
+  options: {
+    text?: McpTranslator;
+    log?: LogLine;
+    writeDb?: Db | null;
+    actionDb?: Db;
+    readSettings?: () => McpConfig;
+    audit?: McpContext["audit"];
+    caller?: McpContext["caller"];
+    grant?: McpContext["grant"];
+    readGrant?: McpContext["readGrant"];
+  } = {},
+): McpContext {
   return {
     db,
     settings,
@@ -43,10 +63,13 @@ export function defaultContext(db: Db, settings: McpConfig, options: { text?: Mc
     searchPlan: buildSearchPlanLenient,
     text: options.text ?? mcpTranslator(),
     log: options.log ?? stderrLine,
+    features: { careerEnabled: () => featureEnabled("career"), repliesEnabled: () => featureEnabled("replies") },
     writer: { inputs: readWriterInputs, writeDb: options.writeDb ?? null },
     actions: options.actionDb ? { db: options.actionDb } : undefined,
     audit: options.audit,
     caller: options.caller,
+    grant: options.grant,
+    readGrant: options.readGrant,
   };
 }
 
@@ -76,6 +99,7 @@ function accessFailure(decision: Exclude<AccessDecision, { allowed: true }>, tex
   switch (decision.reason) {
     case "unreadable": return new ToolFailure("settings_unreadable", text("errors.settingsUnreadable", { problem: decision.problem }));
     case "disabled": return new ToolFailure("not_permitted", text("errors.serverOff"));
+    case "token_inactive": return new ToolFailure("not_permitted", text("errors.tokenInactive"));
     case "missing_permission": return new ToolFailure("not_permitted", text("errors.notPermitted", { permission: decision.permission }));
   }
 }
@@ -96,15 +120,17 @@ export function buildServer(ctx: McpContext, options: { version?: string; capabi
         outputSchema: cap.output,
         annotations: cap.annotations,
       },
-      async (args) =>
-        runLogged(ctx, cap.id, async (callCtx) => {
-          const decision = authorize(cap, ctx.readSettings);
+      async (args) => {
+        const call = () => runLogged(ctx, cap.id, async (callCtx) => {
+          const decision = await authorizeCall(cap, ctx.readSettings, ctx.grant, ctx.readGrant);
           if (!decision.allowed) throw accessFailure(decision, t);
           if (cap.availability && !await cap.availability.available(ctx)) throw new ToolFailure(cap.availability.category, t(cap.availability.message));
           const output = await cap.handler({ ...callCtx, settings: decision.settings, permissions: decision.permissions }, args);
           const parsed = (cap.outputFor?.(decision.permissions) ?? cap.output).parse(output);
           return { result: toolResult(parsed), count: cap.count(parsed) };
-        }, cap.target?.(args) ?? null),
+        }, cap.target?.(args) ?? null);
+        return ctx.track ? ctx.track(call) : call();
+      },
     );
   }
 

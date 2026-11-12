@@ -20,7 +20,7 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { authorize, liveMcpSettings } from "../src/lib/agent-access/authorize";
 import { createAuditRecorder } from "../src/lib/agent-access/audit";
 import { CAPABILITIES, visibleCapabilities } from "../src/lib/capabilities/registry";
-import { createConnection } from "../src/lib/db/client";
+import { closeDb, createConnection, initializeReadOnlyDb } from "../src/lib/db/client";
 import { createReadOnlyDb } from "../src/lib/db/read-only-client";
 import { openAgentCallsConnection } from "../src/lib/db/repos/agent-calls";
 import { loadDatabaseEnv } from "../src/lib/env";
@@ -74,6 +74,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  initializeReadOnlyDb();
   const database = createReadOnlyDb();
   const { audit: auditSettings } = settings;
   const openAudit = () => {
@@ -96,7 +97,7 @@ async function main(): Promise<void> {
   const stop = (code: number) => {
     if (stopping) return;
     stopping = true;
-    void Promise.allSettled([handle.close()]).then(() => Promise.allSettled([audit.close()])).then(() => Promise.allSettled([database.close(), ...(actionConnection ? [actionConnection.sql.end({ timeout: 5 })] : []), ...(writable ? [writable.sql.end({ timeout: 5 })] : [])])).then(() => {
+    void Promise.allSettled([handle.close()]).then(() => Promise.allSettled([audit.close()])).then(() => Promise.allSettled([database.close(), closeDb(), ...(actionConnection ? [actionConnection.sql.end({ timeout: 5 })] : []), ...(writable ? [writable.sql.end({ timeout: 5 })] : [])])).then(() => {
       stderrLine(text("serve.stopped"));
       process.exit(code);
     });

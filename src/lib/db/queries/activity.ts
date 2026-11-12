@@ -1,5 +1,5 @@
 /** Privacy boundary for activity views: explicit projections only, and compatibility codes for unknown enums. */
-import { and, asc, eq, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
@@ -260,14 +260,15 @@ export async function listQueryRows(db: Db, rootId: string): Promise<{ rows: Act
   }), queriesNotReached };
 }
 
-export async function listActivityEvents(db: Db, rootId: string, options: ActivityPage & { spanId?: string; level?: EventLevel }): Promise<{ rows: ActivityEventRow[]; total: number }> {
+export async function listActivityEvents(db: Db, rootId: string, options: ActivityPage & { spanId?: string; level?: EventLevel; newestFirst?: boolean }): Promise<{ rows: ActivityEventRow[]; total: number }> {
   const { limit, offset } = pagination(options);
   const e = activityEvents;
+  const order = options.newestFirst ? desc : asc;
   const where = and(eq(e.rootId, rootId), options.spanId ? eq(e.spanId, options.spanId) : undefined, options.level ? eq(e.level, options.level) : undefined);
   const rows = await db.select({ id: e.id, spanId: e.spanId, at: e.at, level: e.level, code: e.code, jobId: e.jobId, rawPostingId: e.rawPostingId, params: e.params,
     existingJobId: jobs.id, title: jobs.title, company: companies.name,
   }).from(e).leftJoin(jobs, eq(jobs.id, e.jobId)).leftJoin(companies, eq(companies.id, jobs.companyId))
-    .where(where).orderBy(asc(e.at), asc(e.id)).limit(limit).offset(offset);
+    .where(where).orderBy(order(e.at), order(e.id)).limit(limit).offset(offset);
   const [count] = await db.select({ total: sql<number>`count(*)::integer` }).from(e).where(where);
   return { rows: rows.map(({ existingJobId, title, company, ...row }) => ({ ...row,
     level: compatible(eventLevelSchema, row.level), code: compatible(eventCodeSchema, row.code), params: safeParams(row.params),

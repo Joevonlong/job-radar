@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Permission } from "@/lib/agent-access/permissions";
 import type { JobCard } from "@/lib/db/queries/types";
 import { readSourceUrl } from "../read-guard";
 import { iso, isoOrNull, notices, type CleanText } from "./shared";
@@ -11,7 +12,13 @@ export const readJobDto = z.strictObject({
   text_withheld: z.string().nullable(),
 });
 export const pageFields = { total: z.number().int(), returned: z.number().int(), truncated: z.boolean() };
-export const todayOutput = z.strictObject({ notices, ...pageFields, view: z.string().nullable(), quick: z.enum(["high", "salary", "following"]).nullable(), quick_counts: z.strictObject({ all: z.number().int(), high: z.number().int(), salary: z.number().int(), following: z.number().int() }), jobs: z.array(readJobDto) });
+const quickCounts = z.strictObject({ all: z.number().int(), high: z.number().int(), salary: z.number().int(), following: z.number().int() });
+/** The registered schema accepts both releases; each call is checked against the strict schema of its permissions. */
+export const todayOutput = z.strictObject({ notices, ...pageFields, view: z.string().nullable(), quick: z.enum(["high", "salary", "following"]).nullable(), quick_counts: quickCounts.partial({ following: true }), jobs: z.array(readJobDto) });
+/** The following count is tracking data: present exactly with tracking:read. */
+export function todayOutputFor(permissions: ReadonlySet<Permission>): z.ZodType<z.infer<typeof todayOutput>> {
+  return todayOutput.extend({ quick_counts: permissions.has("tracking:read") ? quickCounts : quickCounts.omit({ following: true }) });
+}
 
 export function toReadJobDto(card: JobCard, clean: CleanText) {
   const link = (url: string | null) => readSourceUrl(url, clean);

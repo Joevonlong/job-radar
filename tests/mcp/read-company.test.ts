@@ -34,3 +34,11 @@ it.each(["not_scanned", "traps_disabled", "settings_unreadable", "findings_unrea
   expect(result.research).toMatchObject({ available: false, reason, fields: [{ field: "summary", text: null, source_url: "https://example.invalid/about" }] });
   expect(cleanDescriptionStrict).toHaveBeenCalledExactlyOnceWith(expect.anything(), { jobId: 42, description: "Company information" }, expect.anything());
 });
+
+it.each([[["jobs:read", "tracking:read"], false], [["jobs:read", "profile:read"], true]] as const)("gives the watched and blacklisted marks only with profile permission: %j", async (permissions, marks) => {
+  vi.mocked(cleanDescriptionStrict).mockResolvedValue({ ok: false, reason: "not_scanned" });
+  const result = await getCompany(readContext(permissions), { company_id: 3 });
+  expect("watched" in result.company).toBe(marks);
+  expect("blacklisted" in result.company).toBe(marks);
+  expect(vi.mocked(companyOverviewDependencies.loadSettings).mock.calls.length > 0).toBe(marks);
+});

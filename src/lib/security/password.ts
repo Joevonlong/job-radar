@@ -105,6 +105,16 @@ export function readPasswordSetting(env: Readonly<Record<string, string | undefi
   return null;
 }
 
+/** A password that can be checked: set, and when given as a hash, a hash this code can read. HTTP agent access relies on it. */
+export function passwordSettingUsable(setting: PasswordSetting | null): setting is PasswordSetting {
+  return setting !== null && (setting.kind !== "hash" || setting.parsed !== null);
+}
+
+/** {@link passwordSettingUsable} for the password in the environment. */
+export function webPasswordUsable(env: Readonly<Record<string, string | undefined>> = process.env): boolean {
+  return passwordSettingUsable(readPasswordSetting(env));
+}
+
 /**
  * Whether `attempt` is the configured password. Always runs one scrypt derivation, whatever the setting, so a wrong
  * password, an empty one and a plain-text setting take about the same time; the comparison is constant-time.

@@ -54,6 +54,8 @@ export const SERIAL_CHAIN: readonly ChainEntry[] = [
   // ui / notify / ai / sources / pipeline
   { name: "chromium-settings-advanced", spec: "settings-advanced.spec.ts" },
   { name: "chromium-settings-workflow", spec: "settings-workflow.spec.ts" },
+  // mcp.yaml (the agent access page saves the switches, the matrix and the stdio grant)
+  { name: "chromium-agents-settings", spec: "agents-settings.spec.ts" },
   // Many board applications and a temporary ui.yaml hidden status; counts must not race other specs.
   { name: "chromium-pipeline-many", spec: "pipeline-many.spec.ts" },
   // one application's status and the one seeded reply

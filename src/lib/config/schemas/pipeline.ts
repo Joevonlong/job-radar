@@ -12,7 +12,7 @@ import { DEAL_BREAKER_HARD_LIMITS } from "./preferences";
 export { regexString } from "./common";
 
 /** `filter.deal_breakers` when the file has none. */
-export const DEAL_BREAKER_DEFAULTS = { max_rules: 20, max_pattern_chars: 200, match_text_max_chars: 20_000, rule_warn_ms: 200, match_ms: 100, rule_budget_ms: 2000, preview_ms: 3000 } as const;
+export const DEAL_BREAKER_DEFAULTS = { max_rules: 20, max_pattern_chars: 200, match_text_max_chars: 20_000, rule_warn_ms: 200, match_ms: 100, rule_budget_ms: 2000, preview_ms: 3000, preview_samples: 3 } as const;
 
 const regexList = z.array(regexString);
 /** Lists the market packs also supply; the user file adds to them (union), so it may leave them out. */
@@ -452,6 +452,8 @@ export const pipelineSchema = z.strictObject({
         rule_budget_ms: positiveInt.default(DEAL_BREAKER_DEFAULTS.rule_budget_ms),
         /** Longest the /me card's preview may take; after that it shows the jobs counted so far (ms). */
         preview_ms: positiveInt.default(DEAL_BREAKER_DEFAULTS.preview_ms),
+        /** Samples per rule in the shared web and MCP preview. */
+        preview_samples: nonNegativeInt.default(DEAL_BREAKER_DEFAULTS.preview_samples),
       })
       .default(DEAL_BREAKER_DEFAULTS),
   }),

@@ -1,17 +1,17 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { todayOutput } from "@/lib/mcp/dto/read-jobs";
-import { getCompanyOutput, listCompaniesOutput } from "@/lib/mcp/dto/companies";
+import { todayOutputFor } from "@/lib/mcp/dto/read-jobs";
+import { getCompanyOutputFor, listCompaniesOutputFor } from "@/lib/mcp/dto/companies";
 import { getApplicationOutputFor, listFavoritesOutputFor } from "@/lib/mcp/dto/read-tracking";
 import { insightsOutputFor } from "@/lib/mcp/dto/insights";
 import { listApplicationsOutputFor } from "@/lib/mcp/dto/tracking";
-import { PERMISSIONS } from "@/lib/agent-access/permissions";
+import { PERMISSIONS, type Permission } from "@/lib/agent-access/permissions";
 import { CAPABILITIES } from "@/lib/capabilities/registry";
 import { mcpTranslator } from "@/lib/mcp/text";
 
 const all = new Set(PERMISSIONS);
-const schemas = { get_today: todayOutput, list_companies: listCompaniesOutput, get_company: getCompanyOutput, get_insights: insightsOutputFor(all), get_application: getApplicationOutputFor(all), list_favorites: listFavoritesOutputFor(all) };
+const schemas = { get_today: todayOutputFor(all), list_companies: listCompaniesOutputFor(all), get_company: getCompanyOutputFor(all), get_insights: insightsOutputFor(all), get_application: getApplicationOutputFor(all), list_favorites: listFavoritesOutputFor(all) };
 function fields(schema: unknown): unknown {
   if (Array.isArray(schema)) return schema.map(fields);
   if (schema !== null && typeof schema === "object") {
@@ -31,6 +31,18 @@ describe("read DTO allow-lists", () => {
     expect(JSON.stringify(favorite).includes('"favorite_note"')).toBe(grants.has("notes:read"));
     expect(JSON.stringify(list).includes('"application_notes"')).toBe(grants.has("notes:read"));
     expect(application.additionalProperties).toBe(false);
+  });
+  it.each([[["jobs:read"]], [["jobs:read", "tracking:read"]], [["jobs:read", "profile:read"]], [[...PERMISSIONS]]] as const)("tracking and profile fields follow effective permission: %j", (permissions) => {
+    const grants = new Set<Permission>(permissions);
+    const today = { notices: [], total: 0, returned: 0, truncated: false, view: null, quick: null, jobs: [] };
+    const counts = { all: 1, high: 1, salary: 1 };
+    expect(todayOutputFor(grants).safeParse({ ...today, quick_counts: counts }).success).toBe(!grants.has("tracking:read"));
+    expect(todayOutputFor(grants).safeParse({ ...today, quick_counts: { ...counts, following: 1 } }).success).toBe(grants.has("tracking:read"));
+    for (const schema of [listCompaniesOutputFor(grants), getCompanyOutputFor(grants)]) {
+      const json = JSON.stringify(z.toJSONSchema(schema));
+      expect(json.includes('"watched"')).toBe(grants.has("profile:read"));
+      expect(json.includes('"blacklisted"')).toBe(grants.has("profile:read"));
+    }
   });
   it("rejects additional and oversized parameters for every new tool", () => {
     const ctx = { text: mcpTranslator("en") };
