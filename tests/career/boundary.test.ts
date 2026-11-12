@@ -574,5 +574,5 @@ test("MCP exposes only redacted career schemas and the registered read capabilit
     { file: "src/lib/mcp/dto/career.ts", to: "src/lib/career/tailor/proposal-schema.ts" },
   ]);
   const { CAPABILITIES } = await import("@/lib/capabilities/registry");
-  expect(CAPABILITIES.map((capability) => capability.id)).toEqual(["search_jobs", "get_job", "get_job_raw", "list_applications", "get_profile", "get_interests", "preview_deal_breakers", "preview_interest_category", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer", "get_career_profile", "list_career_documents", "get_career_document", "check_career_document", "list_replies"]);
+  expect(CAPABILITIES.map((capability) => capability.id)).toEqual(["search_jobs", "get_job", "get_job_raw", "list_applications", "get_profile", "get_interests", "preview_deal_breakers", "preview_interest_category", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer", "get_career_profile", "list_career_documents", "get_career_document", "check_career_document", "list_replies", "get_system_status", "list_cycles", "list_channels", "get_activity_log", "get_ai_usage"]);
 });

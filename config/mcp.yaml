@@ -15,6 +15,9 @@
 # Only when writer:read is granted (it gives `get_application_context`): your application questions and answer versions, and the material
 # you chose for each question, which can include your profile summary, skills and languages, chosen stories and emphasis note.
 
+# Only with ops:read: safe doctor summaries, cycle/channel/activity codes and counts, and aggregate AI usage.
+# No raw errors, paths, hosts, database addresses or job-level usage are returned.
+
 # Version of this file's structure; don't edit by hand (a migration script upgrades it when the structure changes)
 config_version: 3
 
@@ -30,6 +33,8 @@ enabled: false
 # get_application_context: writer:read and writer.yaml enabled (shares your chosen application material)
 # save_application_answer: writer:write and writer.yaml enabled (only adds answer versions)
 # get_job_raw: raw:read (off by default; untrusted, uncleaned payloads may include recruiter contact data)
+# get_system_status / list_cycles / list_channels / get_activity_log / get_ai_usage: ops:read (opt-in)
+# Operations expose codes, counts and usage aggregates only; no raw errors, paths or job-level usage.
 # match:read / notes:read add fields to job tools; other catalog ids are accepted but do not give tools yet.
 permissions:
   - jobs:read
@@ -69,7 +74,7 @@ http:
     global_delay_seconds: 2
 
 limits:
-  # Most jobs, applications, replies or pending interest suggestions one call returns (1-100); the answer says when more matched
+  # Most results per list or usage dimension (1-100), also expanded runs, activity spans, events, jobs, applications, replies and pending interest suggestions; truncation is marked and the answer says when more matched
   max_results: 20
   # Most characters of a JD one get_job call returns (500-100000); a longer JD is cut and marked as cut
   max_description_chars: 12000

@@ -53,6 +53,7 @@ export interface McpContext {
    * second time). Absent: no field block is given.
    */
   permissions?: ReadonlySet<Permission>;
+  ops?: { doctor: () => Promise<import("@/lib/ops/doctor/types").DoctorReport> };
   audit?: AuditRecorder;
   caller?: { caller: "stdio" | "token"; tokenId: number | null; transport: "stdio" | "http" };
   /** The permissions this connection was granted; absent = the local stdio process. */

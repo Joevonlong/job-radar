@@ -83,7 +83,7 @@ export const mcpSchema = z.strictObject({
   }).default({ retention_days: 90, connect_timeout_seconds: 2, statement_timeout_ms: 1500, lock_timeout_ms: 200, write_timeout_ms: 2000 }),
   limits: z
     .strictObject({
-      /** Most jobs or applications one call returns; the rest is cut and the answer says so. */
+      /** Most results per list or usage dimension, including expanded runs, activity spans and events; truncation is marked. */
       max_results: z.number().int().min(1).max(MCP_MAX_RESULTS_CAP).default(20),
       /** Most characters of a JD one `get_job` call returns; a longer JD is cut and marked as cut. */
       max_description_chars: z.number().int().min(500).max(MCP_MAX_DESCRIPTION_CHARS_CAP).default(12_000),

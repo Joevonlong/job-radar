@@ -7472,6 +7472,26 @@
         "title": "试算兴趣类别",
         "description": "使用与 /interests 相同的预览，对近期岗位试算完整词表草稿中的一个类别。不保存内容，也不调用 AI。"
       },
+      "get_system_status": {
+        "title": "系统状态",
+        "description": "读取安全的诊断摘要、进程心跳、运行中的处理轮、待处理请求和磁盘等级。需要 ops:read。"
+      },
+      "list_cycles": {
+        "title": "最近处理轮",
+        "description": "读取最近处理轮及各步骤计数；可展开一轮的有限条通道运行记录。需要 ops:read。"
+      },
+      "list_channels": {
+        "title": "通道健康",
+        "description": "读取通道健康、熔断状态、当月预算用量和最近运行。需要 ops:read。"
+      },
+      "get_activity_log": {
+        "title": "操作日志",
+        "description": "读取根记录列表或单条详情，只提供代码和计数。需要 ops:read。"
+      },
+      "get_ai_usage": {
+        "title": "AI 用量",
+        "description": "按日、任务、模型读取调用数、token、耗时和费用聚合。不提供逐次调用或岗位标识。需要 ops:read。"
+      },
       "get_today": {
         "title": "读取今日岗位",
         "description": "读取选中或默认保存视图的岗位及快捷视图计数。保存视图优先于快捷视图；未指定视图时显式开关选择全部岗位。岗位文本需要当前陷阱扫描。"
@@ -7567,6 +7587,33 @@
       "replyState": "按回信状态筛选。",
       "replyCategory": "按有效回信分类筛选，优先使用用户修正后的分类。",
       "replySince": "仅返回在此 ISO 日期时间之后（含）收到的回信。"
+    },
+    "ops": {
+      "checkSummary": {
+        "ok": "检查通过。",
+        "warn": "检查需要关注。",
+        "fail": "检查失败。"
+      },
+      "params": {
+        "cycleId": "要展开通道运行的处理轮",
+        "rootId": "要查看的操作日志根记录",
+        "page": "页码（从 1 开始）",
+        "offset": "跳过的通道数量",
+        "scope": "操作日志范围",
+        "status": "操作日志状态筛选",
+        "from": "开始日期（含），使用调度时区",
+        "to": "结束日期（含），使用调度时区",
+        "level": "操作事件级别",
+        "issues": "只看有问题的操作",
+        "range": "用量时间范围；custom 需要 from 和 to",
+        "provider": "AI 服务商",
+        "task": "AI 任务"
+      },
+      "errors": {
+        "cycleNotFound": "not_found: cycle_not_found",
+        "range": "invalid_input: invalid_range",
+        "activityUnavailable": "database: activity_unavailable"
+      }
     }
   },
   "dealBreakers": {

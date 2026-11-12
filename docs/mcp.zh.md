@@ -19,10 +19,10 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 |---|---|
 | 岗位事实字段：职位名、公司、地点、办公方式、合同类型、中介标记、德语要求、状态、日期、技能 | 画像快照和导入草稿 |
 | 来源链接（原帖和申请链接） | 联系方式文件、图片内容和 PDF |
-| 岗位写明的薪资 | AI 服务商 / 模型 / 用量 |
+| 岗位写明的薪资 | 逐次 AI 调用、AI 服务商 / 模型设置 |
 | 分数与排名 | 本机路径（定制简历文件） |
 | 薪酬 / 福利信号及其 JD 引用和位置 | 邮件正文、主题、发件人、引用和邮件标识符 |
-| 经 AI 陷阱清洗的 JD（见下文） | `.env` 和 `.auth/` 里的值、密钥、AI 用量、通知、运行记录、配置文件原文 |
+| 经 AI 陷阱清洗的 JD（见下文） | `.env` 和 `.auth/` 里的值、密钥、通知、原始运行载荷、运行记录、配置文件原文 |
 | 你的申请：状态、最近一次变更时间、在该状态停留的天数、下一步及日期、面试轮数、状态历史 | |
 
 有效 `career:read` 加上 `career.yaml: enabled` 可读取去标识职业档案和文档；有效 `replies:read` 加上 `replies.yaml: enabled` 可读取回信分类及关联申请元数据。两个权限默认都关闭。
@@ -69,6 +69,24 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 授予 `replies:read` 并开启 `replies.yaml: enabled` 后提供 `list_replies`。可选筛选参数为 `state`、`category`、`since`（ISO 日期时间，含边界）和 `limit`。按收到时间倒序返回内部数据库回信 `id`、`receivedAt`、有效 `category`（用户修正优先）、`match`、`state`、可空的 `jobId`、公司、职位，以及（需要 `tracking:read`）申请状态；没有该权限时不返回此字段。`total`、`returned`、`truncated` 及截断提示说明 `limits.max_results` 上限；公司和职位作为第三方文本清理，其中粘贴的邮箱、本机路径和凭据值会遮盖。查询不选择邮件主题、正文、发件人域名、引用、message/thread id、原始引用、去重键、候选或建议 JSON。回信编号是 Job Radar 数据库编号，不是邮件标识符。
 
 移除权限会隐藏对应工具。关闭功能、配置损坏或两层配置文件均被移除，会立即隐藏工具；直接调用报功能未开启（`disabled`）。不修改文件或业务表，正常的元数据审计仍会记录。档案/文档/检查调用计数为 1，文档列表为条目数，回信为返回条数；五个审计 target 均为 null。
+
+## 运维读取权限
+
+在 `permissions` 和 `stdio.permissions` 中都授予 `ops:read` 才会列出以下五个工具。从任一列表移除它，工具就不再列出，后续调用也会被拒绝。默认权限仍为 `jobs:read` 和 `tracking:read`，运维读取需要主动开启。
+
+| 工具 | 字段与筛选 |
+|---|---|
+| `get_system_status` | Doctor 检查 id、状态和固定安全摘要；runner 与 ai-worker 在线标记、是否正在处理、待处理控制请求总数和磁盘等级。无参数。 |
+| `list_cycles` | 最近处理轮的种类、时间、状态及白名单内的步骤计数。可用 `cycle_id` 展开某轮的通道运行：状态、抓取/新增数、中断标记、用量单位和回看窗口。可传 `limit`。 |
+| `list_channels` | 各通道的健康、熔断状态、当月记录数/支出/预算和最近运行。可传 `limit`、`offset`。 |
+| `get_activity_log` | 根记录列表，或 `root_id` 对应的子步骤/事件代码和计数。筛选为 `scope`、`status`、成对且包含两端的 `from`/`to`、`issues_only`；详情事件支持 `level`。`page` 对根记录或详情事件分页，`limit` 限制各列表。 |
+| `get_ai_usage` | 按日、任务、服务商/模型聚合的调用数、输入/输出 token、总耗时和费用，以及整个窗口的总计；明确统计 token/耗时/费用未知的调用数。筛选为 `range`（`today`、`7d`、`30d`、`month`、`custom`）、`provider`、`task`；自定义范围必须提供包含两端的 `from`/`to`。即使同时有 `jobs:read`，也不提供逐次调用或岗位 id 维度。 |
+
+日期使用调度时区。AI 自定义范围沿用页面的 `ui.yaml: ai_usage.custom_max_days` 上限，非法范围会被拒绝。`limits.max_results` 限制各列表、展开的运行、详情子步骤/事件以及每个用量分组；`truncated` 表示有省略。展开的运行和日志详情子步骤/事件按从新到旧排列，详情另用 `spans_truncated` 标记省略；用量总计始终覆盖整个所选窗口。这些工具不会启动处理轮、修改设置或调用 AI 服务商。Doctor 执行原有只读探测，返回固定摘要而非命令行详情。
+
+`get_ai_usage` 的 `by_day` 按日期从新到旧排列；截断时保留最新日期和调用量最大的任务/模型分组（相同调用量按字母排序）。
+
+全部输出使用 `src/lib/mcp/dto/ops.ts` 中的严格字段白名单，错误只留类别和已知代码。不返回 Doctor 标题/详情/提示、命令、launchd 标签、路径、主机、数据库地址、原始运行错误、日志里的岗位链接或任意事件参数。无法识别的代码降级为 `unknown` 或 `other`。该权限只提供运维聚合，不授予配置文件读取。
 
 ## 打开它
 

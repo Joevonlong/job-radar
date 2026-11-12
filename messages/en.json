@@ -7472,6 +7472,26 @@
         "title": "Preview interest category",
         "description": "Try a category in a complete vocabulary draft against recent jobs using the same preview as /interests. Nothing is saved and no AI runs."
       },
+      "get_system_status": {
+        "title": "System status",
+        "description": "Read safe doctor summaries, process heartbeats, running cycles, pending requests and disk level. Requires ops:read."
+      },
+      "list_cycles": {
+        "title": "Recent cycles",
+        "description": "Read recent cycles and step counts; optionally expand one cycle into bounded channel runs. Requires ops:read."
+      },
+      "list_channels": {
+        "title": "Channel health",
+        "description": "Read channel health, breakers, current-month budget usage and latest runs. Requires ops:read."
+      },
+      "get_activity_log": {
+        "title": "Activity log",
+        "description": "Read activity root records or one record with codes and counts only. Requires ops:read."
+      },
+      "get_ai_usage": {
+        "title": "AI usage",
+        "description": "Read daily, task and model aggregates of calls, tokens, duration and cost. No individual calls or job identifiers. Requires ops:read."
+      },
       "get_today": {
         "title": "Get today’s jobs",
         "description": "Today’s selected or default saved view and quick-view counts. Saved views win over quick views; explicit toggles without view select all jobs. Posting text needs current trap scans."
@@ -7567,6 +7587,33 @@
       "replyState": "Filter by reply state.",
       "replyCategory": "Filter by effective reply category, including user corrections.",
       "replySince": "Only replies received at or after this ISO datetime."
+    },
+    "ops": {
+      "checkSummary": {
+        "ok": "Check passed.",
+        "warn": "Check needs attention.",
+        "fail": "Check failed."
+      },
+      "params": {
+        "cycleId": "Cycle to expand into channel runs",
+        "rootId": "Activity root to inspect",
+        "page": "Page number (starting at 1)",
+        "offset": "Number of channels to skip",
+        "scope": "Activity scope",
+        "status": "Activity status filter",
+        "from": "First day, inclusive, in the schedule time zone",
+        "to": "Last day, inclusive, in the schedule time zone",
+        "level": "Activity event level",
+        "issues": "Only activity with issues",
+        "range": "Usage window; custom requires from and to",
+        "provider": "AI provider",
+        "task": "AI task"
+      },
+      "errors": {
+        "cycleNotFound": "not_found: cycle_not_found",
+        "range": "invalid_input: invalid_range",
+        "activityUnavailable": "database: activity_unavailable"
+      }
     }
   },
   "dealBreakers": {

@@ -22,6 +22,11 @@ import { get_company } from "./jobs/get-company";
 import { get_insights } from "./jobs/get-insights";
 import { get_application } from "./tracking/get-application";
 import { list_favorites } from "./tracking/list-favorites";
+import { get_system_status } from "./ops/get-system-status";
+import { list_cycles } from "./ops/list-cycles";
+import { list_channels } from "./ops/list-channels";
+import { get_activity_log } from "./ops/get-activity-log";
+import { get_ai_usage } from "./ops/get-ai-usage";
 
 import { get_career_profile } from "./career/get-career-profile";
 import { list_career_documents } from "./career/list-career-documents";
@@ -51,6 +56,11 @@ export const CAPABILITIES: readonly Capability[] = [
   get_career_document,
   check_career_document,
   list_replies,
+  get_system_status,
+  list_cycles,
+  list_channels,
+  get_activity_log,
+  get_ai_usage,
 ];
 
 /**
