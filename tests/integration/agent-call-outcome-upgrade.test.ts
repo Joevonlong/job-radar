@@ -33,13 +33,15 @@ it("upgrades audit rows through budgets and the new outcome, preserving data and
     const before = await connection.sql`select * from agent_calls order by id`;
     await through(60);
     expect(await connection.sql`select * from agent_calls order by id`).toEqual(before);
-    await through(61);
+    await through(62);
+    expect(await connection.sql`select * from agent_calls order by id`).toEqual(before);
+    await through(63);
     expect(await connection.sql`select * from agent_calls order by id`).toEqual(before);
     await connection.sql`insert into agent_calls (caller, transport, capability, outcome, returned_count, duration_ms)
       values ('stdio', 'stdio', 'score_jobs', 'over_budget', 0, 4)`;
     await expect(connection.sql`insert into agent_calls (caller, transport, capability, outcome, returned_count, duration_ms)
       values ('stdio', 'stdio', 'score_jobs', 'unknown_outcome', 0, 4)`).rejects.toMatchObject({ code: "23514" });
-    const sqlFile = fs.readFileSync(path.resolve("drizzle/0061_agent_call_over_budget.sql"), "utf8");
+    const sqlFile = fs.readFileSync(path.resolve("drizzle/0063_agent_call_over_budget.sql"), "utf8");
     for (const statement of sqlFile.split("--> statement-breakpoint")) await connection.sql.unsafe(statement);
     expect(await connection.sql`select * from agent_calls where outcome <> 'over_budget' order by id`).toEqual(before);
     expect((await connection.sql`select outcome from agent_calls where outcome = 'over_budget'`)).toEqual([{ outcome: "over_budget" }]);
