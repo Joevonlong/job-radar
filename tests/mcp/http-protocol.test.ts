@@ -165,6 +165,21 @@ describe("installed MCP SDK HTTP protocols", () => {
     expect(deps.writeDb).toHaveBeenCalledTimes(writeConnections);
   });
 
+  it.each([
+    { permissions: ["jobs:read", "actions:run"], listed: true, writeConnections: 2 },
+    { permissions: ["jobs:read"], listed: false, writeConnections: 1 },
+  ] as const)("offers action tools to a token granted actions:run ($listed)", async ({ permissions, listed, writeConnections }) => {
+    const deps = fakeDeps();
+    deps.readSettings.mockReturnValue(mcpSchema.parse({ enabled: true, permissions: ["jobs:read", "actions:run"], http: { enabled: true } }));
+    deps.verify.mockImplementation(async () => ({ ok: true, grant: { kind: "token", tokenId: 7, permissions: [...permissions] } }));
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} });
+    const result = await snapshot(await handleMcpHttpRequest(rpcRequest({ headers: { "mcp-protocol-version": "2025-06-18" }, body }), deps));
+    const json = result.body.split("\n").find((line) => line.startsWith("data: "))!.slice(6);
+    const tools = (JSON.parse(json).result.tools as { name: string }[]).map((tool) => tool.name);
+    for (const id of ["run_collection", "translate_job", "get_request_status"]) expect(tools.includes(id)).toBe(listed);
+    expect(deps.writeDb).toHaveBeenCalledTimes(writeConnections);
+  });
+
   it("negotiates the raw 2025 protocol without a modern envelope", async () => {
     const response = await handleMcpHttpRequest(rpcRequest({ headers: { "mcp-protocol-version": "2025-06-18" } }), fakeDeps());
     expect(response.headers.get("content-type")).toContain("text/event-stream");
