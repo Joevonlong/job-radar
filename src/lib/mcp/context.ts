@@ -16,8 +16,7 @@ export interface McpWriterAccess {
   /** writer.yaml, me.yaml and stories.yaml as they are now. */
   inputs: () => WriterInputs;
   /**
-   * The answer-writing connection, used by `save_application_answer` and by nothing else. Null unless writer:write is
-   * effective and the application writer is on.
+   * Write-pool access for `save_application_answer`. Null unless writer:write is effective and the application writer is on.
    */
   writeDb: Db | null;
 }
@@ -46,6 +45,8 @@ export interface McpContext {
   log: LogLine;
   /** Absent: the writer tools are not offered. */
   writer?: McpWriterAccess;
+  /** Present only when tracking:write was granted a write connection. */
+  tracking?: { writeDb: Db | null };
   /** Absent readers close the corresponding feature gates. */
   features?: { careerEnabled: () => boolean; repliesEnabled: () => boolean };
   /**

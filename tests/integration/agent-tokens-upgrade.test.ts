@@ -59,12 +59,13 @@ afterAll(async () => {
 });
 
 // drizzle applies a migration only when its journal time is newer than the newest one already applied; the tag is not compared.
-it("is the newest entry of the journal, so a database that has every earlier migration still applies it", () => {
+it("is newer than every entry before it, so a database that has every earlier migration still applies it", () => {
   const { entries } = journal(path.resolve("drizzle"));
-  const last = entries[entries.length - 1];
-  expect(last?.tag.endsWith(`_${MIGRATION}`)).toBe(true);
-  expect(entries.every((entry) => entry.when <= (last?.when ?? 0))).toBe(true);
-  expect(entries.filter((entry) => entry.when === last?.when)).toHaveLength(1);
+  const at = entries.findIndex((entry) => entry.tag.endsWith(`_${MIGRATION}`));
+  const own = entries[at];
+  expect(own).toBeDefined();
+  expect(entries.slice(0, at).every((entry) => entry.when < (own?.when ?? 0))).toBe(true);
+  expect(entries.filter((entry) => entry.when === own?.when)).toHaveLength(1);
   expect(entries.map((entry) => entry.idx)).toEqual(entries.map((_, index) => index));
 });
 
@@ -82,7 +83,7 @@ it("adds the table and the foreign key to a database that has all earlier migrat
 
 // The migrator skips SQL it has applied, so running it twice proves nothing about the file: replay the statements themselves.
 it("can be replayed statement by statement on a database that already has it", async () => {
-  const file = fs.readFileSync(path.resolve("drizzle", `${journal(path.resolve("drizzle")).entries.at(-1)?.tag}.sql`), "utf8");
+  const file = fs.readFileSync(path.resolve("drizzle", `${journal(path.resolve("drizzle")).entries.find((entry) => entry.tag.endsWith(`_${MIGRATION}`))?.tag}.sql`), "utf8");
   for (const statement of file.split("--> statement-breakpoint").map((part) => part.trim()).filter((part) => part !== "")) await db.execute(sql.raw(statement));
   expect(await tokenObjects()).toEqual({ table: ["agent_tokens"], constraint: ["agent_calls_token_id_agent_tokens_id_fk"] });
 });

@@ -103,7 +103,7 @@ export async function saveApplicationAnswer(ctx: McpContext, args: SaveApplicati
   const counts = countStatuses(sentences);
   const { audit, auditCall } = ctx;
   const added = await appendAnswerVersion(writeDb, {
-    onAdded: audit && auditCall ? (tx) => audit.inTransaction(tx, auditCall.success(1)) : undefined,
+    onAdded: audit && auditCall ? async (tx) => { await audit.inTransaction(tx, auditCall.success(1)); } : undefined,
     jobId: args.job_id,
     questionId: args.question_id,
     maxVersions: writer.questions.max_versions_per_question,

@@ -13,7 +13,7 @@ export const settings = (http: Record<string, unknown> = {}) => mcpSchema.parse(
 export function fakeDeps() {
   const read = {} as Db;
   const write = {} as Db;
-  const audit = { record: vi.fn(async () => {}), inTransaction: vi.fn(async () => {}), close: vi.fn(async () => {}) };
+  const audit = { record: vi.fn(async () => {}), inTransaction: vi.fn(async () => 1), close: vi.fn(async () => {}) };
   return {
     ...realDeps(),
     readSettings: vi.fn(() => settings()), password: vi.fn<McpHttpDependencies["password"]>(() => ({ kind: "plain", plain: "test-password" })),
