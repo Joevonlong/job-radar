@@ -18,10 +18,12 @@ export function openAgentCallsConnection(source: string | Db, options: { connect
   });
 }
 
-export async function insertAgentCall(db: Executor, row: AgentCallRow): Promise<void> {
-  await db.insert(agentCalls).values(row);
+export async function insertAgentCall(db: Executor, row: AgentCallRow): Promise<number> {
+  const [added] = await db.insert(agentCalls).values(row).returning({ id: agentCalls.id });
+  return added.id;
 }
 
+/** The foreign key also removes each expired call's local undo data. */
 export async function pruneAgentCalls(db: Executor, olderThan: Date): Promise<number> {
   const rows = await db.delete(agentCalls).where(lt(agentCalls.calledAt, olderThan)).returning({ id: agentCalls.id });
   return rows.length;

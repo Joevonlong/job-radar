@@ -3,6 +3,7 @@ import { Client, StreamableHTTPClientTransport, PROTOCOL_VERSION_META_KEY, CLIEN
 import type { AuthInfo, McpRequestContext } from "@modelcontextprotocol/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { mcpSchema } from "@/lib/config/schemas/mcp";
 import { handleMcpHttpRequest, resetMcpThrottle, type McpHttpDependencies } from "@/lib/mcp/http";
 
 import { fakeDeps, rpcRequest, SECRET, settings, snapshot } from "./http-helpers";
@@ -145,6 +146,23 @@ describe("installed MCP SDK HTTP protocols", () => {
     expect(response.headers.get("content-type")).toContain("application/json");
     expect(await response.json()).toMatchObject({ error: { code: -32603, message: "Subscription limit reached" } });
     expect((await snapshot(await handleMcpHttpRequest(rpcRequest(), deps))).status).toBe(200);
+  });
+
+  it.each([
+    { permissions: ["jobs:read", "tracking:read", "tracking:write"], listed: true, writeConnections: 2 },
+    { permissions: ["jobs:read", "tracking:read"], listed: false, writeConnections: 1 },
+  ] as const)("offers tracking writes to a token granted tracking:write ($listed) without the writer switch", async ({ permissions, listed, writeConnections }) => {
+    const deps = fakeDeps();
+    deps.readSettings.mockReturnValue(mcpSchema.parse({ enabled: true, permissions: ["jobs:read", "tracking:read", "tracking:write"], http: { enabled: true } }));
+    deps.verify.mockImplementation(async () => ({ ok: true, grant: { kind: "token", tokenId: 7, permissions: [...permissions] } }));
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} });
+    const result = await snapshot(await handleMcpHttpRequest(rpcRequest({ headers: { "mcp-protocol-version": "2025-06-18" }, body }), deps));
+    const json = result.body.split("\n").find((line) => line.startsWith("data: "))!.slice(6);
+    const tools = (JSON.parse(json).result.tools as { name: string }[]).map((tool) => tool.name);
+    for (const id of ["set_application_status", "mark_applied", "set_next_action", "set_interview_rounds", "undo_change"]) expect(tools.includes(id)).toBe(listed);
+    expect(tools).not.toContain("save_application_answer");
+    expect(deps.writerEnabled).not.toHaveBeenCalled();
+    expect(deps.writeDb).toHaveBeenCalledTimes(writeConnections);
   });
 
   it("negotiates the raw 2025 protocol without a modern envelope", async () => {

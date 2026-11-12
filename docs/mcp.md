@@ -8,9 +8,10 @@ client can start `pnpm mcp:serve` locally over stdin / stdout, or connect to the
 
 - **Off by default.** Nothing happens until you set `enabled: true` in `mcp.yaml`.
 - **Local stdio or optional HTTP.** Stdio opens no port and needs no token. HTTP uses the web port and requires an agent token on every POST request.
-- **Read-only, with one permission-controlled exception.** Database reads use read-only sessions; personal-data reads also read local profile files. The only tool that can write,
-  `save_application_answer`, requires `writer:write`, and all it can do is add an answer version. The server never starts a
-  collection or an AI call.
+- **Reads and explicitly granted writes.** Database reads use read-only sessions; personal-data reads also read local profile files.
+  `writer:write` can add answer versions; `tracking:write` can update application status, next steps and interview rounds, and
+  undo its own changes. These use a separate write connection. Status changes may queue automatic research; the MCP process
+  does not start a collection or call an AI provider itself.
 
 The server also stores local call metadata in `agent_calls`, over a separate audit connection (see [Audit trail](#audit-trail)).
 
@@ -123,11 +124,14 @@ was off, `jobs:read` offers both and `config:migrate` prints a notice. Remove `j
 you write into `mcp.yaml` also covers tools that later versions add under it, so grant only what should be readable or
 writable.
 
-`budgets` reserves daily limits for future agent action tools; existing tools do not use these counters yet.
+`budgets` sets daily limits for agent actions.
 `per_caller` counts the local stdio connection and each token separately. It caps collection requests, job translations,
 breakdowns, salary lookups, company lookups, answer drafts and resume tailoring; `score_jobs` counts each job in a batch.
-Salary and company lookups also include automatic research started by an agent's write. An action cap of `0` forbids that
-action. `total` counts requests, not jobs, across all callers and actions: a `score_jobs` batch of 40 jobs uses 40 of the
+An agent write that queues automatic research uses one `research_company` unit per company lookup and one `research_salary`
+unit per salary lookup, only for work it newly queues. Reservations for each write are all-or-nothing: any refused bucket
+skips all research for that write (`research: "budget_skipped"`). Units for work not newly queued are returned; breakdowns
+started this way are not counted. An action cap of `0` forbids that action.
+`total` counts requests, not jobs, across all callers and actions: a `score_jobs` batch of 40 jobs uses 40 of the
 caller's `score_jobs` cap but only 1 of `total`. `0` forbids all agent actions.
 The day and next reset follow `schedule.yaml`'s time zone, including daylight saving changes. The runner prunes counter rows older
 than the current local day minus `audit.retention_days` once an hour. These settings have defaults and keep `config_version: 3`.
@@ -150,7 +154,7 @@ The server reads the database the same way the host-side `ai-worker` does: from 
 ### Claude Code
 
 ```bash
-claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:serve
+claude mcp add job-radar -- /absolute/path/to/job-radar/scripts/mcp-stdio.sh
 ```
 
 Add `--scope user` to have it in every project. `claude mcp list` shows whether it connected.
@@ -163,21 +167,20 @@ Settings → Developer → Edit Config opens `claude_desktop_config.json`. Add:
 {
   "mcpServers": {
     "job-radar": {
-      "command": "/absolute/path/to/pnpm",
-      "args": ["--silent", "--dir", "/absolute/path/to/job-radar", "mcp:serve"],
-      "env": { "PATH": "/folder/of/node:/usr/bin:/bin" }
+      "command": "/absolute/path/to/job-radar/scripts/mcp-stdio.sh",
+      "env": { "PATH": "/folder/of/pnpm:/folder/of/node:/usr/bin:/bin" }
     }
   }
 }
 ```
 
-- Use absolute paths: an app started from the Dock does not get your shell's `PATH`. `which pnpm` gives the command;
-  `dirname "$(which node)"` gives the folder for `PATH` (pnpm needs `node`).
-- `--silent` keeps pnpm's own header line off stdout, which belongs to the protocol.
+- Use absolute paths: an app started from the Dock does not get your shell's `PATH`. The script runs `pnpm`, which needs `node`:
+  put the folders of `which pnpm` and `which node` (`dirname`) into `PATH`.
+- `scripts/mcp-stdio.sh` changes into the project and runs `pnpm --silent mcp:serve`, so it works whatever directory the client starts it from (pnpm picks its version by the current directory) and keeps pnpm's own header line off stdout, which belongs to the protocol. Do not call `pnpm --dir <project> mcp:serve` directly from a client: it fails under corepack.
 - **Project on an external disk** (macOS): the first start may be blocked until you allow Claude to access removable volumes
   (System Settings → Privacy & Security → Files and Folders). The client's log for the server then shows a permission error.
 
-Other MCP clients work the same way: a stdio server, command `pnpm`, arguments `--silent --dir <project> mcp:serve`.
+Other MCP clients work the same way: a stdio server whose command is `/absolute/path/to/job-radar/scripts/mcp-stdio.sh`, no arguments.
 
 ## Managing it on the web
 
@@ -186,6 +189,27 @@ Settings → Agent access (`/settings/agents`) sets the keys of step 1: the mast
 Once a web password is set, these changes need a real session. Every other page lets a visit from the host skip the login, but another process on the same machine could use that to widen an agent's access, so this page asks for the password once more. It shows a sign-in card that uses the normal login and brings you back to the page. The same rule covers `mcp.yaml` in the advanced editor (save, restore default, repair). Without a web password the page works without a sign-in, and HTTP stays off, because HTTP needs the password. Editing `data/config/mcp.yaml` by hand on the host is not affected.
 
 What the session gate does not cover: it stops processes that only reach the dashboard over the network. A process running as your user with access to the files can edit `mcp.yaml` directly, gate or not. Use a strong web password. When the page shows the HTTP address as plain `http://` to another host, a client using it sends its bearer token in clear text: use it only on localhost or over Tailscale (HTTPS).
+
+### Tokens on the web
+
+The **Connections** card lists the local stdio process first, then the tokens that can still be used: name, display prefix
+(`jrat_` and 8 characters), permissions, created, last used and expiry. A permission the global matrix does not allow is drawn
+dashed and struck through: it gives nothing until the matrix allows it. Revoked and expired tokens are folded into "Revoked or
+expired", read-only. **View activity** opens the activity page filtered to that token.
+
+**New token** asks for a name (unique among tokens that are not revoked, the same rules as `pnpm agent:token`), permissions
+(a preset and check boxes, listing only what the matrix allows; the default is the read-only preset within the matrix) and an
+expiry (never, or a last valid day after today in the schedule's time zone). The token is then shown **once** in the same
+dialog, with a copy button (when the clipboard is unavailable the text is selected), the HTTP address and a Claude Code example.
+It is not in the URL, a notification, browser storage, the page's data or any log, and the database keeps only its hash: after
+you close the dialog it cannot be shown again. Lost it? Revoke it and create a new one.
+
+**Revoke** asks for confirmation; it cannot be undone. The next HTTP request with the token gets 401, and a connection that is
+already open is refused from its next tool call. Revoking works while MCP or HTTP is off.
+
+Creating a token needs a web password and a sign-in on this page (tokens are only for HTTP, which needs the password); without a
+password the button is disabled and `pnpm agent:token create` still works. Revoking needs a sign-in once a password is set: a
+process on the same machine must not be able to cut off every HTTP client.
 
 ## Reaching it from other devices (HTTP)
 
@@ -206,7 +230,7 @@ unsupported session operations without triggering browser login or OAuth discove
 Other path spellings and requests with `Next-Action` keep the normal session rules. Every method reaching the route first
 returns 404 if either switch is off or settings are unreadable, or 503 if the web password is unusable.
 
-Create one token for each client on the host:
+Create one token for each client, on the settings page (above) or on the host:
 
 ```bash
 pnpm agent:token create --name laptop --permissions jobs:read,tracking:read --expires 2027-12-31
@@ -348,6 +372,11 @@ URL; restrict that role only if it can still perform the web's required operatio
 | `list_favorites` | `tracking:read`: all starred jobs, including closed, filtered and ignored ones. `sort`: `starred` (default, newest first) or `rank`; optional `limit`. `notes:read` adds each item’s `notes.favorite_note`. |
 | `get_application_context` | **Off by default.** Everything to write one job's answers (`job_id`): job facts, the cleaned JD, breakdown points, the company background and fit note, the questions, the material chosen for each and the saved versions (newest first, at most `max_results` per question). |
 | `save_application_answer` | **Off by default.** Adds one answer version (`job_id`, `question_id`, `text`, optional `sentences`). |
+| `set_application_status` | `tracking:write`: sets `job_id` to `status`, creating its application if needed. All web-selectable statuses are allowed. |
+| `mark_applied` | `tracking:write`: marks `job_id` applied from `new`, `interested`, `preparing` or `archived`. Already applied is a no-op; later stages are refused. |
+| `set_next_action` | `tracking:write`: sets `job_id`, `next_action` and `next_action_date` (`YYYY-MM-DD` or null); requires an existing application. |
+| `set_interview_rounds` | `tracking:write`: sets `job_id` and `rounds`, with the web's input limits; requires an existing application. |
+| `undo_change` | `tracking:write`: restores one of this caller's changes by `audit_id`, subject to the rules below. |
 
 `search_jobs` uses the same URL-state filters as `/jobs`; absent scope keeps the legacy current-jobs rule, and dates compare first seen. As on the web, reversed `since` / `until` bounds are swapped; the previous MCP path returned no matches for such a range. Its search plan remains lenient: unreadable pipeline settings leave text search working without market vocabulary. Every explicit MCP sort has a web equivalent; MCP keeps rank as its default without a query, including archive (the web archive defaults to last listed).
 
@@ -440,6 +469,41 @@ Each call writes one line to stderr (your client keeps it in its log of the serv
 long it took, and whether it worked. Never the arguments or the results. Errors name a category only (`database`, `not_found`,
 `invalid_input`, ...), never an address or a path.
 
+## Tracking writes and undo
+
+Add `tracking:write` to both `permissions` and `stdio.permissions`, then restart the MCP client so the server can open
+its write connection. Without both the effective permission and that connection, none of these tools is offered. Removing
+the permission or switching the server off refuses subsequent calls without a restart. The application writer switch is independent.
+
+The four tracking tools call the same services as the web. A successful receipt contains only `audit_id`, `job_id`, `field`,
+`undoable`, `research` and notices. It does not echo the new or previous text. Blank next-step text clears it; null or an empty
+date clears the date. Status changes preserve notes, append events and wake dormant jobs under the web's existing rules.
+Notes, favorites, seen state, closure, filters and replies have no write tools in this release.
+
+`undo_change` takes the write's `audit_id`. It requires the same caller and the original data area's write permission.
+The server locks and fingerprints the current field; if it differs from the value after that write, undo returns a conflict
+and restores nothing. Other fields are left alone. Status fingerprints also include the status clock and newest event so
+moving away and back does not hide later history. A successful undo can happen only once, gets its own audit row and cannot
+itself be undone. No-op writes are audited but are not undoable. Expired audit rows have no remaining undo data.
+
+Status undo appends a reverse change event; it never deletes history or uses the web toast's fallback that overwrites a later
+status. If the original write created the application, undo restores status `new` and retains the application and its history.
+There is no delete tool. The undo response names the restored field and audit ids, plus research outcome and notices; it
+never returns previous private text, even with read permissions. Owner activity-page undo controls are not included here.
+
+A qualifying status change, including restoration, may start automatic research under `research.yaml`. An agent write uses
+one `research_company` unit per company lookup and one `research_salary` unit per salary lookup, only for work it newly queues.
+Before queuing, it reserves those units through the shared daily budget gate. Reservations for each write are all-or-nothing:
+any refused bucket or unavailable budget leaves the tracking write successful, skips all research for that write, and returns
+`research: "budget_skipped"` with a notice. Units for work not newly queued (including cached or merged work) are returned.
+Breakdowns started this way are not counted. Owner/web clicks never spend agent budget. Existing research limits still apply.
+Agent budget reservations and queued work commit with the write and its audit; failures roll them back.
+Undo does not cancel queued research, refund work already queued or spent, or retract content already sent to a model.
+
+A write-enabled agent that reads malicious text can still corrupt application tracking. Undo helps recover changes; it cannot
+prevent them, and later edits can make undo conflict. Remove its write grant or disable MCP to stop subsequent calls. For a
+token-based connection, revoke its token to stop it; this release serves local stdio, so disable that connection or its grants.
+
 ## Audit trail
 
 Each tool call also adds one row to the local `agent_calls` table. `tools/list` adds none. A row holds only its numeric id,
@@ -455,12 +519,15 @@ of the call, time spent behind other rows included. If the row fails or the dead
 normally and writes one additional stderr line with the failure category only (`timeout` for a passed deadline). A row
 that timed out is not sent again, because the database may already have saved it; the server drops that session and the
 next row opens a new one. A saved answer version and its success audit row are written in the same
-transaction on the answer's write connection: both are saved or neither is. If that audit insert fails, the answer is
+transaction on the answer's write connection: both are saved or neither is. Tracking writes additionally store local
+before-values and after-fingerprints in `agent_undo` in that same transaction; failure of either insert rolls back the write.
+The activity query derives `undoable` / `undone` / `not_undoable` from the presence of that row and its `undone_at`, so there
+is no duplicated status to drift. If that audit insert fails, the answer is
 rolled back, the call fails and the server attempts to record the error over the audit connection. The existing stderr
 call-log line is unchanged.
 
 In `mcp.yaml`, `audit.retention_days` defaults to **90** (1–3650). The runner periodically deletes older rows, including
-while MCP is off; without a running runner, they remain. Old database backups can still hold deleted rows. The other
+while MCP is off; the foreign key cascades deletion to the associated `agent_undo` rows, including private before-values. Without a running runner, they remain. Old database backups can still hold deleted rows. The other
 `audit` keys bound the dedicated connection's waits:
 
 | Key | Default | Bounds |
@@ -486,7 +553,7 @@ The filters are in the URL, so a view can be bookmarked or shared: connection, t
 ## Optional: a database role that can only read
 
 The read-only sessions guard against a mistaken write, but they are not a security boundary. For a hard one, give the server
-its own role with `SELECT` rights only (`save_application_answer` then cannot save):
+its own role with `SELECT` rights only (write tools then cannot save):
 
 ```bash
 docker compose exec db psql -U jobradar -d jobradar
@@ -534,6 +601,7 @@ GRANT USAGE ON SEQUENCE agent_calls_id_seq TO job_radar_ro;
 | `get_application_context` or `save_application_answer` is not offered | Its permission is absent from either list, or `writer.yaml: enabled` is `false`. Restart the client after changing either. |
 | "text does not match sentences" | The client sent two different answers. Send the same one in both, or leave `sentences` out. |
 | "already holds … versions" | See [Writing answers from your client](#writing-answers-from-your-client). |
+| The client shows "connection closed" or the server exits right away; its log mentions pnpm's version ("This project is configured to use … of pnpm") | pnpm was started from another directory, so corepack chose a different pnpm version. Launch it through `scripts/mcp-stdio.sh` as shown above instead of `pnpm --dir … mcp:serve`. |
 | `command not found` / `spawn pnpm ENOENT` | The client does not find `pnpm` or `node`: use absolute paths and set `PATH` in `env` (see Claude Desktop above). |
 | "The query failed (database)" | The stack is not running, or the database address in `.env` is not reachable from the host. `pnpm run doctor` checks both. |
 | "The MCP audit row could not be written (…)" in the client's log | The call itself answered; only its audit row is missing. `database`: the server runs with a SELECT-only role (grant `INSERT` on `agent_calls`, see [above](#optional-a-database-role-that-can-only-read)), or the database has not been migrated to this version yet (deploy the update with `scripts/ops/deploy.sh`, see [upgrade.md](upgrade.md)); until then `save_application_answer` fails as a whole with "The query failed (database)", because the answer and its row are saved together. `database` also covers a locked `agent_calls` table (for example during a migration) or a slow statement, because `audit.lock_timeout_ms` and `audit.statement_timeout_ms` fire before `audit.write_timeout_ms` with the defaults. `timeout`: the database or network did not answer within `audit.write_timeout_ms`, or the write queue was too long. Later calls write their rows again once the cause is gone. |

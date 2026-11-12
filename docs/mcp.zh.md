@@ -7,7 +7,7 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 - **默认关闭。** 在 `mcp.yaml` 里设 `enabled: true` 之前什么都不会发生。
 - **本机 stdio 或可选 HTTP。** stdio 不开端口、不需要 token；HTTP 使用 Web 端口，每个 POST 请求都必须验证 agent token。
-- **只读，有一个由权限控制的例外。** 数据库读取使用只读会话，个人数据读取还会访问本机画像文件。唯一能写的工具 `save_application_answer` 需要 `writer:write` 权限，也只能新增答案版本。服务从不触发采集或 AI 调用。
+- **读取和明确授权的写入。** 数据库读取使用只读会话，个人数据读取还会访问本机画像文件。`writer:write` 可新增答案版本；`tracking:write` 可修改申请状态、下一步和面试轮次，并撤销自己的修改。写入使用单独连接。状态变化可能排队自动调研；MCP 进程本身不触发采集，也不调用 AI 服务商。
 
 服务还会通过单独的审计连接，把调用元数据存在本机的 `agent_calls` 表里（见[调用审计](#调用审计)）。
 
@@ -98,9 +98,11 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 `search_jobs` 和 `get_job` 共用 `jobs:read`，`list_applications` 需要 `tracking:read`。权限目录中的其他 id 也能填写；`match:read` 为搜索卡片和详情增加匹配字段块，`notes:read` 为 `get_job` 增加备注字段块。版本 2 的工具开关会迁移为两份权限列表；如果此前只关了一个岗位工具，`jobs:read` 会同时提供两个，`config:migrate` 会打印提示。移除 `jobs:read` 可以同时关闭两个。写进 `mcp.yaml` 的权限也适用于以后版本在它下面新增的工具，所以只授予应当可读或可写的权限。
 
-`budgets` 为后续 agent 动作工具预留每日额度；现有工具还不使用这些计数。
+`budgets` 设置 agent 动作的每日额度。
 `per_caller` 分别计算本地 stdio 连接和每个 token 的额度，限制采集请求、岗位翻译、拆解、薪资查询、公司查询、回答起草和简历定制；`score_jobs` 按批次里的每个岗位计数。
-薪资与公司查询也包括 agent 写入间接触发的自动研究。某项额度为 `0` 就禁止 agent 触发该动作。
+agent 写入触发自动调研时，每项公司查询占用 `research_company` 的 1 单位，每项薪资查询占用 `research_salary` 的 1 单位，仅对新排队的任务计费。
+每次写入所需的预算必须全部获准：任何一个额度桶拒绝，就跳过该次写入的全部调研（`research: "budget_skipped"`）。
+未新增入队的任务会退回额度；由此触发的岗位拆解不计费。某项额度为 `0` 就禁止 agent 触发该动作。
 `total` 统计所有 caller、所有动作的请求数，不是岗位数：一次给 40 个岗位打分的 `score_jobs` 批量请求占该 caller `score_jobs` 额度的 40，只占 `total` 的 1。`0` 禁止全部 agent 动作。
 日期与下次重置时间遵循 `schedule.yaml` 的时区及夏令时。runner 每小时清理早于「当前本地日期减去 `audit.retention_days`」的计数行。
 这些设置有默认值，仍使用 `config_version: 3`。
@@ -122,7 +124,7 @@ stdio:
 ### Claude Code
 
 ```bash
-claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:serve
+claude mcp add job-radar -- /absolute/path/to/job-radar/scripts/mcp-stdio.sh
 ```
 
 加 `--scope user` 可以在所有项目里用。`claude mcp list` 显示是否连上。
@@ -135,19 +137,18 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 {
   "mcpServers": {
     "job-radar": {
-      "command": "/absolute/path/to/pnpm",
-      "args": ["--silent", "--dir", "/absolute/path/to/job-radar", "mcp:serve"],
-      "env": { "PATH": "/folder/of/node:/usr/bin:/bin" }
+      "command": "/absolute/path/to/job-radar/scripts/mcp-stdio.sh",
+      "env": { "PATH": "/folder/of/pnpm:/folder/of/node:/usr/bin:/bin" }
     }
   }
 }
 ```
 
-- 用绝对路径：从程序坞启动的应用拿不到你 shell 里的 `PATH`。`which pnpm` 给出命令；`dirname "$(which node)"` 给出要放进 `PATH` 的目录（pnpm 需要 `node`）。
-- `--silent` 让 pnpm 不往 stdout 打印自己的标题行，stdout 只属于协议。
+- 用绝对路径：从程序坞启动的应用拿不到你 shell 里的 `PATH`。脚本会运行 `pnpm`，而 pnpm 需要 `node`：把 `which pnpm` 和 `which node` 所在的目录（`dirname`）都放进 `PATH`。
+- `scripts/mcp-stdio.sh` 会先进入项目目录再运行 `pnpm --silent mcp:serve`：不论客户端从哪个目录启动都能用（pnpm 按当前目录选版本），并且 pnpm 的标题行不会进 stdout（stdout 只属于协议）。不要让客户端直接调用 `pnpm --dir <项目> mcp:serve`：在 corepack 下会失败。
 - **项目在外接磁盘上**（macOS）：首次启动可能被拦下，直到你允许 Claude 访问可移除宗卷（系统设置 → 隐私与安全性 → 文件与文件夹）。这时客户端里该服务的日志会显示权限错误。
 
-其他 MCP 客户端同理：stdio 服务，命令 `pnpm`，参数 `--silent --dir <项目目录> mcp:serve`。
+其他 MCP 客户端同理：stdio 服务，命令 `/absolute/path/to/job-radar/scripts/mcp-stdio.sh`，不带参数。
 
 ## 在网页上管理
 
@@ -156,6 +157,16 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 设了网页口令后，这些修改要有真实的登录会话。其他页面允许本机访问免登录，但同机的其他进程可能借此放大 agent 的权限，所以这页要再输一次口令：页面显示一张登录卡片，走正常的登录，登录后回到本页。高级编辑器里的 `mcp.yaml`（保存、恢复默认、修复）同样遵守这条规则。没设网页口令时这页不用登录就能改，HTTP 则保持关闭，因为 HTTP 需要口令。在本机手动编辑 `data/config/mcp.yaml` 不受影响。
 
 这道会话闸管不到的情况：它只拦得住通过网络访问面板的进程。以你的系统用户运行、能读写文件的进程，可以绕过它直接改 `mcp.yaml`。网页口令要设得足够强。如果页面给出的 HTTP 地址是指向其他主机的明文 `http://`，客户端用它时 bearer token 会明文传输：只在 localhost 或 Tailscale（HTTPS）上使用。
+
+### 在网页上管理 token
+
+**连接**卡第一行是本机 stdio，下面是还能用的 token：名称、显示前缀（`jrat_` 加 8 个字符）、权限、创建时间、最后使用和到期。不在全局矩阵里的权限画成虚线加删除线：矩阵开了它才生效。已吊销和已过期的 token 折叠在“已失效”里，只读。**看活动**打开按这个 token 筛选的活动页。
+
+**新建 token** 要填名称（不能和未吊销的 token 重名，规则和 `pnpm agent:token` 相同）、权限（预设加复选框，只列矩阵里有的；默认是只读预设和矩阵的交集）和到期（不过期，或按计划时区的某一天为最后有效日，必须晚于今天）。建好后同一个弹窗**只显示这一次** token，带复制按钮（剪贴板不可用时会选中文本），下面是 HTTP 地址和一行 Claude Code 示例。token 不进 URL、通知、浏览器存储、页面数据和任何日志，数据库只存它的哈希：关掉弹窗后再也看不到。丢了就吊销，再建一个。
+
+**吊销**会先确认，不能撤回。之后带这个 token 的 HTTP 请求返回 401，已经连着的连接在下一次调用工具时被拒绝。MCP 或 HTTP 关着时也能吊销。
+
+建 token 要先设网页口令，并在这页登录（token 只给 HTTP 用，HTTP 需要口令）；没设口令时按钮禁用，`pnpm agent:token create` 照常可用。设了口令后，吊销也要登录：同机的进程不能借本机免登录把所有 HTTP 客户端都断掉。
 
 ## 从其他设备访问（HTTP）
 
@@ -174,7 +185,7 @@ GET 和 DELETE 让客户端探测不支持的会话操作，不触发浏览器�
 其他路径拼写及带 `Next-Action` 的请求保留正常会话规则。所有到达路由的方法都先检查前提：任一开关关闭或配置不可读返回 404，
 Web 密码不可用返回 503。
 
-在宿主机为每个客户端单独创建 token：
+为每个客户端单独创建 token，可以在上面的设置页，也可以在宿主机：
 
 ```bash
 pnpm agent:token create --name laptop --permissions jobs:read,tracking:read --expires 2027-12-31
@@ -308,6 +319,11 @@ HTTP 工具审计行带 `caller: token`、token id 和 `transport: http`，不�
 | `list_favorites` | `tracking:read`：全部收藏岗位，含已关闭、被过滤和忽略的岗位。`sort` 为默认的 `starred`（最新优先）或 `rank`，可传 `limit`；`notes:read` 增加每项的 `notes.favorite_note`。 |
 | `get_application_context` | **默认关闭。** 写一个岗位答案所需的全部材料（`job_id`）：岗位事实、清洗后的 JD、拆解要点、公司背景和契合要点、问题、每题选中的材料和已保存的版本（最新的在前，每题最多 `max_results` 个）。 |
 | `save_application_answer` | **默认关闭。** 新增一个答案版本（`job_id`、`question_id`、`text`，可选 `sentences`）。 |
+| `set_application_status` | `tracking:write`：将 `job_id` 设为 `status`，需要时创建申请。允许网页状态选择器中的全部状态。 |
+| `mark_applied` | `tracking:write`：将 `job_id` 标为已投递，仅允许从新建、感兴趣、准备中或归档出发；已经投递则不变，更后面的阶段拒绝。 |
+| `set_next_action` | `tracking:write`：设置已有申请的 `job_id`、`next_action`、`next_action_date`（`YYYY-MM-DD` 或空值）。 |
+| `set_interview_rounds` | `tracking:write`：设置已有申请的 `job_id` 和 `rounds`，输入上限与网页一致。 |
+| `undo_change` | `tracking:write`：用 `audit_id` 撤销当前调用方自己的修改，规则见下文。 |
 
 `search_jobs` 与 `/jobs` 共用 URL 状态筛选函数：未传 scope 沿用当前岗位规则，日期比较首次发现时间。与网页一样，`since` 晚于 `until` 时会交换两端；旧 MCP 路径对此返回空集。新增 `scope`（`current`、`archive`、`all`）、`unseen_only` 和 `favorites_only`（都需要 `tracking:read`；没有时，把任一个设为 `true` 的调用按 `not_permitted` 拒绝）、`visa`（`offered`、`not_denied`）、`ghost`（`only`、`hide`）；签证和幽灵岗位筛选仅在网页对应筛选可用时生效。所有范围始终隐藏硬过滤排除的岗位，默认还隐藏关闭和休眠岗位。MCP 的搜索计划仍容错读取 pipeline 配置，读取失败时按文本匹配，不使用市场词汇。四个显式排序都与网页对应；无搜索词时 MCP 默认按 rank 排序，归档范围也如此（网页归档默认按最后刊登时间）。
 
@@ -382,6 +398,33 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 
 每次调用往 stderr 写一行（客户端会保存在该服务的日志里）：工具名、返回条数、耗时、成功与否。从不写参数和结果。错误只给类别（`database`、`not_found`、`invalid_input` 等），不含地址或路径。
 
+## 追踪写入和撤销
+
+在 `permissions` 和 `stdio.permissions` 中都加入 `tracking:write`，然后重启客户端，让服务打开写连接。
+缺少有效权限或写连接时，这些工具都不在列表中。撤掉权限或关闭 MCP 后，后续调用立即拒绝，无需重启。写作功能开关与此独立。
+
+四个工具调用网页使用的同一组服务。成功回执仅含 `audit_id`、`job_id`、`field`、`undoable`、`research` 和提示，不回显新旧文字。
+空白下一步文字会清除文字；空值或空日期字符串会清除日期。状态变化保留备注、追加事件，并按网页规则唤醒休眠岗位。
+本版本不提供备注、收藏、已看、关闭、过滤覆盖或回信的写工具。
+
+`undo_change` 接收写入的 `audit_id`，要求同一调用方且仍有原数据区的写权限。服务锁定并计算当前字段指纹，
+与写入后的指纹不同时返回冲突，不还原；其他字段保持不变。状态指纹还包括状态时间和最新事件，避免“改走再改回”掩盖后续历史。
+每次修改只能成功撤销一次。撤销有自己的审计行，不能再次撤销；未改变值的写入仍记审计，但不可撤销。审计过期后不再有撤销数据。
+
+状态撤销追加一次反向事件，不删历史，也不走网页 toast 在历史变化后直接覆盖旧状态的回退分支。
+若原写入创建了申请，撤销将其状态还原为 `new`，保留申请和历史。没有删除工具。
+撤销输出只有恢复的字段名、审计 id、调研结果和提示；即使有读取权限，也不返回旧私人文字。所有者活动页的撤销控件不在本版本内。
+
+符合规则的状态变化（包括还原）会按 `research.yaml` 触发自动调研。agent 写入触发的每项公司查询占用 `research_company` 的 1 单位，
+每项薪资查询占用 `research_salary` 的 1 单位，仅对新排队的任务计费。排队前先通过共享每日预算接口预留这些额度。
+每次写入所需的预算必须全部获准：任何一个额度桶拒绝或预算不可用时，追踪写入仍成功，跳过该次写入的全部调研，
+返回 `research: "budget_skipped"` 并提示。未新增入队的任务（包括缓存命中、合并已有任务）会退回额度。
+由此触发的岗位拆解不计费。所有者网页操作不扣 agent 额度；原有调研上限继续生效。
+agent 预算预留、排队任务和写入审计一起提交，事务失败一起回滚。撤销不取消已排队调研、不退回已排队或消耗的费用，也不能收回已发给模型的内容。
+
+有写权限的 agent 读到恶意文字后仍可能把申请进度改乱。撤销帮助恢复，不能预防，后来的修改也可能造成撤销冲突。
+撤掉写权限或关闭 MCP 可阻止后续调用；使用 token 的连接应吊销 token 止损。本版本提供本机 stdio，应关闭该连接或撤掉它的权限。
+
 ## 调用审计
 
 每次工具调用还会在本机的 `agent_calls` 表里加一行，`tools/list` 不记。每行只有数字 id、调用时间（`called_at`）、
@@ -394,10 +437,11 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 `audit.write_timeout_ms`，排在别的行后面的时间也算在内。写不进去或超时，读取仍照常回答，stderr 另写一行，只说失败类别
 （超时是 `timeout`）。超时的行不会重发，因为数据库可能已经存下了；服务丢掉那个会话，下一行再开新的。保存答案时，答案版本和成功的审计行走写入连接的同一个事务：
 一起保存，或一起不保存。审计插入失败会回滚答案、让调用失败，然后尝试通过审计连接记录这次错误。
+追踪写入还会在同一事务向 `agent_undo` 保存本机旧值和新值指纹，任一插入失败都回滚业务写入。活动查询按该行是否存在及 `undone_at` 派生“可撤销／已撤销／不可撤销”，不重复存一份状态。
 原来的 stderr 调用日志行不变。
 
 `mcp.yaml` 的 `audit.retention_days` 默认 **90 天**（1–3650）。runner 定期删掉更早的记录，MCP 关着也会清理；
-runner 没运行就会继续保留。旧数据库备份仍可能含已删的行。`audit` 的其他键限制专用连接的等待时间：
+外键级联删除对应的 `agent_undo` 行，包括私人旧值；runner 没运行就会继续保留。旧数据库备份仍可能含已删的行。`audit` 的其他键限制专用连接的等待时间：
 
 | 键 | 默认 | 范围 |
 |---|---|---|
@@ -418,7 +462,7 @@ runner 没运行就会继续保留。旧数据库备份仍可能含已删的行�
 
 ## 可选：只能读的数据库角色
 
-用这个角色后 `save_application_answer` 无法保存。
+用这个角色后所有写工具都无法保存。
 
 只读会话防的是误写，不是安全边界。要更硬的边界，给服务一个只有 `SELECT` 权限的角色：
 
@@ -465,6 +509,7 @@ GRANT USAGE ON SEQUENCE agent_calls_id_seq TO job_radar_ro;
 | 客户端里没有 `get_application_context` 或 `save_application_answer` | 所需权限不在两份列表中，或 `writer.yaml: enabled` 是 `false`。改完要重启客户端。 |
 | "text 和 sentences 对不上" | 客户端发了两份不同的答案。两边发同一份，或者不传 `sentences`。 |
 | "已有 … 个版本" | 见[从客户端写答案](#从客户端写答案)。 |
+| 客户端显示“连接已关闭”或服务立刻退出，日志里有 pnpm 版本提示（“This project is configured to use … of pnpm”） | pnpm 是从别的目录启动的，corepack 选了另一个 pnpm 版本。按上文改用 `scripts/mcp-stdio.sh` 启动，不要用 `pnpm --dir … mcp:serve`。 |
 | `command not found` / `spawn pnpm ENOENT` | 客户端找不到 `pnpm` 或 `node`：用绝对路径，并在 `env` 里设 `PATH`（见上面 Claude Desktop 一节）。 |
 | "查询失败（database）" | 整套服务没在运行，或 `.env` 里的数据库地址从宿主机连不上。`pnpm run doctor` 两项都会查。 |
 | 客户端日志里有"MCP 调用记录写不进去（…）" | 调用本身已经回答，只是少了审计行。`database`：服务用的是只有 SELECT 权限的角色（给 `agent_calls` 授 `INSERT`，见[上文](#可选只能读的数据库角色)），或数据库还没迁移到这个版本（用 `scripts/ops/deploy.sh` 部署这次更新，见 [upgrade.zh.md](upgrade.zh.md)）；迁移之前 `save_application_answer` 会整个失败，报"查询失败（database）"，因为答案和它的审计行一起保存。`agent_calls` 表被锁住（比如正在迁移）或语句太慢，默认设置下也报 `database`，因为 `audit.lock_timeout_ms` 和 `audit.statement_timeout_ms` 比 `audit.write_timeout_ms` 先到。`timeout`：数据库或网络在 `audit.write_timeout_ms` 内没有回应，或写入队列太长。原因消除后，之后的调用会照常写入。 |

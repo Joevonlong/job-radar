@@ -66,6 +66,7 @@ const { completeSetup } = await import("../src/lib/setup/state");
 const { createConnection } = await import("../src/lib/db/client");
 const { runMigrations } = await import("../src/lib/db/migrate");
 const { seedDemoDatabase } = await import("../src/lib/db/seed-demo");
+const { seedAgentTokens } = await import("../src/lib/db/seed-agent-tokens");
 
 await runMigrations({ currentScoresBackfill: currentScoresBackfill(), url: targetUrl });
 
@@ -93,6 +94,7 @@ await mutateConfig("ui", (current) => ({ ...current, applications: { ...current.
 const connection = createConnection(targetUrl, { max: 1 });
 try {
   const result = await seedDemoDatabase(connection.db, { now: demoNow(), timezone: DEMO_TIMEZONE });
+  await seedAgentTokens(connection.db, demoNow());
   console.log(`demo-prepare: database "${dbName}" ready (${result.jobs} jobs, ${result.applications} applications)`);
 } finally {
   await connection.sql.end({ timeout: 5 });

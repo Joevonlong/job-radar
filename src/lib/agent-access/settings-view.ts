@@ -5,10 +5,10 @@
  */
 import { CAPABILITIES } from "@/lib/capabilities/registry";
 import type { Capability } from "@/lib/capabilities/types";
-import { layeredConfigFingerprint } from "@/lib/config";
+import { layeredConfigFingerprint, loadConfig } from "@/lib/config";
 import { getDb } from "@/lib/db";
 import { latestAgentCallAt } from "@/lib/db/repos/agent-calls";
-import { activeAgentTokenGrants } from "@/lib/db/repos/agent-tokens";
+import { listAgentTokens, type AgentTokenSummary } from "@/lib/db/repos/agent-tokens";
 import { configProblem } from "@/lib/mcp/settings";
 import { probeMcp } from "@/lib/ops/doctor/mcp-probe";
 import { mcpVerdict, type McpVerdict } from "@/lib/ops/doctor/mcp-verdict";
@@ -18,6 +18,7 @@ import { webPasswordUsable } from "@/lib/security/password";
 import { liveMcpSettings } from "./authorize";
 import { normalizePermissions } from "./matrix";
 import { PERMISSIONS, isPermission, type Permission } from "./permissions";
+import { agentTokenState, dayInZone, type AgentTokenState } from "./tokens";
 
 export type AgentAccessConfig =
   | { ok: true; enabled: boolean; httpEnabled: boolean; matrix: Permission[]; stdio: Permission[]; baseHash: string }
@@ -31,6 +32,19 @@ export interface AgentAccessStatus {
   lastCallAt: string | null;
 }
 
+/** A token as the page shows it: metadata only, never the hash. Times are ISO strings. */
+export interface AgentTokenRow {
+  id: number;
+  name: string;
+  prefix: string;
+  permissions: Permission[];
+  state: AgentTokenState;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+}
+
 export interface AgentAccessView {
   session: OwnerSessionState;
   /** HTTP may be switched on only with a usable web password. */
@@ -41,6 +55,12 @@ export interface AgentAccessView {
   tools: Record<Permission, string[]>;
   /** The own grants of the active tokens; null when the database cannot be read. */
   tokenGrants: Permission[][] | null;
+  /** Every token, oldest first; null when the database cannot be read. */
+  tokens: AgentTokenRow[] | null;
+  /** schedule.yaml `timezone`: the zone dates are shown in and an expiry day ends in. */
+  timezone: string;
+  /** Today in that zone (YYYY-MM-DD): an expiry day must come after it. */
+  today: string;
 }
 
 /** Tool ids per permission, from the capability registry. */
@@ -74,24 +94,52 @@ async function optional<T>(read: () => Promise<T>): Promise<T | null> {
   }
 }
 
+function tokenRow(token: AgentTokenSummary, now: Date): AgentTokenRow {
+  return {
+    id: token.id,
+    name: token.name,
+    prefix: token.tokenPrefix,
+    permissions: normalizePermissions(token.permissions.filter(isPermission)),
+    state: agentTokenState(token, now),
+    createdAt: token.createdAt.toISOString(),
+    lastUsedAt: token.lastUsedAt?.toISOString() ?? null,
+    expiresAt: token.expiresAt?.toISOString() ?? null,
+    revokedAt: token.revokedAt?.toISOString() ?? null,
+  };
+}
+
+function zone(): string {
+  try {
+    return loadConfig("schedule").timezone;
+  } catch {
+    return "UTC";
+  }
+}
+
 export async function loadAgentAccessView(session: OwnerSessionState, now: Date = new Date()): Promise<AgentAccessView> {
   const config = readConfig();
-  const [probe, lastCall, grants] = await Promise.all([
+  const timezone = zone();
+  const [probe, lastCall, stored] = await Promise.all([
     probeMcp(now, liveMcpSettings),
     optional(() => latestAgentCallAt(getDb())),
-    optional(() => activeAgentTokenGrants(getDb(), now)),
+    optional(() => listAgentTokens(getDb())),
   ]);
+  const tokens = stored === null ? null : stored.map((token) => tokenRow(token, now));
+  const active = tokens === null ? null : tokens.filter((token) => token.state === "active");
   return {
     session,
     passwordUsable: webPasswordUsable(),
     config,
     status: {
       verdict: mcpVerdict(probe),
-      activeTokens: grants === null ? null : grants.length,
+      activeTokens: active === null ? null : active.length,
       lastCallAt: lastCall?.toISOString() ?? null,
     },
     tools: toolsByPermission(),
-    tokenGrants: grants === null ? null : grants.map((row) => normalizePermissions(row.permissions.filter(isPermission))),
+    tokenGrants: active === null ? null : active.map((token) => token.permissions),
+    tokens,
+    timezone,
+    today: dayInZone(now, timezone),
   };
 }
 

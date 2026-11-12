@@ -24,6 +24,7 @@ import { completeSetup } from "../src/lib/setup/state";
 import { createConnection } from "../src/lib/db/client";
 import { runMigrations } from "../src/lib/db/migrate";
 import { seedDatabase } from "../src/lib/db/seed";
+import { seedAgentTokens } from "../src/lib/db/seed-agent-tokens";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -106,6 +107,7 @@ const connection = createConnection(targetUrl.toString(), { max: 1 });
 try {
   await connection.sql`truncate table control_requests, runtime_state`;
   await seedDatabase(connection.db, { timezone: loadConfig("schedule").timezone });
+  await seedAgentTokens(connection.db);
 } finally {
   await connection.sql.end({ timeout: 5 });
 }

@@ -5,6 +5,7 @@ import type { Executor } from "../executor";
 import { applicationEvents, applications, applicationStatusEnum, companies, jobs } from "../schema";
 import { PIPELINE_STATUSES } from "@/lib/dashboard/board";
 import { wakeDormantJob } from "./dormancy";
+import { lockApplicationCreation } from "./application-lock";
 
 export type Application = typeof applications.$inferSelect;
 export type ApplicationEvent = typeof applicationEvents.$inferSelect;
@@ -70,6 +71,8 @@ async function createApplication(
   tx: Executor,
   input: { jobId: number; status: ApplicationStatus; notes?: string | null; note?: string | null },
 ): Promise<Application | null> {
+  if (await getApplicationByJobId(tx, input.jobId)) return null;
+  await lockApplicationCreation(tx, input.jobId);
   const [row] = await tx
     .insert(applications)
     .values({ jobId: input.jobId, status: input.status, notesMd: input.notes ?? null })
