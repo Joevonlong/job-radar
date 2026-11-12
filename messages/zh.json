@@ -6382,7 +6382,7 @@
         },
         "mcp": {
           "title": "给 AI 客户端用的 MCP 服务",
-          "on": "已打开：你配置的 MCP 客户端可用这些权限：{effective}（全局上限：{matrix}）。调用记录保留 {days} 天。工具返回的内容会交给该客户端所用的模型服务商，见 docs/mcp.zh.md",
+          "on": "已打开：你配置的 MCP 客户端可用这些权限：{effective}（全局上限：{matrix}）。调用记录保留 {days} 天。工具返回的内容会交给该客户端所用的模型服务商，见 docs/mcp.zh.md。",
           "none": "无",
           "off": "未打开（mcp.yaml 的 enabled: false，默认）",
           "configError": "mcp.yaml 读不出来：{problem}",
