@@ -120,10 +120,14 @@ describe("get_job field blocks", () => {
     for (const value of [S.email, S.path, S.secret]) expect(JSON.stringify(result)).not.toContain(value);
   });
 
-  it("preserves the previous job and notices; jobs-only without include preserves the complete response", async () => {
+  it("preserves the previous job and notices under the default grant; jobs-only leaves out the application and closure fields", async () => {
     const strict = goodStrict();
     const expected = { notices: [context().text("notice.thirdParty")], job: toJobDetailDto(blockDetail(), { traps: null, description: availableDescription(blockDetail().description, 12000), quote: quoteGuard(strict, blockDetail().description) }, clean) };
-    expect(await getJob(context(["jobs:read"]), { job_id: 7 })).toEqual(expected);
+    const jobsOnly = Object.fromEntries(Object.entries(expected.job).filter(([key]) => !["application_status", "closed_reason", "application"].includes(key)));
+    const narrow = await getJob(context(["jobs:read"]), { job_id: 7 });
+    expect(narrow).toEqual({ ...expected, job: jobsOnly });
+    expect(Object.keys(narrow.job)).toEqual(Object.keys(jobsOnly));
+    expect(getJobOutputFor(new Set(["jobs:read"])).safeParse({ ...narrow, job: { ...narrow.job, application_status: "applied" } }).success).toBe(false);
     const { tracking, ...legacy } = await getJob(context(), { job_id: 7 });
     expect(legacy).toEqual(expected);
     expect(tracking).toMatchObject({ seen: true, filter_override: "exclude" });

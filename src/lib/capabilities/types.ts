@@ -23,7 +23,7 @@ export interface Capability {
    * Whether it can be offered and called at all right now, besides permissions (the application writer switched on, ...), and the
    * failure a call gets when it cannot. The list and the call apply the same rule.
    */
-  availability?: { available: (ctx: Pick<McpContext, "writer" | "tracking">) => boolean; category: string; message: MessageKey };
+  availability?: { available: (ctx: Pick<McpContext, "writer" | "tracking" | "features">) => boolean; category: string; message: MessageKey };
   blocks?: readonly { key: string; permission: Permission; onRequest: boolean }[];
   outputFor?: (permissions: ReadonlySet<Permission>) => z.ZodType<CapabilityOutput>;
 }
@@ -43,7 +43,7 @@ export function defineCapability<I extends z.ZodObject, O extends z.ZodType<Capa
   return erased as Capability;
 }
 
-/** These tools only read, and read only this installation's own database. */
+/** These tools only read this installation's local data. */
 export const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 /** Adds a row and changes or removes nothing; calling it twice adds two. */
 export const ADDS_ONLY = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;

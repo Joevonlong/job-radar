@@ -4,12 +4,17 @@ import type { Permission } from "@/lib/agent-access/permissions";
 import type { McpConfig } from "@/lib/config/schemas/mcp";
 import type { McpContext } from "@/lib/mcp/context";
 
+import { get_profile } from "./profile/get-profile";
+import { get_interests } from "./profile/get-interests";
+import { preview_deal_breakers } from "./profile/preview-deal-breakers";
+import { preview_interest_category } from "./profile/preview-interest-category";
 import { undo_change } from "./access/undo-change";
 import { set_application_status } from "./tracking/set-application-status";
 import { mark_applied } from "./tracking/mark-applied";
 import { set_next_action } from "./tracking/set-next-action";
 import { set_interview_rounds } from "./tracking/set-interview-rounds";
 import { get_job } from "./jobs/get-job";
+import { get_job_raw } from "./jobs/get-job-raw";
 import { search_jobs } from "./jobs/search-jobs";
 import { list_applications } from "./tracking/list-applications";
 import type { Capability } from "./types";
@@ -22,11 +27,27 @@ import { get_company } from "./jobs/get-company";
 import { get_insights } from "./jobs/get-insights";
 import { get_application } from "./tracking/get-application";
 import { list_favorites } from "./tracking/list-favorites";
+import { get_system_status } from "./ops/get-system-status";
+import { list_cycles } from "./ops/list-cycles";
+import { list_channels } from "./ops/list-channels";
+import { get_activity_log } from "./ops/get-activity-log";
+import { get_ai_usage } from "./ops/get-ai-usage";
+
+import { get_career_profile } from "./career/get-career-profile";
+import { list_career_documents } from "./career/list-career-documents";
+import { get_career_document } from "./career/get-career-document";
+import { check_career_document } from "./career/check-career-document";
+import { list_replies } from "./replies/list-replies";
 
 export const CAPABILITIES: readonly Capability[] = [
   search_jobs,
   get_job,
+  get_job_raw,
   list_applications,
+  get_profile,
+  get_interests,
+  preview_deal_breakers,
+  preview_interest_category,
   get_today,
   list_companies,
   get_company,
@@ -35,6 +56,16 @@ export const CAPABILITIES: readonly Capability[] = [
   list_favorites,
   get_application_context,
   save_application_answer,
+  get_career_profile,
+  list_career_documents,
+  get_career_document,
+  check_career_document,
+  list_replies,
+  get_system_status,
+  list_cycles,
+  list_channels,
+  get_activity_log,
+  get_ai_usage,
   set_application_status,
   mark_applied,
   set_next_action,
@@ -46,12 +77,15 @@ export const CAPABILITIES: readonly Capability[] = [
  * The capabilities a client is offered now: authorized for the connection's grant against one fresh read of mcp.yaml (none when it
  * cannot be read), and available.
  */
-export function visibleCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer" | "tracking" | "grant">): readonly Capability[] {
+export function visibleCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer" | "tracking" | "features" | "grant">): readonly Capability[] {
   return listedCapabilities(capabilities, ctx).map(({ capability }) => capability);
 }
 
 /** A list and its caller's effective permissions share one fresh settings read, including a failed read. */
-export function listedCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer" | "tracking" | "grant">): { capability: Capability; permissions: ReadonlySet<Permission> }[] {
+export function listedCapabilities(
+  capabilities: readonly Capability[],
+  ctx: Pick<McpContext, "readSettings" | "writer" | "tracking" | "features" | "grant">,
+): { capability: Capability; permissions: ReadonlySet<Permission> }[] {
   let read: { settings: McpConfig } | { error: unknown };
   try {
     read = { settings: ctx.readSettings() };

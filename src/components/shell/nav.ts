@@ -1,4 +1,5 @@
 import {
+  Bot,
   Briefcase,
   Building2,
   CalendarCheck,
@@ -64,11 +65,15 @@ export function navItems(career: boolean): readonly NavItem[] {
   return [...NAV_ITEMS.slice(0, at), CAREER_NAV_ITEM, ...NAV_ITEMS.slice(at)];
 }
 
-/** Pages under a main item that the command palette also lists (labels: `sources.subnav.*`). The sidebar shows only the main items. */
+/**
+ * Pages under a main item that the command palette also lists (labels: `<labels>.subnav.<key>`). The sidebar shows only the main
+ * items.
+ */
 export const PALETTE_SUBPAGES = [
-  { key: "registry", href: "/sources/registry", icon: ListChecks },
-  { key: "aiUsage", href: "/sources/ai-usage", icon: Coins },
-  { key: "logs", href: "/sources/logs", icon: ScrollText },
+  { key: "registry", href: "/sources/registry", icon: ListChecks, labels: "sources" },
+  { key: "aiUsage", href: "/sources/ai-usage", icon: Coins, labels: "sources" },
+  { key: "logs", href: "/sources/logs", icon: ScrollText, labels: "sources" },
+  { key: "access", href: "/settings/agents", icon: Bot, labels: "agents" },
 ] as const;
 
 /** `/` only matches exactly; other items also match their sub-routes (e.g. /jobs/123). */

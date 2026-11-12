@@ -73,8 +73,7 @@ async function loadQuota(db: Db, aiConfig: AiConfig, aiHealth: ReadonlyMap<AiPro
 }
 
 /** `at` defaults to the database clock: heartbeats and runs are stamped by it. */
-export async function loadSourcesView(at?: Date): Promise<SourcesView> {
-  const db = getDb();
+export async function loadSourcesView(at?: Date, db: Db = getDb()): Promise<SourcesView> {
   const now = at ?? (await getDbNow(db));
   const channelsConfig = loadConfig("channels");
   const aiConfig = loadConfig("ai");

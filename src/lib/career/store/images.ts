@@ -64,3 +64,19 @@ export async function deleteImage(kind: ImageKind): Promise<void> {
     }
   }, file));
 }
+
+
+/** Presence checks expose no image bytes or storage names. */
+export async function imagePresence(): Promise<{ hasPhoto: boolean; hasSignature: boolean }> {
+  const exists = async (kind: ImageKind) => {
+    for (const ext of extensions) {
+      try {
+        if ((await fsp.stat(careerImagePath(kind, ext))).isFile()) return true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new CareerStoreError("image_invalid");
+      }
+    }
+    return false;
+  };
+  return { hasPhoto: await exists("photo"), hasSignature: await exists("signature") };
+}

@@ -148,8 +148,18 @@ export type TrapsProbe =
   | { state: "ok"; enabled: boolean; backlogWarn: number; recentDays: number; stats: { jobsWithTraps: number; recentJobsWithTraps: number; backlog: number } | null }
   | { state: "config_error"; problem: string };
 
-/** What `data.mcp` reads: the switch, global matrix and effective stdio permissions of mcp.yaml, or why it cannot be read. */
-export type McpProbe = { state: "ok"; enabled: boolean; permissions: readonly string[]; effective: readonly string[]; auditRetentionDays: number } | { state: "config_error"; problem: string };
+/** MCP switches, permissions and credential-free token statistics; unavailable database statistics stay null. */
+export type McpProbe = {
+  state: "ok";
+  enabled: boolean;
+  permissions: readonly string[];
+  effective: readonly string[];
+  auditRetentionDays: number;
+  httpEnabled: boolean;
+  webPasswordUsable: boolean;
+  activeTokens: number | null;
+  nearestExpiry: Date | null;
+} | { state: "config_error"; problem: string };
 
 /** What `data.replies` reads: the switch, the label, when it was last read and the replies older than `doctor.pending_warn_days`. */
 export type RepliesProbe =

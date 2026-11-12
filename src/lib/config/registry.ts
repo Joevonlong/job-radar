@@ -71,7 +71,7 @@ export const configRegistry = {
   /** Starting points of the "add a category" dialog on /interests (shipped). */
   signalPresets: { file: "signal-presets.yaml", location: "config", kind: "shipped", schema: signalPresetsSchema },
   deliveryAudit: { file: "delivery-audit.yaml", location: "config", kind: "shipped", schema: deliveryAuditSchema },
-  /** The optional read-only MCP server (`pnpm mcp:serve`); off by default, every key has a default. */
+  /** The optional MCP server (local stdio or token-protected HTTP); off by default, every key has a default. */
   mcp: { file: "mcp.yaml", location: "config", kind: "user", schema: mcpSchema },
   /** The operations log of the runner and ai-worker: retention, writer limits, page settings (shipped). */
   activityLog: { file: "activity-log.yaml", location: "config", kind: "shipped", schema: activityLogSchema },

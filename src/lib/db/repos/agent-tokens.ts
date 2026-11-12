@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, or } from "drizzle-orm";
+import { and, asc, count, eq, gt, isNull, min, or } from "drizzle-orm";
 
 import type { Executor } from "../executor";
 import { agentTokens } from "../schema";
@@ -12,6 +12,21 @@ export type AgentTokenSummary = Omit<typeof agentTokens.$inferSelect, "tokenHash
 export type AgentTokenCredential = Pick<typeof agentTokens.$inferSelect, "id" | "tokenHash" | "permissions" | "expiresAt" | "revokedAt">;
 
 export type AgentTokenGrantRow = Pick<typeof agentTokens.$inferSelect, "id" | "permissions" | "expiresAt" | "revokedAt">;
+
+export interface ActiveAgentTokenStats { activeTokens: number; nearestExpiry: Date | null }
+
+/** Aggregate metadata only: active excludes revoked tokens and tokens expiring at or before now. */
+export async function activeAgentTokenStats(db: Executor, now: Date): Promise<ActiveAgentTokenStats> {
+  const [row] = await db.select({ activeTokens: count(), nearestExpiry: min(agentTokens.expiresAt) })
+    .from(agentTokens).where(and(isNull(agentTokens.revokedAt), or(isNull(agentTokens.expiresAt), gt(agentTokens.expiresAt, now))));
+  return row ?? { activeTokens: 0, nearestExpiry: null };
+}
+
+/** The permission lists of the tokens that can still be used: what narrowing the global matrix would take from them. */
+export async function activeAgentTokenGrants(db: Executor, now: Date): Promise<{ permissions: string[] }[]> {
+  return db.select({ permissions: agentTokens.permissions })
+    .from(agentTokens).where(and(isNull(agentTokens.revokedAt), or(isNull(agentTokens.expiresAt), gt(agentTokens.expiresAt, now))));
+}
 
 const summaryColumns = {
   id: agentTokens.id,

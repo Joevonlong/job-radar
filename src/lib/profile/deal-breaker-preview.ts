@@ -5,6 +5,8 @@
  */
 import { z } from "zod";
 
+import { currentMe } from "@/lib/filter";
+import { loadPipeline } from "@/lib/market";
 import type { PipelineConfig } from "@/lib/config";
 import { visaRulesFor } from "@/lib/visa/rules";
 import { dealBreakerSchema, DEAL_BREAKER_HARD_LIMITS, type DealBreaker } from "@/lib/config/schemas/preferences";
@@ -169,4 +171,10 @@ export async function previewDealBreakerDrafts(db: Db, drafts: z.infer<typeof pr
     return rule ?? { id: result.data.id, status: "invalid", count: 0, samples: [], ms: 0 };
   });
   return { total: preview.total, partial: preview.partial, rules };
+}
+
+/** The web form and MCP share the same saved market, personal context and sample limit. */
+export async function previewPersonalDealBreakers(db: Db, drafts: z.infer<typeof previewRequestSchema>) {
+  const pipeline = loadPipeline();
+  return previewDealBreakerDrafts(db, drafts, { pipeline, me: currentMe(), sampleLimit: pipeline.filter.deal_breakers.preview_samples });
 }

@@ -2,21 +2,12 @@
 
 import { useId, useState, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
-import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
-type LoginError = "invalid" | "tooMany" | "unavailable" | "network";
-
-const successSchema = z.object({ next: z.string() });
-const throttledSchema = z.object({ retry_after: z.number().int().positive() });
-
-/** Where to go after a login: an internal path only (the server already cleaned it; this is the second line). */
-function internal(path: string): string {
-  return path.startsWith("/") && !path.startsWith("//") && !path.includes("\\") ? path : "/";
-}
+import { postLogin, type LoginError } from "./post-login";
 
 /**
  * The password form. It posts to `/api/auth/login` and, once the session cookie is set, loads `next` as a full page (so
@@ -34,29 +25,13 @@ export function LoginForm({ next, insecure = false }: { next: string; insecure?:
     if (pending) return;
     setPending(true);
     setError(null);
-    try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { accept: "application/json", "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ password, next }).toString(),
-        credentials: "same-origin",
-      });
-      const body: unknown = await response.json().catch(() => null);
-      if (response.ok) {
-        const parsed = successSchema.safeParse(body);
-        window.location.assign(internal(parsed.success ? parsed.data.next : next));
-        return;
-      }
-      setPassword("");
-      if (response.status === 429) {
-        const parsed = throttledSchema.safeParse(body);
-        setError({ kind: "tooMany", minutes: Math.max(1, Math.ceil((parsed.success ? parsed.data.retry_after : 60) / 60)) });
-      } else {
-        setError({ kind: response.status === 401 ? "invalid" : "unavailable" });
-      }
-    } catch {
-      setError({ kind: "network" });
+    const result = await postLogin(password, next);
+    if (result.ok) {
+      window.location.assign(result.next);
+      return;
     }
+    if (result.error !== "network") setPassword("");
+    setError({ kind: result.error, ...(result.minutes === undefined ? {} : { minutes: result.minutes }) });
     setPending(false);
   }
 

@@ -5,6 +5,7 @@ import { DEFAULT_PERMISSIONS, permissionSchema } from "@/lib/agent-access/permis
 /** Bounds of the limits: a typo cannot turn a tool into a dump of the whole database. */
 export const MCP_MAX_RESULTS_CAP = 100;
 export const MCP_MAX_DESCRIPTION_CHARS_CAP = 100_000;
+export const MCP_MAX_RAW_CHARS_CAP = 1_000_000;
 export const MCP_MAX_DAILY_CAP = 100_000;
 
 export const AGENT_ACTIONS = [
@@ -41,7 +42,7 @@ const budgetsSchema = z.strictObject({
 
 /**
  * config/mcp.yaml: the optional MCP server (`pnpm mcp:serve`, docs/mcp.md) that lets an MCP client the user configured (Claude
- * Desktop, Claude Code, ...) query jobs and applications over stdio and, with writer permissions, add answer versions. Every key has a default, so a missing file means
+ * Desktop, Claude Code, ...) query jobs and applications over stdio or optional token-protected HTTP and, with writer permissions, add answer versions. Every key has a default, so a missing file means
  * "off" and the defaults below. What the server may return is fixed in code (`src/lib/mcp/dto/index.ts`), not here.
  */
 export const mcpSchema = z.strictObject({
@@ -53,6 +54,22 @@ export const mcpSchema = z.strictObject({
   stdio: z.strictObject({
     permissions: z.array(permissionSchema).default([...DEFAULT_PERMISSIONS]),
   }).default({ permissions: [...DEFAULT_PERMISSIONS] }),
+  http: z.strictObject({
+    enabled: z.boolean().default(false),
+    max_body_bytes: z.number().int().min(1024).max(4_194_304).default(262_144),
+    pool: z.strictObject({
+      read_max: z.number().int().min(1).max(20).default(3),
+      write_max: z.number().int().min(1).max(10).default(2),
+      max_concurrent: z.number().int().min(1).max(64).default(8),
+    }).prefault({}),
+    throttle: z.strictObject({
+      max_failures: z.number().int().min(1).max(100).default(5),
+      window_minutes: z.number().int().min(1).max(1440).default(10),
+      lockout_minutes: z.number().int().min(1).max(1440).default(15),
+      global_max_failures: z.number().int().min(1).max(10_000).default(50),
+      global_delay_seconds: z.number().int().min(1).max(3600).default(2),
+    }).prefault({}),
+  }).prefault({}),
   audit: z.strictObject({
     retention_days: z.number().int().min(1).max(3650).default(90),
     connect_timeout_seconds: z.number().int().min(1).max(30).default(2),
@@ -66,12 +83,14 @@ export const mcpSchema = z.strictObject({
   }).default({ retention_days: 90, connect_timeout_seconds: 2, statement_timeout_ms: 1500, lock_timeout_ms: 200, write_timeout_ms: 2000 }),
   limits: z
     .strictObject({
-      /** Most jobs or applications one call returns; the rest is cut and the answer says so. */
+      /** Most results per list or usage dimension, including expanded runs, activity spans and events; truncation is marked. */
       max_results: z.number().int().min(1).max(MCP_MAX_RESULTS_CAP).default(20),
       /** Most characters of a JD one `get_job` call returns; a longer JD is cut and marked as cut. */
       max_description_chars: z.number().int().min(500).max(MCP_MAX_DESCRIPTION_CHARS_CAP).default(12_000),
+      /** Total serialized payload characters across all sources of one raw-posting call. */
+      max_raw_chars: z.number().int().min(500).max(MCP_MAX_RAW_CHARS_CAP).default(20_000),
     })
-    .default({ max_results: 20, max_description_chars: 12_000 }),
+    .default({ max_results: 20, max_description_chars: 12_000, max_raw_chars: 20_000 }),
   budgets: budgetsSchema,
 });
 
