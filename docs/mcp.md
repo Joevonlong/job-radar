@@ -150,7 +150,7 @@ The server reads the database the same way the host-side `ai-worker` does: from 
 ### Claude Code
 
 ```bash
-claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:serve
+claude mcp add job-radar -- /absolute/path/to/job-radar/scripts/mcp-stdio.sh
 ```
 
 Add `--scope user` to have it in every project. `claude mcp list` shows whether it connected.
@@ -163,21 +163,20 @@ Settings → Developer → Edit Config opens `claude_desktop_config.json`. Add:
 {
   "mcpServers": {
     "job-radar": {
-      "command": "/absolute/path/to/pnpm",
-      "args": ["--silent", "--dir", "/absolute/path/to/job-radar", "mcp:serve"],
-      "env": { "PATH": "/folder/of/node:/usr/bin:/bin" }
+      "command": "/absolute/path/to/job-radar/scripts/mcp-stdio.sh",
+      "env": { "PATH": "/folder/of/pnpm:/folder/of/node:/usr/bin:/bin" }
     }
   }
 }
 ```
 
-- Use absolute paths: an app started from the Dock does not get your shell's `PATH`. `which pnpm` gives the command;
-  `dirname "$(which node)"` gives the folder for `PATH` (pnpm needs `node`).
-- `--silent` keeps pnpm's own header line off stdout, which belongs to the protocol.
+- Use absolute paths: an app started from the Dock does not get your shell's `PATH`. The script runs `pnpm`, which needs `node`:
+  put the folders of `which pnpm` and `which node` (`dirname`) into `PATH`.
+- `scripts/mcp-stdio.sh` changes into the project and runs `pnpm --silent mcp:serve`, so it works whatever directory the client starts it from (pnpm picks its version by the current directory) and keeps pnpm's own header line off stdout, which belongs to the protocol. Do not call `pnpm --dir <project> mcp:serve` directly from a client: it fails under corepack.
 - **Project on an external disk** (macOS): the first start may be blocked until you allow Claude to access removable volumes
   (System Settings → Privacy & Security → Files and Folders). The client's log for the server then shows a permission error.
 
-Other MCP clients work the same way: a stdio server, command `pnpm`, arguments `--silent --dir <project> mcp:serve`.
+Other MCP clients work the same way: a stdio server whose command is `/absolute/path/to/job-radar/scripts/mcp-stdio.sh`, no arguments.
 
 ## Managing it on the web
 
@@ -528,6 +527,7 @@ GRANT USAGE ON SEQUENCE agent_calls_id_seq TO job_radar_ro;
 | `get_application_context` or `save_application_answer` is not offered | Its permission is absent from either list, or `writer.yaml: enabled` is `false`. Restart the client after changing either. |
 | "text does not match sentences" | The client sent two different answers. Send the same one in both, or leave `sentences` out. |
 | "already holds … versions" | See [Writing answers from your client](#writing-answers-from-your-client). |
+| The client shows "connection closed" or the server exits right away; its log mentions pnpm's version ("This project is configured to use … of pnpm") | pnpm was started from another directory, so corepack chose a different pnpm version. Launch it through `scripts/mcp-stdio.sh` as shown above instead of `pnpm --dir … mcp:serve`. |
 | `command not found` / `spawn pnpm ENOENT` | The client does not find `pnpm` or `node`: use absolute paths and set `PATH` in `env` (see Claude Desktop above). |
 | "The query failed (database)" | The stack is not running, or the database address in `.env` is not reachable from the host. `pnpm run doctor` checks both. |
 | "The MCP audit row could not be written (…)" in the client's log | The call itself answered; only its audit row is missing. `database`: the server runs with a SELECT-only role (grant `INSERT` on `agent_calls`, see [above](#optional-a-database-role-that-can-only-read)), or the database has not been migrated to this version yet (deploy the update with `scripts/ops/deploy.sh`, see [upgrade.md](upgrade.md)); until then `save_application_answer` fails as a whole with "The query failed (database)", because the answer and its row are saved together. `database` also covers a locked `agent_calls` table (for example during a migration) or a slow statement, because `audit.lock_timeout_ms` and `audit.statement_timeout_ms` fire before `audit.write_timeout_ms` with the defaults. `timeout`: the database or network did not answer within `audit.write_timeout_ms`, or the write queue was too long. Later calls write their rows again once the cause is gone. |

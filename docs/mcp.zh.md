@@ -122,7 +122,7 @@ stdio:
 ### Claude Code
 
 ```bash
-claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:serve
+claude mcp add job-radar -- /absolute/path/to/job-radar/scripts/mcp-stdio.sh
 ```
 
 加 `--scope user` 可以在所有项目里用。`claude mcp list` 显示是否连上。
@@ -135,19 +135,18 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 {
   "mcpServers": {
     "job-radar": {
-      "command": "/absolute/path/to/pnpm",
-      "args": ["--silent", "--dir", "/absolute/path/to/job-radar", "mcp:serve"],
-      "env": { "PATH": "/folder/of/node:/usr/bin:/bin" }
+      "command": "/absolute/path/to/job-radar/scripts/mcp-stdio.sh",
+      "env": { "PATH": "/folder/of/pnpm:/folder/of/node:/usr/bin:/bin" }
     }
   }
 }
 ```
 
-- 用绝对路径：从程序坞启动的应用拿不到你 shell 里的 `PATH`。`which pnpm` 给出命令；`dirname "$(which node)"` 给出要放进 `PATH` 的目录（pnpm 需要 `node`）。
-- `--silent` 让 pnpm 不往 stdout 打印自己的标题行，stdout 只属于协议。
+- 用绝对路径：从程序坞启动的应用拿不到你 shell 里的 `PATH`。脚本会运行 `pnpm`，而 pnpm 需要 `node`：把 `which pnpm` 和 `which node` 所在的目录（`dirname`）都放进 `PATH`。
+- `scripts/mcp-stdio.sh` 会先进入项目目录再运行 `pnpm --silent mcp:serve`：不论客户端从哪个目录启动都能用（pnpm 按当前目录选版本），并且 pnpm 的标题行不会进 stdout（stdout 只属于协议）。不要让客户端直接调用 `pnpm --dir <项目> mcp:serve`：在 corepack 下会失败。
 - **项目在外接磁盘上**（macOS）：首次启动可能被拦下，直到你允许 Claude 访问可移除宗卷（系统设置 → 隐私与安全性 → 文件与文件夹）。这时客户端里该服务的日志会显示权限错误。
 
-其他 MCP 客户端同理：stdio 服务，命令 `pnpm`，参数 `--silent --dir <项目目录> mcp:serve`。
+其他 MCP 客户端同理：stdio 服务，命令 `/absolute/path/to/job-radar/scripts/mcp-stdio.sh`，不带参数。
 
 ## 在网页上管理
 
@@ -459,6 +458,7 @@ GRANT USAGE ON SEQUENCE agent_calls_id_seq TO job_radar_ro;
 | 客户端里没有 `get_application_context` 或 `save_application_answer` | 所需权限不在两份列表中，或 `writer.yaml: enabled` 是 `false`。改完要重启客户端。 |
 | "text 和 sentences 对不上" | 客户端发了两份不同的答案。两边发同一份，或者不传 `sentences`。 |
 | "已有 … 个版本" | 见[从客户端写答案](#从客户端写答案)。 |
+| 客户端显示“连接已关闭”或服务立刻退出，日志里有 pnpm 版本提示（“This project is configured to use … of pnpm”） | pnpm 是从别的目录启动的，corepack 选了另一个 pnpm 版本。按上文改用 `scripts/mcp-stdio.sh` 启动，不要用 `pnpm --dir … mcp:serve`。 |
 | `command not found` / `spawn pnpm ENOENT` | 客户端找不到 `pnpm` 或 `node`：用绝对路径，并在 `env` 里设 `PATH`（见上面 Claude Desktop 一节）。 |
 | "查询失败（database）" | 整套服务没在运行，或 `.env` 里的数据库地址从宿主机连不上。`pnpm run doctor` 两项都会查。 |
 | 客户端日志里有"MCP 调用记录写不进去（…）" | 调用本身已经回答，只是少了审计行。`database`：服务用的是只有 SELECT 权限的角色（给 `agent_calls` 授 `INSERT`，见[上文](#可选只能读的数据库角色)），或数据库还没迁移到这个版本（用 `scripts/ops/deploy.sh` 部署这次更新，见 [upgrade.zh.md](upgrade.zh.md)）；迁移之前 `save_application_answer` 会整个失败，报"查询失败（database）"，因为答案和它的审计行一起保存。`agent_calls` 表被锁住（比如正在迁移）或语句太慢，默认设置下也报 `database`，因为 `audit.lock_timeout_ms` 和 `audit.statement_timeout_ms` 比 `audit.write_timeout_ms` 先到。`timeout`：数据库或网络在 `audit.write_timeout_ms` 内没有回应，或写入队列太长。原因消除后，之后的调用会照常写入。 |
