@@ -39,6 +39,8 @@ describe("the activity URL query", () => {
     });
     expect(parseAgentActivityQuery({ connection: "12" }).connection).toBe(12);
     expect(parseAgentActivityQuery({ connection: "12; drop", tool: "A B", result: "nope", range: "year", before: "yesterday" })).toEqual({});
+    expect(parseAgentActivityQuery({ before: "2026-13-45T99:00:00.000000Z~1" }).before).toBeUndefined();
+    expect(parseAgentActivityQuery({ before: "2026-02-31T10:00:00.000000Z~1" }).before).toBeUndefined();
     expect(parseAgentActivityQuery({ tool: ["get_job", "x"] }).tool).toBe("get_job");
   });
 

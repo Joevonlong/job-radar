@@ -24,7 +24,10 @@ import { liveMcpSettings } from "./authorize";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const cursorSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z~\d{1,15}$/);
+const cursorSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z~\d{1,15}$/)
+  .refine((value) => Number.isFinite(Date.parse(value.slice(0, 19) + "Z")) && new Date(value.slice(0, 19) + "Z").toISOString().startsWith(value.slice(0, 19)));
 
 /** The URL query of the page; a value that does not parse is ignored, so a hand-edited link still opens. */
 export const agentActivityQuerySchema = z.object({
