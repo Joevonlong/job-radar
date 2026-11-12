@@ -9863,6 +9863,7 @@
         "ok": "成功",
         "not_permitted": "无权限",
         "invalid_input": "输入无效",
+        "over_budget": "超出额度",
         "error": "出错"
       },
       "errorWith": "{result}：{category}",

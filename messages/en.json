@@ -9863,6 +9863,7 @@
         "ok": "OK",
         "not_permitted": "Not permitted",
         "invalid_input": "Invalid input",
+        "over_budget": "Over budget",
         "error": "Error"
       },
       "errorWith": "{result}: {category}",

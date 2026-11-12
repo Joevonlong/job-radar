@@ -16,10 +16,11 @@ type Translator = ReturnType<typeof useTranslations<"agents.activity">>;
 const OUTCOME_BADGE: Record<string, "status-good" | "status-warn" | "status" | "gate-bad"> = {
   ok: "status-good",
   not_permitted: "status-warn",
+  over_budget: "status-warn",
   invalid_input: "status",
   error: "gate-bad",
 };
-const OUTCOME_FILL: Record<string, string> = { ok: "bg-good", not_permitted: "bg-warn", invalid_input: "bg-soft", error: "bg-bad" };
+const OUTCOME_FILL: Record<string, string> = { ok: "bg-good", not_permitted: "bg-warn", over_budget: "bg-hi", invalid_input: "bg-soft", error: "bg-bad" };
 
 function areaOf(permission: string): string {
   if (permission === "actions:run") return "actions";
@@ -27,7 +28,7 @@ function areaOf(permission: string): string {
   return permission.split(":")[0] ?? permission;
 }
 
-const KNOWN_OUTCOMES = ["ok", "not_permitted", "invalid_input", "error"] as const;
+const KNOWN_OUTCOMES = ["ok", "not_permitted", "invalid_input", "over_budget", "error"] as const;
 const DATA_AREAS = ["jobs", "raw", "tracking", "notes", "match", "profile", "career", "writer", "replies", "ops", "config"] as const;
 
 function outcomeLabel(t: Translator, outcome: string): string {

@@ -60,7 +60,7 @@ export async function seedAgentCalls(db: Executor, input: { now: Date }): Promis
     const tokenId = source === 0 ? null : source === 1 ? laptop : notebook;
     const minutesAgo = n < 4 ? 3 + n : Math.round(n * n * 3.3 + n * 40);
     const calledAt = new Date(now.getTime() - minutesAgo * 60_000);
-    const failure = n % 11 === 5 ? "error" : n % 13 === 6 ? "not_permitted" : n % 17 === 8 ? "invalid_input" : "ok";
+    const failure = n % 11 === 5 ? "error" : n % 13 === 6 ? "not_permitted" : n % 17 === 8 ? "invalid_input" : n % 19 === 9 ? "over_budget" : "ok";
     rows.push({
       calledAt,
       caller: tokenId === null ? "stdio" : `token:${tokenId}`,
