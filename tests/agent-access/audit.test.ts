@@ -10,7 +10,7 @@ import { mcpTranslator } from "@/lib/mcp/text";
 import { runLogged } from "@/lib/mcp/context";
 import { defaultContext } from "@/lib/mcp/server";
 
-vi.mock("@/lib/db/repos/agent-calls", () => ({ insertAgentCall: vi.fn(async () => undefined) }));
+vi.mock("@/lib/db/repos/agent-calls", () => ({ insertAgentCall: vi.fn(async () => 1) }));
 afterEach(() => vi.resetAllMocks());
 
 const entry: AuditEntry = {
@@ -74,7 +74,7 @@ describe("audit recorder", () => {
 
   it.each([false, true])("drains pending fire-and-forget inserts before closing exactly once (failure %s)", async (fails) => {
     const { recorder, opened } = fixture();
-    const gate = Promise.withResolvers<void>();
+    const gate = Promise.withResolvers<number>();
     vi.mocked(insertAgentCall).mockReturnValueOnce(gate.promise);
     void recorder.record(entry);
     const closing = recorder.close();
@@ -83,7 +83,7 @@ describe("audit recorder", () => {
     expect(opened).toHaveLength(1);
     expect(opened[0]!.end).not.toHaveBeenCalled();
     if (fails) gate.reject(new Error("private"));
-    else gate.resolve();
+    else gate.resolve(1);
     await closing;
     await recorder.close();
     expect(opened[0]!.end).toHaveBeenCalledExactlyOnceWith({ timeout: 0 });
@@ -99,7 +99,7 @@ describe("audit recorder", () => {
     const { recorder, opened, log } = fixture();
     const gate = Promise.withResolvers<void>();
     const ctx = defaultContext({} as Db, mcpSchema.parse({}), { audit: recorder, log: () => undefined, text });
-    vi.mocked(insertAgentCall).mockImplementation(async () => { expect(opened[0]!.end).not.toHaveBeenCalled(); });
+    vi.mocked(insertAgentCall).mockImplementation(async () => { expect(opened[0]!.end).not.toHaveBeenCalled(); return 1; });
     const call = runLogged(ctx, "get_job", async () => {
       await gate.promise;
       if (fails) throw new Error("private");
@@ -118,7 +118,7 @@ describe("audit recorder", () => {
 
 describe("audit recorder deadlines", () => {
   afterEach(() => vi.useRealTimers());
-  const never = () => new Promise<void>(() => undefined);
+  const never = () => new Promise<number>(() => undefined);
 
   it("returns a read on time when its row stalls, logs one timeout line and destroys the stalled connection", async () => {
     vi.useFakeTimers();
@@ -138,7 +138,7 @@ describe("audit recorder deadlines", () => {
   it("writes the next row once on a new connection and never repeats the stalled insert", async () => {
     vi.useFakeTimers();
     const { recorder, opened, log } = fixture();
-    vi.mocked(insertAgentCall).mockImplementationOnce(never).mockResolvedValue(undefined);
+    vi.mocked(insertAgentCall).mockImplementationOnce(never).mockResolvedValue(1);
     const stalled = recorder.record(entry);
     await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS);
     await stalled;
@@ -173,7 +173,7 @@ describe("audit recorder deadlines", () => {
   it("closes within the deadline when a call never ends and a row never answers, and writes nothing afterwards", async () => {
     vi.useFakeTimers();
     const { recorder, opened, log } = fixture();
-    vi.mocked(insertAgentCall).mockImplementationOnce(never).mockResolvedValue(undefined);
+    vi.mocked(insertAgentCall).mockImplementationOnce(never).mockResolvedValue(1);
     const ctx = defaultContext({} as Db, mcpSchema.parse({}), { audit: recorder, log: () => undefined, text });
     const hanging = runLogged(ctx, "get_job", () => new Promise<never>(() => undefined));
     void recorder.record(entry);

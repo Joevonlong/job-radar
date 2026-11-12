@@ -1,7 +1,8 @@
 # MCP server (docs/mcp.md): lets an MCP client you configure yourself (Claude Desktop, Claude Code, ...) query your jobs and
-# applications. Local clients start `pnpm mcp:serve` over stdio; optional HTTP uses the web port and agent tokens. Nothing
-# can be written, except that `save_application_answer`, when you grant writer:write, adds answer versions; it cannot change or
-# delete any. Each call also adds one metadata row to the local `agent_calls` table (see `audit` below).
+# applications. Local clients start `pnpm mcp:serve` over stdio; optional HTTP uses the web port and agent tokens.
+# writer:write adds answer versions (save_application_answer cannot change or delete any); tracking:write updates
+# application fields and can undo its own writes. Each call also adds one metadata row to the local `agent_calls`
+# table (see `audit` below).
 # Privacy: whatever the tools return is handed by your client to the model provider it uses (Anthropic for Claude, ...).
 # What may be returned is fixed in code: job facts, source links, scores and ranks, signals with their JD quotes, the JD after
 # AI-trap cleaning, and the status, dates, next step and interview rounds of your applications. Match and note fields require
@@ -35,6 +36,7 @@ enabled: false
 # get_job_raw: raw:read (off by default; untrusted, uncleaned payloads may include recruiter contact data)
 # get_system_status / list_cycles / list_channels / get_activity_log / get_ai_usage: ops:read (opt-in)
 # Operations expose codes, counts and usage aggregates only; no raw errors, paths or job-level usage.
+# set_application_status / mark_applied / set_next_action / set_interview_rounds / undo_change: tracking:write
 # match:read / notes:read add fields to job tools; other catalog ids are accepted but do not give tools yet.
 permissions:
   - jobs:read

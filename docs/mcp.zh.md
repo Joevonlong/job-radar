@@ -7,7 +7,7 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 - **默认关闭。** 在 `mcp.yaml` 里设 `enabled: true` 之前什么都不会发生。
 - **本机 stdio 或可选 HTTP。** stdio 不开端口、不需要 token；HTTP 使用 Web 端口，每个 POST 请求都必须验证 agent token。
-- **只读，有一个由权限控制的例外。** 数据库读取使用只读会话，个人数据读取还会访问本机画像文件。唯一能写的工具 `save_application_answer` 需要 `writer:write` 权限，也只能新增答案版本。服务从不触发采集或 AI 调用。
+- **读取和明确授权的写入。** 数据库读取使用只读会话，个人数据读取还会访问本机画像文件。`writer:write` 可新增答案版本；`tracking:write` 可修改申请状态、下一步和面试轮次，并撤销自己的修改。写入使用单独连接。状态变化可能排队自动调研；MCP 进程本身不触发采集，也不调用 AI 服务商。
 
 服务还会通过单独的审计连接，把调用元数据存在本机的 `agent_calls` 表里（见[调用审计](#调用审计)）。
 
@@ -98,9 +98,11 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 `search_jobs` 和 `get_job` 共用 `jobs:read`，`list_applications` 需要 `tracking:read`。权限目录中的其他 id 也能填写；`match:read` 为搜索卡片和详情增加匹配字段块，`notes:read` 为 `get_job` 增加备注字段块。版本 2 的工具开关会迁移为两份权限列表；如果此前只关了一个岗位工具，`jobs:read` 会同时提供两个，`config:migrate` 会打印提示。移除 `jobs:read` 可以同时关闭两个。写进 `mcp.yaml` 的权限也适用于以后版本在它下面新增的工具，所以只授予应当可读或可写的权限。
 
-`budgets` 为后续 agent 动作工具预留每日额度；现有工具还不使用这些计数。
+`budgets` 设置 agent 动作的每日额度。
 `per_caller` 分别计算本地 stdio 连接和每个 token 的额度，限制采集请求、岗位翻译、拆解、薪资查询、公司查询、回答起草和简历定制；`score_jobs` 按批次里的每个岗位计数。
-薪资与公司查询也包括 agent 写入间接触发的自动研究。某项额度为 `0` 就禁止 agent 触发该动作。
+agent 写入触发自动调研时，每项公司查询占用 `research_company` 的 1 单位，每项薪资查询占用 `research_salary` 的 1 单位，仅对新排队的任务计费。
+每次写入所需的预算必须全部获准：任何一个额度桶拒绝，就跳过该次写入的全部调研（`research: "budget_skipped"`）。
+未新增入队的任务会退回额度；由此触发的岗位拆解不计费。某项额度为 `0` 就禁止 agent 触发该动作。
 `total` 统计所有 caller、所有动作的请求数，不是岗位数：一次给 40 个岗位打分的 `score_jobs` 批量请求占该 caller `score_jobs` 额度的 40，只占 `total` 的 1。`0` 禁止全部 agent 动作。
 日期与下次重置时间遵循 `schedule.yaml` 的时区及夏令时。runner 每小时清理早于「当前本地日期减去 `audit.retention_days`」的计数行。
 这些设置有默认值，仍使用 `config_version: 3`。
@@ -307,6 +309,11 @@ HTTP 工具审计行带 `caller: token`、token id 和 `transport: http`，不�
 | `list_favorites` | `tracking:read`：全部收藏岗位，含已关闭、被过滤和忽略的岗位。`sort` 为默认的 `starred`（最新优先）或 `rank`，可传 `limit`；`notes:read` 增加每项的 `notes.favorite_note`。 |
 | `get_application_context` | **默认关闭。** 写一个岗位答案所需的全部材料（`job_id`）：岗位事实、清洗后的 JD、拆解要点、公司背景和契合要点、问题、每题选中的材料和已保存的版本（最新的在前，每题最多 `max_results` 个）。 |
 | `save_application_answer` | **默认关闭。** 新增一个答案版本（`job_id`、`question_id`、`text`，可选 `sentences`）。 |
+| `set_application_status` | `tracking:write`：将 `job_id` 设为 `status`，需要时创建申请。允许网页状态选择器中的全部状态。 |
+| `mark_applied` | `tracking:write`：将 `job_id` 标为已投递，仅允许从新建、感兴趣、准备中或归档出发；已经投递则不变，更后面的阶段拒绝。 |
+| `set_next_action` | `tracking:write`：设置已有申请的 `job_id`、`next_action`、`next_action_date`（`YYYY-MM-DD` 或空值）。 |
+| `set_interview_rounds` | `tracking:write`：设置已有申请的 `job_id` 和 `rounds`，输入上限与网页一致。 |
+| `undo_change` | `tracking:write`：用 `audit_id` 撤销当前调用方自己的修改，规则见下文。 |
 
 `search_jobs` 与 `/jobs` 共用 URL 状态筛选函数：未传 scope 沿用当前岗位规则，日期比较首次发现时间。与网页一样，`since` 晚于 `until` 时会交换两端；旧 MCP 路径对此返回空集。新增 `scope`（`current`、`archive`、`all`）、`unseen_only` 和 `favorites_only`（都需要 `tracking:read`；没有时，把任一个设为 `true` 的调用按 `not_permitted` 拒绝）、`visa`（`offered`、`not_denied`）、`ghost`（`only`、`hide`）；签证和幽灵岗位筛选仅在网页对应筛选可用时生效。所有范围始终隐藏硬过滤排除的岗位，默认还隐藏关闭和休眠岗位。MCP 的搜索计划仍容错读取 pipeline 配置，读取失败时按文本匹配，不使用市场词汇。四个显式排序都与网页对应；无搜索词时 MCP 默认按 rank 排序，归档范围也如此（网页归档默认按最后刊登时间）。
 
@@ -381,6 +388,33 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 
 每次调用往 stderr 写一行（客户端会保存在该服务的日志里）：工具名、返回条数、耗时、成功与否。从不写参数和结果。错误只给类别（`database`、`not_found`、`invalid_input` 等），不含地址或路径。
 
+## 追踪写入和撤销
+
+在 `permissions` 和 `stdio.permissions` 中都加入 `tracking:write`，然后重启客户端，让服务打开写连接。
+缺少有效权限或写连接时，这些工具都不在列表中。撤掉权限或关闭 MCP 后，后续调用立即拒绝，无需重启。写作功能开关与此独立。
+
+四个工具调用网页使用的同一组服务。成功回执仅含 `audit_id`、`job_id`、`field`、`undoable`、`research` 和提示，不回显新旧文字。
+空白下一步文字会清除文字；空值或空日期字符串会清除日期。状态变化保留备注、追加事件，并按网页规则唤醒休眠岗位。
+本版本不提供备注、收藏、已看、关闭、过滤覆盖或回信的写工具。
+
+`undo_change` 接收写入的 `audit_id`，要求同一调用方且仍有原数据区的写权限。服务锁定并计算当前字段指纹，
+与写入后的指纹不同时返回冲突，不还原；其他字段保持不变。状态指纹还包括状态时间和最新事件，避免“改走再改回”掩盖后续历史。
+每次修改只能成功撤销一次。撤销有自己的审计行，不能再次撤销；未改变值的写入仍记审计，但不可撤销。审计过期后不再有撤销数据。
+
+状态撤销追加一次反向事件，不删历史，也不走网页 toast 在历史变化后直接覆盖旧状态的回退分支。
+若原写入创建了申请，撤销将其状态还原为 `new`，保留申请和历史。没有删除工具。
+撤销输出只有恢复的字段名、审计 id、调研结果和提示；即使有读取权限，也不返回旧私人文字。所有者活动页的撤销控件不在本版本内。
+
+符合规则的状态变化（包括还原）会按 `research.yaml` 触发自动调研。agent 写入触发的每项公司查询占用 `research_company` 的 1 单位，
+每项薪资查询占用 `research_salary` 的 1 单位，仅对新排队的任务计费。排队前先通过共享每日预算接口预留这些额度。
+每次写入所需的预算必须全部获准：任何一个额度桶拒绝或预算不可用时，追踪写入仍成功，跳过该次写入的全部调研，
+返回 `research: "budget_skipped"` 并提示。未新增入队的任务（包括缓存命中、合并已有任务）会退回额度。
+由此触发的岗位拆解不计费。所有者网页操作不扣 agent 额度；原有调研上限继续生效。
+agent 预算预留、排队任务和写入审计一起提交，事务失败一起回滚。撤销不取消已排队调研、不退回已排队或消耗的费用，也不能收回已发给模型的内容。
+
+有写权限的 agent 读到恶意文字后仍可能把申请进度改乱。撤销帮助恢复，不能预防，后来的修改也可能造成撤销冲突。
+撤掉写权限或关闭 MCP 可阻止后续调用；使用 token 的连接应吊销 token 止损。本版本提供本机 stdio，应关闭该连接或撤掉它的权限。
+
 ## 调用审计
 
 每次工具调用还会在本机的 `agent_calls` 表里加一行，`tools/list` 不记。每行只有数字 id、调用时间（`called_at`）、
@@ -393,10 +427,11 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 `audit.write_timeout_ms`，排在别的行后面的时间也算在内。写不进去或超时，读取仍照常回答，stderr 另写一行，只说失败类别
 （超时是 `timeout`）。超时的行不会重发，因为数据库可能已经存下了；服务丢掉那个会话，下一行再开新的。保存答案时，答案版本和成功的审计行走写入连接的同一个事务：
 一起保存，或一起不保存。审计插入失败会回滚答案、让调用失败，然后尝试通过审计连接记录这次错误。
+追踪写入还会在同一事务向 `agent_undo` 保存本机旧值和新值指纹，任一插入失败都回滚业务写入。活动查询按该行是否存在及 `undone_at` 派生“可撤销／已撤销／不可撤销”，不重复存一份状态。
 原来的 stderr 调用日志行不变。
 
 `mcp.yaml` 的 `audit.retention_days` 默认 **90 天**（1–3650）。runner 定期删掉更早的记录，MCP 关着也会清理；
-runner 没运行就会继续保留。旧数据库备份仍可能含已删的行。`audit` 的其他键限制专用连接的等待时间：
+外键级联删除对应的 `agent_undo` 行，包括私人旧值；runner 没运行就会继续保留。旧数据库备份仍可能含已删的行。`audit` 的其他键限制专用连接的等待时间：
 
 | 键 | 默认 | 范围 |
 |---|---|---|
@@ -411,7 +446,7 @@ runner 没运行就会继续保留。旧数据库备份仍可能含已删的行�
 
 ## 可选：只能读的数据库角色
 
-用这个角色后 `save_application_answer` 无法保存。
+用这个角色后所有写工具都无法保存。
 
 只读会话防的是误写，不是安全边界。要更硬的边界，给服务一个只有 `SELECT` 权限的角色：
 
