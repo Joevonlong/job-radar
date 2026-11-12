@@ -5,6 +5,7 @@ import { trapsTranslator } from "@/lib/traps/text";
 
 import { diskLevel, internalDataPath, volumeLabel } from "../../disk";
 import type { DockerDataLocation } from "../../docker-data";
+import { mcpVerdict } from "../mcp-verdict";
 import { ageSeconds, cached, fail, formatAgo, formatBytes, ok, warn } from "../helpers";
 import { SkipCheck, type CheckOutcome, type DoctorCheck, type DoctorContext } from "../types";
 
@@ -186,6 +187,7 @@ export const mcpCheck: DoctorCheck = {
   ...mcpSpec,
   async run(ctx) {
     const probe = await ctx.probes.mcp();
+    const verdict = mcpVerdict(probe);
     if (probe.state === "config_error") return warn(mcpSpec, ctx.t("checks.data.mcp.configError", { problem: probe.problem }), ctx.t("checks.data.mcp.configHint"));
     const summary = probe.enabled
       ? ctx.t("checks.data.mcp.on", { effective: probe.effective.join(", ") || ctx.t("checks.data.mcp.none"), matrix: probe.permissions.join(", ") || ctx.t("checks.data.mcp.none"), days: probe.auditRetentionDays })
@@ -194,8 +196,8 @@ export const mcpCheck: DoctorCheck = {
       enabled: String(probe.httpEnabled),
       count: probe.activeTokens === null ? ctx.t("checks.data.mcp.unknown") : String(probe.activeTokens),
       expiry: probe.activeTokens === null ? ctx.t("checks.data.mcp.unknown") : probe.nearestExpiry?.toISOString() ?? ctx.t("checks.data.mcp.none"),
-    })}`;
-    if (probe.enabled && probe.httpEnabled && !probe.webPasswordUsable) return warn(mcpSpec, `${detail} ${ctx.t("checks.data.mcp.passwordRequired")}`, ctx.t("checks.data.mcp.passwordHint"));
+    })} ${ctx.t("checks.data.mcp.manage")}`;
+    if (verdict === "password_required") return warn(mcpSpec, `${detail} ${ctx.t("checks.data.mcp.passwordRequired")}`, ctx.t("checks.data.mcp.passwordHint"));
     return ok(mcpSpec, detail);
   },
 };

@@ -64,6 +64,8 @@ export type AdvancedFailure =
   /** The text changes a protected key (the live check reports which one; this is the write's own refusal). */
   | { status: "protected" }
   | { status: "dbUnavailable" }
+  /** mcp.yaml while a web password is set and the request has no session: it is changed on the agent access page after logging in. */
+  | { status: "session_required" }
   | { status: "failed" };
 
 export type AdvancedSaveResult = { status: "saved"; hash: string; layer: AdvancedLayer; text: string; canReset: boolean; backup: boolean } | AdvancedFailure;

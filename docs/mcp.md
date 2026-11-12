@@ -108,7 +108,7 @@ Removing the permission hides the corresponding tools. Switching either feature 
 
 ## Turning it on
 
-1. Open `mcp.yaml` (Settings → Advanced, or `data/config/mcp.yaml`) and set `enabled: true`. The global `permissions` matrix caps every connection; the local grant is
+1. Switch on "Allow agent access" in Settings → Agent access, or open `mcp.yaml` (Settings → Advanced, or `data/config/mcp.yaml`) and set `enabled: true`. The global `permissions` matrix caps every connection; the local grant is
    `stdio.permissions`, and only their intersection is effective. Both default to `jobs:read` and `tracking:read`; `limits` caps how many items one call returns (`max_results`, at most 100) and how long a JD may be
    (`max_description_chars`), plus the combined raw payload length (`max_raw_chars`).
 2. Check it: `pnpm run doctor` shows `data.mcp` as on, with the global matrix, effective stdio permissions, HTTP switch, usable-password warning, active token count and nearest active expiry.
@@ -178,6 +178,14 @@ Settings → Developer → Edit Config opens `claude_desktop_config.json`. Add:
   (System Settings → Privacy & Security → Files and Folders). The client's log for the server then shows a permission error.
 
 Other MCP clients work the same way: a stdio server, command `pnpm`, arguments `--silent --dir <project> mcp:serve`.
+
+## Managing it on the web
+
+Settings → Agent access (`/settings/agents`) sets the keys of step 1: the master switch, the HTTP switch, the global matrix and the local stdio grant; see [settings.md](settings.md#agent-access).
+
+Once a web password is set, these changes need a real session. Every other page lets a visit from the host skip the login, but another process on the same machine could use that to widen an agent's access, so this page asks for the password once more. It shows a sign-in card that uses the normal login and brings you back to the page. The same rule covers `mcp.yaml` in the advanced editor (save, restore default, repair). Without a web password the page works without a sign-in, and HTTP stays off, because HTTP needs the password. Editing `data/config/mcp.yaml` by hand on the host is not affected.
+
+What the session gate does not cover: it stops processes that only reach the dashboard over the network. A process running as your user with access to the files can edit `mcp.yaml` directly, gate or not. Use a strong web password. When the page shows the HTTP address as plain `http://` to another host, a client using it sends its bearer token in clear text: use it only on localhost or over Tailscale (HTTPS).
 
 ## Reaching it from other devices (HTTP)
 

@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ADVANCED_NAMES, advancedNameOfStem, advancedStem, canResetFile, loadAdvancedFile, loadAdvancedIndex } from "@/lib/settings/advanced/view";
 import { SLOW_PATTERN_MESSAGE } from "@/lib/config/interests-lint";
@@ -243,5 +243,44 @@ describe("canResetFile", () => {
   ])("%s", (_label, name, setup, expected) => {
     setup();
     expect(canResetFile(name as Parameters<typeof canResetFile>[0])).toBe(expected);
+  });
+});
+
+describe("mcp.yaml needs a session once a web password is set", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("refuses to save, reset or repair it without one, and leaves the file as it was", async () => {
+    fs.writeFileSync(userFile("mcp.yaml"), `${userText("mcp.yaml")}# mine\n`);
+    const data = opened("mcp");
+    const before = userText("mcp.yaml");
+    const save = { file: "mcp", text: data.text.replace(/^enabled: false$/m, "enabled: true"), baseHash: data.hash, baseLayer: data.layer, confirmOverride: false };
+    expect(await saveAdvanced(save, { ownerSession: "login_required" })).toEqual({ status: "session_required" });
+    expect(await saveAdvanced(save)).toEqual({ status: "session_required" });
+    expect(await resetAdvanced({ file: "mcp", baseHash: data.hash, baseLayer: data.layer }, { ownerSession: "login_required" })).toEqual({ status: "session_required" });
+    expect(userText("mcp.yaml")).toBe(before);
+
+    fs.writeFileSync(userFile("mcp.yaml"), "enabled: [oops\n");
+    const broken = opened("mcp");
+    expect(await saveAdvanced({ ...save, text: before, baseHash: broken.hash, baseLayer: broken.layer }, { ownerSession: "login_required" })).toEqual({ status: "session_required" });
+    expect(userText("mcp.yaml")).toBe("enabled: [oops\n");
+  });
+
+  it("the protected-keys override does not lift it", async () => {
+    vi.stubEnv("JOB_RADAR_ALLOW_WEB_EDIT_PROTECTED", "1");
+    const data = opened("mcp");
+    const result = await saveAdvanced({ file: "mcp", text: `${data.text}# mine\n`, baseHash: data.hash, baseLayer: data.layer, confirmOverride: false }, { ownerSession: "login_required" });
+    expect(result).toEqual({ status: "session_required" });
+  });
+
+  it.each(["ok", "no_password"] as const)("saves and resets it with %s", async (ownerSession) => {
+    const data = opened("mcp");
+    expect((await saveAdvanced({ file: "mcp", text: `${data.text}# mine\n`, baseHash: data.hash, baseLayer: data.layer, confirmOverride: false }, { ownerSession })).status).toBe("saved");
+    const saved = opened("mcp");
+    expect((await resetAdvanced({ file: "mcp", baseHash: saved.hash, baseLayer: saved.layer }, { ownerSession })).status).toBe("reset");
+  });
+
+  it("other files do not need one", async () => {
+    const data = opened("notify");
+    expect((await saveAdvanced({ file: "notify", text: `${data.text}# mine\n`, baseHash: data.hash, baseLayer: data.layer, confirmOverride: false }, { ownerSession: "login_required" })).status).toBe("saved");
   });
 });

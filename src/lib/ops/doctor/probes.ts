@@ -32,15 +32,12 @@ import { readReleasesLock } from "../releases-lock";
 import { redact } from "./helpers";
 import { resolveHostDatabaseUrl } from "./database-url";
 import { probeDeliveries } from "./deliveries";
-import { effectivePermissions } from "@/lib/agent-access/permissions";
-import { readMcpSettings } from "@/lib/mcp/settings";
-import { activeAgentTokenStats } from "@/lib/db/repos/agent-tokens";
-import { readPasswordSetting } from "@/lib/security/password";
+import { probeMcp } from "./mcp-probe";
 import { countStalePendingReplies, countPendingReplies } from "@/lib/db/repos/replies";
 import { getRuntimeState } from "@/lib/db/repos/runtime-state";
 import { mailboxCredentials, REPLIES_LAST_READ_KEY } from "@/lib/replies/step";
 
-import type { CommandOutcome, DiskSpace, DoctorContext, DoctorProbes, HttpOutcome, McpProbe, OwnershipScan, RepliesProbe, TrapsProbe } from "./types";
+import type { CommandOutcome, DiskSpace, DoctorContext, DoctorProbes, HttpOutcome, OwnershipScan, RepliesProbe, TrapsProbe } from "./types";
 
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 const MAX_BODY_CHARS = 4096;
@@ -314,24 +311,6 @@ export async function createRealContext(env: Readonly<Record<string, string | un
     runnerMaxAgeSeconds: runnerEnv.RUNNER_HEALTH_MAX_AGE_SECONDS,
     probes: createRealProbes({ commandTimeoutMs: settings.command_timeout_seconds * 1000, probeTimeoutMs: settings.probe_timeout_seconds * 1000, now: () => now, migrationsDir }),
   };
-}
-
-/** `data.mcp` never throws; token counts are aggregate metadata and a database failure leaves them unknown. */
-async function probeMcp(now: Date): Promise<McpProbe> {
-  try {
-    const settings = readMcpSettings();
-    const password = readPasswordSetting(process.env);
-    let stats: { activeTokens: number | null; nearestExpiry: Date | null } = { activeTokens: null, nearestExpiry: null };
-    try { stats = await activeAgentTokenStats(getDb(), now); } catch {}
-    return {
-      state: "ok", enabled: settings.enabled, permissions: settings.permissions,
-      effective: [...effectivePermissions(settings.stdio.permissions, settings.permissions)], auditRetentionDays: settings.audit.retention_days,
-      httpEnabled: settings.http.enabled, webPasswordUsable: password !== null && (password.kind !== "hash" || password.parsed !== null),
-      ...stats,
-    };
-  } catch (error) {
-    return { state: "config_error", problem: error instanceof ConfigError ? firstConfigProblem(error) : "unreadable" };
-  }
 }
 
 /** `data.replies`: the switch, whether the mailbox credentials are set, and what waits. Off asks nothing of the database. */

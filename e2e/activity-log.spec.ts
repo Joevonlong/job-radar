@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { expect, test, waitForServerActions, type Page } from "./fixtures";
+import { NAV_ITEMS, PALETTE_SUBPAGES } from "../src/components/shell/nav";
 import { rootIdForCycle } from "../src/lib/activity/ids";
 
 function connect() {
@@ -30,7 +31,8 @@ test("sources navigation and command palette expose activity logs in both search
   await expect(page.getByTestId("activity-log-subnav")).toHaveAttribute("aria-current", "location");
   await page.keyboard.press("Control+k");
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("option")).toHaveCount(13);
+  await expect(dialog.getByRole("option")).toHaveCount(NAV_ITEMS.length + PALETTE_SUBPAGES.length);
+  await expect(dialog.getByRole("option", { name: "Agent 接入" })).toBeVisible();
   for (const text of ["日志", "logs"]) {
     await dialog.getByRole("combobox").fill(text);
     await expect(dialog.getByTestId("activity-log-palette")).toBeVisible();

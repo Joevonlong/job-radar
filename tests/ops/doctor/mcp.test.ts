@@ -5,6 +5,7 @@ import { mcpSchema } from "@/lib/config/schemas/mcp";
 import { activeAgentTokenStats } from "@/lib/db/repos/agent-tokens";
 import { readMcpSettings } from "@/lib/mcp/settings";
 import { mcpCheck } from "@/lib/ops/doctor/checks/data";
+import { mcpVerdict } from "@/lib/ops/doctor/mcp-verdict";
 import { createRealProbes } from "@/lib/ops/doctor/probes";
 
 import { makeContext, only } from "./helpers";
@@ -26,6 +27,15 @@ describe("data.mcp", () => {
     expect(r.detail).toContain("permissions: jobs:read (allowed overall: jobs:read, tracking:read)");
     expect(r.detail).toContain("docs/mcp");
     expect(r.detail).toContain("Audit retention: 17 days");
+    expect(r.detail).toContain("/settings/agents");
+  });
+  it("the agent access page's verdict is the doctor's", () => {
+    const base = { state: "ok", enabled: true, httpEnabled: false, webPasswordUsable: false, activeTokens: null, nearestExpiry: null, auditRetentionDays: 1, permissions: [], effective: [] } as const;
+    expect(mcpVerdict({ state: "config_error", problem: "x" })).toBe("config_error");
+    expect(mcpVerdict({ ...base, enabled: false })).toBe("off");
+    expect(mcpVerdict(base)).toBe("on");
+    expect(mcpVerdict({ ...base, httpEnabled: true })).toBe("password_required");
+    expect(mcpVerdict({ ...base, httpEnabled: true, webPasswordUsable: true })).toBe("on");
   });
   it("reports retention in Chinese with the Chinese guide", async () => {
     const r = await only(mcpCheck, makeContext({ locale: "zh", probes: { mcp: async () => ({ state: "ok", enabled: true, httpEnabled: false, webPasswordUsable: false, activeTokens: null, nearestExpiry: null, auditRetentionDays: 23, permissions: ["jobs:read"], effective: ["jobs:read"] }) } }));

@@ -11,7 +11,7 @@ import type { McpConfig } from "@/lib/config/schemas/mcp";
 import { getMcpAuditRecorder, getMcpReadDb, getMcpWriteDb } from "@/lib/db/mcp-pools";
 import { markAgentTokenUsed } from "@/lib/db/repos/agent-tokens";
 import { LoginThrottle, throttleKey, type ThrottleLimits } from "@/lib/security/login-throttle";
-import { readPasswordSetting } from "@/lib/security/password";
+import { passwordSettingUsable, readPasswordSetting } from "@/lib/security/password";
 import { readWriterEnabled } from "@/lib/writer/settings";
 
 import { version } from "../../../package.json";
@@ -124,8 +124,7 @@ export async function handleMcpHttpRequest(request: Request, deps: McpHttpDepend
     let settings: McpConfig;
     try { settings = deps.readSettings(); } catch { return refusal(404, "not_found"); }
     if (!settings.enabled || !settings.http.enabled) return refusal(404, "not_found");
-    const password = deps.password();
-    if (password === null || (password.kind === "hash" && password.parsed === null)) return refusal(503, "web_password_required");
+    if (!passwordSettingUsable(deps.password())) return refusal(503, "web_password_required");
     if (request.method !== "POST") return mcpMethodNotAllowed();
     const key = throttleKey(request.headers.get("x-forwarded-for"));
     const current = state();

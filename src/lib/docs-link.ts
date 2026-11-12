@@ -32,6 +32,8 @@ export const DOC_LINKS = {
   storyExtraction: { file: "privacy", anchor: { en: "story-extraction", zh: "提取素材" } },
   /** The user's own veto rules (preferences.yaml `deal_breakers`). */
   dealBreakers: { file: "deal-breakers", anchor: { en: "writing-rules", zh: "写规则" } },
+  /** Reaching the MCP server over HTTP from other devices, and why it needs the web password. */
+  mcpHttp: { file: "mcp", anchor: { en: "reaching-it-from-other-devices-http", zh: "从其他设备访问http" } },
 } as const;
 
 export type DocKey = keyof typeof DOC_LINKS;

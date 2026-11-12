@@ -90,7 +90,7 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 
 ## 打开它
 
-1. 打开 `mcp.yaml`（设置 → 高级，或 `data/config/mcp.yaml`），设 `enabled: true`。全局 `permissions` 是所有连接的权限上限，本机连接的授权写在 `stdio.permissions`，只有两者的交集生效；两者默认都是 `jobs:read` 和 `tracking:read`。`limits` 限制每次调用返回的条数（`max_results`，最多 100）和 JD 长度（`max_description_chars`），以及原始载荷总长度（`max_raw_chars`）。
+1. 在 设置 → Agent 接入 打开“允许 agent 接入”，或者打开 `mcp.yaml`（设置 → 高级，或 `data/config/mcp.yaml`），设 `enabled: true`。全局 `permissions` 是所有连接的权限上限，本机连接的授权写在 `stdio.permissions`，只有两者的交集生效；两者默认都是 `jobs:read` 和 `tracking:read`。`limits` 限制每次调用返回的条数（`max_results`，最多 100）和 JD 长度（`max_description_chars`），以及原始载荷总长度（`max_raw_chars`）。
 2. 检查：`pnpm run doctor` 的 `data.mcp` 显示已打开、全局矩阵、stdio 有效权限、HTTP 开关、可用密码警告、有效 token 数和最近到期时间。
 3. 把服务加到你的客户端（见下），然后重启客户端。
 
@@ -148,6 +148,14 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 - **项目在外接磁盘上**（macOS）：首次启动可能被拦下，直到你允许 Claude 访问可移除宗卷（系统设置 → 隐私与安全性 → 文件与文件夹）。这时客户端里该服务的日志会显示权限错误。
 
 其他 MCP 客户端同理：stdio 服务，命令 `pnpm`，参数 `--silent --dir <项目目录> mcp:serve`。
+
+## 在网页上管理
+
+设置 → Agent 接入（`/settings/agents`）设置第 1 步里的这些键：总开关、HTTP 开关、全局矩阵和本机 stdio 的授权，见 [settings.zh.md](settings.zh.md#agent-接入)。
+
+设了网页口令后，这些修改要有真实的登录会话。其他页面允许本机访问免登录，但同机的其他进程可能借此放大 agent 的权限，所以这页要再输一次口令：页面显示一张登录卡片，走正常的登录，登录后回到本页。高级编辑器里的 `mcp.yaml`（保存、恢复默认、修复）同样遵守这条规则。没设网页口令时这页不用登录就能改，HTTP 则保持关闭，因为 HTTP 需要口令。在本机手动编辑 `data/config/mcp.yaml` 不受影响。
+
+这道会话闸管不到的情况：它只拦得住通过网络访问面板的进程。以你的系统用户运行、能读写文件的进程，可以绕过它直接改 `mcp.yaml`。网页口令要设得足够强。如果页面给出的 HTTP 地址是指向其他主机的明文 `http://`，客户端用它时 bearer token 会明文传输：只在 localhost 或 Tailscale（HTTPS）上使用。
 
 ## 从其他设备访问（HTTP）
 

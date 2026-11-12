@@ -33,6 +33,7 @@ import { toFullText } from "@/lib/config/to-full";
 import { stringifyConfigYaml } from "@/lib/config/yaml-options";
 import { signalPatternIsFast } from "@/lib/signals/pattern-guard";
 import { logActionFailure } from "@/lib/logging/action-failure";
+import { ownerMayChange, type OwnerSessionState } from "@/lib/security/owner-session";
 
 import type { AdvancedFailure, AdvancedLayer, AdvancedPreview, AdvancedResetResult, AdvancedSaveResult, AdvancedValidation } from "./types";
 import { advancedNameOfStem, canResetFile, editorLimits, editorText } from "./view";
@@ -54,6 +55,21 @@ const resetSchema = z.strictObject({ file: stemSchema, baseHash: z.string().max(
  * text's own limits) are issues; the rules would leave them out of every scan.
  */
 const validateOptions = (name: ConfigName): ValidateOptions => (name === "interests" ? { checkProtected: true, interestsProbe: (limits) => signalPatternIsFast(limits) } : { checkProtected: true });
+
+/**
+ * Who may write: mcp.yaml decides what agents can read and change, so once a web password is set its raw text can only be saved,
+ * reset or repaired with a session, as on the agent access page. Every other file is unaffected. A caller that does not say is
+ * treated as having no session.
+ */
+export interface AdvancedWriteOptions {
+  ownerSession: OwnerSessionState;
+}
+
+const NO_SESSION: AdvancedWriteOptions = { ownerSession: "login_required" };
+
+function sessionBlocks(name: ConfigName, options: AdvancedWriteOptions): boolean {
+  return name === "mcp" && !ownerMayChange(options.ownerSession);
+}
 
 /** The user's file ("" without one or when it cannot be read). */
 function currentText(name: ConfigName): string {
@@ -181,10 +197,11 @@ function needsRepair(name: ConfigName, text: string): boolean {
   }
 }
 
-export async function saveAdvanced(rawRequest: unknown): Promise<AdvancedSaveResult> {
+export async function saveAdvanced(rawRequest: unknown, options: AdvancedWriteOptions = NO_SESSION): Promise<AdvancedSaveResult> {
   const request = saveSchema.safeParse(rawRequest);
   const name = request.success ? advancedNameOfStem(request.data.file) : null;
   if (!request.success || name === null) return { status: "failed" };
+  if (sessionBlocks(name, options)) return { status: "session_required" };
   const { baseHash, baseLayer, confirmOverride } = request.data;
   const limits = editorLimits();
   // models.yaml keeps its by-id overlay: the first save of the full catalog pins every model in it, so the browser must have asked
@@ -212,10 +229,11 @@ export async function saveAdvanced(rawRequest: unknown): Promise<AdvancedSaveRes
   }
 }
 
-export async function resetAdvanced(rawRequest: unknown): Promise<AdvancedResetResult> {
+export async function resetAdvanced(rawRequest: unknown, options: AdvancedWriteOptions = NO_SESSION): Promise<AdvancedResetResult> {
   const request = resetSchema.safeParse(rawRequest);
   const name = request.success ? advancedNameOfStem(request.data.file) : null;
   if (!request.success || name === null) return { status: "failed" };
+  if (sessionBlocks(name, options)) return { status: "session_required" };
   try {
     const result = await resetConfigToDefault(name, { baseHash: request.data.baseHash, baseLayer: request.data.baseLayer, backupsKeep: editorLimits().backupsKeep });
     const state = currentState(name);
