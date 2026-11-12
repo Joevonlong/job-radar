@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { DEFAULT_PERMISSIONS, PERMISSIONS, type Permission } from "@/lib/agent-access/permissions";
 import { blockList, blockShape, includeInput, loadBlocks, type FieldBlock } from "@/lib/capabilities/blocks";
-import { CAPABILITIES } from "@/lib/capabilities/registry";
+import { CAPABILITIES, listedCapabilities } from "@/lib/capabilities/registry";
 import { defineCapability, READ_ONLY, type Capability } from "@/lib/capabilities/types";
 
 import { writerSchema } from "@/lib/config";
@@ -419,8 +419,8 @@ describe("tools come from the registry", () => {
     ctx.writer = { inputs: () => ({ writer: writerSchema.parse({ enabled: true }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: untouchable };
     ctx.features = { careerEnabled: () => true, repliesEnabled: () => true };
     const reference = new McpServer({ name: "reference", version: "1" }, { capabilities: { tools: {} } });
-    for (const cap of CAPABILITIES) {
-      reference.registerTool(cap.id, { title: ctx.text(cap.text.title), description: ctx.text(cap.text.description), inputSchema: cap.input(ctx), outputSchema: cap.outputFor?.(new Set(ctx.settings.permissions)) ?? cap.output, annotations: cap.annotations }, async () => ({ content: [], isError: true }));
+    for (const { capability: cap, permissions } of await listedCapabilities(CAPABILITIES, ctx)) {
+      reference.registerTool(cap.id, { title: ctx.text(cap.text.title), description: ctx.text(cap.text.description), inputSchema: cap.input(ctx), outputSchema: cap.outputFor?.(permissions) ?? cap.output, annotations: cap.annotations }, async () => ({ content: [], isError: true }));
     }
     const sdk = await connectServer(reference);
     const client = await connectCapabilities(ctx, CAPABILITIES);

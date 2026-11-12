@@ -7,6 +7,7 @@ const DAY_MS = 86_400_000;
 
 /** The calendar day of an instant in an IANA time zone. */
 export function dayInZone(instant: Date, timeZone: string): string {
+  // en-CA formats as YYYY-MM-DD
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant);
 }
 

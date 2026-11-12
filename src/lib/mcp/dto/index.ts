@@ -20,7 +20,8 @@
  * replies:read gives classification, match/state/time and the linked application's job; its status needs tracking:read; no mail content or transport identifiers.
  * Operations require ops:read: safe doctor summaries, cycle/channel/activity codes and counts, and aggregate AI usage.
  * Never given under any permission: local paths (resume variants), mail content, secrets, profile snapshots, AI provider/model at job level, job-level AI usage, notifications,
- * raw errors and raw run payloads. Writer material is the explicitly selected subset described above; unselected stories are never given by writer:read alone (a fit note
+ * raw errors and raw run payloads. actions:run returns request metadata, safe counts and codes, cycle progress and budget
+ * metadata, never payloads. Writer material is the explicitly selected subset described above; unselected stories are never given by writer:read alone (a fit note
  * can retain short quotes selected when it was made).
  *
  * Posting strings go through the caller's `clean` (invisible characters removed, an instruction to an AI replaced by the trap
@@ -37,6 +38,7 @@ export { notesBlockDto } from "./notes";
 export { applicationDto, historyDto, applicationItemDto, listApplicationsOutput, toApplicationDto, toApplicationItemDto, type ApplicationItemDto, type ListApplicationsOutput } from "./tracking";
 export { writerVersionDto, writerJdPointDto, writerStoryDto, writerQuestionDto, getApplicationContextOutput, saveApplicationAnswerOutput, type WriterVersionDto, type WriterQuestionDto, type GetApplicationContextOutput, type SaveApplicationAnswerOutput } from "./writer";
 export { trackingWriteOutput, undoChangeOutput } from "./tracking-writes";
+export { actionOutput, requestStatusOutput, requestSummaryDto, toRequestSummary, type ActionOutput, type RequestStatusOutput } from "./actions";
 export { systemStatusOutput, listCyclesOutput, listChannelsOutput, activityLogOutput, aiUsageOutput } from "./ops";
 export { getProfileOutput, getInterestsOutput, previewDealBreakersOutput, previewInterestCategoryOutput, toMeDto, toPreferencesDto, toStoriesDto, toInterestSettingsDto, toSuggestionDto, toDealBreakerPreviewDto, toCategoryPreviewDto, type GetProfileOutput, type GetInterestsOutput } from "./profile";
 

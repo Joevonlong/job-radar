@@ -1,4 +1,5 @@
 /** Reads and writes of `company_research` and the `company_research` requests around it. */
+import type { AgentCaller } from "@/lib/agent-access/caller";
 import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
@@ -243,7 +244,7 @@ const manualSince = (since: Date) => and(eq(controlRequests.kind, "company_resea
  * interactive lane and counts as manual); without room it stays where it is and
  * the press gets the quota answer.
  */
-export async function reserveCompanyResearchRequest(db: Executor, input: { companyId: number; jobId: number; force: boolean; origin?: "auto"; maxPerDay: number; now: Date }): Promise<CompanyResearchReservation> {
+export async function reserveCompanyResearchRequest(db: Executor, input: { companyId: number; jobId: number; force: boolean; caller?: AgentCaller; origin?: "auto"; maxPerDay: number; now: Date }): Promise<CompanyResearchReservation> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(${QUOTA_LOCK})`);
     const since = new Date(input.now.getTime() - 86_400_000);
@@ -272,7 +273,7 @@ export async function reserveCompanyResearchRequest(db: Executor, input: { compa
     }
     const [row] = await tx
       .insert(controlRequests)
-      .values({ kind: "company_research", payload: { jobId: input.jobId, companyId: input.companyId, force: input.force, ...(input.origin ? { origin: input.origin } : {}) }, requestedAt: input.now })
+      .values({ kind: "company_research", payload: { jobId: input.jobId, companyId: input.companyId, force: input.force, ...(input.caller === undefined ? {} : { caller: input.caller }), ...(input.origin ? { origin: input.origin } : {}) }, requestedAt: input.now })
       .returning({ id: controlRequests.id });
     if (!row) throw new Error("reserveCompanyResearchRequest: insert returned no row");
     return { state: "queued", requestId: row.id };

@@ -47,6 +47,7 @@ export interface McpContext {
   writer?: McpWriterAccess;
   /** Present only when tracking:write was granted a write connection. */
   tracking?: { writeDb: Db | null };
+  actions?: { db: Db };
   /** Absent readers close the corresponding feature gates. */
   features?: { careerEnabled: () => boolean; repliesEnabled: () => boolean };
   /**
@@ -99,8 +100,8 @@ export function errorCategory(error: unknown): string {
 
 export function auditFailure(error: unknown): AuditOutcome {
   const category = error instanceof ToolFailure ? error.category : errorCategory(error);
-  return category === "not_permitted" && error instanceof ToolFailure
-    ? { outcome: "not_permitted", error_category: null }
+  return (category === "not_permitted" || category === "over_budget") && error instanceof ToolFailure
+    ? { outcome: category, error_category: null }
     : { outcome: "error", error_category: category };
 }
 

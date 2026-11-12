@@ -2,7 +2,7 @@
  * Web side of the control channel: validates what the browser asks for and leaves a row in
  * `control_requests`. The runner does the work (see `poller.ts`); this module never runs a cycle.
  */
-import { withoutCaller } from "@/lib/agent-access/caller";
+import { withoutCaller, type AgentCaller } from "@/lib/agent-access/caller";
 import { logActionFailure } from "@/lib/logging/action-failure";
 import { isConfiguredChannelId } from "@/lib/channels/registry";
 import { loadConfig } from "@/lib/config";
@@ -61,7 +61,7 @@ function currentCascades(): CoverageCascade[] | null {
  * that cannot be read refuses a backfill with `configUnavailable` (the limit is unknown). The open requests are read and the new
  * one inserted under one lock (`queueRunCycleRequest`), so two requests at once cannot both pass the busy check.
  */
-export async function requestRunCycle(rawPayload: unknown): Promise<ControlActionState> {
+export async function requestRunCycle(rawPayload: unknown, options: { db?: Db; caller?: AgentCaller } = {}): Promise<ControlActionState> {
   const payload = runCyclePayloadSchema.safeParse(withoutCaller(rawPayload ?? {}));
   if (!payload.success) return fail("invalidPayload");
   if (payload.data.channelIds?.some((id) => !isConfiguredChannelId(id))) return fail("unknownChannel");
@@ -79,8 +79,8 @@ export async function requestRunCycle(rawPayload: unknown): Promise<ControlActio
   // without the cascades nothing can be judged covered: queue a request of its own
   const cascades = backfillHours === undefined ? currentCascades() : null;
   try {
-    const outcome = await queueRunCycleRequest(getDb(), {
-      payload: payload.data,
+    const outcome = await queueRunCycleRequest(options.db ?? getDb(), {
+      payload: { ...payload.data, ...(options.caller === undefined ? {} : { caller: options.caller }) },
       exclusive: backfillHours !== undefined,
       reuse: (open) => cascades === null ? undefined : open.find((row) => {
         const stored = runCyclePayloadSchema.safeParse(row.payload ?? {});
@@ -123,11 +123,11 @@ const sameScorePayload = (a: ScoreJobsPayload, b: ScoreJobsPayload): boolean => 
  * untrusted. An open request with the same payload is reused, but a request for another job is its own:
  * scoring one job must not swallow the click on the next. Refused when there is nothing to score.
  */
-export async function requestScoreJobs(rawPayload: unknown): Promise<ControlActionState> {
+export async function requestScoreJobs(rawPayload: unknown, options: { db?: Db; caller?: AgentCaller } = {}): Promise<ControlActionState> {
   const payload = scoreJobsPayloadSchema.safeParse(withoutCaller(rawPayload));
   if (!payload.success) return fail("invalidPayload");
   try {
-    const db = getDb();
+    const db = options.db ?? getDb();
     const open = (await listOpenControlRequests(db, "score_jobs")).find((row) => {
       const parsed = scoreJobsPayloadSchema.safeParse(row.payload);
       return parsed.success && sameScorePayload(parsed.data, payload.data);
@@ -139,7 +139,7 @@ export async function requestScoreJobs(rawPayload: unknown): Promise<ControlActi
       const waiting = await Promise.all(payload.data.jobIds.map((id) => jobWaitsForScore(db, id)));
       if (!waiting.some(Boolean)) return fail("nothingToScore");
     }
-    return queued(await insertControlRequest(db, { kind: "score_jobs", payload: payload.data }), false);
+    return queued(await insertControlRequest(db, { kind: "score_jobs", payload: { ...payload.data, ...(options.caller === undefined ? {} : { caller: options.caller }) } }), false);
   } catch (error) {
     logActionFailure("requestScoreJobs", error);
     return fail("databaseUnavailable");
@@ -201,12 +201,12 @@ export async function requestTestAi(rawPayload: unknown): Promise<ControlActionS
  * "Refresh models" of a provider on /settings: the ai-worker reads the provider's model list. `rawPayload` is untrusted: only a
  * provider id and a filter word pass, no address. An open request for the same provider and filter is reused.
  */
-export async function requestModelsSync(rawPayload: unknown): Promise<ControlActionState> {
+export async function requestModelsSync(rawPayload: unknown, options: { db?: Db; caller?: AgentCaller } = {}): Promise<ControlActionState> {
   const payload = modelsSyncPayloadSchema.safeParse(withoutCaller(rawPayload));
   if (!payload.success) return fail("invalidPayload");
   const { provider, filter } = payload.data;
   try {
-    return await requestTest(getDb(), "models_sync", payload.data, (stored) => {
+    return await requestTest(options.db ?? getDb(), "models_sync", { ...payload.data, ...(options.caller === undefined ? {} : { caller: options.caller }) }, (stored) => {
       const parsed = modelsSyncPayloadSchema.safeParse(stored);
       return parsed.success && parsed.data.provider === provider && parsed.data.filter === filter;
     });

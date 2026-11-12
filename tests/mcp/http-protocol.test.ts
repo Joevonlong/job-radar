@@ -165,6 +165,58 @@ describe("installed MCP SDK HTTP protocols", () => {
     expect(deps.writeDb).toHaveBeenCalledTimes(writeConnections);
   });
 
+  it("refuses a tracking write per call for a token without tracking:write, even when the matrix allows it", async () => {
+    const deps = fakeDeps();
+    deps.readSettings.mockReturnValue(mcpSchema.parse({ enabled: true, permissions: ["jobs:read", "tracking:read", "tracking:write"], http: { enabled: true } }));
+    const tokenGrant = { kind: "token", tokenId: 7, permissions: ["jobs:read", "tracking:read"] } as const;
+    deps.verify.mockImplementation(async () => ({ ok: true, grant: { ...tokenGrant, permissions: [...tokenGrant.permissions] } }));
+    deps.readGrant.mockReturnValue(vi.fn(async () => ({ ...tokenGrant, permissions: [...tokenGrant.permissions] })));
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "mark_applied", arguments: { job_id: 1 } } });
+    const result = await snapshot(await handleMcpHttpRequest(rpcRequest({ headers: { "mcp-protocol-version": "2025-06-18" }, body }), deps));
+    const json = result.body.split("\n").find((line) => line.startsWith("data: "))!.slice(6);
+    const call = JSON.parse(json).result as { isError: boolean; content: { text: string }[] };
+    expect(call.isError).toBe(true);
+    expect(call.content[0]!.text).toContain("tracking:write");
+    expect(deps.writeDb).toHaveBeenCalledTimes(1);
+    const audit = deps.audit.mock.results[0]!.value as { record: { mock: { calls: unknown[][] } }; inTransaction: { mock: { calls: unknown[][] } } };
+    expect(audit.inTransaction.mock.calls).toEqual([]);
+    expect(audit.record.mock.calls).toEqual([[expect.objectContaining({ capability: "mark_applied", outcome: "not_permitted", token_id: 7 })]]);
+  });
+
+  it.each([
+    { global: ["jobs:read", "actions:run"], permissions: ["jobs:read", "actions:run"], listed: true, writeConnections: 2 },
+    { global: ["jobs:read", "actions:run"], permissions: ["jobs:read"], listed: false, writeConnections: 1 },
+    { global: ["jobs:read"], permissions: ["jobs:read", "actions:run"], listed: false, writeConnections: 1 },
+  ] as const)("offers action tools only when both the matrix and the token grant actions:run ($global, $permissions)", async ({ global, permissions, listed, writeConnections }) => {
+    const deps = fakeDeps();
+    deps.readSettings.mockReturnValue(mcpSchema.parse({ enabled: true, permissions: [...global], http: { enabled: true } }));
+    deps.verify.mockImplementation(async () => ({ ok: true, grant: { kind: "token", tokenId: 7, permissions: [...permissions] } }));
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} });
+    const result = await snapshot(await handleMcpHttpRequest(rpcRequest({ headers: { "mcp-protocol-version": "2025-06-18" }, body }), deps));
+    const json = result.body.split("\n").find((line) => line.startsWith("data: "))!.slice(6);
+    const tools = (JSON.parse(json).result.tools as { name: string }[]).map((tool) => tool.name);
+    for (const id of ["run_collection", "translate_job", "get_request_status"]) expect(tools.includes(id)).toBe(listed);
+    expect(deps.writeDb).toHaveBeenCalledTimes(writeConnections);
+  });
+
+  it("refuses an action trigger per call for a token without actions:run, even when the matrix allows it", async () => {
+    const deps = fakeDeps();
+    deps.readSettings.mockReturnValue(mcpSchema.parse({ enabled: true, permissions: ["jobs:read", "actions:run"], http: { enabled: true } }));
+    const tokenGrant = { kind: "token", tokenId: 7, permissions: ["jobs:read"] } as const;
+    deps.verify.mockImplementation(async () => ({ ok: true, grant: { ...tokenGrant, permissions: [...tokenGrant.permissions] } }));
+    deps.readGrant.mockReturnValue(vi.fn(async () => ({ ...tokenGrant, permissions: [...tokenGrant.permissions] })));
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "run_collection", arguments: {} } });
+    const result = await snapshot(await handleMcpHttpRequest(rpcRequest({ headers: { "mcp-protocol-version": "2025-06-18" }, body }), deps));
+    const json = result.body.split("\n").find((line) => line.startsWith("data: "))!.slice(6);
+    const call = JSON.parse(json).result as { isError: boolean; content: { text: string }[] };
+    expect(call.isError).toBe(true);
+    expect(call.content[0]!.text).toContain("actions:run");
+    expect(deps.writeDb).toHaveBeenCalledTimes(1);
+    const audit = deps.audit.mock.results[0]!.value as { record: { mock: { calls: unknown[][] } }; inTransaction: { mock: { calls: unknown[][] } } };
+    expect(audit.inTransaction.mock.calls).toEqual([]);
+    expect(audit.record.mock.calls).toEqual([[expect.objectContaining({ capability: "run_collection", outcome: "not_permitted", token_id: 7 })]]);
+  });
+
   it("negotiates the raw 2025 protocol without a modern envelope", async () => {
     const response = await handleMcpHttpRequest(rpcRequest({ headers: { "mcp-protocol-version": "2025-06-18" } }), fakeDeps());
     expect(response.headers.get("content-type")).toContain("text/event-stream");

@@ -2,6 +2,7 @@
  * Web side of the company background button: the web app never calls an AI provider itself. It leaves a `company_research`
  * request for the ai-worker and then asks for its state. Server only; `app/jobs/[id]/research-actions.ts` calls it.
  */
+import type { AgentCaller } from "@/lib/agent-access/caller";
 import { COMPANY_RESEARCH_PROMPT_VERSION } from "@/lib/ai/prompts/company-research";
 import { resolveProviderOrder } from "@/lib/ai/router";
 import { UNRESTRICTED_WEB_PROVIDERS, webAccessAllowed } from "@/lib/ai/web-tasks";
@@ -36,7 +37,7 @@ export type CompanyResearchRequestOutcome =
 
 export async function requestCompanyResearch(
   db: Db,
-  input: { jobId: number; force: boolean; origin?: "auto"; research: ResearchConfig | null; ai: AiConfig | null; now?: Date },
+  input: { jobId: number; force: boolean; caller?: AgentCaller; origin?: "auto"; research: ResearchConfig | null; ai: AiConfig | null; now?: Date },
 ): Promise<CompanyResearchRequestOutcome> {
   if (!input.research || !input.ai) return { state: "error", error: "config_error" };
   if (!input.research.enabled) return { state: "error", error: "disabled" };
@@ -49,7 +50,7 @@ export async function requestCompanyResearch(
     const latest = await findLatestCompanyResearch(db, { companyId: job.companyId, promptVersion: COMPANY_RESEARCH_PROMPT_VERSION, now });
     if (companyResearchCurrent(latest, confirmedWebsiteDomain(job, input.research.company.non_company_hosts))) return { state: "cached" };
   }
-  const reserved = await reserveCompanyResearchRequest(db, { companyId: job.companyId, jobId: input.jobId, force: input.force, ...(input.origin ? { origin: input.origin } : {}), maxPerDay: input.research.company.max_per_day, now });
+  const reserved = await reserveCompanyResearchRequest(db, { companyId: job.companyId, jobId: input.jobId, force: input.force, ...(input.caller === undefined ? {} : { caller: input.caller }), ...(input.origin ? { origin: input.origin } : {}), maxPerDay: input.research.company.max_per_day, now });
   if (reserved.state === "quota") return { state: "error", error: "quota" };
   if (reserved.state === "queued") log.info(input.origin === "auto" ? "automatic request queued" : "manual request queued", { request: reserved.requestId, kind: "company_research", jobId: input.jobId });
   return { state: "queued", requestId: reserved.requestId, existing: reserved.state === "existing" };

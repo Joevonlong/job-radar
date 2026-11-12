@@ -4,6 +4,7 @@
  * first fails the expired requests of the scrubbed kinds (`expireScrubbedRequests`), so a request's material is cleared
  * on time even while no ai-worker runs. Server only; `app/jobs/[id]/apply/actions.ts` calls it.
  */
+import type { AgentCaller } from "@/lib/agent-access/caller";
 import { parseStoredBreakdown } from "@/lib/breakdown/content";
 import { ConfigError, reloadConfig, type MeConfig, type Story, type TrapsConfig, type WriterConfig } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
@@ -60,6 +61,7 @@ export type WriterRequestSpec =
 
 
 export interface WriterRequestInput {
+  caller?: AgentCaller;
   jobId: number;
   questionId: number;
   /** null: writer.yaml cannot be read. */
@@ -154,6 +156,7 @@ export async function requestWriter(db: Db, input: WriterRequestInput, spec: Wri
   // the question, its settings and the job alone are no material to write from
   if (writeInputFields(materials).length <= 3) return { state: "error", error: "no_material" };
   const payload = {
+    ...(input.caller === undefined ? {} : { caller: input.caller }),
     jobId: input.jobId,
     questionId: input.questionId,
     mode: spec.mode satisfies WriteMode,

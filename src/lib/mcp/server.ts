@@ -1,7 +1,8 @@
 /**
  * The MCP server (`pnpm mcp:serve`, docs/mcp.md): tools generated from the capability registry, each authorized on every call
  * against the current mcp.yaml and, for a connection made with an agent token, the token's current row. Write capabilities use
- * separately granted connections and commit their audit with the change. Every capability is registered with the SDK, but
+ * separately granted connections and commit their audit with the change; action triggers use the shared control queue with
+ * daily budgets. Every capability is registered with the SDK, but
  * `tools/list` is answered by this file instead of the SDK, so the list follows the current settings and lists only what a call
  * would accept. The stdio entry point is scripts/mcp-serve.ts.
  */
@@ -40,6 +41,7 @@ export function defaultContext(
     log?: LogLine;
     writeDb?: Db | null;
     trackingWriteDb?: Db | null;
+    actionDb?: Db;
     readSettings?: () => McpConfig;
     audit?: McpContext["audit"];
     caller?: McpContext["caller"];
@@ -66,6 +68,7 @@ export function defaultContext(
     features: { careerEnabled: () => featureEnabled("career"), repliesEnabled: () => featureEnabled("replies") },
     writer: { inputs: readWriterInputs, writeDb: options.writeDb ?? null },
     tracking: { writeDb: options.trackingWriteDb ?? null },
+    actions: options.actionDb ? { db: options.actionDb } : undefined,
     audit: options.audit,
     caller: options.caller,
     grant: options.grant,
@@ -75,13 +78,13 @@ export function defaultContext(
 
 /**
  * The input schema as the SDK sees it, plus one call log line when the SDK rejects the arguments (the handler then never runs, so
- * the line would be missing). The JSON Schema the client is shown is the original one.
+ * the line would be missing). A live schema keeps configuration-dependent bounds consistent with tools/list.
  */
-export function observeInvalidInput<S extends StandardSchemaWithJSON>(schema: S, tool: string, log: LogLine, ctx?: Pick<McpContext, "audit" | "caller">): S {
+export function observeInvalidInput<S extends StandardSchemaWithJSON>(schema: S, tool: string, log: LogLine, ctx?: Pick<McpContext, "audit" | "caller">, currentSchema?: () => S): S {
   const std = schema["~standard"];
   const validate: typeof std.validate = (value, options) => {
     const started = performance.now();
-    const result = std.validate(value, options);
+    const result = (currentSchema?.()["~standard"] ?? std).validate(value, options);
     const report = (outcome: Awaited<typeof result>) => {
       if (outcome.issues && outcome.issues.length > 0) {
         log(formatCallLine({ tool, ok: false, count: 0, ms: performance.now() - started, category: "invalid_input" }));
@@ -116,7 +119,7 @@ export function buildServer(ctx: McpContext, options: { version?: string; capabi
       {
         title: t(cap.text.title),
         description: t(cap.text.description),
-        inputSchema: observeInvalidInput(cap.input(ctx), cap.id, ctx.log, ctx),
+        inputSchema: observeInvalidInput(cap.input(ctx), cap.id, ctx.log, ctx, () => cap.input(ctx)),
         outputSchema: cap.output,
         annotations: cap.annotations,
       },
@@ -124,7 +127,7 @@ export function buildServer(ctx: McpContext, options: { version?: string; capabi
         const call = () => runLogged(ctx, cap.id, async (callCtx) => {
           const decision = await authorizeCall(cap, ctx.readSettings, ctx.grant, ctx.readGrant);
           if (!decision.allowed) throw accessFailure(decision, t);
-          if (cap.availability && !cap.availability.available(ctx)) throw new ToolFailure(cap.availability.category, t(cap.availability.message));
+          if (cap.availability && !await cap.availability.available(ctx)) throw new ToolFailure(cap.availability.category, t(cap.availability.message));
           const output = await cap.handler({ ...callCtx, settings: decision.settings, permissions: decision.permissions }, args);
           const parsed = (cap.outputFor?.(decision.permissions) ?? cap.output).parse(output);
           return { result: toolResult(parsed), count: cap.count(parsed) };
@@ -135,8 +138,8 @@ export function buildServer(ctx: McpContext, options: { version?: string; capabi
   }
 
   server.server.removeRequestHandler("tools/list");
-  server.server.setRequestHandler("tools/list", () => ({
-    tools: listedCapabilities(capabilities, ctx).map(({ capability: cap, permissions }) => {
+  server.server.setRequestHandler("tools/list", async () => ({
+    tools: (await listedCapabilities(capabilities, ctx)).map(({ capability: cap, permissions }) => {
       const inputSchema = cap.input(ctx)["~standard"].jsonSchema.input({ target: "draft-2020-12" });
       const outputSchema = (cap.outputFor?.(permissions) ?? cap.output)["~standard"].jsonSchema.output({ target: "draft-2020-12" });
       return {

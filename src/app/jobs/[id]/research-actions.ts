@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { isCompanyWebsiteCandidate } from "@/lib/ai/web-tasks";
-import { ConfigError, reloadConfig, type AiConfig } from "@/lib/config";
+import { readCompanyActionSettings } from "@/lib/control/action-settings";
 import { readCompanyResearchRequest, requestCompanyResearch } from "@/lib/control/company-research-request";
 import type { ControlQueueView } from "@/lib/control/request-view-schema";
 import { getDb } from "@/lib/db";
@@ -40,24 +40,14 @@ export type CompanyResearchStatusResult =
   | { ok: true; state: "done" }
   | { ok: false; error: CompanyResearchActionErrorKey; detail?: string | null; resumeAt?: string | null };
 
-function readAi(): AiConfig | null {
-  try {
-    return reloadConfig("ai");
-  } catch (error) {
-    logActionFailure("readAi", error);
-    if (error instanceof ConfigError) return null;
-    throw error;
-  }
-}
-
 /** Look up a job's company (the button in the panel): queue the request, or report that a current result exists. */
 export async function requestCompanyResearchAction(input: { jobId: number; force?: boolean }): Promise<CompanyResearchActionResult> {
   const parsed = requestInputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
   try {
-    const settings = readResearchSettings();
+    const settings = readCompanyActionSettings();
     const db = getDb();
-    const outcome = await requestCompanyResearch(db, { jobId: parsed.data.jobId, force: parsed.data.force ?? false, research: settings.state === "ok" ? settings.config : null, ai: readAi() });
+    const outcome = await requestCompanyResearch(db, { jobId: parsed.data.jobId, force: parsed.data.force ?? false, ...settings });
     if (outcome.state === "error") return { ok: false, error: outcome.error };
     if (outcome.state === "cached") return { ok: true, queued: false };
     return { ok: true, queued: true, requestId: outcome.requestId, usedToday: await countCompanyResearchRequests(db, new Date()) };

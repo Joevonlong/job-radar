@@ -1,8 +1,9 @@
 # MCP server (docs/mcp.md): lets an MCP client you configure yourself (Claude Desktop, Claude Code, ...) query your jobs and
-# applications. Local clients start `pnpm mcp:serve` over stdio; optional HTTP uses the web port and agent tokens.
-# writer:write adds answer versions (save_application_answer cannot change or delete any); tracking:write updates
-# application fields and can undo its own writes. Each call also adds one metadata row to the local `agent_calls`
-# table (see `audit` below).
+# applications and queue permitted actions. Local clients start `pnpm mcp:serve` over stdio; optional HTTP uses the web port
+# and agent tokens. No permission that writes is granted by default. writer:write adds answer versions
+# (save_application_answer cannot change or delete any); tracking:write updates application fields and can undo its own
+# writes. Action tools need actions:run and use the existing control queue.
+# Each call adds metadata to `agent_calls` (see `audit` below).
 # Privacy: whatever the tools return is handed by your client to the model provider it uses (Anthropic for Claude, ...).
 # What may be returned is fixed in code: job facts, source links, scores and ranks, signals with their JD quotes, the JD after
 # AI-trap cleaning, and the status, dates, next step and interview rounds of your applications. Match and note fields require
@@ -26,7 +27,8 @@ config_version: 3
 enabled: false
 
 # The global matrix is the most any connection may receive. Tool permissions:
-# search_jobs / get_job: jobs:read; list_applications: tracking:read
+# search_jobs / get_job / get_today / list_companies / get_company / get_insights: jobs:read
+# list_applications / get_application / list_favorites: tracking:read
 # get_profile / get_interests / preview_deal_breakers / preview_interest_category: profile:read (off by default)
 # get_career_profile / list_career_documents / get_career_document / check_career_document: career:read and career.yaml enabled
 # list_replies: replies:read and replies.yaml enabled (no mail subject, body, sender, quotes or mail ids)
@@ -37,7 +39,11 @@ enabled: false
 # get_system_status / list_cycles / list_channels / get_activity_log / get_ai_usage: ops:read (opt-in)
 # Operations expose codes, counts and usage aggregates only; no raw errors, paths or job-level usage.
 # set_application_status / mark_applied / set_next_action / set_interview_rounds / undo_change: tracking:write
-# match:read / notes:read add fields to job tools; other catalog ids are accepted but do not give tools yet.
+# run_collection / score_jobs / translate_job / breakdown_job / research_salary / research_company: actions:run
+# draft_answer: actions:run + writer:write
+# get_request_status: actions:run; only this caller's requests, no daily charge
+# Feature gates still apply: breakdown.enabled, salary.lookup.enabled, research.enabled, writer.enabled.
+# match:read / notes:read add fields to job tools; other catalog ids are accepted; only implemented capabilities and field blocks are offered.
 permissions:
   - jobs:read
   - tracking:read
@@ -95,16 +101,16 @@ audit:
   # Longest a call waits for its audit row (100-10000), queueing included; also the longest shutdown waits for the last rows
   write_timeout_ms: 2000
 
-# Daily agent counters use the calendar day in schedule.yaml's time zone; action tools are not connected yet.
+# Live daily action budgets use the calendar day in schedule.yaml's time zone; joined requests and cache hits are refunded.
 budgets:
   # Daily caps per caller (stdio and each token separately); 0 forbids agents from triggering that action
   per_caller:
     # Collection requests per caller per day
     run_collection: 2
     # Jobs scored per caller per day; a batch counts each job
-    score_jobs: 100
+    score_jobs: 300
     # Job translation requests per caller per day
-    translate_job: 20
+    translate_job: 60
     # Job breakdown requests per caller per day
     breakdown_job: 20
     # Salary lookups, including automatic research started by an agent's write
@@ -113,7 +119,7 @@ budgets:
     research_company: 10
     # Answer drafting requests per caller per day
     draft_answer: 20
-    # Resume tailoring requests per caller per day
+    # Resume tailoring budget: reserved, no tool uses it yet
     tailor_resume: 5
   # Requests (not jobs) per day across all agents and actions; a score_jobs batch counts once; 0 forbids all agent actions
-  total: 150
+  total: 200

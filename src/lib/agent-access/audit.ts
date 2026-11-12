@@ -6,7 +6,7 @@ import type { McpTranslator } from "@/lib/mcp/text";
 import { TimeoutError, withTimeout } from "@/lib/ops/timeout";
 
 export type AuditTarget = { type: "job" | "application" | "question"; id: number };
-export type AuditOutcome = { outcome: "ok" | "not_permitted" | "invalid_input"; error_category: null } | { outcome: "error"; error_category: string };
+export type AuditOutcome = { outcome: "ok" | "not_permitted" | "invalid_input" | "over_budget"; error_category: null } | { outcome: "error"; error_category: string };
 export type AuditEntry = AuditOutcome & {
   caller: string;
   token_id: number | null;

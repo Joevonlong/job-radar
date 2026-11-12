@@ -7447,6 +7447,10 @@
       "companyNotFound": "没有 id 为 {id} 的公司。",
       "applicationNotFound": "岗位 {id} 没有申请记录。",
       "insightsRange": "请求的天数不在 insights.yaml 提供的范围内。",
+      "actionDisabled": "此动作的功能开关未开启，或此连接没有动作写入数据库。",
+      "actionBudget": "{action} 每日额度不足：上限 {cap}，剩余 {remaining}，本次需要 {requested} 个单位（score_jobs 按岗位计）。于 {reset}（{zone}）重置，未提交任何请求。",
+      "totalBudget": "{action} 的每日总额度不足：所有 agent 合计上限 {cap} 个请求，剩余 {remaining}，本次需要 {requested} 个请求。于 {reset}（{zone}）重置，未提交任何请求。",
+      "requestNotFound": "未找到请求。",
       "careerDisabled": "职业档案功能未开启。",
       "repliesDisabled": "回信功能未开启。",
       "careerNotFound": "未找到职业文档或版本。"
@@ -7552,6 +7556,38 @@
         "title": "列出收藏",
         "description": "所有收藏岗位，含已关闭、被过滤和忽略的岗位。收藏备注需要 notes:read。岗位文本需要当前陷阱扫描。"
       },
+      "run_collection": {
+        "title": "运行采集",
+        "description": "按网页按钮相同的限制与去重规则提交手动采集。可选补抓时长受 collect.max_backfill_hours 限制。"
+      },
+      "score_jobs": {
+        "title": "岗位打分",
+        "description": "提交 job_ids 或 backlog: true（只能选一项）的打分请求。每日上限按岗位计，积压模式预留 ai.yaml scoring.backlog_per_run 个岗位的额度。"
+      },
+      "translate_job": {
+        "title": "翻译岗位",
+        "description": "提交岗位描述翻译，或复用当前缓存。force 请求重新翻译。"
+      },
+      "breakdown_job": {
+        "title": "拆解岗位",
+        "description": "提交岗位描述拆解，或复用当前缓存。需要开启 breakdown.yaml enabled。"
+      },
+      "research_salary": {
+        "title": "查询薪资",
+        "description": "提交薪资查询，或复用当前缓存。需要开启 salary.yaml lookup.enabled；原有供应商和每日配额仍然生效。"
+      },
+      "research_company": {
+        "title": "调研公司",
+        "description": "为岗位提交公司调研，或复用当前缓存。需要开启 research.yaml enabled；原有供应商和每日配额仍然生效。"
+      },
+      "draft_answer": {
+        "title": "起草或优化回答",
+        "description": "用已有申请问题所选的材料提交起草或优化请求。需要 actions:run、writer:write 和 writer.yaml enabled。优化模式必须提供 option 和 text。"
+      },
+      "get_request_status": {
+        "title": "查询请求状态",
+        "description": "仅查询当前连接提交的动作请求：状态、排队位置、执行器在线情况和机器可读结果摘要。其他调用方、网页和定时任务的请求均显示未找到。不返回载荷或自由文本，不消耗每日额度。"
+      },
       "get_career_profile": {
         "title": "读取职业档案",
         "description": "从宿主机画像目录读取去标识职业档案及版本列表。联系方式换成方括号占位符，图片仅返回是否存在。"
@@ -7622,6 +7658,15 @@
       "companyId": "list_companies 返回的公司 id。",
       "favoriteSort": "收藏排序：starred（最新优先）或 rank。",
       "insightsRange": "insights.yaml ranges_days 中的天数；省略采用配置默认值。",
+      "channelIds": "可选的 1–50 个已配置通道 ID；省略时采集全部已启用通道。",
+      "backfillHours": "可选补抓小时数，受 collect.max_backfill_hours 限制。",
+      "jobIds": "需打分的 1–50 个正整数岗位 ID；与 backlog 互斥。",
+      "backlog": "设为 true 按配置处理一批积压岗位；不得同时提供 job_ids。",
+      "force": "即使已有当前缓存也重新处理（默认 false）。",
+      "draftMode": "draft 从所选材料起草；polish 优化提供的文本。",
+      "polishOption": "polish 必填：align_to_job 或 language_only。",
+      "polishText": "polish 必填：待优化文本，长度受 writer.yaml draft_max_chars 限制。",
+      "requestId": "动作工具返回的正整数请求 ID。",
       "careerDocumentId": "已保存的职业文档编号。",
       "careerVersion": "可选的历史版本编号；省略则读取当前文件。",
       "careerDoc": "检查简历或求职信。",
@@ -7655,6 +7700,28 @@
         "range": "invalid_input: invalid_range",
         "activityUnavailable": "database: activity_unavailable"
       }
+    },
+    "actionErrors": {
+      "not_found": "未找到所请求的岗位、问题或文档。",
+      "disabled": "此功能未开启。",
+      "quota": "该功能原有的每日配额已用尽。",
+      "busy": "此目标仍有尚未完成的请求。",
+      "too_soon": "尚未达到手动触发的最小间隔。",
+      "cycle_busy": "已有采集轮排队或正在运行。",
+      "another_cycle_running": "另一个处理轮正在运行。",
+      "backfill_over_limit": "补抓时长超过 collect.max_backfill_hours。",
+      "invalid_input": "动作输入无效。",
+      "unknown_channel": "请求的通道尚未配置。",
+      "nothing_to_score": "没有等待打分的岗位。",
+      "database": "队列数据库不可用。",
+      "config_error": "无法读取功能配置。",
+      "no_description": "此岗位没有可处理的描述。",
+      "same_language": "岗位已使用翻译的目标语言。",
+      "no_web_provider": "没有已启用的供应商可执行此网络调研。",
+      "not_ready": "所需调研数据表尚未就绪。",
+      "no_material": "此问题没有可用于写作的已选材料。",
+      "too_long": "草稿长度超过 writer.yaml draft_max_chars。",
+      "failed": "无法提交动作请求。"
     }
   },
   "dealBreakers": {

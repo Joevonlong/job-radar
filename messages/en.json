@@ -7447,6 +7447,10 @@
       "companyNotFound": "No company with id {id}.",
       "applicationNotFound": "No application for job {id}.",
       "insightsRange": "The requested range is not offered by insights.yaml.",
+      "actionDisabled": "This action is disabled in its feature settings, or this connection has no action write database.",
+      "actionBudget": "Daily budget refused for {action}: cap {cap}, remaining {remaining}, requested {requested} units (jobs for score_jobs). Resets at {reset} ({zone}). Nothing was queued.",
+      "totalBudget": "Daily total budget refused for {action}: cap {cap} requests across all agents, remaining {remaining}, requested {requested}. Resets at {reset} ({zone}). Nothing was queued.",
+      "requestNotFound": "Request not found.",
       "careerDisabled": "The career feature is not enabled.",
       "repliesDisabled": "The replies feature is not enabled.",
       "careerNotFound": "The career document or version was not found."
@@ -7552,6 +7556,38 @@
         "title": "List favorites",
         "description": "All starred jobs, including closed, filtered and ignored jobs. Favorite notes require notes:read. Posting text requires current trap scans."
       },
+      "run_collection": {
+        "title": "Run collection",
+        "description": "Queue a manual collection cycle using the web button’s limits and deduplication. Optional backfill is bounded by collect.max_backfill_hours."
+      },
+      "score_jobs": {
+        "title": "Score jobs",
+        "description": "Queue scoring for job_ids or backlog: true (exactly one). The daily cap counts jobs; backlog reserves ai.yaml scoring.backlog_per_run jobs."
+      },
+      "translate_job": {
+        "title": "Translate a job",
+        "description": "Queue JD translation, or use its current cache. force requests a fresh translation."
+      },
+      "breakdown_job": {
+        "title": "Break down a job",
+        "description": "Queue JD breakdown, or use its current cache. Requires breakdown.yaml enabled."
+      },
+      "research_salary": {
+        "title": "Research salary",
+        "description": "Queue salary research, or use its current cache. Requires salary.yaml lookup.enabled; existing provider and daily quotas still apply."
+      },
+      "research_company": {
+        "title": "Research a company",
+        "description": "Queue company research for a job, or use its current cache. Requires research.yaml enabled; existing provider and daily quotas still apply."
+      },
+      "draft_answer": {
+        "title": "Draft or polish an answer",
+        "description": "Queue a draft or polish for an existing application question using its selected material. Requires actions:run, writer:write and writer.yaml enabled. Polish requires option and text."
+      },
+      "get_request_status": {
+        "title": "Get request status",
+        "description": "Read status, queue position, worker availability and a machine-readable result summary for this connection’s action requests only. Other callers, web and scheduler requests all appear not found. No payload or free text is returned. No daily budget is consumed."
+      },
       "get_career_profile": {
         "title": "Get career profile",
         "description": "Read the redacted career profile and its versions from the host profile directory. Contact values become bracket placeholders; images are presence flags only."
@@ -7622,6 +7658,15 @@
       "companyId": "Company id from list_companies.",
       "favoriteSort": "Favorites order: starred (newest first) or rank.",
       "insightsRange": "Number of days offered in insights.yaml ranges_days; omit for the configured default.",
+      "channelIds": "Optional 1–50 configured channel ids; omitted collects all enabled channels.",
+      "backfillHours": "Optional backfill hours, bounded by collect.max_backfill_hours.",
+      "jobIds": "1–50 positive job ids to score; mutually exclusive with backlog.",
+      "backlog": "Set true to score the configured backlog batch; omit job_ids.",
+      "force": "Recompute even when a current cached result exists (default false).",
+      "draftMode": "draft writes from the selected material; polish improves the supplied text.",
+      "polishOption": "Required for polish: align_to_job or language_only.",
+      "polishText": "Required for polish: draft text, bounded by writer.yaml draft_max_chars.",
+      "requestId": "Positive request id returned by an action tool.",
       "careerDocumentId": "Stored career document id.",
       "careerVersion": "Optional stored version id; omit for the current file.",
       "careerDoc": "Check the resume or letter.",
@@ -7655,6 +7700,28 @@
         "range": "invalid_input: invalid_range",
         "activityUnavailable": "database: activity_unavailable"
       }
+    },
+    "actionErrors": {
+      "not_found": "The requested job, question or document was not found.",
+      "disabled": "This feature is disabled.",
+      "quota": "The feature’s existing daily quota is exhausted.",
+      "busy": "Another request for this target is still open.",
+      "too_soon": "The manual trigger minimum interval has not elapsed.",
+      "cycle_busy": "A collection cycle is already queued or running.",
+      "another_cycle_running": "Another processing cycle is running.",
+      "backfill_over_limit": "Backfill exceeds collect.max_backfill_hours.",
+      "invalid_input": "The action input is invalid.",
+      "unknown_channel": "A requested channel is not configured.",
+      "nothing_to_score": "There are no jobs waiting to be scored.",
+      "database": "The queue database is unavailable.",
+      "config_error": "The feature configuration cannot be read.",
+      "no_description": "This job has no description to process.",
+      "same_language": "The job already uses the translation target language.",
+      "no_web_provider": "No enabled provider can perform this web research.",
+      "not_ready": "The required research tables are not ready.",
+      "no_material": "The question has no selected material to write from.",
+      "too_long": "The draft exceeds writer.yaml draft_max_chars.",
+      "failed": "The action could not be queued."
     }
   },
   "dealBreakers": {

@@ -8,10 +8,10 @@ client can start `pnpm mcp:serve` locally over stdin / stdout, or connect to the
 
 - **Off by default.** Nothing happens until you set `enabled: true` in `mcp.yaml`.
 - **Local stdio or optional HTTP.** Stdio opens no port and needs no token. HTTP uses the web port and requires an agent token on every POST request.
-- **Reads and explicitly granted writes.** Database reads use read-only sessions; personal-data reads also read local profile files.
+- **Permissions control writes.** Database reads use read-only sessions; personal-data reads also read local profile files.
   `writer:write` can add answer versions; `tracking:write` can update application status, next steps and interview rounds, and
-  undo its own changes. These use a separate write connection. Status changes may queue automatic research; the MCP process
-  does not start a collection or call an AI provider itself.
+  undo its own changes. These use a separate write connection; status changes may queue automatic research. With `actions:run`,
+  action tools queue collection and AI work through the same functions as the web buttons. Workers perform the work asynchronously.
 
 The server also stores local call metadata in `agent_calls`, over a separate audit connection (see [Audit trail](#audit-trail)).
 
@@ -29,6 +29,7 @@ that provider's terms. Turning the server on adds this exit to the ones listed i
 | Compensation and benefit signals with their JD quote and position | Mail body, subject, sender, quotes and mail identifiers |
 | The JD after AI-trap cleaning (see below) | `.env` and `.auth/` values, keys, notifications, raw run payloads, run records, raw configuration files |
 | Your applications: status, when it last changed, days in that status, next step and its date, interview rounds, the status history | |
+| With `actions:run`: request ids, status, timestamps, queue position, worker availability, safe result counts and codes, cycle progress and daily budget metadata | |
 
 With effective `career:read` and `career.yaml: enabled`, the tools below give redacted career profiles and documents. With effective `replies:read` and `replies.yaml: enabled`, they give reply classifications and linked application metadata. Both permissions are off by default.
 
@@ -124,16 +125,17 @@ was off, `jobs:read` offers both and `config:migrate` prints a notice. Remove `j
 you write into `mcp.yaml` also covers tools that later versions add under it, so grant only what should be readable or
 writable.
 
-`budgets` sets daily limits for agent actions.
+`budgets` enforces daily limits for the seven trigger tools below and for automatic research queued by agent writes. Read tools,
+including `get_request_status`, and `save_application_answer` do not consume them.
 `per_caller` counts the local stdio connection and each token separately. It caps collection requests, job translations,
-breakdowns, salary lookups, company lookups, answer drafts and resume tailoring; `score_jobs` counts each job in a batch.
+breakdowns, salary lookups, company lookups and answer drafts; `score_jobs` counts each job in a batch.
 An agent write that queues automatic research uses one `research_company` unit per company lookup and one `research_salary`
 unit per salary lookup, only for work it newly queues. Reservations for each write are all-or-nothing: any refused bucket
 skips all research for that write (`research: "budget_skipped"`). Units for work not newly queued are returned; breakdowns
 started this way are not counted. An action cap of `0` forbids that action.
 `total` counts requests, not jobs, across all callers and actions: a `score_jobs` batch of 40 jobs uses 40 of the
 caller's `score_jobs` cap but only 1 of `total`. `0` forbids all agent actions.
-The day and next reset follow `schedule.yaml`'s time zone, including daylight saving changes. The runner prunes counter rows older
+The day and next reset follow `schedule.yaml`'s time zone, including daylight saving changes. The runner prunes counter and ticket rows older
 than the current local day minus `audit.retention_days` once an hour. These settings have defaults and keep `config_version: 3`.
 
 ```yaml
@@ -340,7 +342,8 @@ Persistent subscriptions remain disabled.
 HTTP adds up to `read_max + write_max + 1` database sessions (six by default), separate from the web shared pool and any
 stdio process. Pools and the dedicated audit connection open lazily. `agent_tokens.last_used_at` is updated after successful
 authentication and the declared-size check; update failure is category-only logged and does not fail the MCP call. The write
-pool serves last-use metadata, but is passed to tools only when the same writer and permission rules as stdio allow it.
+pool serves last-use metadata. Tools receive it only for the writes the token may make: answer saving (`writer:write` plus
+the writer switch), tracking writes (`tracking:write`) and action triggers (`actions:run`).
 HTTP tool audit rows carry `caller: token`, the token id and `transport: http`, without token text, hash or prefix.
 
 `pnpm run doctor` (`data.mcp`) includes HTTP enabled, usable-password status (warns with 503 and `pnpm web:password` when
@@ -398,7 +401,7 @@ Each search card keeps its existing facts. Its `application_status` is tracking 
 
 Translations, breakdowns, company research, salary lookup content and the `match` block's AI summaries, fit reasons and gaps are withheld with the JD's failure reason whenever the JD cannot pass its safety check (the `match` block then has `available: false`; its numbers, filter result and checks remain). Empty research or lookup storage remains null. JD quotes use the same trap markers as the JD; a breakdown item, fit reason or gap whose quote becomes a marker uses that marker for its own text/name too. All text, including summaries, reasons and notes, goes through the text cleaner. Unsafe instruction-bearing source URLs become null. A derived-content notice follows the third-party notice when derived content is present; withholding adds one notice, regardless of how many blocks were withheld.
 
-No permission releases resume paths, closure notes, mail content and mail identifiers, secrets, profile snapshots, import drafts, AI provider/model/usage or run records. Full matching-profile values require `profile:read`. The free text of `match:read` and `notes:read` is described under the table at the top of this page. The writer's explicitly selected material remains the separate exception described above.
+No permission releases resume paths, closure notes, mail content and mail identifiers, secrets, profile snapshots, import drafts, AI provider/model/usage or run records. Action tools return only the request metadata described below. Full matching-profile values require `profile:read`. The free text of `match:read` and `notes:read` is described under the table at the top of this page. The writer's explicitly selected material remains the separate exception described above.
 
 `get_job` still returns dormant jobs: `status` stays `possibly_closed`, and `closed_reason` is `dormant`.
 
@@ -438,7 +441,7 @@ apply page, where you review, change or finalise it as usual ([application-write
   "External, unverified".
 - Invisible characters are removed before saving. The version is labelled "From your AI client" and records no provider or model.
 
-It uses a database connection of its own, opened only when `writer:write` is effective and the writer is enabled. All other tools stay on the read-only sessions. With the
+It uses a database connection of its own, opened only when `writer:write` is effective and the writer is enabled. Read tools stay on read-only sessions; action triggers use their separate action write connection. With the
 [read-only role](#optional-a-database-role-that-can-only-read) below, saving fails with a database error: that role cannot write.
 
 ## AI traps and the JD
@@ -474,6 +477,8 @@ long it took, and whether it worked. Never the arguments or the results. Errors 
 Add `tracking:write` to both `permissions` and `stdio.permissions`, then restart the MCP client so the server can open
 its write connection. Without both the effective permission and that connection, none of these tools is offered. Removing
 the permission or switching the server off refuses subsequent calls without a restart. The application writer switch is independent.
+Over HTTP, access is the global `permissions` matrix intersected with the token's grant (`stdio.permissions` does not apply),
+and the writer switch is not involved.
 
 The four tracking tools call the same services as the web. A successful receipt contains only `audit_id`, `job_id`, `field`,
 `undoable`, `research` and notices. It does not echo the new or previous text. Blank next-step text clears it; null or an empty
@@ -504,12 +509,87 @@ A write-enabled agent that reads malicious text can still corrupt application tr
 prevent them, and later edits can make undo conflict. Remove its write grant or disable MCP to stop subsequent calls. For a
 token-based connection, revoke its token to stop it; this release serves local stdio, so disable that connection or its grants.
 
+## Action tools and daily limits
+
+All eight tools require effective `actions:run` in both `permissions` and `stdio.permissions`. Add `writer:write` for
+`draft_answer` in both lists as well. Missing permissions hide a tool and refuse a direct
+call as `not_permitted`, naming the missing permission. Feature switches hide their tools and direct calls fail as `disabled`
+before touching a budget. The seven triggers also require an action write connection: restart the client after first granting
+action access. The stdio server opens one separate write session (`max: 1`) only when an action capability is permitted at
+startup and closes it on shutdown. Reads retain their read-only connection.
+Over HTTP, access is the global `permissions` matrix intersected with the token's grant (`stdio.permissions` does not apply);
+the triggers use the HTTP write pool instead of a separate session.
+
+| Tool | Inputs | Behavior and additional gate |
+|---|---|---|
+| `run_collection` | Optional `channel_ids` (1–50 configured strings), `backfill_hours` | Queues manual collection; backfill respects `collect.max_backfill_hours` and the cycle busy gate |
+| `score_jobs` | Exactly one of `job_ids` (1–50 positive integers) or `backlog: true` | Queues scoring; named jobs each cost one unit; backlog reserves `ai.yaml: scoring.backlog_per_run`, at least one |
+| `translate_job` | `job_id`, optional `force` (false) | Queues JD translation or uses a current cache |
+| `breakdown_job` | `job_id`, optional `force` (false) | Queues JD breakdown or uses a current cache; `breakdown.yaml: enabled` |
+| `research_salary` | `job_id`, optional `force` (false) | Queues salary research or uses a current cache; `salary.yaml: lookup.enabled` |
+| `research_company` | `job_id`, optional `force` (false) | Queues company research or uses a current cache; `research.yaml: enabled` |
+| `draft_answer` | `job_id`, `question_id`, `mode` (`draft` or `polish`); polish also requires `option` (`align_to_job` or `language_only`) and `text` | Needs `writer:write` and `writer.yaml: enabled`; text is bounded by `draft_max_chars`, selected material and payload scrubbing match the web writer. In polish mode, the agent-supplied `text` is sent as the owner’s draft ("your draft"); the agent decides what it pastes. |
+| `get_request_status` | `request_id` (positive integer) | Read-only, no daily budget; status and allow-listed result metadata for this connection's action requests |
+
+All numeric ids are positive integers. Inputs reject unknown fields, including
+`caller`. Caller identity is set by the server, separately from input. Joining a request never changes its original caller.
+
+| Daily cap | Default per caller |
+|---|---:|
+| `run_collection` | 2 |
+| `score_jobs` (jobs) | 300 |
+| `translate_job` | 60 |
+| `breakdown_job` | 20 |
+| `research_salary` | 10 |
+| `research_company` | 10 |
+| `draft_answer` | 20 |
+| `tailor_resume` (reserved, no tool uses it yet) | 5 |
+| `total` (requests across all callers and actions) | 200 |
+
+Set overrides under `budgets` in `data/config/mcp.yaml` or Settings → Advanced, for example:
+
+```yaml
+budgets:
+  per_caller:
+    score_jobs: 300
+    translate_job: 60
+  total: 200
+```
+
+Feature switches are checked before taking budget; quotas, deduplication, busy and backfill gates run as on the web,
+and a refused request refunds the charge. These caps are an additional layer. Existing manual-trigger minimum intervals
+where implemented, salary/company daily quotas, AI usage windows, cooldowns, API budgets and `another_cycle_running` remain authoritative. Collection repeats join an open
+covering request; the collection enqueue function does not add a minimum-interval check. A backfill is refused while a cycle
+request is open; execution still checks the active processing-cycle lock. Runtime failures remain visible through status.
+
+A budget reservation happens before enqueueing. Only a newly created request retains it: joining an open request, a cache hit,
+an enqueue error or an exception refunds the ticket once. A worker failure after successful enqueueing retains the charge.
+A batch exceeding the remaining budget is refused in full as `over_budget`: the message names the action, cap, remaining units
+(jobs for scoring, requests for a total refusal), requested amount, and the next local reset with its time zone. Nothing is
+queued. `total` counts requests, so one scoring batch consumes one total unit. Counters reset at local midnight in the schedule
+time zone. Zero disables the action, or all actions for `total: 0`.
+
+The seven trigger results contain only `request_id` (nullable), `state` (`queued`, `joined_existing`, `cached`), `existing`,
+`budget` (`action`, `remaining`, `resets_at` as ISO), and `notices`. A cache hit queues nothing and has no request id.
+
+`get_request_status` only finds the seven created kinds (`run_cycle`, `score_jobs`, `translate_job`, `breakdown_job`,
+`salary_lookup`, `company_research`, `writer_job`) with an exact `payload.caller` match. Other callers, web
+requests, scheduler requests, unsupported kinds and missing ids all return the same **Request not found** response. This also
+applies when a tool joined a web request: its id is returned, but that caller cannot inspect it. Status gives `pending`,
+`running`, `done` or `failed`, timestamps, queue `ahead` and `worker_online` (both null after completion), allow-listed error
+codes, `resume_at`, counts (`scored`, `failed`, `remaining`, `fetched`, `new`), `stopped`, and collection-cycle progress. It never
+returns the payload, result text, provider details or error detail. Unknown error strings become `other`.
+
+Submissions and status queries each use the normal audit path. An over-budget refusal records `outcome: over_budget` with
+`error_category: null`; no audit row contains arguments. Per-job actions target the job; drafting targets the question;
+collection, scoring batches and status queries have no audit target.
+
 ## Audit trail
 
 Each tool call also adds one row to the local `agent_calls` table. `tools/list` adds none. A row holds only its numeric id,
 call time (`called_at`), caller (`stdio` or `token`), transport (`stdio` or `http`), and nullable `token_id` (null for stdio), capability id,
 optional target type and numeric id (`job`, `application` or `question`), outcome (`ok`, `not_permitted`, `invalid_input`
-or `error`), returned item count and duration in milliseconds. Only an `error` row has an `error_category`: a fixed
+or `over_budget` or `error`), returned item count and duration in milliseconds. Only an `error` row has an `error_category`: a fixed
 category such as `database` or `not_found`. Invalid input has no target. No row holds arguments, returned content or
 message text, including error messages.
 

@@ -39,6 +39,15 @@ import { get_career_document } from "./career/get-career-document";
 import { check_career_document } from "./career/check-career-document";
 import { list_replies } from "./replies/list-replies";
 
+import { run_collection } from "./actions/run-collection";
+import { score_jobs } from "./actions/score-jobs";
+import { translate_job } from "./actions/translate-job";
+import { breakdown_job } from "./actions/breakdown-job";
+import { research_salary } from "./actions/research-salary";
+import { research_company } from "./actions/research-company";
+import { draft_answer } from "./actions/draft-answer";
+import { get_request_status } from "./actions/get-request-status";
+
 export const CAPABILITIES: readonly Capability[] = [
   search_jobs,
   get_job,
@@ -71,21 +80,29 @@ export const CAPABILITIES: readonly Capability[] = [
   set_next_action,
   set_interview_rounds,
   undo_change,
+  run_collection,
+  score_jobs,
+  translate_job,
+  breakdown_job,
+  research_salary,
+  research_company,
+  draft_answer,
+  get_request_status,
 ];
 
 /**
  * The capabilities a client is offered now: authorized for the connection's grant against one fresh read of mcp.yaml (none when it
  * cannot be read), and available.
  */
-export function visibleCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer" | "tracking" | "features" | "grant">): readonly Capability[] {
-  return listedCapabilities(capabilities, ctx).map(({ capability }) => capability);
+export async function visibleCapabilities(capabilities: readonly Capability[], ctx: Pick<McpContext, "readSettings" | "writer" | "tracking" | "actions" | "features" | "grant">): Promise<readonly Capability[]> {
+  return (await listedCapabilities(capabilities, ctx)).map(({ capability }) => capability);
 }
 
 /** A list and its caller's effective permissions share one fresh settings read, including a failed read. */
-export function listedCapabilities(
+export async function listedCapabilities(
   capabilities: readonly Capability[],
-  ctx: Pick<McpContext, "readSettings" | "writer" | "tracking" | "features" | "grant">,
-): { capability: Capability; permissions: ReadonlySet<Permission> }[] {
+  ctx: Pick<McpContext, "readSettings" | "writer" | "tracking" | "actions" | "features" | "grant">,
+): Promise<{ capability: Capability; permissions: ReadonlySet<Permission> }[]> {
   let read: { settings: McpConfig } | { error: unknown };
   try {
     read = { settings: ctx.readSettings() };
@@ -96,8 +113,8 @@ export function listedCapabilities(
     if ("error" in read) throw read.error;
     return read.settings;
   };
-  return capabilities.flatMap((capability) => {
+  return (await Promise.all(capabilities.map(async (capability) => {
     const decision = authorize(capability, once, ctx.grant);
-    return decision.allowed && (capability.availability?.available(ctx) ?? true) ? [{ capability, permissions: decision.permissions }] : [];
-  });
+    return decision.allowed && (await capability.availability?.available(ctx) ?? true) ? [{ capability, permissions: decision.permissions }] : [];
+  }))).flat();
 }

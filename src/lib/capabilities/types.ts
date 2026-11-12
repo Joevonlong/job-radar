@@ -12,7 +12,8 @@ export interface Capability {
   id: string;
   kind: "read" | "write" | "trigger";
   permission: Permission;
-  input: (ctx: Pick<McpContext, "text">) => z.ZodObject;
+  alsoRequires?: readonly Permission[];
+  input: (ctx: Pick<McpContext, "text" | "writer">) => z.ZodObject;
   output: z.ZodType<CapabilityOutput>;
   handler: (ctx: McpContext, args: unknown) => Promise<CapabilityOutput>;
   count: (output: CapabilityOutput) => number;
@@ -23,13 +24,13 @@ export interface Capability {
    * Whether it can be offered and called at all right now, besides permissions (the application writer switched on, ...), and the
    * failure a call gets when it cannot. The list and the call apply the same rule.
    */
-  availability?: { available: (ctx: Pick<McpContext, "writer" | "tracking" | "features">) => boolean; category: string; message: MessageKey };
+  availability?: { available: (ctx: Pick<McpContext, "writer" | "tracking" | "actions" | "features">) => boolean | Promise<boolean>; category: string; message: MessageKey };
   blocks?: readonly { key: string; permission: Permission; onRequest: boolean }[];
   outputFor?: (permissions: ReadonlySet<Permission>) => z.ZodType<CapabilityOutput>;
 }
 
 type CapabilityDefinition<I extends z.ZodObject, O extends z.ZodType<CapabilityOutput>> = Omit<Capability, "input" | "output" | "handler" | "count" | "target" | "outputFor"> & {
-  input: (ctx: Pick<McpContext, "text">) => I;
+  input: (ctx: Pick<McpContext, "text" | "writer">) => I;
   output: O;
   handler: (ctx: McpContext, args: z.output<I>) => Promise<z.output<O>>;
   count: (output: z.output<O>) => number;
