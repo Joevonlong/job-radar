@@ -280,7 +280,8 @@ curl -i 'https://<machine>.<tailnet>.ts.net/api/mcp' \
 
 HTTP 额外使用最多 `read_max + write_max + 1` 个数据库连接（默认六个），与 Web 共享池及各 stdio 进程独立，
 连接池和审计连接都延迟打开。认证通过且声明大小未超限后更新 `agent_tokens.last_used_at`；更新失败只记错误类别，
-不阻止调用。写池用于最后使用时间，只有满足与 stdio 相同的写作开关和权限规则时，才会传给工具。
+不阻止调用。写池用于最后使用时间；只有 token 能做的写入才会把它交给工具：保存答案（`writer:write` 且写作开关打开）、
+追踪写入（`tracking:write`）和动作触发（`actions:run`）。
 HTTP 工具审计行带 `caller: token`、token id 和 `transport: http`，不含 token 文本、哈希或前缀。
 
 `pnpm run doctor` 的 `data.mcp` 增加 HTTP 开关、可用密码状态（缺失时警告 503 并提示 `pnpm web:password`）、
@@ -425,6 +426,7 @@ agent 预算预留、排队任务和写入审计一起提交，事务失败一�
 直接调用返回 `not_permitted` 并指出缺少的权限。关闭功能后，工具隐藏，直接调用在扣额度前返回 `disabled`。
 七个触发工具还需要动作写连接：首次授予动作权限后重启客户端。stdio 服务仅在启动时有动作能力获授权的情况下，
 打开一条独立写连接（`max: 1`），关闭时释放；读取继续使用只读连接。
+经 HTTP 访问时，权限是全局 `permissions` 与 token 授权的交集（不看 `stdio.permissions`），触发工具使用 HTTP 写池，不另开连接。
 
 | 工具 | 输入 | 行为和额外开关 |
 |---|---|---|

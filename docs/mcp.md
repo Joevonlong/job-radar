@@ -322,7 +322,8 @@ Persistent subscriptions remain disabled.
 HTTP adds up to `read_max + write_max + 1` database sessions (six by default), separate from the web shared pool and any
 stdio process. Pools and the dedicated audit connection open lazily. `agent_tokens.last_used_at` is updated after successful
 authentication and the declared-size check; update failure is category-only logged and does not fail the MCP call. The write
-pool serves last-use metadata, but is passed to tools only when the same writer and permission rules as stdio allow it.
+pool serves last-use metadata. Tools receive it only for the writes the token may make: answer saving (`writer:write` plus
+the writer switch), tracking writes (`tracking:write`) and action triggers (`actions:run`).
 HTTP tool audit rows carry `caller: token`, the token id and `transport: http`, without token text, hash or prefix.
 
 `pnpm run doctor` (`data.mcp`) includes HTTP enabled, usable-password status (warns with 503 and `pnpm web:password` when
@@ -496,6 +497,8 @@ call as `not_permitted`, naming the missing permission. Feature switches hide th
 before touching a budget. The seven triggers also require an action write connection: restart the client after first granting
 action access. The stdio server opens one separate write session (`max: 1`) only when an action capability is permitted at
 startup and closes it on shutdown. Reads retain their read-only connection.
+Over HTTP, access is the global `permissions` matrix intersected with the token's grant (`stdio.permissions` does not apply);
+the triggers use the HTTP write pool instead of a separate session.
 
 | Tool | Inputs | Behavior and additional gate |
 |---|---|---|
