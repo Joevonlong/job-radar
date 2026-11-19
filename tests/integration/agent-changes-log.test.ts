@@ -107,6 +107,16 @@ describe("agent change log maintenance", () => {
     expect(await remainingKeys(first.db)).toEqual([]);
   });
 
+  it("prunes expired changes without recreating a missing log identity", async () => {
+    await first.db.delete(agentChangeLog);
+    await addChanges(first.db, old(), "old-first", "old-second");
+    await addChanges(first.db, sql`now()`, "fresh");
+
+    expect(await pruneAgentChanges(first.db, retentionDays)).toBe(2);
+    expect(await remainingKeys(first.db)).toEqual(["fresh"]);
+    expect(await readAgentChangeLogIdentity(first.db)).toBeNull();
+  });
+
   it.each(["prune", "reset"] as const)("serializes maintenance while %s holds the log row", async (firstOperation) => {
     await addChanges(first.db, old(), "old");
     const original = await logState(first.db);

@@ -87,16 +87,20 @@ export async function resetAgentChangesIfNeeded(db: Db): Promise<boolean> {
   }, { isolationLevel: "read committed" });
 }
 
-/** Keep the pruning position monotonic even when an older transaction writes a more recent timestamp. */
+/**
+ * Keep the pruning position monotonic even when an older transaction writes a more recent timestamp.
+ * Without a locked identity, prune only when the delete snapshot still sees no identity.
+ */
 export async function pruneAgentChanges(db: Executor, retentionDays: number): Promise<number> {
   return db.transaction(async (tx) => {
-    if (!(await lockAgentChangeLog(tx))) return 0;
+    const logId = await lockAgentChangeLog(tx);
 
     const [row] = await tx.execute<{ deleted: string }>(sql`
       with deleted as (
         delete from public.agent_changes
         where at < now() - make_interval(days => ${retentionDays})
           and tx < pg_snapshot_xmin(pg_current_snapshot())
+          and (${logId}::uuid is not null or not exists (select 1 from public.agent_change_log))
         returning tx, seq
       ), latest as (
         select tx, seq from deleted order by tx desc, seq desc limit 1
@@ -104,7 +108,7 @@ export async function pruneAgentChanges(db: Executor, retentionDays: number): Pr
         update public.agent_change_log as log
         set pruned_through_tx = latest.tx, pruned_through_seq = latest.seq
         from latest
-        where log.singleton and (log.pruned_through_tx is null
+        where log.singleton and log.log_id = ${logId}::uuid and (log.pruned_through_tx is null
           or (log.pruned_through_tx, log.pruned_through_seq) < (latest.tx, latest.seq))
       )
       select count(*)::text as deleted from deleted
