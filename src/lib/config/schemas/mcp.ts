@@ -7,6 +7,7 @@ export const MCP_MAX_RESULTS_CAP = 100;
 export const MCP_MAX_DESCRIPTION_CHARS_CAP = 100_000;
 export const MCP_MAX_RAW_CHARS_CAP = 1_000_000;
 export const MCP_MAX_DAILY_CAP = 100_000;
+export const syncBatchSize = z.int().min(1).max(200);
 
 export const AGENT_ACTIONS = [
   "run_collection", "score_jobs", "translate_job", "breakdown_job",
@@ -83,6 +84,7 @@ export const mcpSchema = z.strictObject({
   }).default({ retention_days: 90, connect_timeout_seconds: 2, statement_timeout_ms: 1500, lock_timeout_ms: 200, write_timeout_ms: 2000 }),
   sync: z.strictObject({
     retention_days: z.number().int().min(1).max(365).default(30),
+    max_batch: syncBatchSize.default(50),
   }).prefault({}),
   limits: z
     .strictObject({

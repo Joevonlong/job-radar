@@ -8,12 +8,14 @@
  */
 import { McpServer, type StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 
-import { authorizeCall, liveMcpSettings, type AccessDecision } from "@/lib/agent-access/authorize";
+import { authorize, authorizeCall, liveMcpSettings, type AccessDecision } from "@/lib/agent-access/authorize";
 import { CAPABILITIES, listedCapabilities } from "@/lib/capabilities/registry";
 import type { Capability } from "@/lib/capabilities/types";
+import { SYNC_TOOLS } from "@/lib/capabilities/sync/cursor";
 import { loadConfig, reloadConfig } from "@/lib/config";
 import type { McpConfig } from "@/lib/config/schemas/mcp";
 import type { Db } from "@/lib/db/client";
+import { withAgentChangeSnapshot } from "@/lib/db/repos/agent-changes";
 import { cityMembers } from "@/lib/jobs/city-groups";
 import { loadCityGroups } from "@/lib/jobs/cities";
 import { buildSearchPlanLenient } from "@/lib/jobs/search";
@@ -31,6 +33,22 @@ function featureEnabled(name: "career" | "replies"): boolean {
 }
 
 export const MCP_SERVER_NAME = "job-radar";
+
+const syncStartupChecks = new WeakMap<Db, Promise<void>>();
+
+/** One startup check per read pool, plus a fresh check inside every sync call so a runner reset can restore service. */
+export async function checkMcpSyncStartup(ctx: McpContext): Promise<void> {
+  const available = CAPABILITIES.some((cap) => SYNC_TOOLS.some((tool) => tool === cap.id) && authorize(cap, () => ctx.settings, ctx.grant).allowed);
+  if (!available) return;
+  let check = syncStartupChecks.get(ctx.db);
+  if (!check) {
+    check = withAgentChangeSnapshot(ctx.db, async () => {}).catch(() => {
+      ctx.log(ctx.text("sync.errors.unavailable"));
+    });
+    syncStartupChecks.set(ctx.db, check);
+  }
+  await check;
+}
 
 /** The context with the real loaders (config files, the city groups of the database); `readSettings` defaults to mcp.yaml read fresh from disk. */
 export function defaultContext(
@@ -139,8 +157,8 @@ export function buildServer(ctx: McpContext, options: { version?: string; capabi
 
   server.server.removeRequestHandler("tools/list");
   server.server.setRequestHandler("tools/list", async () => ({
-    tools: (await listedCapabilities(capabilities, ctx)).map(({ capability: cap, permissions }) => {
-      const inputSchema = cap.input(ctx)["~standard"].jsonSchema.input({ target: "draft-2020-12" });
+    tools: (await listedCapabilities(capabilities, ctx)).map(({ capability: cap, permissions, settings }) => {
+      const inputSchema = cap.input(ctx, settings)["~standard"].jsonSchema.input({ target: "draft-2020-12" });
       const outputSchema = (cap.outputFor?.(permissions) ?? cap.output)["~standard"].jsonSchema.output({ target: "draft-2020-12" });
       return {
         name: cap.id,

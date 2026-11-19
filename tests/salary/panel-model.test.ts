@@ -14,7 +14,7 @@ const context = (over: Partial<SalaryContext> = {}): SalaryContext => ({
 
 const band = { title: "Engineer", seniority: null, location: null, basis: "base", min: 80000, max: 100000, median: 90000, convertible: true, original: { min: 80000, max: 100000, median: 90000, currency: "EUR" }, sources: [] };
 const view = (over: Record<string, unknown>): SalaryLookupView => ({
-  id: 1, origin: null, provider: null, model: null, fetchedAt: "2026-01-01T00:00:00.000Z", expired: false,
+  id: 1, origin: null, provider: null, model: null, fetchedAt: "2026-01-01T00:00:00.000Z", expiresAt: "2026-02-01T00:00:00.000Z", expired: false,
   result: salaryLookupResultSchema.parse({
     query: { company: "Acme", title: "Engineer", seniority: "senior", city: null, country: null, currency: "EUR" },
     companyLevel: { level: "market", median: null, summary: "", sources: [] },

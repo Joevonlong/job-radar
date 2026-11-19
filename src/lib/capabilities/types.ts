@@ -3,6 +3,7 @@ import type { z } from "zod";
 
 import type { Permission } from "@/lib/agent-access/permissions";
 import type { AuditTarget } from "@/lib/agent-access/audit";
+import type { McpConfig } from "@/lib/config/schemas/mcp";
 import type { McpContext } from "@/lib/mcp/context";
 
 type CapabilityOutput = { notices: string[] } & Record<string, unknown>;
@@ -14,7 +15,7 @@ export interface Capability {
   kind: "read" | "write" | "trigger";
   permission: Permission;
   alsoRequires?: readonly Permission[];
-  input: (ctx: InputContext) => z.ZodObject;
+  input: (ctx: InputContext, advertisedSettings?: McpConfig) => z.ZodObject;
   output: z.ZodType<CapabilityOutput>;
   handler: (ctx: McpContext, args: unknown) => Promise<CapabilityOutput>;
   count: (output: CapabilityOutput) => number;
@@ -31,7 +32,7 @@ export interface Capability {
 }
 
 type CapabilityDefinition<I extends z.ZodObject, O extends z.ZodType<CapabilityOutput>> = Omit<Capability, "input" | "output" | "handler" | "count" | "target" | "outputFor"> & {
-  input: (ctx: InputContext) => I;
+  input: (ctx: InputContext, advertisedSettings?: McpConfig) => I;
   output: O;
   handler: (ctx: McpContext, args: z.output<I>) => Promise<z.output<O>>;
   count: (output: z.output<O>) => number;

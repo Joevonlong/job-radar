@@ -35,7 +35,7 @@ const salary = (over: Partial<JobSalary> = {}): JobSalary => ({
 
 const band = { title: "Engineer", seniority: "senior", location: null, basis: "base", min: 120000, max: 150000, median: 135000, convertible: true, original: { min: 120000, max: 150000, median: 135000, currency: "EUR" }, sources: [0] };
 const lookup = (over: Record<string, unknown> = {}): SalaryLookupView => ({
-  id: 1, origin: { jobId: 7, title: "Engineer" }, provider: "seed", model: "seed", fetchedAt: "2026-01-01T12:00:00.000Z", expired: false,
+  id: 1, origin: { jobId: 7, title: "Engineer" }, provider: "seed", model: "seed", fetchedAt: "2026-01-01T12:00:00.000Z", expiresAt: "2026-02-01T12:00:00.000Z", expired: false,
   result: salaryLookupResultSchema.parse({
     query: { company: "Acme", title: "Engineer", seniority: "senior", city: null, country: null, currency: "EUR" },
     companyLevel: { level: "above", median: 140000, summary: "Pays well", sources: [0] },

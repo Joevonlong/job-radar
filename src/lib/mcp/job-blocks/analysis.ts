@@ -3,13 +3,13 @@ import type { z } from "zod";
 
 import { parseStoredBreakdown, type BreakdownContent } from "@/lib/breakdown/content";
 import { getJobBreakdown } from "@/lib/db/repos/breakdowns";
-import { getCompanyResearchForJob } from "@/lib/db/repos/company-research";
+import { getCompanyResearchForJob, type CompanyResearchView } from "@/lib/db/repos/company-research";
 import { getTranslation } from "@/lib/db/repos/translations";
 import { salaryContextInput } from "@/lib/jobs/detail-inputs";
 import { buildGhostCheckView } from "@/lib/ghost/view";
 import type { GhostReason } from "@/lib/ghost/types";
 import type { McpContext } from "@/lib/mcp/context";
-import { breakdownBlockDto, companyBlockDto, ghostBlockDto, ghostReasonDto, lifecycleBlockDto, salaryBlockDto, translationBlockDto } from "@/lib/mcp/dto/job-analysis";
+import { breakdownBlockDto, companyBlockDto, ghostBlockDto, ghostReasonDto, lifecycleBlockDto, salaryBlockDto, syncCompanyBlockDto, syncSalaryBlockDto, translationBlockDto } from "@/lib/mcp/dto/job-analysis";
 import { isoOrNull } from "@/lib/mcp/dto/shared";
 import { safeSourceUrl, truncateText } from "@/lib/mcp/guard";
 import { COMPANY_RESEARCH_FIELDS } from "@/lib/research/fields";
@@ -69,12 +69,23 @@ export async function loadBreakdown(ctx: McpContext, source: JobBlockSource): Pr
 export async function loadCompany(ctx: McpContext, source: JobBlockSource): Promise<z.infer<typeof companyBlockDto>> {
   const row = await getCompanyResearchForJob(ctx.db, source.detail.id, ctx.now());
   if (row === null) return null;
-  if (!source.strict.ok) return { available: false, reason: source.strict.reason, fetched_at: null, expired: null, fields: [] };
+  const block = companyBlock(source, row);
+  return { ...block, expired: block.available ? row.expired : null };
+}
+
+export async function loadSyncCompany(ctx: McpContext, source: JobBlockSource): Promise<z.infer<typeof syncCompanyBlockDto>> {
+  const row = await getCompanyResearchForJob(ctx.db, source.detail.id, ctx.now());
+  if (row === null) return null;
+  const block = companyBlock(source, row);
+  return { ...block, expires_at: block.available ? isoOrNull(row.expiresAt) : null };
+}
+
+function companyBlock(source: JobBlockSource, row: CompanyResearchView): Omit<NonNullable<z.infer<typeof companyBlockDto>>, "expired"> {
+  if (!source.strict.ok) return { available: false, reason: source.strict.reason, fetched_at: null, fields: [] };
   return {
     available: true,
     reason: null,
     fetched_at: row.fetchedAt.toISOString(),
-    expired: row.expired,
     fields: COMPANY_RESEARCH_FIELDS.flatMap((field) => {
       const entry = row.fields[field];
       return entry ? [{ field, text: source.clean(companyFieldText(entry.text)), source_url: safeSourceUrl(httpsUrlOrNull(entry.sourceUrl), source.clean) }] : [];
@@ -83,26 +94,48 @@ export async function loadCompany(ctx: McpContext, source: JobBlockSource): Prom
 }
 
 export async function loadSalary(ctx: McpContext, source: JobBlockSource): Promise<z.infer<typeof salaryBlockDto>> {
-  const settings = jobBlockSettings();
+  const result = await salaryBlock(ctx, source, false);
+  if (result === null) return null;
+  const { block, company, latest } = result;
+  return {
+    ...block,
+    company_figures: company ? { count: company.count, median: company.median } : null,
+    lookup: block.lookup && { ...block.lookup, expired: block.lookup.available ? latest?.expired ?? null : null },
+  };
+}
+
+export async function loadSyncSalary(ctx: McpContext, source: JobBlockSource): Promise<z.infer<typeof syncSalaryBlockDto>> {
+  const result = await salaryBlock(ctx, source, true);
+  if (result === null) return null;
+  const { block, latest } = result;
+  return { ...block, lookup: block.lookup && { ...block.lookup, expires_at: block.lookup.available ? latest?.expiresAt ?? null : null } };
+}
+
+type SalaryBlock = NonNullable<z.infer<typeof salaryBlockDto>>;
+
+async function salaryBlock(ctx: McpContext, source: JobBlockSource, sync: boolean) {
+  const settings = source.settings ?? jobBlockSettings();
   const currency = settings.baseCurrency() ?? "";
-  const value = await getSalaryContext(ctx.db, salaryContextInput(source.detail, { currency, salary: settings.salary(), ai: settings.ai(), locale: ctx.text.locale ?? "en", now: ctx.now() }));
+  const value = await getSalaryContext(ctx.db, salaryContextInput(source.detail, {
+    currency, salary: settings.salary(), ai: settings.ai(), locale: ctx.text.locale ?? "en", now: ctx.now(), ...(sync ? { sync } : {}),
+  }));
   if (value === null) return null;
   const { clean } = source;
   const text = (value: string | null) => value === null ? null : clean(value);
   const band = (value: SalaryBand) => ({ title: clean(value.title), seniority: text(value.seniority), min: value.min, max: value.max, median: value.median, basis: value.basis, location: text(value.location) });
   const latest = value.lookup.latest;
-  const lookup: NonNullable<z.infer<typeof salaryBlockDto>>["lookup"] = latest === null ? null : !source.strict.ok
-    ? { available: false, reason: source.strict.reason, fetched_at: null, expired: null, company_level: null, role_band: null, related_roles: null, sources: null, confidence: null, notes: null }
-    : { available: true, reason: null, fetched_at: latest.fetchedAt, expired: latest.expired, company_level: { level: latest.result.companyLevel.level, median: latest.result.companyLevel.median, summary: clean(latest.result.companyLevel.summary) }, role_band: latest.result.roleBand ? band(latest.result.roleBand) : null, related_roles: latest.result.relatedRoles.map(band), sources: latest.result.sources.map((entry) => ({ url: safeSourceUrl(entry.url, clean), host: clean(entry.host), site: clean(entry.site), title: clean(entry.title), excerpt: clean(entry.excerpt), trusted: entry.trusted })), confidence: latest.result.confidence, notes: clean(latest.result.notes) };
-  return {
+  const lookup: Omit<NonNullable<SalaryBlock["lookup"]>, "expired"> | null = latest === null ? null : !source.strict.ok
+    ? { available: false, reason: source.strict.reason, fetched_at: null, company_level: null, role_band: null, related_roles: null, sources: null, confidence: null, notes: null }
+    : { available: true, reason: null, fetched_at: latest.fetchedAt, company_level: { level: latest.result.companyLevel.level, median: latest.result.companyLevel.median, summary: clean(latest.result.companyLevel.summary) }, role_band: latest.result.roleBand ? band(latest.result.roleBand) : null, related_roles: latest.result.relatedRoles.map(band), sources: latest.result.sources.map((entry) => ({ url: safeSourceUrl(entry.url, clean), host: clean(entry.host), site: clean(entry.site), title: clean(entry.title), excerpt: clean(entry.excerpt), trusted: entry.trusted })), confidence: latest.result.confidence, notes: clean(latest.result.notes) };
+  const block = {
     currency: clean(value.currency),
     figure: value.figure,
     family: text(value.familyId),
     benchmark: value.group ? { level: value.group.level, seniority: text(value.group.seniority), place: text(value.group.place), n: value.group.n, median: value.group.median, quantiles: value.group.quantiles.map((number) => number) } : null,
     position: value.position ? { value: value.position.value, clamp: value.position.clamp } : null,
-    company_figures: value.company ? { count: value.company.count, median: value.company.median } : null,
     lookup,
   };
+  return { block, company: value.company, latest };
 }
 
 export function toGhostReason(reason: GhostReason, source: JobBlockSource): z.infer<typeof ghostReasonDto> {
@@ -116,7 +149,7 @@ export function toGhostReason(reason: GhostReason, source: JobBlockSource): z.in
 }
 
 export async function loadGhost(_ctx: McpContext, source: JobBlockSource): Promise<z.infer<typeof ghostBlockDto>> {
-  if (!jobBlockSettings().ghostEnabled()) return null;
+  if (!(source.settings ?? jobBlockSettings()).ghostEnabled()) return null;
   const view = buildGhostCheckView(source.detail.ghost);
   return { state: view.state, level: view.level, score: view.score, checked_at: isoOrNull(source.detail.ghost?.checkedAt ?? null), dismissed: source.detail.ghost?.dismissed ?? false, reasons: view.reasons.map((reason) => toGhostReason(reason, source)) };
 }

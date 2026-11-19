@@ -7398,6 +7398,22 @@
     }
   },
   "mcp": {
+    "sync": {
+      "params": {
+        "cursor": "上一批返回的不透明游标。省略或传 null 开始新的快照。",
+        "limit": "每批最多返回的项数。默认使用配置中的 sync.max_batch。",
+        "blocks": "要同步的岗位字段块。基础 job 块始终包含。省略时使用 get_job 在当前权限下的默认块。"
+      },
+      "errors": {
+        "invalidCursor": "invalid_cursor: 同步游标格式有误或未通过验证。请去掉游标重新开始。",
+        "pruned": "resync_required (pruned): 变更日志已清理到游标之后。请去掉游标重新开始。",
+        "logReset": "resync_required (log_reset): 变更日志已重置。请去掉游标重新开始。",
+        "scopeChanged": "resync_required (scope_changed): 同步工具、字段块、权限或数据格式已变化。请去掉游标重新开始。",
+        "unavailable": "sync_unavailable: 无法校验变更日志身份。",
+        "limit": "参数校验失败：limit 必须介于 1 和 {max} 之间。",
+        "block": "参数校验失败：字段块 {block} 需要 {permission} 权限。"
+      }
+    },
     "serve": {
       "disabled": "Job Radar 的 MCP 服务没有打开。在 mcp.yaml（data/config/ 下，或设置 → 高级）里设 enabled: true，再重启你的 MCP 客户端。见 docs/mcp.zh.md。",
       "configError": "mcp.yaml 读不出来：{problem}。用 pnpm config:check 看是哪一项。",
@@ -7475,6 +7491,10 @@
       "get_job": {
         "title": "查看岗位",
         "description": "一个岗位的详情：事实字段、来源链接、分数与排名、带 JD 引用和位置的薪酬 / 福利信号、发现的 AI 陷阱数量、你的申请状态，以及 Job Radar 去掉针对 AI 的文字后的 JD 正文。该岗位还没做陷阱检查时不给 JD 正文。 可用 include 请求翻译、职位拆解、薪资背景、公司研究、幽灵职位检查和生命周期。有效的 match:read、tracking:read 和 notes:read 权限会自动增加对应字段块。"
+      },
+      "list_job_changes": {
+        "title": "同步岗位",
+        "description": "分批读取全部岗位，包括历史岗位和被硬条件筛掉的岗位，然后用 next_cursor 跟进变更。用 job_id 更新本地副本，移除标为 removed 的岗位。收到 snapshot_complete 为 true 后，删除属于旧代的记录。"
       },
       "list_applications": {
         "title": "查看申请",

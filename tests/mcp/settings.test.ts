@@ -24,7 +24,7 @@ describe("mcp.yaml schema", () => {
       permissions: ["jobs:read", "tracking:read"],
       stdio: { permissions: ["jobs:read", "tracking:read"] },
       audit: { retention_days: 90, connect_timeout_seconds: 2, statement_timeout_ms: 1500, lock_timeout_ms: 200, write_timeout_ms: 2000 },
-      sync: { retention_days: 30 },
+      sync: { retention_days: 30, max_batch: 50 },
       limits: { max_results: 20, max_description_chars: 12_000, max_raw_chars: 20_000 },
       budgets: {
         per_caller: {
@@ -48,6 +48,12 @@ describe("mcp.yaml schema", () => {
     expect(mcpSchema.parse({ sync: {} }).sync.retention_days).toBe(30);
     for (const retention_days of [1, 365]) {
       expect(mcpSchema.parse({ sync: { retention_days } }).sync.retention_days).toBe(retention_days);
+    }
+  });
+  it("defaults the sync batch size in existing settings and accepts both ends of its range", () => {
+    expect(mcpSchema.parse({ sync: { retention_days: 7 } }).sync.max_batch).toBe(50);
+    for (const max_batch of [1, 200]) {
+      expect(mcpSchema.parse({ sync: { max_batch } }).sync.max_batch).toBe(max_batch);
     }
   });
   it.each(["permissions", "stdio"])("reports an unknown permission at its array path in %s", (key) => {
@@ -75,6 +81,9 @@ describe("mcp.yaml schema", () => {
     ["excessive sync retention", { sync: { retention_days: 366 } }],
     ["fractional sync retention", { sync: { retention_days: 1.5 } }],
     ["string sync retention", { sync: { retention_days: "30" } }],
+    ["zero sync batch", { sync: { max_batch: 0 } }],
+    ["excessive sync batch", { sync: { max_batch: 201 } }],
+    ["fractional sync batch", { sync: { max_batch: 1.5 } }],
     ["zero connect timeout", { audit: { connect_timeout_seconds: 0 } }],
     ["excessive connect timeout", { audit: { connect_timeout_seconds: 31 } }],
     ["zero statement timeout", { audit: { statement_timeout_ms: 0 } }],

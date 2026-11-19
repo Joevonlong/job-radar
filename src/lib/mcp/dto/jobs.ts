@@ -151,9 +151,12 @@ export const getJobOutput = z.strictObject({
 });
 export type GetJobOutput = z.infer<typeof getJobOutput>;
 
+export function jobDetailDtoFor(permissions: ReadonlySet<Permission>) {
+  return permissions.has("tracking:read") ? jobDetailDto : jobDetailDto.omit(DETAIL_TRACKING_FIELDS);
+}
+
 export function getJobOutputFor(permissions: ReadonlySet<Permission>): z.ZodType<GetJobOutput> {
-  const job = permissions.has("tracking:read") ? jobDetailDto : jobDetailDto.omit(DETAIL_TRACKING_FIELDS);
-  return z.strictObject({ notices, job, ...blockShape(getJobBlocks, permissions) });
+  return z.strictObject({ notices, job: jobDetailDtoFor(permissions), ...blockShape(getJobBlocks, permissions) });
 }
 
 export function toJobCardDto(card: JobCard, clean: CleanText): JobCardDto {

@@ -1,20 +1,21 @@
-import { and, desc, eq, getTableColumns, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, inArray, isNotNull, sql } from "drizzle-orm";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 
 import type { Db } from "../client";
-import { getFavorite, type FavoriteState } from "../repos/favorites";
-import { getClosureOverride, type ClosureOverride } from "../repos/closures";
+import type { Executor } from "../executor";
+import { getFavoriteStates, type FavoriteState } from "../repos/favorites";
+import type { ClosureOverride } from "../repos/closures";
 import { uxTablesReady } from "../repos/ux-tables";
 import { reasonEvidenceColumnReady } from "../repos/scores";
 import { parseReasonEvidence, type ReasonEvidence } from "@/lib/scoring/evidence";
-import { getGhostOfJob } from "../repos/ghost";
-import { getVisaOfJob, type VisaDetail } from "../repos/visa";
+import { getGhostDetails } from "../repos/ghost";
+import { getVisaDetails, type VisaDetail } from "../repos/visa";
 import type { GhostOfJob } from "@/lib/ghost/types";
 import { closedReason, effectiveJobStatus, type ClosedReason } from "@/lib/jobs/closure";
 import { parseLinkCheck, type LinkCheckEvidence } from "@/lib/jobs/link-check-evidence";
-import { getApplicationByJobId, listApplicationEvents, type Application, type ApplicationEvent } from "../repos/applications";
-import { companies, jobs, profileSnapshots, scores, signalScans, translations } from "../schema";
+import { APPLICATION_EVENT_LIMIT, listEventsByApplication, type Application, type ApplicationEvent } from "../repos/applications";
+import { applications, companies, jobClosureOverrides, jobs, profileSnapshots, scores, signalScans, translations } from "../schema";
 import { loadSignals, loadSources } from "./job-cards";
 import { summarizeMonthSalaries } from "@/lib/domain/salary";
 import { ghostTrustedKeys } from "@/lib/ghost/settings";
@@ -111,31 +112,25 @@ export interface JobDetail {
 
 type ScoreRow = Omit<typeof scores.$inferSelect, "reasonEvidence" | "filterInputHash" | "filterConfigHash"> & { reasonEvidence?: unknown };
 
-/**
- * The score row the detail page shows: the newest one, except that a newest row which passed the
- * filter but has no AI score yet (the profile changed, re-scoring is pending) shows the newest row
- * that has a score, marked stale, so the page never goes blank after a profile edit.
- */
-/** The preferences snapshot a filter result was made under: its salary floor, or null when the YAML cannot be read. */
-async function floorOfSnapshot(db: Db, snapshotId: number | null): Promise<number | null> {
-  if (snapshotId === null) return null;
-  const [row] = await db
-    .select({ yaml: profileSnapshots.contentYaml })
-    .from(profileSnapshots)
-    .where(and(eq(profileSnapshots.id, snapshotId), eq(profileSnapshots.kind, "preferences")))
-    .limit(1);
-  if (!row) return null;
+/** Preferences snapshots created before the market packs used the legacy EUR key. */
+function parseSnapshotFloor(yaml: string): number | null {
   try {
-    // snapshots saved before the market packs call it `salary_floor_eur_year`
-    const parsed = z.object({ salary_floor_year: z.number().finite().nonnegative().optional(), salary_floor_eur_year: z.number().finite().nonnegative().optional() }).safeParse(parseYaml(row.yaml));
+    const parsed = z.object({ salary_floor_year: z.number().finite().nonnegative().optional(), salary_floor_eur_year: z.number().finite().nonnegative().optional() }).safeParse(parseYaml(yaml));
     return parsed.success ? (parsed.data.salary_floor_year ?? parsed.data.salary_floor_eur_year ?? null) : null;
   } catch {
     return null;
   }
 }
 
+async function floorsOfSnapshots(db: Executor, snapshotIds: readonly number[]): Promise<Map<number, number | null>> {
+  if (snapshotIds.length === 0) return new Map();
+  const rows = await db.select({ id: profileSnapshots.id, yaml: profileSnapshots.contentYaml }).from(profileSnapshots)
+    .where(and(inArray(profileSnapshots.id, [...new Set(snapshotIds)]), eq(profileSnapshots.kind, "preferences")));
+  return new Map(rows.map(({ id, yaml }) => [id, parseSnapshotFloor(yaml)]));
+}
+
 /**
- * `floorOfSnapshot` for a page of list rows: the floor each job's newest filter result was made under (job id → EUR a year; null when the
+ * The floor each job's newest filter result was made under (job id → EUR a year; null when the
  * snapshot cannot be read). Two queries for the whole page. Only jobs the filter removed for their salary need it (the list says
  * "below the floor of the time" in the detail page's words).
  */
@@ -147,32 +142,34 @@ export async function getFilterFloors(db: Db, jobIds: readonly number[]): Promis
     .from(scores)
     .where(inArray(scores.jobId, [...jobIds]))
     .orderBy(scores.jobId, desc(scores.createdAt), desc(scores.id));
-  const floors = new Map<number, number | null>();
-  for (const snapshotId of new Set(newest.flatMap((row) => (row.snapshotId === null ? [] : [row.snapshotId])))) floors.set(snapshotId, await floorOfSnapshot(db, snapshotId));
+  const floors = await floorsOfSnapshots(db, newest.flatMap((row) => row.snapshotId === null ? [] : [row.snapshotId]));
   for (const row of newest) out.set(row.jobId, row.snapshotId === null ? null : (floors.get(row.snapshotId) ?? null));
   return out;
 }
 
 /** Internal filter hashes are never needed by the page, including before their migration. */
-async function scoreColumns(db: Db) {
+async function scoreColumns(db: Executor) {
   const { reasonEvidence, filterInputHash, filterConfigHash, ...rest } = getTableColumns(scores);
   void [filterInputHash, filterConfigHash];
   return (await reasonEvidenceColumnReady(db)) ? { ...rest, reasonEvidence } : rest;
 }
 
-async function displayedScore(db: Db, jobId: number): Promise<ScoreRow | null> {
+/** A pending re-score keeps the last AI score, with the latest filter result and its preferences snapshot. */
+async function displayedScores(db: Executor, jobIds: number[]): Promise<Map<number, ScoreRow>> {
   const columns = await scoreColumns(db);
-  const [newest] = await db.select(columns).from(scores).where(eq(scores.jobId, jobId)).orderBy(desc(scores.createdAt), desc(scores.id)).limit(1);
-  if (!newest || newest.score !== null || newest.filterResult !== "passed") return newest ?? null;
-  const [scored] = await db
-    .select(columns)
-    .from(scores)
-    .where(and(eq(scores.jobId, jobId), isNotNull(scores.score)))
-    .orderBy(desc(scores.createdAt), desc(scores.id))
-    .limit(1);
-  // the filter fields stay those of the newest row
-  // (and the snapshot the filter result was made under, which is all `profileSnapshotId` is used for below)
-  return scored ? { ...scored, filterResult: newest.filterResult, filterReasons: newest.filterReasons, profileSnapshotId: newest.profileSnapshotId, stale: true } : newest;
+  const newest = await db.selectDistinctOn([scores.jobId], columns).from(scores).where(inArray(scores.jobId, jobIds))
+    .orderBy(asc(scores.jobId), desc(scores.createdAt), desc(scores.id));
+  const result = new Map<number, ScoreRow>(newest.map((row) => [row.jobId, row]));
+  const pending = newest.filter((row) => row.score === null && row.filterResult === "passed");
+  if (pending.length === 0) return result;
+  const previous = await db.selectDistinctOn([scores.jobId], columns).from(scores)
+    .where(and(inArray(scores.jobId, pending.map((row) => row.jobId)), isNotNull(scores.score)))
+    .orderBy(asc(scores.jobId), desc(scores.createdAt), desc(scores.id));
+  for (const row of previous) {
+    const latest = result.get(row.jobId)!;
+    result.set(row.jobId, { ...row, filterResult: latest.filterResult, filterReasons: latest.filterReasons, profileSnapshotId: latest.profileSnapshotId, stale: true });
+  }
+  return result;
 }
 
 export interface JobClosure {
@@ -194,104 +191,138 @@ function detailColumns(listing: boolean) {
   };
 }
 
-/** The closed state of a job; before the migration the automatic status alone. */
-async function loadClosure(db: Db, id: number, autoStatus: JobStatus): Promise<{ status: JobStatus; closure: JobClosure }> {
-  if (!(await uxTablesReady(db))) return { status: autoStatus, closure: { autoStatus, reason: closedReason(autoStatus, null, null), override: null, linkCheck: null } };
+/** Before the closure migration the detail reader falls back to the automatic status. */
+async function loadClosures(db: Executor, jobIds: number[]): Promise<Map<number, { status: JobStatus; closure: JobClosure }>> {
+  if (!(await uxTablesReady(db))) return new Map();
   const dormant = await dormancyReady(db);
-  const [[check], override] = await Promise.all([db.select({ json: jobs.linkCheckJson, dormant: dormantSql(dormant) }).from(jobs).where(eq(jobs.id, id)).limit(1), getClosureOverride(db, id)]);
-  const linkCheck = parseLinkCheck(check?.json);
-  const action = override?.action ?? null;
-  return {
-    status: effectiveJobStatus(autoStatus, action),
-    closure: { autoStatus, reason: closedReason(autoStatus, action, linkCheck?.outcome ?? null, check?.dormant ?? false), override, linkCheck },
-  };
+  const rows = await db.select({
+    id: jobs.id, autoStatus: jobs.status, json: jobs.linkCheckJson, dormant: dormantSql(dormant),
+    override: { action: jobClosureOverrides.action, note: jobClosureOverrides.note, createdAt: jobClosureOverrides.createdAt },
+  }).from(jobs).leftJoin(jobClosureOverrides, eq(jobClosureOverrides.jobId, jobs.id)).where(inArray(jobs.id, jobIds));
+  return new Map(rows.map(({ id, autoStatus, json, dormant, override }) => {
+    const linkCheck = parseLinkCheck(json);
+    const action = override?.action ?? null;
+    return [id, {
+      status: effectiveJobStatus(autoStatus, action),
+      closure: { autoStatus, reason: closedReason(autoStatus, action, linkCheck?.outcome ?? null, dormant), override, linkCheck },
+    }];
+  }));
 }
 
-export async function getJobDetail(db: Db, id: number): Promise<JobDetail | null> {
-  const [row] = await db
+export async function getJobDetail(db: Executor, id: number): Promise<JobDetail | null> {
+  return (await getJobDetails(db, [id])).get(id) ?? null;
+}
+
+export async function getJobDetails(db: Executor, ids: readonly number[]): Promise<Map<number, JobDetail>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
     .select({ job: detailColumns(await listingReady(db)), companyName: companies.name, companyNameNorm: companies.nameNorm, companyWatched: companies.watched })
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .where(eq(jobs.id, id))
-    .limit(1);
-  if (!row) return null;
-  const { job } = row;
-
-  const [sources, signals, score, translated, application, [scan], favorite, closed, visa, ghost] = await Promise.all([
-    loadSources(db, [id]),
-    loadSignals(db, [id]),
-    displayedScore(db, id),
-    db.select({ lang: translations.lang }).from(translations).where(eq(translations.jobId, id)),
-    getApplicationByJobId(db, id),
-    db.select({ aiScannedAt: signalScans.aiScannedAt, aiDescriptionHash: signalScans.aiDescriptionHash, descriptionHash: signalScans.descriptionHash }).from(signalScans).where(eq(signalScans.jobId, id)).limit(1),
-    getFavorite(db, id),
-    loadClosure(db, id, job.status),
-    getVisaOfJob(db, id),
-    getGhostOfJob(db, id, ghostTrustedKeys()),
+    .where(inArray(jobs.id, [...ids]));
+  if (rows.length === 0) return new Map();
+  const jobIds = rows.map(({ job }) => job.id);
+  const [sources, signals, displayScores, translated, applicationRows, scans, favorites, closures, visas, ghosts] = await Promise.all([
+    loadSources(db, jobIds),
+    loadSignals(db, jobIds),
+    displayedScores(db, jobIds),
+    db.select({ jobId: translations.jobId, lang: translations.lang }).from(translations)
+      .where(inArray(translations.jobId, jobIds)).orderBy(asc(translations.jobId), asc(translations.lang)),
+    db.select().from(applications).where(inArray(applications.jobId, jobIds)),
+    db.select({ jobId: signalScans.jobId, aiScannedAt: signalScans.aiScannedAt, aiDescriptionHash: signalScans.aiDescriptionHash, descriptionHash: signalScans.descriptionHash })
+      .from(signalScans).where(inArray(signalScans.jobId, jobIds)),
+    getFavoriteStates(db, jobIds),
+    loadClosures(db, jobIds),
+    getVisaDetails(db, jobIds),
+    getGhostDetails(db, jobIds, ghostTrustedKeys()),
   ]);
-  const applicationEvents = application ? await listApplicationEvents(db, application.id) : [];
-  const salaryFiltered = score?.filterResult === "filtered_out" && score.filterReasons.some((reason) => reason.startsWith("salary_below_floor"));
-  const filterFloorEur = salaryFiltered ? await floorOfSnapshot(db, score?.profileSnapshotId ?? null) : null;
+  const [events, floors] = await Promise.all([
+    listEventsByApplication(db, applicationRows.map(({ id }) => id), APPLICATION_EVENT_LIMIT),
+    floorsOfSnapshots(db, [...displayScores.values()].flatMap((score) => isSalaryFiltered(score) && score.profileSnapshotId !== null ? [score.profileSnapshotId] : [])),
+  ]);
+  const byJob = new Map(applicationRows.map((row) => [row.jobId, row]));
+  const scanByJob = new Map(scans.map((row) => [row.jobId, row]));
+  const languages = new Map<number, string[]>();
+  for (const { jobId, lang } of translated) {
+    const list = languages.get(jobId) ?? [];
+    list.push(lang);
+    languages.set(jobId, list);
+  }
+  return new Map(rows.map((row) => {
+    const { job } = row;
+    const id = job.id;
+    const score = displayScores.get(id);
+    const scan = scanByJob.get(id);
+    const application = byJob.get(id) ?? null;
+    const closed = closures.get(id) ?? {
+      status: job.status,
+      closure: { autoStatus: job.status, reason: closedReason(job.status, null, null), override: null, linkCheck: null },
+    };
+    const filterFloorEur = score && isSalaryFiltered(score) && score.profileSnapshotId !== null ? floors.get(score.profileSnapshotId) ?? null : null;
+    return [id, {
+      id: job.id,
+      title: job.title,
+      company: { id: job.companyId, name: row.companyName, nameNorm: row.companyNameNorm, watched: row.companyWatched },
+      locations: parseLocations(job.locationsJson),
+      workplace: job.workplace,
+      seniority: job.seniority,
+      contract: asContract(job.contract),
+      isAgency: job.isAgency,
+      language: asJobLanguage(job.language),
+      germanLevelRequired: asGermanLevel(score?.germanLevel ?? job.germanLevelRequired),
+      germanLevelRule: asGermanLevel(job.germanLevelRequired),
+      status: closed.status,
+      closure: closed.closure,
+      postedAt: job.postedAt,
+      firstSeenAt: job.firstSeenAt,
+      lastSeenAt: job.lastSeenAt,
+      lastListedAt: job.lastListedAt,
+      relistedAt: job.relistedAt,
+      relistCount: job.relistCount,
+      description: job.description,
+      salary: parseSalary(job.salaryJson),
+      salaryDisclosed: job.salaryJson !== null && job.salaryJson !== undefined,
+      skills: job.skills,
+      sources: sources.get(id) ?? [],
+      signals: signals.get(id) ?? [],
+      signalScan: scan ? { ruleScanned: true, aiReviewed: scan.aiScannedAt !== null && scan.aiDescriptionHash === scan.descriptionHash } : null,
+      score: score
+        ? {
+            rankValue: score.rankValue,
+            score: score.score,
+            signalBonus: score.signalBonus,
+            filterResult: score.filterResult,
+            filterReasons: score.filterReasons,
+            filterFloorEur,
+            fitReasons: score.fitReasons,
+            gaps: score.gaps,
+            reasonEvidence: parseReasonEvidence(score.reasonEvidence, { fit: score.fitReasons.length, gaps: score.gaps.length }),
+            summaries: summariesOf(score),
+            outputLang: score.outputLang,
+            stale: score.score !== null && score.stale,
+            aiScore: score.aiScore,
+            germanPenalty: score.germanPenalty,
+            germanLevel: score.germanLevel === null ? null : asGermanLevel(score.germanLevel),
+            germanLevelAi: score.germanLevelAi === null ? null : asGermanLevel(score.germanLevelAi),
+            germanLevelSource: score.germanLevelSource,
+            provider: score.provider,
+            model: score.model,
+            promptVersion: score.promptVersion,
+            scoredAt: score.scoredAt,
+          }
+        : null,
+      translatedLanguages: languages.get(id) ?? [],
+      application,
+      favorite: favorites.get(id) ?? null,
+      applicationEvents: application ? events.get(application.id) ?? [] : [],
+      visa: visas.get(id) ?? null,
+      ghost: ghosts.get(id) ?? null,
+    }];
+  }));
+}
 
-  return {
-    id: job.id,
-    title: job.title,
-    company: { id: job.companyId, name: row.companyName, nameNorm: row.companyNameNorm, watched: row.companyWatched },
-    locations: parseLocations(job.locationsJson),
-    workplace: job.workplace,
-    seniority: job.seniority,
-    contract: asContract(job.contract),
-    isAgency: job.isAgency,
-    language: asJobLanguage(job.language),
-    germanLevelRequired: asGermanLevel(score?.germanLevel ?? job.germanLevelRequired),
-    germanLevelRule: asGermanLevel(job.germanLevelRequired),
-    status: closed.status,
-    closure: closed.closure,
-    postedAt: job.postedAt,
-    firstSeenAt: job.firstSeenAt,
-    lastSeenAt: job.lastSeenAt,
-    lastListedAt: job.lastListedAt,
-    relistedAt: job.relistedAt,
-    relistCount: job.relistCount,
-    description: job.description,
-    salary: parseSalary(job.salaryJson),
-    salaryDisclosed: job.salaryJson !== null && job.salaryJson !== undefined,
-    skills: job.skills,
-    sources: sources.get(id) ?? [],
-    signals: signals.get(id) ?? [],
-    signalScan: scan ? { ruleScanned: true, aiReviewed: scan.aiScannedAt !== null && scan.aiDescriptionHash === scan.descriptionHash } : null,
-    score: score
-      ? {
-          rankValue: score.rankValue,
-          score: score.score,
-          signalBonus: score.signalBonus,
-          filterResult: score.filterResult,
-          filterReasons: score.filterReasons,
-          filterFloorEur,
-          fitReasons: score.fitReasons,
-          gaps: score.gaps,
-          reasonEvidence: parseReasonEvidence(score.reasonEvidence, { fit: score.fitReasons.length, gaps: score.gaps.length }),
-          summaries: summariesOf(score),
-          outputLang: score.outputLang,
-          stale: score.score !== null && score.stale, // only a row with AI output can be outdated
-          aiScore: score.aiScore,
-          germanPenalty: score.germanPenalty,
-          germanLevel: score.germanLevel === null ? null : asGermanLevel(score.germanLevel),
-          germanLevelAi: score.germanLevelAi === null ? null : asGermanLevel(score.germanLevelAi),
-          germanLevelSource: score.germanLevelSource,
-          provider: score.provider,
-          model: score.model,
-          promptVersion: score.promptVersion,
-          scoredAt: score.scoredAt,
-        }
-      : null,
-    translatedLanguages: translated.map((t) => t.lang),
-    application,
-    favorite,
-    applicationEvents,
-    visa,
-    ghost,
-  };
+function isSalaryFiltered(score: ScoreRow): boolean {
+  return score.filterResult === "filtered_out" && score.filterReasons.some((reason) => reason.startsWith("salary_below_floor"));
 }
 
 /** Whether a job with this id exists (used to reject mutations of unknown jobs before touching `applications`). */

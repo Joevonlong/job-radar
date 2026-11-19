@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, inArray, lt, lte, sql } from "drizzle-orm";
 
 import type { Db } from "../client";
 import type { Executor } from "../executor";
@@ -14,6 +14,8 @@ export type ApplicationStatus = Application["status"];
 /** All statuses, in pipeline order (the select on the detail page lists them in this order). */
 export const APPLICATION_STATUSES: readonly ApplicationStatus[] = applicationStatusEnum.enumValues;
 
+export const APPLICATION_EVENT_LIMIT = 20;
+
 /** Applications per status (statuses without any are missing from the result). */
 export async function countApplicationsByStatus(db: Executor): Promise<Partial<Record<ApplicationStatus, number>>> {
   const rows = await db.select({ status: applications.status, n: sql<number>`count(*)::int` }).from(applications).groupBy(applications.status);
@@ -27,7 +29,7 @@ export async function getApplicationByJobId(db: Executor, jobId: number): Promis
   return row ?? null;
 }
 
-export async function listApplicationEvents(db: Db, applicationId: number, limit = 20): Promise<ApplicationEvent[]> {
+export async function listApplicationEvents(db: Db, applicationId: number, limit = APPLICATION_EVENT_LIMIT): Promise<ApplicationEvent[]> {
   return db
     .select()
     .from(applicationEvents)
@@ -201,14 +203,20 @@ export async function setApplicationNotes(db: Executor, jobId: number, notes: st
 }
 
 /** Events of several applications, newest first within each application (the pipeline board's timelines). */
-export async function listEventsByApplication(db: Executor, applicationIds: readonly number[]): Promise<Map<number, ApplicationEvent[]>> {
+export async function listEventsByApplication(db: Executor, applicationIds: readonly number[], limit?: number): Promise<Map<number, ApplicationEvent[]>> {
   const out = new Map<number, ApplicationEvent[]>();
   if (applicationIds.length === 0) return out;
-  const rows = await db
-    .select()
-    .from(applicationEvents)
-    .where(inArray(applicationEvents.applicationId, [...applicationIds]))
-    .orderBy(desc(applicationEvents.at), desc(applicationEvents.id));
+  const which = inArray(applicationEvents.applicationId, [...applicationIds]);
+  const ranked = db.select({
+    ...getTableColumns(applicationEvents),
+    rowNumber: sql<number>`row_number() over (partition by ${applicationEvents.applicationId} order by ${applicationEvents.at} desc, ${applicationEvents.id} desc)`.as("row_number"),
+  }).from(applicationEvents).where(which).as("ranked_events");
+  const rows = limit === undefined
+    ? await db.select().from(applicationEvents).where(which).orderBy(desc(applicationEvents.at), desc(applicationEvents.id))
+    : await db.select({
+      id: ranked.id, applicationId: ranked.applicationId, at: ranked.at, fromStatus: ranked.fromStatus,
+      toStatus: ranked.toStatus, note: ranked.note, occurredAt: ranked.occurredAt, reference: ranked.reference,
+    }).from(ranked).where(lte(ranked.rowNumber, limit)).orderBy(desc(ranked.at), desc(ranked.id));
   for (const row of rows) {
     const list = out.get(row.applicationId) ?? [];
     list.push(row);

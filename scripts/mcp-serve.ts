@@ -25,7 +25,7 @@ import { createReadOnlyDb } from "../src/lib/db/read-only-client";
 import { openAgentCallsConnection } from "../src/lib/db/repos/agent-calls";
 import { loadDatabaseEnv } from "../src/lib/env";
 import { stderrLine } from "../src/lib/mcp/call-log";
-import { buildServer, defaultContext } from "../src/lib/mcp/server";
+import { buildServer, checkMcpSyncStartup, defaultContext } from "../src/lib/mcp/server";
 import { configProblem, readMcpSettings } from "../src/lib/mcp/settings";
 import { mcpTranslator } from "../src/lib/mcp/text";
 import { readWriterEnabled, readWriterInputs } from "../src/lib/writer/settings";
@@ -91,6 +91,7 @@ async function main(): Promise<void> {
   };
   const audit = createAuditRecorder(openAudit, { text, log: stderrLine, writeTimeoutMs: auditSettings.write_timeout_ms });
   const context = defaultContext(database.db, settings, { text, writeDb: writerDb, trackingWriteDb: trackingDb, actionDb: actionConnection?.db, audit });
+  await checkMcpSyncStartup(context);
   const version = packageVersion();
   const handle = serveStdio(() => buildServer(context, { version }), {
     onerror: (error) => stderrLine(`[mcp] transport error: ${error.name}`),

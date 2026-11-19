@@ -104,6 +104,8 @@ audit:
 sync:
   # Days a change row is kept (1-365); the runner prunes older changes once a day
   retention_days: 30
+  # Default and maximum entities per sync page (1-200)
+  max_batch: 50
 
 # Live daily action budgets use the calendar day in schedule.yaml's time zone; joined requests and cache hits are refunded.
 budgets:

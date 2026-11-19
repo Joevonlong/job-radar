@@ -26,7 +26,7 @@ import { fixtureText, migratedDocument, overlayDocument, plainValue, shippedValu
  * entry frozen when its schema is registered; the older entries retain their original hashes except when schema defaults
  * evolve. Career hashes include document and preview defaults; the writer reference includes the shared preview vocabulary
  * fields; the MCP reference includes the global matrix, stdio permission grant, audit, HTTP, daily agent budget and sync
- * retention defaults; the pipeline reference includes the deal-breaker preview sample default. The current loader must
+ * defaults. The pipeline reference includes the deal-breaker preview sample default. The current loader must
  * give the same canonical hashes for the same inputs, and converting each full copy to an overlay must not change them either.
  */
 interface Golden {

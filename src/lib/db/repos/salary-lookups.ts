@@ -25,6 +25,11 @@ export interface JobForSalaryLookup {
   location: JobLocation | null;
 }
 
+export function firstSalaryLocation(locations: unknown): JobLocation | null {
+  const first = Array.isArray(locations) && locations.length > 0 ? jobLocationSchema.safeParse(locations[0]) : null;
+  return first?.success ? first.data : null;
+}
+
 export async function getJobForSalaryLookup(db: Executor, jobId: number): Promise<JobForSalaryLookup | null> {
   const [row] = await db
     .select({ id: jobs.id, title: jobs.title, titleNorm: jobs.titleNorm, seniority: jobs.seniority, companyId: jobs.companyId, company: companies.name, companyNorm: companies.nameNorm, locations: jobs.locationsJson })
@@ -33,8 +38,7 @@ export async function getJobForSalaryLookup(db: Executor, jobId: number): Promis
     .where(eq(jobs.id, jobId))
     .limit(1);
   if (!row) return null;
-  const first = Array.isArray(row.locations) && row.locations.length > 0 ? jobLocationSchema.safeParse(row.locations[0]) : null;
-  return { id: row.id, title: row.title, titleNorm: row.titleNorm, seniority: row.seniority, companyId: row.companyId, company: row.company, companyNorm: row.companyNorm, location: first?.success ? first.data : null };
+  return { id: row.id, title: row.title, titleNorm: row.titleNorm, seniority: row.seniority, companyId: row.companyId, company: row.company, companyNorm: row.companyNorm, location: firstSalaryLocation(row.locations) };
 }
 
 export interface StoredSalaryLookup {
@@ -214,8 +218,7 @@ async function reconstructCompanyLookupKeys(db: Executor, input: { fromCompanyId
   const companyJobs = await db.select({ titleNorm: jobs.titleNorm, seniority: jobs.seniority, locations: jobs.locationsJson }).from(jobs).where(eq(jobs.companyId, input.fromCompanyId));
   const keys = new Map<string, string>();
   for (const row of companyJobs) {
-    const first = Array.isArray(row.locations) && row.locations.length > 0 ? jobLocationSchema.safeParse(row.locations[0]) : null;
-    const job = { companyNorm: input.fromNorm, titleNorm: row.titleNorm, seniority: row.seniority, location: first?.success ? first.data : null };
+    const job = { companyNorm: input.fromNorm, titleNorm: row.titleNorm, seniority: row.seniority, location: firstSalaryLocation(row.locations) };
     for (const family of families) keys.set(salaryLookupKey(job, family), salaryLookupKey({ ...job, companyNorm: input.toNorm }, family));
   }
   return keys;

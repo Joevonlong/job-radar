@@ -61,6 +61,14 @@ export const companyBlockDto = z.strictObject({
   fields: z.array(z.strictObject({ field: z.string(), text: z.string(), source_url: z.string().nullable() })),
 }).nullable();
 
+export const syncCompanyBlockDto = companyBlockDto.unwrap().omit({ expired: true })
+  .extend({ expires_at: date.nullable() }).nullable();
+
+export const syncSalaryBlockDto = salaryBlockDto.unwrap().omit({ company_figures: true }).extend({
+  lookup: salaryBlockDto.unwrap().shape.lookup.unwrap().omit({ expired: true })
+    .extend({ expires_at: date.nullable() }).nullable(),
+}).nullable();
+
 export const ghostReasonDto = z.discriminatedUnion("code", [
   z.strictObject({ code: z.literal("long_open"), points: z.number(), days: z.number().int(), since: z.iso.date(), from: z.enum(["posted", "first_seen"]), channel_id: z.string().nullable() }),
   z.strictObject({ code: z.literal("repost_label"), points: z.number(), channel_id: z.string(), label: z.string() }),
