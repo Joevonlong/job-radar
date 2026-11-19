@@ -69,14 +69,18 @@ async function readSyncPage(
 
   const { xmin } = state;
   const { mask } = selection;
-  const expand = expandAgentChangeKeys(tx, limit + 1, () => {
+  const { prepareRows, expand } = expandAgentChangeKeys(tx, limit + 1, selection, () => {
     const salary = settings.salary();
     return salary && { families: compileFamilies(salary.role_families), currency: settings.baseCurrency() ?? "" };
   });
   const result = await scanAgentChangePage({
     position: cursor.position, xmin, limit,
-    readRows: (after, chunk) => readAgentChangeRows(tx, { xmin, after, mask, limit: chunk }),
-    expand: (row, after) => expand(row, after, selection.kindsFor(row.blocks)),
+    readRows: async (after, chunk) => {
+      const rows = await readAgentChangeRows(tx, { xmin, after, mask, limit: chunk });
+      await prepareRows(rows);
+      return rows;
+    },
+    expand,
   });
   return {
     entities: result.entities, has_more: result.hasMore, held_back: await countHeldAgentChanges(tx, xmin, mask),

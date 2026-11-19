@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import type { FamilyMatcher } from "@/lib/salary/families";
 import { salaryGroupCandidates } from "@/lib/salary/groups";
-import { salaryLookupCompanyMatches, salaryLookupKey } from "@/lib/salary/lookup-key";
+import { salaryLookupKey } from "@/lib/salary/lookup-key";
 
 import type { Executor } from "../executor";
 import { applications, companies, jobFavorites, jobs, jobSources } from "../schema";
@@ -48,24 +48,39 @@ function trackingMembership(jobId: JobIdColumn, kinds: readonly SyncEntityKind[]
 }
 
 const groupKey = z.tuple([z.string(), z.string(), z.enum(["city", "country", "all"]), z.string(), z.string()]);
-export type SyncBenchmarkKey = z.infer<typeof groupKey>;
+type SyncBenchmarkKey = z.infer<typeof groupKey>;
 
 function parseBenchmarkKey(key: string): SyncBenchmarkKey | null {
   const parsed = groupKey.safeParse(JSON.parse(key));
   return parsed.success ? parsed.data : null;
 }
 
-type SalaryCandidate = Pick<JobForSalaryLookup, "title" | "seniority" | "location">;
+type Candidate = { id: number; application: boolean; favorite: boolean };
+type SalaryCandidate = Candidate & Pick<JobForSalaryLookup, "title" | "titleNorm" | "seniority" | "companyNorm" | "location">;
 
-export function matchesSyncSalaryLookup(job: SalaryCandidate & Pick<JobForSalaryLookup, "companyNorm" | "titleNorm">, key: string, families: FamilyMatcher): boolean {
-  return salaryLookupKey(job, families.familyOf(job.title)) === key;
+function addCandidate(index: Map<string, Candidate[]>, key: string, candidate: Candidate): void {
+  const matches = index.get(key);
+  if (matches) matches.push(candidate);
+  else index.set(key, [candidate]);
 }
 
-export function matchesSyncSalaryBenchmark(job: SalaryCandidate, key: SyncBenchmarkKey, families: FamilyMatcher): boolean {
-  const [family, seniority, geoLevel, geoKey] = key;
-  return families.familyOf(job.title) === family && salaryGroupCandidates({
-    seniority: job.seniority, city: job.location?.city ?? null, country: job.location?.countryCode ?? null,
-  }).some((candidate) => candidate.seniority === seniority && candidate.geoLevel === geoLevel && candidate.geoKey === geoKey);
+export function indexSyncSalaryCandidates(candidates: readonly SalaryCandidate[], families: FamilyMatcher, currency: string) {
+  const lookups = new Map<string, Candidate[]>();
+  const benchmarks = new Map<string, Candidate[]>();
+  for (const candidate of candidates) {
+    const family = families.familyOf(candidate.title);
+    addCandidate(lookups, salaryLookupKey(candidate, family), candidate);
+    if (family === null || !currency) continue;
+    const groups = salaryGroupCandidates({
+      seniority: candidate.seniority, city: candidate.location?.city ?? null, country: candidate.location?.countryCode ?? null,
+    });
+    const keys = new Set(groups.map(({ seniority, geoLevel, geoKey }) => JSON.stringify([family, seniority, geoLevel, geoKey, currency])));
+    for (const key of keys) addCandidate(benchmarks, key, candidate);
+  }
+  return {
+    lookup: (key: string) => lookups.get(key) ?? [],
+    benchmark: (key: SyncBenchmarkKey) => benchmarks.get(JSON.stringify(key)) ?? [],
+  };
 }
 
 async function* jobPages<Row extends { id: number }>(after: number, chunk: number, read: (after: number) => Promise<Row[]>) {
@@ -77,47 +92,58 @@ async function* jobPages<Row extends { id: number }>(after: number, chunk: numbe
   }
 }
 
-type Candidate = { id: number; application: boolean; favorite: boolean };
+function readSalaryCandidates(db: Executor, kinds: readonly SyncEntityKind[]) {
+  const membership = trackingMembership(jobs.id, kinds);
+  const location = sql`case when jsonb_typeof(${jobs.locationsJson}) = 'array' then ${jobs.locationsJson} -> 0 end`
+    .mapWith((value: unknown) => firstSalaryLocation([value]));
+  return db.select({
+    id: jobs.id, title: jobs.title, titleNorm: jobs.titleNorm, seniority: jobs.seniority,
+    companyNorm: companies.nameNorm, location, ...membership.columns,
+  }).from(jobs).innerJoin(companies, eq(companies.id, jobs.companyId))
+    .where(membership.filter).orderBy(asc(jobs.id));
+}
 
 /** Resolve shared keys against the current snapshot. Jobs in the archive have the same dependencies as other jobs. */
 export function expandAgentChangeKeys(
   db: Executor,
   chunk: number,
+  selection: { mask: number; kindsFor: (blocks: number) => readonly SyncEntityKind[] },
   salaryScope: () => { families: FamilyMatcher; currency: string } | null,
 ) {
-  let companyRows: Promise<{ id: number; name: string }[]> | undefined;
+  const selectedKinds = selection.kindsFor(selection.mask);
+  let directMembers = new Map<number, Candidate>();
+  let salaryIndex: Promise<ReturnType<typeof indexSyncSalaryCandidates>> | undefined;
   let salary: ReturnType<typeof salaryScope> | undefined;
-  async function* salaryJobs(row: AgentChangeRow, after: number, kinds: readonly SyncEntityKind[]) {
+
+  async function prepareRows(rows: readonly AgentChangeRow[]) {
+    if (selectedKinds.every((kind) => kind === "job")) return;
+    const ids = new Set<number>();
+    for (const row of rows) {
+      if (row.keyKind !== "job" || !selection.kindsFor(row.blocks).some((kind) => kind !== "job" && !wasRemoved(row, kind))) continue;
+      const id = Number(row.key);
+      if (id > 0) ids.add(id);
+    }
+    const members = ids.size === 0 ? [] : await db.select({ id: jobs.id, ...trackingMembership(jobs.id, selectedKinds).columns })
+      .from(jobs).where(inArray(jobs.id, [...ids]));
+    directMembers = new Map(members.map((member) => [member.id, member]));
+  }
+
+  async function* salaryJobs(row: AgentChangeRow, after: number) {
     if (salary === undefined) salary = salaryScope();
     const scope = salary;
     if (scope === null) return;
     const benchmark = row.keyKind === "benchmark";
     const group = benchmark ? parseBenchmarkKey(row.key) : null;
     if (benchmark && (!group || !scope.currency || group[4] !== scope.currency)) return;
-    const candidateCompanies = group ? undefined : (await (companyRows ??= db.select({
-      id: companies.id, name: companies.nameNorm,
-    }).from(companies))).filter(({ name }) => salaryLookupCompanyMatches(name, row.key)).map(({ id }) => id);
-    if (candidateCompanies?.length === 0) return;
-
-    const membership = trackingMembership(jobs.id, kinds);
-    const candidates = jobPages(after, chunk, async (id) => db.select({
-      id: jobs.id, title: jobs.title, titleNorm: jobs.titleNorm, seniority: jobs.seniority,
-      companyNorm: companies.nameNorm, locations: jobs.locationsJson, ...membership.columns,
-    }).from(jobs).innerJoin(companies, eq(companies.id, jobs.companyId))
-      .where(and(gt(jobs.id, id), membership.filter, candidateCompanies ? inArray(jobs.companyId, candidateCompanies) : undefined))
-      .orderBy(asc(jobs.id)).limit(chunk));
-    for await (const candidate of candidates) {
-      const job = { ...candidate, location: firstSalaryLocation(candidate.locations) };
-      if (group ? matchesSyncSalaryBenchmark(job, group, scope.families) : matchesSyncSalaryLookup(job, row.key, scope.families)) yield candidate;
+    const index = await (salaryIndex ??= readSalaryCandidates(db, selectedKinds)
+      .then((candidates) => indexSyncSalaryCandidates(candidates, scope.families, scope.currency)));
+    for (const candidate of group ? index.benchmark(group) : index.lookup(row.key)) {
+      if (candidate.id > after) yield candidate;
     }
   }
 
-  async function* directJob(row: AgentChangeRow, jobId: number, after: number, kinds: readonly SyncEntityKind[]) {
-    if (!(jobId > after)) return;
-    const needed = kinds.filter((kind) => kind !== "job" && !wasRemoved(row, kind));
-    const [current] = needed.length === 0 ? [] : await db.select(trackingMembership(jobs.id, needed).columns)
-      .from(jobs).where(eq(jobs.id, jobId));
-    yield { id: jobId, application: current?.application ?? false, favorite: current?.favorite ?? false };
+  function* directJob(jobId: number, after: number) {
+    if (jobId > after) yield directMembers.get(jobId) ?? { id: jobId, application: false, favorite: false };
   }
 
   function sharedJobs(after: number, kinds: readonly SyncEntityKind[], filter?: SQL) {
@@ -126,11 +152,11 @@ export function expandAgentChangeKeys(
       .where(and(gt(jobs.id, id), membership.filter, filter)).orderBy(asc(jobs.id)).limit(chunk));
   }
 
-  function candidates(row: AgentChangeRow, after: number, kinds: readonly SyncEntityKind[]): AsyncIterable<Candidate> {
+  function candidates(row: AgentChangeRow, after: number, kinds: readonly SyncEntityKind[]): Iterable<Candidate> | AsyncIterable<Candidate> {
     const numericKey = Number(row.key);
     switch (row.keyKind) {
       case "job":
-        return directJob(row, numericKey, after, kinds);
+        return directJob(numericKey, after);
       case "company":
         return sharedJobs(after, kinds, eq(jobs.companyId, numericKey));
       case "raw_posting": {
@@ -141,13 +167,14 @@ export function expandAgentChangeKeys(
       }
       case "benchmark":
         if (row.key === "*") return sharedJobs(after, kinds);
-        return salaryJobs(row, after, kinds);
+        return salaryJobs(row, after);
       case "salary_key":
-        return salaryJobs(row, after, kinds);
+        return salaryJobs(row, after);
     }
   }
 
-  return async function* expand(row: AgentChangeRow, after: SyncEntityKey | null, kinds: readonly SyncEntityKind[]) {
+  async function* expand(row: AgentChangeRow, after: SyncEntityKey | null) {
+    const kinds = selection.kindsFor(row.blocks);
     for await (const candidate of candidates(row, after === null ? 0 : after.jobId - 1, kinds)) {
       for (const kind of kinds) {
         if (kind !== "job" && !candidate[kind] && !wasRemoved(row, kind)) continue;
@@ -155,7 +182,9 @@ export function expandAgentChangeKeys(
         if (after === null || compareSyncEntityKeys(key, after) > 0) yield key;
       }
     }
-  };
+  }
+
+  return { prepareRows, expand };
 }
 
 function wasRemoved(row: AgentChangeRow, kind: SyncEntityKind): boolean {

@@ -24,15 +24,6 @@ export function salaryLookupKey(job: Pick<JobForSalaryLookup, "companyNorm" | "t
   return `${key.slice(0, LOOKUP_KEY_MAX - 17)}#${createHash("sha256").update(key).digest("hex").slice(0, 16)}`;
 }
 
-/** Select companies whose normalized name could start this key, including keys shortened before the first separator. */
-export function salaryLookupCompanyMatches(companyNorm: string, lookupKey: string): boolean {
-  const company = keyPart(companyNorm);
-  const separator = lookupKey.indexOf("|");
-  if (separator >= 0) return company === lookupKey.slice(0, separator);
-  const suffix = LOOKUP_KEY_MAX - 17;
-  return lookupKey.length === LOOKUP_KEY_MAX && lookupKey[suffix] === "#" && company.startsWith(lookupKey.slice(0, suffix));
-}
-
 const COMPANY_PART = 0;
 const TITLE_PART = 2;
 
