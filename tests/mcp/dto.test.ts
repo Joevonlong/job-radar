@@ -139,7 +139,7 @@ function detail(): JobDetail {
     translatedLanguages: ["zh"],
     application: application(),
     favorite: { createdAt: NOW, note: SENTINEL.favoriteNote },
-    applicationEvents: [{ id: 1, applicationId: 1, at: NOW, fromStatus: "interested", toStatus: "applied", note: SENTINEL.eventNote }],
+    applicationEvents: [{ id: 1, applicationId: 1, at: NOW, fromStatus: "interested", toStatus: "applied", note: SENTINEL.eventNote, occurredAt: null, reference: null }],
     visa: null,
     ghost: null,
   };
@@ -420,10 +420,13 @@ describe("get_job block field sets", () => {
   it("tracking", () => { expect(fieldSet(trackingBlockDto)).toMatchInlineSnapshot(`
     [
       "application",
+      "application.applied_at",
       "application.created_at",
       "application.history",
       "application.history.at",
       "application.history.from",
+      "application.history.occurred_at",
+      "application.history.reference",
       "application.history.to",
       "application.interview_rounds",
       "application.next_action",

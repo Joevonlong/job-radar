@@ -11,7 +11,8 @@ import { actionOutput, requestStatusOutput, toRequestSummary } from "@/lib/mcp/d
 import { mcpTranslator } from "@/lib/mcp/text";
 
 const text = mcpTranslator("en");
-const input = (name: string) => CAPABILITIES.find((cap) => cap.id === name)!.input({ text });
+const inputCtx = { text, now: () => new Date("2026-11-11T23:00:00Z"), timezone: () => "UTC" };
+const input = (name: string) => CAPABILITIES.find((cap) => cap.id === name)!.input(inputCtx);
 
 describe("action input boundaries", () => {
   it.each([{}, { job_ids: [], backlog: true }, { job_ids: [1], backlog: true }, { backlog: false }, { job_ids: [0] }, { job_ids: Array.from({ length: SCORE_JOBS_MAX_IDS + 1 }, (_, i) => i + 1) }, { job_ids: [1], caller: "stdio" }])("rejects invalid scoring selection %j", (args) => {
@@ -31,7 +32,7 @@ describe("action input boundaries", () => {
     }
   });
   it("requires polish text and option and reads the configured text bound", () => {
-    const schema = CAPABILITIES.find((cap) => cap.id === "draft_answer")!.input({ text, writer: { writeDb: null, inputs: () => ({ writer: writerSchema.parse({ draft_max_chars: 500 }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: false }) } });
+    const schema = CAPABILITIES.find((cap) => cap.id === "draft_answer")!.input({ ...inputCtx, writer: { writeDb: null, inputs: () => ({ writer: writerSchema.parse({ draft_max_chars: 500 }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: false }) } });
     const args = { job_id: 1, question_id: 2, mode: "polish", option: "language_only", text: "A draft" };
     expect(schema.safeParse(args).success).toBe(true);
     for (const bad of [{ ...args, text: undefined }, { ...args, option: undefined }, { ...args, option: "other" }, { ...args, text: "x".repeat(501) }, { ...args, mode: "draft" }]) expect(schema.safeParse(bad).success).toBe(false);
@@ -39,7 +40,7 @@ describe("action input boundaries", () => {
   });
   it("offers descriptions for every action input in both languages", () => {
     for (const locale of ["en", "zh"] as const) for (const cap of CAPABILITIES.filter((item) => item.permission === "actions:run")) {
-      const schema = cap.input({ text: mcpTranslator(locale) });
+      const schema = cap.input({ ...inputCtx, text: mcpTranslator(locale) });
       for (const field of Object.values(schema.shape)) expect(field.description).toBeTruthy();
     }
   });

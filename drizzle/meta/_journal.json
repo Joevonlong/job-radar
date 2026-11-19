@@ -449,6 +449,13 @@
       "when": 1794519504869,
       "tag": "0063_agent_call_over_budget",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1795053799936,
+      "tag": "0064_application_event_occurred",
+      "breakpoints": true
     }
   ]
 }

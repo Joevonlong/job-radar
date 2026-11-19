@@ -188,6 +188,8 @@ export default async function JobDetailPage({ params }: { params: Params }) {
     from: e.fromStatus,
     to: e.toStatus,
     note: e.note,
+    occurredAt: e.occurredAt ? absolute(e.occurredAt) : null,
+    reference: e.reference,
   }));
 
   // ---- v3: score card, salary card, checks (thresholds and scales come from the config files)

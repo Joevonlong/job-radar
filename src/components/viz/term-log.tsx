@@ -9,6 +9,8 @@ export interface TermLine {
   tone?: "ink" | "amber" | "green" | "dim";
   /** Dim prefix such as a time (`17:00`). */
   prefix?: string;
+  /** Let long details wrap within the log. */
+  wrap?: boolean;
 }
 
 export interface TermLogProps {
@@ -28,7 +30,7 @@ export function TermLog({ lines, cursor = true, className }: TermLogProps) {
       {lines.map((line, index) => (
         <span key={index} className={cx("jr-term__line", TONE_CLASS[line.tone ?? "ink"], cursor && index === lines.length - 1 && "jr-term__cursor")}>
           {line.prefix ? <span className="jr-term__dim">{line.prefix} </span> : null}
-          <span className="jr-term__txt" style={cssVars({ "--k": index, "--len": Math.max(1, line.text.length) })}>
+          <span className={cx("jr-term__txt", line.wrap && "jr-term__txt--wrap")} style={cssVars({ "--k": index, "--len": Math.max(1, line.text.length) })}>
             {line.text}
           </span>
         </span>

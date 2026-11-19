@@ -19,13 +19,26 @@ export interface TimelineLabels {
   moved: (from: string, to: string) => string;
   stayed: (to: string) => string;
   note: (text: string) => string;
+  occurredAt: (date: string) => string;
+  reference: (reference: string) => string;
   /** Unknown kind: says so with the raw kind. */
   generic: (kind: string) => string;
 }
 
+export function eventDetailsLines(
+  event: Pick<BoardEvent, "occurredAt" | "reference">,
+  labels: Pick<TimelineLabels, "occurredAt" | "reference">,
+): TermLine[] {
+  const details = [
+    event.occurredAt === null ? null : labels.occurredAt(event.occurredAt),
+    event.reference === null ? null : labels.reference(event.reference),
+  ].filter((value) => value !== null);
+  return details.length === 0 ? [] : [{ text: details.join(" · "), tone: "dim", wrap: true }];
+}
+
 /**
  * The lines of the drawer's terminal log, oldest first (a log reads top to bottom), the newest amber. Every event is one
- * line that says what happened, followed by a dim line for its note; no line is ever blank.
+ * line that says what happened, followed by dim lines for any recorded details and note.
  */
 export function timelineLines(eventsNewestFirst: readonly BoardEvent[], labels: TimelineLabels): TermLine[] {
   const chronological = [...eventsNewestFirst].reverse();
@@ -37,6 +50,8 @@ export function timelineLines(eventsNewestFirst: readonly BoardEvent[], labels: 
       kind === "created" ? labels.created(to) : kind === "moved" ? labels.moved(from, to) : kind === "stayed" ? labels.stayed(to) : labels.generic(kind);
     const main: TermLine = { prefix: event.when, text: text.trim() === "" ? labels.generic(kind) : text, tone: position === chronological.length - 1 ? "amber" : "ink" };
     const note = event.note?.trim();
-    return note ? [main, { text: labels.note(note), tone: "dim" }] : [main];
+    const lines = [main, ...eventDetailsLines(event, labels)];
+    if (note) lines.push({ text: labels.note(note), tone: "dim" });
+    return lines;
   });
 }

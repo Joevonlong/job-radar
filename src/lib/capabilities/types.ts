@@ -7,13 +7,14 @@ import type { McpContext } from "@/lib/mcp/context";
 
 type CapabilityOutput = { notices: string[] } & Record<string, unknown>;
 type MessageKey = Parameters<McpContext["text"]>[0];
+type InputContext = Pick<McpContext, "text" | "writer" | "now" | "timezone">;
 
 export interface Capability {
   id: string;
   kind: "read" | "write" | "trigger";
   permission: Permission;
   alsoRequires?: readonly Permission[];
-  input: (ctx: Pick<McpContext, "text" | "writer">) => z.ZodObject;
+  input: (ctx: InputContext) => z.ZodObject;
   output: z.ZodType<CapabilityOutput>;
   handler: (ctx: McpContext, args: unknown) => Promise<CapabilityOutput>;
   count: (output: CapabilityOutput) => number;
@@ -30,7 +31,7 @@ export interface Capability {
 }
 
 type CapabilityDefinition<I extends z.ZodObject, O extends z.ZodType<CapabilityOutput>> = Omit<Capability, "input" | "output" | "handler" | "count" | "target" | "outputFor"> & {
-  input: (ctx: Pick<McpContext, "text" | "writer">) => I;
+  input: (ctx: InputContext) => I;
   output: O;
   handler: (ctx: McpContext, args: z.output<I>) => Promise<z.output<O>>;
   count: (output: z.output<O>) => number;

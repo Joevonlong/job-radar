@@ -1,8 +1,12 @@
+import fs from "node:fs";
+import path from "node:path";
+import { Client } from "@modelcontextprotocol/client";
+import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 
 import { markAppliedAction, setApplicationStatusAction } from "@/app/jobs/[id]/actions";
-import { saveNextActionAction, setInterviewRoundsAction } from "@/app/pipeline/actions";
+import { saveNextActionAction, setInterviewRoundsAction, undoApplicationStatusAction } from "@/app/pipeline/actions";
 import { createAuditRecorder, type AuditRecorder } from "@/lib/agent-access/audit";
 import type { AgentCaller } from "@/lib/agent-access/caller";
 import type { Permission } from "@/lib/agent-access/permissions";
@@ -14,14 +18,16 @@ import { closeDb, createConnection, getDb, schema } from "@/lib/db";
 import { createReadOnlyDb, type ReadOnlyDb } from "@/lib/db/read-only-client";
 import { pruneAgentCalls } from "@/lib/db/repos/agent-calls";
 import { getAgentCallUndoState } from "@/lib/db/repos/agent-undo";
-import { getApplicationByJobId, listApplicationEvents, setApplicationNotes, setApplicationStatus } from "@/lib/db/repos/applications";
+import { getApplicationByJobId, listApplicationEvents, setApplicationNotes, setApplicationStatus, type ApplicationStatus } from "@/lib/db/repos/applications";
 import { readApplicationForUndo } from "@/lib/db/repos/application-undo";
 import { getOrCreateCompany } from "@/lib/db/repos/companies";
 import { insertJob } from "@/lib/db/repos/jobs";
 import { runLogged } from "@/lib/mcp/context";
-import { trackingWriteOutput, undoChangeOutput } from "@/lib/mcp/dto";
-import { defaultContext } from "@/lib/mcp/server";
+import { getJobOutput, trackingWriteOutput, undoChangeOutput } from "@/lib/mcp/dto";
+import { getApplicationOutput } from "@/lib/mcp/dto/read-tracking";
+import { buildServer, defaultContext } from "@/lib/mcp/server";
 import { mcpTranslator } from "@/lib/mcp/text";
+import { makeTempConfig } from "../config/helpers";
 import { trackingResearchDeps } from "./tracking-write-fixtures";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -61,7 +67,7 @@ afterAll(async () => {
   await closeDb();
 });
 
-async function fixture(status: "new" | "interested" | "offer" | null = "new") {
+async function fixture(status: ApplicationStatus | null = "new") {
   serial++;
   const company = await getOrCreateCompany(getDb(), { name: `Example ${serial}`, nameNorm: `example ${serial}` });
   const job = await insertJob(getDb(), { companyId: company.id, title: "Engineer", titleNorm: "engineer", description: "Build reliable systems." });
@@ -226,6 +232,201 @@ it("mark applied refuses later stages clearly; repeated application is a non-und
   expect(receipt).toMatchObject({ undoable: false, research: null });
   expect(await snapshot(id)).toEqual(after);
   expect(await call("undo_change", { audit_id: receipt.audit_id })).toMatchObject({ isError: true });
+});
+
+describe("mark_applied through MCP", () => {
+  const now = new Date("2026-11-18T16:30:00Z");
+  const dateTime = "2026-11-12T09:30:00+01:00";
+  const occurredAt = "2026-11-12T08:30:00.000Z";
+  const recorded = { applied_at: dateTime, reference: "receipt-17" };
+  let temp: ReturnType<typeof makeTempConfig>;
+  let close: (() => Promise<void>) | undefined;
+
+  beforeAll(() => {
+    temp = makeTempConfig({ user: "empty" });
+    fs.writeFileSync(path.join(temp.configDir, "schedule.yaml"), "timezone: Asia/Tokyo\n");
+  });
+  afterEach(async () => { await close?.(); close = undefined; });
+  afterAll(() => temp.cleanup());
+
+  async function connect(locale: "en" | "zh" = "en") {
+    const text = mcpTranslator(locale);
+    const permissions: Permission[] = ["jobs:read", "tracking:read", "tracking:write"];
+    const config = mcpSchema.parse({ ...settings(), permissions, stdio: { permissions } });
+    const recorder = createAuditRecorder(() => ({ db: getDb(), end: async () => undefined }), { text, log: () => undefined, writeTimeoutMs: 3000 });
+    const ctx = defaultContext(readOnly.db, config, { trackingWriteDb: getDb(), readSettings: () => config, text, log: () => undefined, audit: recorder });
+    ctx.now = () => now;
+    const server = buildServer(ctx);
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "mark-applied-test", version: "1.0.0" });
+    close = async () => { await client.close(); await server.close(); await recorder.close(); };
+    await server.connect(st);
+    await client.connect(ct);
+    return client;
+  }
+
+  async function invoke(client: Client, name: string, args: Record<string, unknown>) {
+    const result = await client.callTool({ name, arguments: args });
+    expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
+    return result.structuredContent;
+  }
+
+  async function read(client: Client, jobId: number) {
+    const result = getApplicationOutput.parse(await invoke(client, "get_application", { job_id: jobId }));
+    expect(result.tracking.application).not.toBeNull();
+    return result.tracking.application!;
+  }
+
+  async function stored(jobId: number) {
+    const application = await getApplicationByJobId(getDb(), jobId);
+    return { application, events: application ? await listApplicationEvents(getDb(), application.id) : [] };
+  }
+
+  async function databaseTime() {
+    const [row] = await getDb().execute<{ ms: string }>(sql`select floor(extract(epoch from clock_timestamp()) * 1000)::bigint as ms`);
+    return Number(row!.ms);
+  }
+
+  it("uses midnight in the configured schedule zone on creation and reads it through both tracking tools", async () => {
+    const id = await fixture(null);
+    const client = await connect();
+    await invoke(client, "mark_applied", { job_id: id, applied_at: "2026-11-12" });
+    const expected = "2026-11-11T15:00:00.000Z";
+    const application = await read(client, id);
+    expect(application).toMatchObject({
+      status: "applied", applied_at: expected, status_changed_at: expected,
+      history: [{ from: null, to: "applied", occurred_at: expected, reference: null }],
+    });
+    expect((await stored(id)).application?.statusChangedAt).toEqual(new Date(expected));
+    const job = getJobOutput.parse(await invoke(client, "get_job", { job_id: id }));
+    expect(job.tracking?.application).toEqual(application);
+  });
+
+  it("records an earlier datetime while keeping the write event latest and supports undo", async () => {
+    const id = await fixture("interested");
+    const client = await connect();
+    const initial = await read(client, id);
+    expect(initial.applied_at).toBeNull();
+    const before = await databaseTime();
+    const receipt = trackingWriteOutput.parse(await invoke(client, "mark_applied", { job_id: id, ...recorded, reference: "  receipt-17  " }));
+    const after = await databaseTime();
+    const application = await read(client, id);
+    expect(application).toMatchObject({ status: "applied", applied_at: occurredAt, status_changed_at: occurredAt });
+    const [applied, interested] = application.history;
+    expect(application.history).toHaveLength(2);
+    expect(applied).toMatchObject({ from: "interested", to: "applied", occurred_at: occurredAt, reference: "receipt-17" });
+    expect(interested).toEqual(initial.history[0]);
+    expect(Date.parse(applied!.at)).toBeGreaterThanOrEqual(before);
+    expect(Date.parse(applied!.at)).toBeLessThanOrEqual(after);
+    const saved = await stored(id);
+    expect(saved.application?.statusChangedAt).toEqual(new Date(occurredAt));
+    expect(saved.events[0]).toMatchObject({ toStatus: "applied", at: new Date(applied!.at), occurredAt: new Date(occurredAt), reference: "receipt-17" });
+
+    expect(receipt.undoable).toBe(true);
+    expect(undoChangeOutput.parse(await invoke(client, "undo_change", { audit_id: receipt.audit_id })).field).toBe("application_status");
+    expect(await read(client, id)).toMatchObject({
+      status: "interested", history: [{ from: "applied", to: "interested", occurred_at: null, reference: null }, applied, interested],
+    });
+  });
+
+  it.each([null, "interested"] as const)("uses the write time with omitted arguments from %s", async (from) => {
+    const id = await fixture(from);
+    const client = await connect();
+    const receipt = trackingWriteOutput.parse(await invoke(client, "mark_applied", { job_id: id }));
+    expect(receipt).toMatchObject({ job_id: id, field: "application_status", undoable: true });
+    const { application, events: [event] } = await stored(id);
+    expect(event).toMatchObject({ fromStatus: from, toStatus: "applied", occurredAt: null, reference: null });
+    expect(application?.statusChangedAt).toEqual(event?.at);
+    expect(await read(client, id)).toMatchObject({ applied_at: event?.at.toISOString(), status_changed_at: event?.at.toISOString() });
+  });
+
+  it("keeps the time and reference of an already applied job", async () => {
+    const id = await fixture(null);
+    const client = await connect();
+    await invoke(client, "mark_applied", { job_id: id, ...recorded });
+    const before = await stored(id);
+    const receipt = trackingWriteOutput.parse(await invoke(client, "mark_applied", { job_id: id, applied_at: "2026-11-13", reference: "receipt-18" }));
+    expect(receipt).toMatchObject({ undoable: false, research: null });
+    expect(await stored(id)).toEqual(before);
+  });
+
+  it("web undo restores the previous clock and removes the event it takes back", async () => {
+    const id = await fixture("interested");
+    const client = await connect();
+    const initial = await stored(id);
+    await invoke(client, "mark_applied", { job_id: id, ...recorded });
+    const applied = await stored(id);
+    await setApplicationStatus(getDb(), id, "interviewing");
+    expect(await undoApplicationStatusAction({ jobId: id, movedTo: "interviewing", restoreTo: "applied" })).toEqual({ ok: true, status: "applied" });
+    expect(await stored(id)).toEqual(applied);
+    expect(await undoApplicationStatusAction({ jobId: id, movedTo: "applied", restoreTo: "interested" })).toEqual({ ok: true, status: "interested" });
+    expect(await stored(id)).toEqual(initial);
+  });
+
+  it.each(["interviewing", "offer", "rejected", "withdrawn"] as const)("refuses %s with the optional arguments", async (status) => {
+    const id = await fixture(status);
+    const client = await connect();
+    const before = await stored(id);
+    const result = await client.callTool({ name: "mark_applied", arguments: { job_id: id, ...recorded } });
+    expect(result).toMatchObject({ isError: true, content: [{ type: "text", text: text("errors.markAppliedNotAllowed") }] });
+    expect(await stored(id)).toEqual(before);
+  });
+
+  it.each(["en", "zh"] as const)("rejects invalid input in %s before any tracking writes", async (locale) => {
+    const id = await fixture("interested");
+    const client = await connect(locale);
+    const t = mcpTranslator(locale);
+    const invalid = [
+      ["applied_at", "2026-11-20", t("errors.appliedAtFuture")],
+      ["applied_at", "2026-11-18T17:30:00.001+01:00", t("errors.appliedAtFuture")],
+      ["applied_at", "2026-11-12T09:30:00", t("errors.appliedAtFormat")],
+      ["reference", " \t ", t("errors.appliedReferenceLength", { max: 200 })],
+      ["reference", "x".repeat(201), t("errors.appliedReferenceLength", { max: 200 })],
+    ] as const;
+    const before = await stored(id);
+    const beforeJob = await snapshot(id);
+    for (const [field, value, message] of invalid) {
+      const result = await client.callTool({ name: "mark_applied", arguments: { job_id: id, [field]: value } });
+      expect(result).toMatchObject({ isError: true, content: [{ type: "text", text: expect.stringMatching(/^Input validation error:/) }] });
+      expect(JSON.stringify(result.content)).toContain(`${field}: ${message}`);
+      expect(await stored(id)).toEqual(before);
+      expect(await snapshot(id)).toEqual(beforeJob);
+    }
+    expect(await getDb().select().from(schema.agentUndo)).toHaveLength(0);
+    expect(await getDb().select().from(schema.agentBudgetUsage)).toHaveLength(0);
+  });
+
+  it("reads the newest applied transition even outside the returned history", async () => {
+    const id = await fixture("offer");
+    const { application } = await stored(id);
+    const applicationId = application!.id;
+    const start = Date.parse("2026-11-11T00:00:00Z");
+    const past = "2026-11-06T00:00:00.000Z";
+    await getDb().insert(schema.applicationEvents).values([
+      { applicationId, fromStatus: null, toStatus: "applied", at: new Date(start), occurredAt: new Date("2026-11-10T00:00:00Z") },
+      { applicationId, fromStatus: "interested", toStatus: "applied", at: new Date(start + 1), occurredAt: new Date(past) },
+      ...Array.from({ length: 20 }, (_, index) => ({
+        applicationId, toStatus: "interviewing" as const, at: new Date(start + index + 2),
+      })),
+    ]);
+    const result = await read(await connect(), id);
+    expect(result.applied_at).toBe(past);
+    expect(result.history.some((event) => event.to === "applied")).toBe(false);
+  });
+
+  it("lists both optional parameters with descriptions only on mark_applied", async () => {
+    const client = await connect();
+    const { tools } = await client.listTools();
+    const mark = tools.find((tool) => tool.name === "mark_applied");
+    expect(mark?.inputSchema).toMatchObject({
+      required: ["job_id"],
+      properties: {
+        applied_at: { description: text("params.appliedAt") },
+        reference: { description: text("params.appliedReference", { max: 200 }) },
+      },
+    });
+    expect(Object.keys(tools.find((tool) => tool.name === "set_application_status")!.inputSchema.properties!)).toEqual(["job_id", "status"]);
+  });
 });
 
 it("undo of a newly created application retains it as new and preserves append-only history", async () => {

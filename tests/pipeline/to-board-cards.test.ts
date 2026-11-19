@@ -9,14 +9,14 @@ vi.mock("@/components/jobs/to-list-items", () => ({ toListItems: async () => [{}
 
 const now = new Date("2026-07-01T12:00:00Z");
 const options = { now, timezone: "Europe/Berlin", thresholds: { interestedDays: 5, appliedDays: 10 } };
-function entry(status: PipelineEntry["application"]["status"], appliedAt: Date | null): PipelineEntry {
+function entry(status: PipelineEntry["application"]["status"], appliedAt: Date | null, occurredAt: Date | null = null): PipelineEntry {
   return {
     job: {
       id: 1, title: "Observatory engineer", companyId: 1, companyName: "Moonfern", locations: [], workplace: "unknown", contract: "unknown", isAgency: false, germanLevelRequired: "unknown", status: "active", closedReason: null, linkCheck: null,
       postedAt: null, firstSeenAt: now, lastSeenAt: now, lastListedAt: null, relistedAt: null, relistCount: 0, salaryDisclosed: false, salary: null, skills: [], sources: [], applicationStatus: status, favorite: null, rank: null, summary: null, signals: [], seen: false,
     },
     application: { id: 1, jobId: 1, status, statusChangedAt: new Date("2026-06-01T23:30:00Z"), nextAction: null, nextActionAt: new Date("2026-06-01T12:00:00Z"), notesMd: null, resumeVariantPath: null, interviewRounds: 0, createdAt: new Date("2020-01-01T12:00:00Z") },
-    events: appliedAt ? [{ id: 1, applicationId: 1, fromStatus: null, toStatus: "applied", at: appliedAt, note: null }] : [],
+    events: appliedAt ? [{ id: 1, applicationId: 1, fromStatus: null, toStatus: "applied", at: appliedAt, note: null, occurredAt, reference: null }] : [],
   };
 }
 
@@ -26,6 +26,10 @@ describe("server card dates", () => {
     expect(card?.appliedDate).toMatchObject({ iso: "2026-06-01T23:30:00.000Z", label: "Jun 2", full: "Jun 2, 2026, 1:30 AM" });
     expect(card?.statusDate).toEqual(card?.appliedDate);
     expect(card?.nextActionDateLabel).toBe("Jun 1");
+  });
+  it("formats the reported date in the display zone and keeps the event's write time", async () => {
+    const [card] = await toBoardCards([entry("applied", now, new Date("2026-06-01T23:30:00Z"))], options);
+    expect(card?.events[0]).toMatchObject({ when: "Jul 1, 2026, 2:00 PM", occurredAt: "Jun 2, 2026, 1:30 AM" });
   });
   it("includes a year only when the event and now are in different display years", async () => {
     const [old] = await toBoardCards([entry("applied", new Date("2025-06-01T12:00:00Z"))], options);

@@ -177,6 +177,27 @@ describe("tools/list", () => {
     expect("tracking" in jobs.items.properties).toBe(permissions.includes("tracking:read"));
     expect("notes" in jobs.items.properties).toBe(false);
   });
+  it.each(["en", "zh"] as const)("advertises the mark_applied inputs and validates them in %s", async (locale) => {
+    const permissions: Permission[] = ["tracking:write"];
+    const text = mcpTranslator(locale);
+    const lines: string[] = [];
+    const ctx = { ...context({ permissions, stdio: { permissions } }, lines), text, tracking: { writeDb: untouchable } };
+    const client = await connect(ctx);
+    const { tools } = await client.listTools();
+    expect(tools.find((tool) => tool.name === "mark_applied")?.inputSchema).toMatchObject({
+      required: ["job_id"],
+      properties: {
+        applied_at: { description: text("params.appliedAt") },
+        reference: { description: text("params.appliedReference", { max: 200 }) },
+      },
+    });
+    const invalid = await client.callTool({ name: "mark_applied", arguments: { job_id: 1, applied_at: "2026-10-12", reference: "  " } });
+    expect(invalid.isError).toBe(true);
+    expect(textOf(invalid)).toMatch(/^Input validation error:/);
+    expect(textOf(invalid)).toContain(`applied_at: ${text("errors.appliedAtFuture")}`);
+    expect(textOf(invalid)).toContain(`reference: ${text("errors.appliedReferenceLength", { max: 200 })}`);
+    expect(lines).toEqual([expect.stringContaining("invalid_input")]);
+  });
   describe("the writer tools", () => {
     const on = { permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"] as Permission[], stdio: { permissions: ["jobs:read", "tracking:read", "writer:read", "writer:write"] as Permission[] } };
     const withWriter = (enabled: boolean, writeDb: Db | null = untouchable) => ({ ...context(on), writer: { inputs: () => ({ writer: writerSchema.parse({ enabled }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb } });

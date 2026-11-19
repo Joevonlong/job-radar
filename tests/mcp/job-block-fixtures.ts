@@ -22,8 +22,8 @@ export function blockDetail(): JobDetail {
     application: { id: 1, jobId: 7, status: "applied", statusChangedAt: BLOCK_NOW, createdAt: BLOCK_NOW, nextAction: "Follow up", nextActionAt: BLOCK_NOW, interviewRounds: 2, notesMd: BLOCK_SENTINEL.applicationNote, resumeVariantPath: BLOCK_SENTINEL.path },
     favorite: { createdAt: BLOCK_NOW, note: BLOCK_SENTINEL.favoriteNote },
     applicationEvents: [
-      { id: 2, applicationId: 1, at: BLOCK_NOW, fromStatus: "interested", toStatus: "applied", note: BLOCK_SENTINEL.eventNote },
-      { id: 1, applicationId: 1, at: BLOCK_NOW, fromStatus: null, toStatus: "interested", note: null },
+      { id: 2, applicationId: 1, at: BLOCK_NOW, fromStatus: "interested", toStatus: "applied", note: BLOCK_SENTINEL.eventNote, occurredAt: null, reference: null },
+      { id: 1, applicationId: 1, at: BLOCK_NOW, fromStatus: null, toStatus: "interested", note: null, occurredAt: null, reference: null },
     ],
     visa: { status: "offered", kind: null, checkedAt: BLOCK_NOW, evidence: [{ status: "offered", kind: null, quote: "data pipelines", offset: 15 }] },
     ghost: { level: "likely", score: 8, checkedAt: BLOCK_NOW, dismissed: true, dismissedAt: BLOCK_NOW, dismissedCodes: ["reposted"], reasons: [{ code: "reposted", points: 4, channelId: "fixture", events: [{ oldId: BLOCK_SENTINEL.secret, newId: BLOCK_SENTINEL.path, oldSeen: "2026-08-01", newSeen: "2026-09-01", gapDays: 31 }] }] },

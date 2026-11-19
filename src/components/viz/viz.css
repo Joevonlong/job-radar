@@ -360,6 +360,7 @@
 .jr-term__txt { display: inline-block; overflow: hidden; white-space: nowrap; vertical-align: bottom; max-width: 100%; text-overflow: clip; }
 [data-played="false"] .jr-term__txt { width: 0; }
 [data-played="true"] .jr-term__txt { animation: jr-type 0.9s steps(var(--len, 24)) backwards; animation-delay: calc(var(--k, 0) * 350ms); }
+.jr-term__txt.jr-term__txt--wrap { width: auto; white-space: pre-wrap; overflow-wrap: anywhere; animation: none; }
 @keyframes jr-type { from { width: 0; } }
 .jr-term__cursor::after { content: "█"; margin-left: 3px; color: var(--term-amber); animation: jr-blink 1s steps(1) infinite; }
 

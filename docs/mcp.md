@@ -376,7 +376,7 @@ URL; restrict that role only if it can still perform the web's required operatio
 | `get_application_context` | **Off by default.** Everything to write one job's answers (`job_id`): job facts, the cleaned JD, breakdown points, the company background and fit note, the questions, the material chosen for each and the saved versions (newest first, at most `max_results` per question). |
 | `save_application_answer` | **Off by default.** Adds one answer version (`job_id`, `question_id`, `text`, optional `sentences`). |
 | `set_application_status` | `tracking:write`: sets `job_id` to `status`, creating its application if needed. All web-selectable statuses are allowed. |
-| `mark_applied` | `tracking:write`: marks `job_id` applied from `new`, `interested`, `preparing` or `archived`. Already applied is a no-op; later stages are refused. |
+| `mark_applied` | `tracking:write`: marks `job_id` applied from `new`, `interested`, `preparing` or `archived`, with optional `applied_at` and `reference`. Already applied is a no-op. Later stages are refused. |
 | `set_next_action` | `tracking:write`: sets `job_id`, `next_action` and `next_action_date` (`YYYY-MM-DD` or null); requires an existing application. |
 | `set_interview_rounds` | `tracking:write`: sets `job_id` and `rounds`, with the web's input limits; requires an existing application. |
 | `undo_change` | `tracking:write`: restores one of this caller's changes by `audit_id`, subject to the rules below. |
@@ -398,6 +398,11 @@ Each search card keeps its existing facts. Its `application_status` is tracking 
 | `match` | `match:read` | Automatic: summaries, AI score, German deduction, scoring date, stale flag, fit/gap evidence, filter reasons, deal-breaker and visa evidence, skill/German/salary checks; null without a score |
 | `tracking` | `tracking:read` | Automatic (also with the default permissions): application status/history/next action/dates/rounds, favorite date, seen flag, closure action/link-check outcome, filter override; no notes |
 | `notes` | `notes:read` | Automatic: cleaned application, event and favorite notes; an event note has its `from` / `to` status only when `tracking:read` is effective too, otherwise only its text and time; never the closure note |
+
+In `get_application` and `get_job`, `tracking.application.history[]` is newest first by the write time `at`.
+Each event includes `occurred_at` and `reference`, with `null` for either value that was omitted. References go through
+the text cleaner. `tracking.application.applied_at` uses `occurred_at` from the newest transition to `applied`, falling
+back to that event's `at`. It is `null` if the application has never entered `applied`.
 
 Translations, breakdowns, company research, salary lookup content and the `match` block's AI summaries, fit reasons and gaps are withheld with the JD's failure reason whenever the JD cannot pass its safety check (the `match` block then has `available: false`; its numbers, filter result and checks remain). Empty research or lookup storage remains null. JD quotes use the same trap markers as the JD; a breakdown item, fit reason or gap whose quote becomes a marker uses that marker for its own text/name too. All text, including summaries, reasons and notes, goes through the text cleaner. Unsafe instruction-bearing source URLs become null. A derived-content notice follows the third-party notice when derived content is present; withholding adds one notice, regardless of how many blocks were withheld.
 
@@ -484,6 +489,14 @@ The four tracking tools call the same services as the web. A successful receipt 
 `undoable`, `research` and notices. It does not echo the new or previous text. Blank next-step text clears it; null or an empty
 date clears the date. Status changes preserve notes, append events and wake dormant jobs under the web's existing rules.
 Notes, favorites, seen state, closure, filters and replies have no write tools in this release.
+
+`mark_applied` accepts an optional `applied_at` as an ISO date (`YYYY-MM-DD`) or a datetime with `Z` or a numeric
+offset (for example, `2026-11-12T09:30:00+01:00`). A date means midnight in the `schedule.yaml` timezone and can be
+today or earlier in that zone. A datetime can be at or before the current instant. The optional `reference` accepts
+1 to 200 characters after trimming leading and trailing whitespace. Invalid values, including null characters in
+a reference, return an input validation error.
+The status clock `status_changed_at` uses `applied_at` when supplied and the write time otherwise. The event's `at`
+always records the write time.
 
 `undo_change` takes the write's `audit_id`. It requires the same caller and the original data area's write permission.
 The server locks and fingerprints the current field; if it differs from the value after that write, undo returns a conflict

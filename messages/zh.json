@@ -1773,6 +1773,8 @@
       "moved": "{from} → {to}",
       "stayed": "状态仍是 {to}",
       "note": "备注：{text}",
+      "occurredAt": "投递时间 {date}",
+      "reference": "回执编号 {reference}",
       "generic": "事件（{kind}）"
     },
     "dnd": {
@@ -7436,6 +7438,11 @@
       "trackingWriteDisabled": "追踪写入需要已授权的写连接。启用 tracking:write 后请重启 MCP 服务。",
       "writeAuditUnavailable": "审计记录器不可用，未做修改。",
       "markAppliedNotAllowed": "标记已投递仅允许从新建、感兴趣、准备中或归档出发；更后面的申请阶段保持不变。",
+      "appliedAtFormat": "请使用 ISO 日期（YYYY-MM-DD），或带 Z 或数字时区偏移的 ISO 日期时间。",
+      "appliedAtFuture": "日期须为今天或更早，日期时间须为当前时刻或更早。",
+      "appliedAtTimezone": "无法读取日程时区。请使用带时区偏移的日期时间。",
+      "appliedReferenceLength": "去掉首尾空白后须有 1 到 {max} 个字符。",
+      "appliedReferenceNul": "请移除回执编号中的空字符。",
       "trackingNotFound": "未找到岗位或其申请。",
       "undo": {
         "not_permitted": "仅原调用方且仍有原数据区写权限时可撤销此修改。",
@@ -7482,7 +7489,7 @@
       },
       "mark_applied": {
         "title": "标记已投递",
-        "description": "仅从新建、感兴趣、准备中或归档标记为已投递。已经投递时不变；更后面的阶段拒绝操作。可能触发受预算限制的自动调研。"
+        "description": "仅从新建、感兴趣、准备中或归档标记为已投递。可记录实际投递时间和回执编号。已经投递时不变；更后面的阶段拒绝操作。可能触发受预算限制的自动调研。"
       },
       "set_next_action": {
         "title": "设置下一步",
@@ -7630,6 +7637,8 @@
       "until": "首次发现于这一天或之前（YYYY-MM-DD）",
       "applicationStatus": "要保留的申请状态（new 也匹配没有申请记录的岗位；archived = 已忽略）",
       "targetApplicationStatus": "申请状态",
+      "appliedAt": "实际投递时间，可用 YYYY-MM-DD（schedule.yaml 时区的当天零点），或带 Z 或数字时区偏移的 ISO 日期时间。日期须为今天或更早，日期时间须为当前时刻或更早。",
+      "appliedReference": "投递回执或参考编号，去掉首尾空白后须有 1 到 {max} 个字符。",
       "sort": "排序：relevance（有 query 时默认，相关度降序）、rank（无 query 时默认，排序值降序）、posted（发布时间最新优先）、first_seen（发现时间最新优先）。",
       "limit": "最多返回几条（不超过 mcp.yaml 的 limits.max_results）",
       "jobId": "岗位 id（来自 search_jobs 或 list_applications）",

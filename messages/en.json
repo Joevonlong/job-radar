@@ -1773,6 +1773,8 @@
       "moved": "{from} → {to}",
       "stayed": "Still {to}",
       "note": "Note: {text}",
+      "occurredAt": "Applied on {date}",
+      "reference": "Reference {reference}",
       "generic": "Event ({kind})"
     },
     "dnd": {
@@ -7436,6 +7438,11 @@
       "trackingWriteDisabled": "Tracking writes need a granted write connection. Restart the MCP server after enabling tracking:write.",
       "writeAuditUnavailable": "The audit recorder is unavailable; no change was made.",
       "markAppliedNotAllowed": "Mark applied is only allowed from new, interested, preparing or archived; an application at a later stage is left unchanged.",
+      "appliedAtFormat": "Use an ISO date (YYYY-MM-DD) or an ISO datetime with Z or a numeric offset.",
+      "appliedAtFuture": "Use today or an earlier date, or a datetime at or before now.",
+      "appliedAtTimezone": "The schedule timezone could not be read. Use a datetime with an offset.",
+      "appliedReferenceLength": "Use 1 to {max} characters after trimming whitespace.",
+      "appliedReferenceNul": "Remove null characters from the reference.",
       "trackingNotFound": "The job or its application was not found.",
       "undo": {
         "not_permitted": "Only the same caller with the original data-area write permission may undo this change.",
@@ -7482,7 +7489,7 @@
       },
       "mark_applied": {
         "title": "Mark applied",
-        "description": "Mark a job as applied, only from new, interested, preparing or archived. Already applied is a no-op; later stages are refused. May start budgeted automatic research."
+        "description": "Mark a job as applied, only from new, interested, preparing or archived. Optionally record the actual application time and a receipt reference. Already applied is a no-op; later stages are refused. May start budgeted automatic research."
       },
       "set_next_action": {
         "title": "Set next action",
@@ -7630,6 +7637,8 @@
       "until": "First seen on or before this day (YYYY-MM-DD)",
       "applicationStatus": "Application statuses to keep (new also matches jobs without an application; archived = ignored)",
       "targetApplicationStatus": "Application status",
+      "appliedAt": "Actual application time as YYYY-MM-DD (midnight in the schedule.yaml time zone) or an ISO datetime with Z or a numeric offset. Use today or an earlier date, or a datetime at or before now.",
+      "appliedReference": "Application receipt or reference, 1 to {max} characters after trimming whitespace.",
       "sort": "Order: relevance (default with query), rank (best first, default without query), posted (newest posting first), first_seen (newest found first).",
       "limit": "Most results to return (capped by mcp.yaml limits.max_results)",
       "jobId": "The job id (from search_jobs or list_applications)",

@@ -1158,6 +1158,8 @@ export const applicationEvents = pgTable(
     fromStatus: applicationStatusEnum("from_status"),
     toStatus: applicationStatusEnum("to_status").notNull(),
     note: text("note"),
+    occurredAt: timestamptz("occurred_at"),
+    reference: text("reference"),
   },
   (t) => [index("application_events_application_at_idx").on(t.applicationId, t.at)],
 );
