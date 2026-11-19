@@ -47,3 +47,5 @@ figures for one city. It reports changed groups and estimates their read-side re
 `agent-changes-writes-LABEL.json` records every run and the medians for elapsed time, WAL bytes and change rows, including
 the separate phases of multi-step scenarios. The script prints a summary table and exits with status 1 when any comparison
 shows more than 10% time growth or 20% WAL growth, or when a heartbeat or identical rebuild emits a change row.
+`agent-changes-writes.mts` reports an elapsed-time change of about +13% for `rescore/ten_thousand` against the +10% threshold,
+so a non-zero exit from that result alone is expected given the accepted cost of writing one change row per changed job.

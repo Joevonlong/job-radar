@@ -3,6 +3,7 @@ import { parseArgs } from "node:util";
 import { closeDb, getDb } from "../src/lib/db/client";
 import { resetAgentChanges } from "../src/lib/db/repos/agent-changes";
 import { getTranslator } from "../src/lib/i18n/node";
+import { redact } from "../src/lib/ops/doctor/helpers";
 
 const t = getTranslator("cli.mcpSyncReset", "cli");
 
@@ -22,7 +23,9 @@ async function main(): Promise<number> {
 
 try {
   process.exitCode = await main();
-} catch {
+} catch (error) {
+  const cause = error instanceof Error && error.cause instanceof Error ? error.cause : error;
   console.error(t("failed"));
+  console.error(redact(cause instanceof Error ? cause.message : String(cause)));
   process.exitCode = 1;
 }

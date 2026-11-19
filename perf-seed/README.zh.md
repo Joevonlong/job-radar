@@ -25,3 +25,4 @@ node --import tsx perf-seed/agent-changes-writes.mts ADMIN_URL TEMPLATE_DB CODE_
 
 `agent-changes-writes-LABEL.json` 记录各轮及中位数，包括各阶段的耗时、WAL 字节数和变更行数。脚本会打印汇总表。任一比较的耗时增长超过
 10%、WAL 增长超过 20%，或心跳及相同数据重建产生变更行，都会以状态码 1 退出。
+`agent-changes-writes.mts` 报告 `rescore/ten_thousand` 的耗时增幅约为 +13%，超过 +10% 门槛，这属于每个变更岗位写入一条变更记录的已接受开销，仅因这一项以非零状态退出符合预期。

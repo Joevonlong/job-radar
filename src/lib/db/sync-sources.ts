@@ -1,4 +1,9 @@
-/** A field added to an exported block must update this matrix, the triggers and SYNC_DTO_VERSION in the same PR. */
+/**
+ * A field added to an exported block must update this matrix, the triggers and SYNC_DTO_VERSION in the same PR.
+ * Each block carries one read permission. `get_job` exposes `application_status`, `application` and `closed_reason`
+ * on the job object only with `tracking:read`. Route their inputs to `tracking` and `app` under that permission.
+ * The `job` block carries `jobs:read`. Sync callers must select `tracking` to see those fields on a job.
+ */
 import type { Permission } from "@/lib/agent-access/permissions";
 
 export const SYNC_DTO_VERSION = 1;
