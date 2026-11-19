@@ -23,8 +23,9 @@ const trackingTables = { application: applications, favorite: jobFavorites } as 
 type TrackingKind = (typeof trackingKinds)[number];
 type JobIdColumn = typeof jobs.id | typeof jobSources.jobId;
 
-export async function listSyncTrackingKeys(db: Executor, after: SyncEntityKey | null, limit: number): Promise<SyncEntityKey[]> {
-  const pages = await Promise.all(trackingKinds.map(async (kind) => {
+export async function listSyncTrackingKeys(db: Executor, after: SyncEntityKey | null, limit: number, kinds: readonly SyncEntityKind[]): Promise<SyncEntityKey[]> {
+  const selected = trackingKinds.filter((kind) => kinds.includes(kind));
+  const pages = await Promise.all(selected.map(async (kind) => {
     const table = trackingTables[kind];
     const at = after?.jobId ?? 0;
     const bound = after !== null && compareSyncEntityKeys({ jobId: at, kind }, after) > 0 ? gte : gt;

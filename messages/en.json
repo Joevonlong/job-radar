@@ -7403,7 +7403,7 @@
         "cursor": "Opaque cursor from the previous sync page. Omit it or pass null to start a new snapshot.",
         "limit": "Maximum items on the page. Defaults to the configured sync.max_batch.",
         "blocks": "Job field blocks to sync. The base job block is always included. Omit this to use the default get_job blocks allowed by your permissions.",
-        "applicationBlocks": "Application and favorite blocks to sync. Omit this to use app and fav, plus app.notes and fav.notes when you have notes:read."
+        "applicationBlocks": "Application and favorite blocks to sync. Each notes block includes its base block. Omit this to use app and fav, plus app.notes and fav.notes when you have notes:read."
       },
       "errors": {
         "invalidCursor": "invalid_cursor: The sync cursor is malformed or could not be authenticated. Start again without a cursor.",
@@ -7412,7 +7412,8 @@
         "scopeChanged": "resync_required (scope_changed): The sync tool, blocks, permissions, or data format changed. Start again without a cursor.",
         "unavailable": "sync_unavailable: The change log identity could not be verified.",
         "limit": "Input validation error: limit must be between 1 and {max}.",
-        "block": "Input validation error: Block {block} requires {permission}."
+        "block": "Input validation error: Block {block} requires {permission}.",
+        "emptyBlocks": "Select at least one application or favorite block."
       }
     },
     "serve": {

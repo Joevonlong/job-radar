@@ -131,7 +131,10 @@ describe("incremental application and favorite sync", () => {
         expect(page.items[0]).not.toHaveProperty("application.notes");
       }
       const notesPage = await sync(withNotes, { cursor: notes.next_cursor, blocks: notesBlocks });
-      expect(notesPage).toMatchObject({ has_more: false, held_back: 2, items: [] });
+      expect(notesPage).toMatchObject({ has_more: false, held_back: 2, items: [{
+        kind: "application", job_id: jobId, changed_at: visibleAt.toISOString(),
+        application: { tracking: { application: { next_action: "Follow up" } } },
+      }] });
       return { plainPage, basePage, notesPage };
     });
 
@@ -142,6 +145,61 @@ describe("incremental application and favorite sync", () => {
       { kind: "application", job_id: jobId, changed_at: notesAt.toISOString(), application: { notes: { application_notes: "Application note sentinel" } } },
       { kind: "favorite", job_id: jobId, changed_at: notesAt.toISOString(), favorite: { notes: { favorite_note: "Favorite note sentinel" } } },
     ] });
+  });
+
+  it("keeps a favorites-only snapshot and change feed scoped to favorites", async () => {
+    const both = await addJob("Application and favorite");
+    const applied = await addJob("Application only");
+    await setApplicationStatus(writer.db, both, "applied");
+    await setApplicationStatus(writer.db, applied, "applied");
+    await addFavorite(writer.db, both);
+    const client = await connect();
+    const blocks = ["fav"];
+    const start = await sync(client, { blocks });
+    expect(start).toMatchObject({ phase: "snapshot", snapshot_complete: true });
+    expect(keys(start.items)).toEqual([[both, "favorite"]]);
+
+    await writer.db.update(schema.applications).set({ nextAction: "Follow up" }).where(eq(schema.applications.jobId, both));
+    const afterUpdate = await sync(client, { blocks, cursor: start.next_cursor });
+    expect(afterUpdate).toMatchObject({ items: [], has_more: false, held_back: 0 });
+    expect(await revertApplicationStatus(writer.db, both, { movedTo: "applied", restoreTo: "new" })).toMatchObject({ status: null, reverted: true });
+    const afterRemoval = await sync(client, { blocks, cursor: afterUpdate.next_cursor });
+    expect(afterRemoval).toMatchObject({ items: [], has_more: false, held_back: 0 });
+
+    expect(await removeFavorite(writer.db, both)).not.toBeNull();
+    const page = await sync(client, { blocks, cursor: afterRemoval.next_cursor });
+    expect(page.items).toEqual([{ kind: "favorite", job_id: both, removed: true, favorite: null, changed_at: expect.any(String) }]);
+  });
+
+  it("keeps an applications-only snapshot and shows application removals", async () => {
+    const applied = await addJob("Application only");
+    const starred = await addJob("Favorite only");
+    await setApplicationStatus(writer.db, applied, "applied");
+    await addFavorite(writer.db, starred);
+    const client = await connect();
+    const blocks = ["app"];
+    const start = await sync(client, { blocks });
+    expect(start).toMatchObject({ phase: "snapshot", snapshot_complete: true });
+    expect(keys(start.items)).toEqual([[applied, "application"]]);
+
+    expect(await removeFavorite(writer.db, starred)).not.toBeNull();
+    const afterUnfavorite = await sync(client, { blocks, cursor: start.next_cursor });
+    expect(afterUnfavorite).toMatchObject({ items: [], has_more: false, held_back: 0 });
+    expect(await revertApplicationStatus(writer.db, applied, { movedTo: "applied", restoreTo: "new" })).toMatchObject({ status: null, reverted: true });
+    const page = await sync(client, { blocks, cursor: afterUnfavorite.next_cursor });
+    expect(page.items).toEqual([{ kind: "application", job_id: applied, removed: true, application: null, changed_at: expect.any(String) }]);
+  });
+
+  it("rejects empty application blocks and keeps the base job block for empty job blocks", async () => {
+    const jobId = await addJob("Role in the job snapshot");
+    const client = await connect(["jobs:read", "tracking:read"]);
+    const args = { blocks: [] };
+    const result = await client.callTool({ name: "list_application_changes", arguments: args });
+    expect(result).toMatchObject({ isError: true, content: [{ type: "text", text: expect.stringMatching(/^Input validation error:/) }] });
+    expect(result.structuredContent).toBeUndefined();
+
+    const jobs = listJobChangesOutput.parse(await readTool(client, "list_job_changes", args));
+    expect(jobs.items).toMatchObject([{ job_id: jobId, removed: false, job: { job: { id: jobId } } }]);
   });
 
   it("returns removals for a reverted application, an unfavorite and a deleted job", async () => {

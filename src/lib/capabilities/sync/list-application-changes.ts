@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import { z } from "zod";
 
 import type { Permission } from "@/lib/agent-access/permissions";
 import type { McpConfig } from "@/lib/config/schemas/mcp";
@@ -26,13 +26,17 @@ const defaultBlocks = new Set([
 ]);
 
 function listApplicationChangesInput(ctx: Pick<McpContext, "text">, advertised?: McpConfig) {
-  return syncInput(ctx, trackingBlocks, ctx.text("sync.params.applicationBlocks"), advertised);
+  const blocks = z.array(z.enum(trackingBlocks)).min(1, { error: ctx.text("sync.errors.emptyBlocks") });
+  return syncInput(ctx, blocks, ctx.text("sync.params.applicationBlocks"), advertised);
 }
 
 export function applicationSyncSelection(permissions: ReadonlySet<Permission>, blocks?: readonly SyncBlock[]) {
+  const selected = [...(blocks ?? trackingBlocks.filter((block) => defaultBlocks.has(block) && permissions.has(SYNC_BLOCKS[block].permission)))];
+  if (selected.includes("app.notes")) selected.push("app");
+  if (selected.includes("fav.notes")) selected.push("fav");
   return syncSelection({
     tool, permission, kinds: ["application", "favorite"], permissions,
-    blocks: blocks ?? trackingBlocks.filter((block) => defaultBlocks.has(block) && permissions.has(SYNC_BLOCKS[block].permission)),
+    blocks: selected,
   });
 }
 

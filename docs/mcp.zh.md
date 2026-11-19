@@ -370,18 +370,19 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 
 ## 增量同步
 
-`list_job_changes` 从全部岗位开始，包括历史岗位和被硬条件筛掉的岗位。`list_application_changes` 从当前全部申请和收藏开始。
+`list_job_changes` 从全部岗位开始，包括历史岗位和被硬条件筛掉的岗位。`list_application_changes` 按所选字段块同步当前申请、收藏或两者。
 两个工具都可通过 stdio 和 HTTP 调用，需要各自的有效读权限。
 
 两个工具都接受可选参数 `cursor`、`limit` 和 `blocks`。在 `mcp.yaml` 中编辑 `sync`（设置 → 高级，或
 `data/config/mcp.yaml`）。`sync.max_batch` 同时是 `limit` 的默认值和每页上限（默认 50，整数范围 1–200）。
 `sync.retention_days` 指定变更行保留天数（默认 30，整数范围 1–365），runner 每天清理一次。
 
-- `list_job_changes` 始终包含基础 `job` 块。其中的申请字段（`application_status`、`closed_reason` 和 `application`）
+- `list_job_changes` 始终包含基础 `job` 块，传入 `blocks: []` 时也一样。其中的申请字段（`application_status`、`closed_reason` 和 `application`）
   仅在选中且有权读取 `tracking` 时提供。省略 `blocks` 时，使用 `get_job` 在当前权限下的默认块。可选块见上面的字段块表。
-- `list_application_changes` 的 `app` 和 `fav` 分别对应申请和收藏的基础字段。`app.notes` 和 `fav.notes` 需要 `notes:read`。
-  省略 `blocks` 时，使用 `app` 和 `fav`，并在有权限时加入两个备注块，与 `get_application` 和 `list_favorites` 的默认输出一致。
-  每个返回项都带有自己的基础字段，快照也一样。要跟进两类基础字段的后续变化，请选中 `app` 和 `fav`。
+- `list_application_changes` 通过 `app` 和 `fav` 指定快照包含哪些类型，并跟进相应基础字段的变更。
+  选择 `app.notes` 时会同时选中 `app`，选择 `fav.notes` 时会同时选中 `fav`。两个备注块都需要 `notes:read`。
+  如果传入 `blocks`，至少要选择一个块。省略 `blocks` 时，使用 `app` 和 `fav`，并在有权限时加入两个备注块，
+  与 `get_application` 和 `list_favorites` 的默认输出一致。
 
 未知的块会触发参数校验错误。开始新快照时，所选块必须在有效权限内。游标绑定所选块及相关权限。
 在变更阶段，一行日志必须影响至少一个已选且有权读取的块，才会计入返回项、`has_more`、`held_back` 或 `changed_at`。

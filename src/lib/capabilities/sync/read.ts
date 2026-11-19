@@ -7,7 +7,7 @@ import { expandAgentChangeKeys } from "@/lib/db/repos/agent-change-keys";
 import { AgentChangesPruned, checkAgentChangeRetention, scanAgentChangePage } from "@/lib/db/repos/agent-change-page";
 import { AgentSyncUnavailable, countHeldAgentChanges, readAgentChangeRows, withAgentChangeSnapshot, type AgentChangeSnapshot } from "@/lib/db/repos/agent-changes";
 import type { SyncEntityKey } from "@/lib/db/sync-position";
-import { SYNC_BLOCKS, type SyncBlock } from "@/lib/db/sync-sources";
+import { SYNC_BLOCKS, type SyncBlock, type SyncEntityKind } from "@/lib/db/sync-sources";
 import { ToolFailure, type McpContext } from "@/lib/mcp/context";
 import { jobBlockSettings } from "@/lib/mcp/job-blocks/settings";
 import { compileFamilies } from "@/lib/salary/families";
@@ -20,7 +20,7 @@ type Progress = Pick<Extract<SyncCursor, { phase: "snapshot" }>, "phase" | "posi
 
 type Selection = ReturnType<typeof syncSelection>;
 type BlockSettings = ReturnType<typeof jobBlockSettings>;
-type SnapshotKeys = (tx: Executor, after: SyncEntityKey | null, limit: number) => Promise<SyncEntityKey[]>;
+type SnapshotKeys = (tx: Executor, after: SyncEntityKey | null, limit: number, kinds: readonly SyncEntityKind[]) => Promise<SyncEntityKey[]>;
 export type PageEntity = SyncEntityKey & { changedAt: Date | null; removed: boolean };
 
 interface SyncPage {
@@ -30,12 +30,12 @@ interface SyncPage {
   next: Progress;
 }
 
-export function syncInput<Block extends SyncBlock>(ctx: Pick<McpContext, "text">, blocks: readonly Block[], blockDescription: string, advertised?: McpConfig) {
+export function syncInput<Blocks extends z.ZodType<SyncBlock[]>>(ctx: Pick<McpContext, "text">, blocks: Blocks, blockDescription: string, advertised?: McpConfig) {
   const max = advertised?.sync.max_batch;
   return z.strictObject({
     cursor: z.string({ error: ctx.text("sync.errors.invalidCursor") }).nullish().describe(ctx.text("sync.params.cursor")),
     limit: (max === undefined ? syncBatchSize.optional() : syncBatchSize.max(max).default(max)).describe(ctx.text("sync.params.limit")),
-    blocks: z.array(z.enum(blocks)).optional().describe(blockDescription),
+    blocks: blocks.optional().describe(blockDescription),
   });
 }
 
@@ -56,7 +56,7 @@ async function readSyncPage(
   snapshotKeys: SnapshotKeys, settings: BlockSettings,
 ): Promise<SyncPage> {
   if (cursor.phase === "snapshot") {
-    const keys = await snapshotKeys(tx, cursor.position.after, limit + 1);
+    const keys = await snapshotKeys(tx, cursor.position.after, limit + 1, selection.kindsFor(selection.mask));
     const hasMore = keys.length > limit;
     const entities = keys.slice(0, limit).map((key) => ({ ...key, changedAt: null, removed: false }));
     return {

@@ -174,6 +174,17 @@ describe("tools/list", () => {
     }
   });
 
+  it("requires at least one explicit tracking sync block", async () => {
+    const client = await connect(context());
+    const { tools } = await client.listTools();
+    const tracking = tools.find(({ name }) => name === "list_application_changes");
+    expect(tracking?.inputSchema.properties).toMatchObject({ blocks: { minItems: 1 } });
+    const result = await client.callTool({ name: "list_application_changes", arguments: { blocks: [] } });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/^Input validation error:/);
+    expect(textOf(result)).toContain("Select at least one application or favorite block.");
+  });
+
   it("offers the read-only tools with titles, descriptions and schemas", async () => {
     const client = await connect(context());
     const { tools } = await client.listTools();

@@ -105,10 +105,21 @@ describe("sync field scopes", () => {
   it("partitions intersections by kind after applying the selected permission mask", () => {
     const selected = applicationSyncSelection(new Set(["tracking:read", "notes:read", "jobs:read"]), ["app", "fav.notes"]);
     expect(selected.scope.permissions).toEqual(["notes:read", "tracking:read"]);
-    expect(selected.mask).toBe(bit("app") | bit("fav.notes"));
+    expect(selected.mask).toBe(bit("app") | bit("fav") | bit("fav.notes"));
     expect(selected.kindsFor(bit("notes") | bit("fav.notes"))).toEqual(["favorite"]);
     expect(selected.kindsFor(bit("app") | bit("fav.notes") | bit("app.notes"))).toEqual(["application", "favorite"]);
-    expect(selected.kindsFor(bit("job") | bit("tracking") | bit("app.notes") | bit("fav"))).toEqual([]);
+    expect(selected.kindsFor(bit("job") | bit("tracking") | bit("app.notes"))).toEqual([]);
+  });
+
+  it.each([
+    { base: "app", notes: "app.notes", kind: "application" },
+    { base: "fav", notes: "fav.notes", kind: "favorite" },
+  ] as const)("selects only $kind and implies $base when selecting $notes", ({ base, notes, kind }) => {
+    const permissions = new Set(["tracking:read", "notes:read"] as const);
+    const selected = applicationSyncSelection(permissions, [notes]);
+    expect(selected.scope).toEqual(applicationSyncSelection(permissions, [base, notes]).scope);
+    expect(selected.kindsFor(selected.mask)).toEqual([kind]);
+    expect(selected.kindsFor(bit(base))).toEqual([kind]);
   });
 
   it("defaults to the application and favorite readers' granted blocks", () => {

@@ -7403,7 +7403,7 @@
         "cursor": "上一批返回的不透明游标。省略或传 null 开始新的快照。",
         "limit": "每批最多返回的项数。默认使用配置中的 sync.max_batch。",
         "blocks": "要同步的岗位字段块。基础 job 块始终包含。省略时使用 get_job 在当前权限下的默认块。",
-        "applicationBlocks": "要同步的申请和收藏字段块。省略时使用 app 和 fav，有 notes:read 权限时再加上 app.notes 和 fav.notes。"
+        "applicationBlocks": "要同步的申请和收藏字段块。选择备注块时同时包含对应的基础块。省略时使用 app 和 fav，有 notes:read 权限时再加上 app.notes 和 fav.notes。"
       },
       "errors": {
         "invalidCursor": "invalid_cursor: 同步游标格式有误或未通过验证。请去掉游标重新开始。",
@@ -7412,7 +7412,8 @@
         "scopeChanged": "resync_required (scope_changed): 同步工具、字段块、权限或数据格式已变化。请去掉游标重新开始。",
         "unavailable": "sync_unavailable: 无法校验变更日志身份。",
         "limit": "参数校验失败：limit 必须介于 1 和 {max} 之间。",
-        "block": "参数校验失败：字段块 {block} 需要 {permission} 权限。"
+        "block": "参数校验失败：字段块 {block} 需要 {permission} 权限。",
+        "emptyBlocks": "请至少选择一个申请或收藏字段块。"
       }
     },
     "serve": {

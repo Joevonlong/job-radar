@@ -423,20 +423,21 @@ Saved views in `get_today` require `profile:read`, whether explicit or default. 
 ## Incremental sync
 
 `list_job_changes` starts with all jobs, including archived and hard-filtered jobs. `list_application_changes` starts
-with all current applications and favorites. Both tools work over stdio and HTTP with their effective read permission.
+with current applications, favorites, or both according to the block selection. Both tools work over stdio and HTTP
+with their effective read permission.
 
 Both accept optional `cursor`, `limit` and `blocks`. Edit `sync` in `mcp.yaml` (Settings → Advanced or
 `data/config/mcp.yaml`). `sync.max_batch` is both the default `limit` and the maximum page size (50 by default,
 integer 1–200). `sync.retention_days` sets how many days of change rows the runner retains (30 by default,
 integer 1–365). The runner prunes the log daily.
 
-- `list_job_changes` always includes the base `job` block. Its application fields (`application_status`,
+- `list_job_changes` always includes the base `job` block, including with `blocks: []`. Its application fields (`application_status`,
   `closed_reason` and `application`) appear only when `tracking` is selected and granted. Omit `blocks` for the
   default `get_job` blocks at your permissions. The block table above lists the optional blocks.
-- `list_application_changes` accepts `app` and `fav` for the base application and favorite fields, and `app.notes`
-  and `fav.notes` with `notes:read`. Omit `blocks` for `app` and `fav` plus the notes blocks when granted, matching
-  the defaults of `get_application` and `list_favorites`. A returned item carries its base fields, including in the
-  snapshot. Select `app` and `fav` to follow later changes to both sets of base fields.
+- `list_application_changes` uses `app` and `fav` to select the kinds included in the snapshot and follow their base
+  field changes. Selecting `app.notes` also selects `app`, and selecting `fav.notes` also selects `fav`. Both notes
+  blocks require `notes:read`. An explicit `blocks` array must contain at least one block. Omit `blocks` for `app`
+  and `fav` plus the notes blocks when granted, matching the defaults of `get_application` and `list_favorites`.
 
 An unknown block causes an input validation error. For a new snapshot, every selected block must be within your effective
 permissions. A cursor binds the selected blocks and relevant grants. In the changes phase, a log row must affect at least

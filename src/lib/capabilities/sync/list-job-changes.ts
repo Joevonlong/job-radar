@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import { z } from "zod";
 
 import type { McpConfig } from "@/lib/config/schemas/mcp";
 import { listSyncJobKeys } from "@/lib/db/repos/agent-change-keys";
@@ -16,7 +16,7 @@ const tool = "list_job_changes";
 const jobBlocks = ["job", ...getJobBlocks.map((block) => block.key)] as const;
 
 function listJobChangesInput(ctx: Pick<McpContext, "text">, advertised?: McpConfig) {
-  return syncInput(ctx, jobBlocks, ctx.text("sync.params.blocks"), advertised);
+  return syncInput(ctx, z.array(z.enum(jobBlocks)), ctx.text("sync.params.blocks"), advertised);
 }
 
 type Args = z.infer<ReturnType<typeof listJobChangesInput>>;
