@@ -28,7 +28,7 @@ that provider's terms. Turning the server on adds this exit to the ones listed i
 | Score and rank numbers | Local paths (tailored résumé files) |
 | Compensation and benefit signals with their JD quote and position | Mail body, subject, sender, quotes and mail identifiers |
 | The JD after AI-trap cleaning (see below) | `.env` and `.auth/` values, keys, notifications, raw run payloads, run records, raw configuration files |
-| Your applications: status, when it last changed, days in that status, next step and its date, interview rounds, the status history | |
+| Your applications: status, its recorded start time, days in that status, next step and its date, interview rounds, the status history | |
 | With `actions:run`: request ids, status, timestamps, queue position, worker availability, safe result counts and codes, cycle progress and daily budget metadata | |
 
 With effective `career:read` and `career.yaml: enabled`, the tools below give redacted career profiles and documents. With effective `replies:read` and `replies.yaml: enabled`, they give reply classifications and linked application metadata. Both permissions are off by default.

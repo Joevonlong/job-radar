@@ -38,7 +38,7 @@ The bar above the board shows how many replies wait, and a card with a waiting r
 - **Dismiss** leaves everything as it is.
 - **Category** corrects the rules: the suggestion is worked out again. A mail the rules cannot place is "Not classified", and waits for you to pick one.
 - **Application** links the reply to another application, for example when several could fit.
-- **Undo** sits under "Recently confirmed" for `panel.undo_days` days. It restores the status (and the time in that status) or the old next step, and removes the event as long as nothing else happened since.
+- **Undo** sits under "Recently confirmed" for `panel.undo_days` days. It restores the status (and its recorded start time) or the old next step, and removes the event as long as nothing else happened since.
 
 If you moved the application yourself before confirming, your change wins: the suggestion is voided and nothing is written. Acknowledgements and other mails that change nothing are only recorded, without asking.
 
