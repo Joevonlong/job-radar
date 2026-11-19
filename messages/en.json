@@ -7402,7 +7402,8 @@
       "params": {
         "cursor": "Opaque cursor from the previous sync page. Omit it or pass null to start a new snapshot.",
         "limit": "Maximum items on the page. Defaults to the configured sync.max_batch.",
-        "blocks": "Job field blocks to sync. The base job block is always included. Omit this to use the default get_job blocks allowed by your permissions."
+        "blocks": "Job field blocks to sync. The base job block is always included. Omit this to use the default get_job blocks allowed by your permissions.",
+        "applicationBlocks": "Application and favorite blocks to sync. Omit this to use app and fav, plus app.notes and fav.notes when you have notes:read."
       },
       "errors": {
         "invalidCursor": "invalid_cursor: The sync cursor is malformed or could not be authenticated. Start again without a cursor.",
@@ -7495,6 +7496,10 @@
       "list_job_changes": {
         "title": "Sync jobs",
         "description": "Page through all jobs, including archived and filtered-out jobs, then follow changes with next_cursor. Use job_id to update your copy and remove jobs marked removed. Once snapshot_complete is true, delete records from earlier generations."
+      },
+      "list_application_changes": {
+        "title": "Sync applications and favorites",
+        "description": "Page through current applications and favorites, then follow changes with next_cursor. Update your copy by kind and job_id, and delete items marked removed. Once snapshot_complete is true, delete records from earlier generations."
       },
       "list_applications": {
         "title": "List applications",

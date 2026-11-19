@@ -1,5 +1,5 @@
 /** Reads and writes of `job_seen`, the jobs the user has looked at. Every query of the feature lives here. */
-import { and, eq, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 
 import type { Executor } from "../executor";
 import { jobs, jobSeen, jobSeenViaEnum } from "../schema";
@@ -29,8 +29,13 @@ export async function markUnseen(db: Executor, jobId: number): Promise<boolean> 
 
 /** Whether the job has been seen. */
 export async function isSeen(db: Executor, jobId: number): Promise<boolean> {
-  const [row] = await db.select({ jobId: jobSeen.jobId }).from(jobSeen).where(eq(jobSeen.jobId, jobId)).limit(1);
-  return row !== undefined;
+  return (await getSeenJobIds(db, [jobId])).has(jobId);
+}
+
+export async function getSeenJobIds(db: Executor, jobIds: readonly number[]): Promise<Set<number>> {
+  if (jobIds.length === 0) return new Set();
+  const rows = await db.select({ jobId: jobSeen.jobId }).from(jobSeen).where(inArray(jobSeen.jobId, [...jobIds]));
+  return new Set(rows.map(({ jobId }) => jobId));
 }
 
 /**

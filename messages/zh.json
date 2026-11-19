@@ -7402,7 +7402,8 @@
       "params": {
         "cursor": "上一批返回的不透明游标。省略或传 null 开始新的快照。",
         "limit": "每批最多返回的项数。默认使用配置中的 sync.max_batch。",
-        "blocks": "要同步的岗位字段块。基础 job 块始终包含。省略时使用 get_job 在当前权限下的默认块。"
+        "blocks": "要同步的岗位字段块。基础 job 块始终包含。省略时使用 get_job 在当前权限下的默认块。",
+        "applicationBlocks": "要同步的申请和收藏字段块。省略时使用 app 和 fav，有 notes:read 权限时再加上 app.notes 和 fav.notes。"
       },
       "errors": {
         "invalidCursor": "invalid_cursor: 同步游标格式有误或未通过验证。请去掉游标重新开始。",
@@ -7495,6 +7496,10 @@
       "list_job_changes": {
         "title": "同步岗位",
         "description": "分批读取全部岗位，包括历史岗位和被硬条件筛掉的岗位，然后用 next_cursor 跟进变更。用 job_id 更新本地副本，移除标为 removed 的岗位。收到 snapshot_complete 为 true 后，删除属于旧代的记录。"
+      },
+      "list_application_changes": {
+        "title": "同步申请和收藏",
+        "description": "分批读取当前的申请和收藏，然后用 next_cursor 跟进变更。按 kind 和 job_id 更新本地副本，删除标为 removed 的记录。收到 snapshot_complete 为 true 后，删除属于旧代的记录。"
       },
       "list_applications": {
         "title": "查看申请",

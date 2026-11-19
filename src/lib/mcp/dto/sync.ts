@@ -6,6 +6,7 @@ import { syncJobBlocks } from "@/lib/mcp/job-blocks";
 
 import { syncCompanyBlockDto, syncSalaryBlockDto } from "./job-analysis";
 import { getJobOutput, jobDetailDtoFor } from "./jobs";
+import { applicationReadItemDto, applicationReadItemDtoFor, favoriteItemDto, favoriteItemDtoFor } from "./read-tracking";
 import { notices } from "./shared";
 
 export const syncPageDto = z.strictObject({
@@ -26,11 +27,12 @@ export function syncJobAssemblyDtoFor(permissions: ReadonlySet<Permission>): z.Z
   return z.strictObject({ notices, job: jobDetailDtoFor(permissions), ...blockShape(syncJobBlocks, permissions) });
 }
 
+const entityChangeFields = { job_id: z.int().positive(), changed_at: z.iso.datetime().nullable() };
+
 function jobChangeItem(job: z.ZodType<z.infer<typeof syncJobDto>>) {
-  const common = { job_id: z.int().positive(), changed_at: z.iso.datetime().nullable() };
   return z.discriminatedUnion("removed", [
-    z.strictObject({ ...common, removed: z.literal(false), job }),
-    z.strictObject({ ...common, removed: z.literal(true), job: z.null() }),
+    z.strictObject({ ...entityChangeFields, removed: z.literal(false), job }),
+    z.strictObject({ ...entityChangeFields, removed: z.literal(true), job: z.null() }),
   ]);
 }
 
@@ -40,4 +42,26 @@ export type ListJobChangesOutput = z.infer<typeof listJobChangesOutput>;
 export function listJobChangesOutputFor(permissions: ReadonlySet<Permission>): z.ZodType<ListJobChangesOutput> {
   const job = permissions.has("tracking:read") ? syncJobDto.shape.job : jobDetailDtoFor(permissions);
   return syncPageDto.extend({ items: z.array(jobChangeItem(z.strictObject({ job, ...blockShape(syncJobBlocks, permissions) }))) });
+}
+
+function trackingChangeItem(application: z.ZodType<z.infer<typeof applicationReadItemDto>>, favorite: z.ZodType<z.infer<typeof favoriteItemDto>>) {
+  const appFields = { ...entityChangeFields, kind: z.literal("application") };
+  const favFields = { ...entityChangeFields, kind: z.literal("favorite") };
+  return z.discriminatedUnion("kind", [
+    z.discriminatedUnion("removed", [
+      z.strictObject({ ...appFields, removed: z.literal(false), application }),
+      z.strictObject({ ...appFields, removed: z.literal(true), application: z.null() }),
+    ]),
+    z.discriminatedUnion("removed", [
+      z.strictObject({ ...favFields, removed: z.literal(false), favorite }),
+      z.strictObject({ ...favFields, removed: z.literal(true), favorite: z.null() }),
+    ]),
+  ]);
+}
+
+export const listApplicationChangesOutput = syncPageDto.extend({ items: z.array(trackingChangeItem(applicationReadItemDto, favoriteItemDto)) });
+export type ListApplicationChangesOutput = z.infer<typeof listApplicationChangesOutput>;
+
+export function listApplicationChangesOutputFor(permissions: ReadonlySet<Permission>): z.ZodType<ListApplicationChangesOutput> {
+  return syncPageDto.extend({ items: z.array(trackingChangeItem(applicationReadItemDtoFor(permissions), favoriteItemDtoFor(permissions))) });
 }

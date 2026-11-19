@@ -1,6 +1,6 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 
-import type { Db } from "../client";
+import type { Executor } from "../executor";
 import type { FavoriteSort } from "@/lib/jobs/constants";
 import { companies, jobFavorites, jobs } from "../schema";
 import { uxTablesReady } from "../repos/ux-tables";
@@ -13,7 +13,8 @@ import { dormancyReady } from "../repos/dormancy";
  * Every starred job, with no filter at all: closed, possibly closed, hard-filtered and ignored jobs are listed too,
  * the list rows mark them. `starred`: newest star first; `rank`: filtered-out last, then the rank value.
  */
-export async function listFavoriteJobs(db: Db, options: { sort: FavoriteSort; visa?: boolean; ghost?: boolean }): Promise<JobCard[]> {
+export async function listFavoriteJobs(db: Executor, options: { sort: FavoriteSort; visa?: boolean; ghost?: boolean; jobIds?: readonly number[] }): Promise<JobCard[]> {
+  if (options.jobIds?.length === 0) return [];
   return currentScoreRead(db, async () => {
     const latest = await currentScore(db, "set");
     const ux = await uxTablesReady(db);
@@ -27,6 +28,7 @@ export async function listFavoriteJobs(db: Db, options: { sort: FavoriteSort; vi
       .innerJoin(jobs, eq(jobs.id, jobFavorites.jobId))
       .innerJoin(companies, eq(companies.id, jobs.companyId))
       .leftJoin(latest, eq(latest.jobId, jobs.id))
+      .where(options.jobIds === undefined ? undefined : inArray(jobs.id, [...options.jobIds]))
       .orderBy(...orderBy);
     return hydrateCards(db, rows, { visa: options.visa ?? true, ghost: options.ghost === true });
   });

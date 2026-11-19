@@ -9,8 +9,8 @@ vi.mock("@/lib/traps/clean", () => ({ cleanDescriptionStrict: vi.fn(), cleanDesc
 vi.mock("@/lib/db/repos/translations", () => ({ getTranslation: vi.fn() }));
 vi.mock("@/lib/db/repos/breakdowns", () => ({ getJobBreakdown: vi.fn() }));
 vi.mock("@/lib/db/repos/company-research", () => ({ getCompanyResearchForJob: vi.fn() }));
-vi.mock("@/lib/db/repos/seen", () => ({ isSeen: vi.fn() }));
-vi.mock("@/lib/db/repos/filter-overrides", () => ({ getFilterOverride: vi.fn() }));
+vi.mock("@/lib/db/repos/seen", () => ({ getSeenJobIds: vi.fn() }));
+vi.mock("@/lib/db/repos/filter-overrides", () => ({ getFilterOverrides: vi.fn() }));
 vi.mock("@/lib/salary/view", () => ({ getSalaryContext: vi.fn() }));
 vi.mock("@/lib/mcp/job-blocks/settings", () => ({ jobBlockSettings: vi.fn() }));
 
@@ -22,8 +22,8 @@ import type { Db } from "@/lib/db/client";
 import { getJobDetail, getJobDetails } from "@/lib/db/queries/job-detail";
 import { getJobBreakdown } from "@/lib/db/repos/breakdowns";
 import { getCompanyResearchForJob } from "@/lib/db/repos/company-research";
-import { getFilterOverride } from "@/lib/db/repos/filter-overrides";
-import { isSeen } from "@/lib/db/repos/seen";
+import { getFilterOverrides } from "@/lib/db/repos/filter-overrides";
+import { getSeenJobIds } from "@/lib/db/repos/seen";
 import { getTranslation } from "@/lib/db/repos/translations";
 import { loadTrapCounts } from "@/lib/db/repos/traps";
 import { mcpSchema } from "@/lib/config/schemas/mcp";
@@ -78,8 +78,8 @@ beforeEach(() => {
   vi.mocked(getJobBreakdown).mockResolvedValue({ jobId: 7, sourceHash: "hash", promptVersion: BREAKDOWN_PROMPT_VERSION, provider: S.provider, model: S.model, content: blockBreakdown(), analyzedAt: BLOCK_NOW, droppedItems: 0, outputLang: "en" });
   vi.mocked(getCompanyResearchForJob).mockResolvedValue({ id: 1, companyId: 3, fetchedAt: BLOCK_NOW, expiresAt: BLOCK_NOW, expired: true, domainUsed: S.email, provider: S.provider, model: S.model, fields: { summary: { text: "Stored company text", sourceUrl: "https://example.invalid/about" } }, dropped: 0 });
   vi.mocked(getSalaryContext).mockResolvedValue(blockSalary());
-  vi.mocked(isSeen).mockResolvedValue(true);
-  vi.mocked(getFilterOverride).mockResolvedValue("exclude");
+  vi.mocked(getSeenJobIds).mockResolvedValue(new Set([7]));
+  vi.mocked(getFilterOverrides).mockResolvedValue(new Map([[7, "exclude"]]));
 });
 
 describe("get_job field blocks", () => {

@@ -38,15 +38,15 @@ export async function listApplicationEvents(db: Db, applicationId: number, limit
     .limit(limit);
 }
 
-/** Latest entry into applied by write order, even when that event falls outside the displayed history. */
-export async function getLatestAppliedAt(db: Executor, applicationId: number): Promise<Date | null> {
-  const [event] = await db
-    .select({ at: applicationEvents.at, occurredAt: applicationEvents.occurredAt })
+/** Latest entry into applied by write order per application, even outside the displayed history. */
+export async function getLatestAppliedDates(db: Executor, applicationIds: readonly number[]): Promise<Map<number, Date>> {
+  if (applicationIds.length === 0) return new Map();
+  const events = await db
+    .selectDistinctOn([applicationEvents.applicationId], { applicationId: applicationEvents.applicationId, at: applicationEvents.at, occurredAt: applicationEvents.occurredAt })
     .from(applicationEvents)
-    .where(and(eq(applicationEvents.applicationId, applicationId), eq(applicationEvents.toStatus, "applied")))
-    .orderBy(desc(applicationEvents.at), desc(applicationEvents.id))
-    .limit(1);
-  return event?.occurredAt ?? event?.at ?? null;
+    .where(and(inArray(applicationEvents.applicationId, [...applicationIds]), eq(applicationEvents.toStatus, "applied")))
+    .orderBy(asc(applicationEvents.applicationId), desc(applicationEvents.at), desc(applicationEvents.id));
+  return new Map(events.map(({ applicationId, occurredAt, at }) => [applicationId, occurredAt ?? at]));
 }
 
 /** Application status per job (jobs without an application are absent from the map). */

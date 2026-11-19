@@ -1,22 +1,40 @@
 import type { z } from "zod";
 
-import { getLatestAppliedAt } from "@/lib/db/repos/applications";
-import { getFilterOverride } from "@/lib/db/repos/filter-overrides";
-import { isSeen } from "@/lib/db/repos/seen";
+import type { JobDetail } from "@/lib/db/queries/job-detail";
+import { getLatestAppliedDates } from "@/lib/db/repos/applications";
+import { getFilterOverrides } from "@/lib/db/repos/filter-overrides";
+import { getSeenJobIds } from "@/lib/db/repos/seen";
 import type { McpContext } from "@/lib/mcp/context";
 import { trackingBlockDto } from "@/lib/mcp/dto/job-tracking";
-import { isoOrNull } from "@/lib/mcp/dto/shared";
+import { isoOrNull, type CleanText } from "@/lib/mcp/dto/shared";
 
 import type { JobBlockSource } from "./source";
 
-export async function loadTracking(ctx: McpContext, { detail, clean }: Pick<JobBlockSource, "detail" | "clean">): Promise<z.infer<typeof trackingBlockDto>> {
-  const application = detail.application;
-  const recentApplied = detail.applicationEvents.find((event) => event.toStatus === "applied");
-  const [seen, override, appliedAt] = await Promise.all([
-    isSeen(ctx.db, detail.id),
-    getFilterOverride(ctx.db, detail.id),
-    recentApplied ? recentApplied.occurredAt ?? recentApplied.at : application && getLatestAppliedAt(ctx.db, application.id),
+type TrackingBlock = z.infer<typeof trackingBlockDto>;
+
+export async function loadTracking(ctx: McpContext, { detail, clean }: Pick<JobBlockSource, "detail" | "clean">): Promise<TrackingBlock> {
+  return (await loadTrackingByJob(ctx, [detail], clean)).get(detail.id)!;
+}
+
+export async function loadTrackingByJob(ctx: McpContext, details: readonly JobDetail[], clean: CleanText): Promise<Map<number, TrackingBlock>> {
+  const states = details.map((detail) => ({ detail, recentApplied: detail.applicationEvents.find((event) => event.toStatus === "applied") }));
+  const jobIds = details.map(({ id }) => id);
+  const olderAppliedIds = states.flatMap(({ detail, recentApplied }) => detail.application && !recentApplied ? [detail.application.id] : []);
+  const [seen, overrides, olderApplied] = await Promise.all([
+    getSeenJobIds(ctx.db, jobIds),
+    getFilterOverrides(ctx.db, jobIds),
+    getLatestAppliedDates(ctx.db, olderAppliedIds),
   ]);
+  return new Map(states.map(({ detail, recentApplied }) => {
+    const appliedAt = recentApplied
+      ? recentApplied.occurredAt ?? recentApplied.at
+      : detail.application && olderApplied.get(detail.application.id);
+    return [detail.id, toTrackingBlock(detail, clean, seen.has(detail.id), overrides.get(detail.id) ?? null, appliedAt ?? null)];
+  }));
+}
+
+function toTrackingBlock(detail: JobDetail, clean: CleanText, seen: boolean, override: TrackingBlock["filter_override"], appliedAt: Date | null): TrackingBlock {
+  const application = detail.application;
   return {
     application: application ? {
       status: application.status,

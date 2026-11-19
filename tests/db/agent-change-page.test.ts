@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { applicationSyncSelection } from "@/lib/capabilities/sync/list-application-changes";
 import { syncSelection } from "@/lib/capabilities/sync/scope";
 import { checkAgentChangeRetention, scanAgentChangePage } from "@/lib/db/repos/agent-change-page";
 import type { AgentChangeRow } from "@/lib/db/repos/agent-changes";
@@ -13,6 +14,7 @@ const row = (seq: string, jobId: number, stamp = at): AgentChangeRow => ({
   tx: "101", seq, at: stamp, keyKind: "job", key: String(jobId), blocks: 1, removed: 0,
 });
 const key = (jobId: number, kind: SyncEntityKey["kind"] = "job"): SyncEntityKey => ({ jobId, kind });
+const bit = (block: keyof typeof SYNC_BLOCKS) => 1 << SYNC_BLOCKS[block].bit;
 
 function scan(rows: AgentChangeRow[], limit: number, position = start, keys = (change: AgentChangeRow) => [key(Number(change.key))]) {
   return scanAgentChangePage({
@@ -57,6 +59,25 @@ describe("sync log paging", () => {
     expect(last.hasMore).toBe(false);
   });
 
+  it("pages a shared row by job ID and resumes between an application and a favorite", async () => {
+    const selected = applicationSyncSelection(new Set(["tracking:read"]));
+    const shared = { ...row("1", 1), keyKind: "company" as const, blocks: bit("job") | bit("app") | bit("fav") };
+    const keys = (change: AgentChangeRow) => [4, 8].flatMap((id) => selected.kindsFor(change.blocks).map((kind) => key(id, kind)));
+    const expected = [key(4, "application"), key(4, "favorite"), key(8, "application"), key(8, "favorite")];
+    const first = await scan([shared], 1, start, keys);
+    expect(first.entities).toEqual([{ ...expected[0], changedAt: at, removed: false }]);
+    expect(first.position).toEqual({ consumed: start.consumed, active: { row: { tx: shared.tx, seq: shared.seq }, after: expected[0] } });
+
+    let position = first.position;
+    for (const [index, item] of expected.slice(1).entries()) {
+      const page = await scan([shared], 1, position, keys);
+      expect(page.entities).toEqual([{ ...item, changedAt: at, removed: false }]);
+      expect(page.hasMore).toBe(index < expected.length - 2);
+      position = page.position;
+    }
+    expect(position).toEqual({ consumed: { tx: "200", seq: "0" }, active: null });
+  });
+
   it("rejects pruned snapshot origins and active rows but accepts an already consumed boundary", async () => {
     const boundary = { tx: "101", seq: "0" };
     expect(() => checkAgentChangeRetention(boundary, { phase: "snapshot", position: { start: boundary, after: null } })).toThrow();
@@ -73,7 +94,6 @@ describe("sync field scopes", () => {
       blocks: ["tracking", "job", "salary", "tracking", "app", "match"],
       permissions: new Set(["jobs:read", "tracking:read", "notes:read", "ops:read"]),
     });
-    const bit = (block: keyof typeof SYNC_BLOCKS) => 1 << SYNC_BLOCKS[block].bit;
     expect(selected.scope.blocks).toEqual(["app", "job", "match", "salary", "tracking"]);
     expect(selected.scope.permissions).toEqual(["jobs:read", "tracking:read"]);
     expect(selected.unpermitted).toEqual(["app", "match"]);
@@ -83,12 +103,21 @@ describe("sync field scopes", () => {
   });
 
   it("partitions intersections by kind after applying the selected permission mask", () => {
-    const selected = syncSelection({
-      tool: "list_application_changes", permission: "tracking:read", kinds: ["application", "favorite"],
-      blocks: ["app", "fav.notes"], permissions: new Set(["tracking:read", "notes:read"]),
-    });
-    const bit = (block: keyof typeof SYNC_BLOCKS) => 1 << SYNC_BLOCKS[block].bit;
+    const selected = applicationSyncSelection(new Set(["tracking:read", "notes:read", "jobs:read"]), ["app", "fav.notes"]);
+    expect(selected.scope.permissions).toEqual(["notes:read", "tracking:read"]);
+    expect(selected.mask).toBe(bit("app") | bit("fav.notes"));
     expect(selected.kindsFor(bit("notes") | bit("fav.notes"))).toEqual(["favorite"]);
     expect(selected.kindsFor(bit("app") | bit("fav.notes") | bit("app.notes"))).toEqual(["application", "favorite"]);
+    expect(selected.kindsFor(bit("job") | bit("tracking") | bit("app.notes") | bit("fav"))).toEqual([]);
+  });
+
+  it("defaults to the application and favorite readers' granted blocks", () => {
+    const base = applicationSyncSelection(new Set(["tracking:read", "jobs:read"]));
+    expect(base.scope.blocks).toEqual(["app", "fav"]);
+    expect(base.mask).toBe(bit("app") | bit("fav"));
+    expect(base.kindsFor(bit("app.notes") | bit("fav.notes"))).toEqual([]);
+    const notes = applicationSyncSelection(new Set(["tracking:read", "notes:read"]));
+    expect(notes.scope.blocks).toEqual(["app", "app.notes", "fav", "fav.notes"]);
+    expect(notes.mask).toBe(base.mask | bit("app.notes") | bit("fav.notes"));
   });
 });

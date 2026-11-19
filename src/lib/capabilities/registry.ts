@@ -15,6 +15,7 @@ import { set_next_action } from "./tracking/set-next-action";
 import { set_interview_rounds } from "./tracking/set-interview-rounds";
 import { get_job } from "./jobs/get-job";
 import { get_job_raw } from "./jobs/get-job-raw";
+import { list_application_changes } from "./sync/list-application-changes";
 import { list_job_changes } from "./sync/list-job-changes";
 import { search_jobs } from "./jobs/search-jobs";
 import { list_applications } from "./tracking/list-applications";
@@ -65,6 +66,7 @@ export const CAPABILITIES: readonly Capability[] = [
   get_insights,
   get_application,
   list_favorites,
+  list_application_changes,
   get_application_context,
   save_application_answer,
   get_career_profile,

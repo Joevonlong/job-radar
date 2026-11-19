@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { expect, it } from "vitest";
 
 import { SYNC_BLOCKS, SYNC_DTO_VERSION } from "@/lib/db/sync-sources";
-import { listJobChangesOutput } from "@/lib/mcp/dto/sync";
+import { listApplicationChangesOutput, listApplicationChangesOutputFor, listJobChangesOutput } from "@/lib/mcp/dto/sync";
 import { getJobBlocks } from "@/lib/mcp/job-blocks";
 import { mcpTranslator } from "@/lib/mcp/text";
 
@@ -13,6 +13,25 @@ it("pins the job sync JSON Schema digest to its DTO version", () => {
   };
   const schema = JSON.stringify(listJobChangesOutput.toJSONSchema());
   expect(createHash("sha256").update(schema).digest("hex")).toBe(schemaByVersion[SYNC_DTO_VERSION]);
+});
+
+it("pins the tracking sync JSON Schema digest to its DTO version", () => {
+  const schemaByVersion: Record<number, string> = {
+    1: "85f6a70e6edcd831530c0aa09902c8971f6a5da5260f6906e6cde3433e74cbf4",
+  };
+  const schema = JSON.stringify(listApplicationChangesOutput.toJSONSchema());
+  expect(createHash("sha256").update(schema).digest("hex")).toBe(schemaByVersion[SYNC_DTO_VERSION]);
+  expect(schema).toContain('"status_changed_at"');
+  expect(schema).not.toContain('"days_in_status"');
+});
+
+it("advertises tracking notes only with notes access", () => {
+  const base = JSON.stringify(listApplicationChangesOutputFor(new Set(["tracking:read"])).toJSONSchema());
+  const withNotes = JSON.stringify(listApplicationChangesOutputFor(new Set(["tracking:read", "notes:read"])).toJSONSchema());
+  for (const field of ['"application_notes"', '"event_notes"', '"favorite_note"']) {
+    expect(base).not.toContain(field);
+    expect(withNotes).toContain(field);
+  }
 });
 
 it("uses the same block permissions as get_job", () => {
