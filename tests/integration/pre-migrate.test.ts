@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import postgres from "postgres";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { createConnection, readAppliedMigrations, schema } from "@/lib/db";
@@ -56,16 +56,14 @@ async function appliedCount(database: string): Promise<number> {
   }
 }
 
-function copyWithJournalBefore(destination: string, stop: (entry: { tag: string }, index: number) => boolean): string {
+function copyWithJournalBefore(destination: string, stop: (entry: { tag: string }, index: number) => boolean): void {
   fs.cpSync(path.resolve("drizzle"), destination, { recursive: true });
   const file = path.join(destination, "meta", "_journal.json");
   const journal = JSON.parse(fs.readFileSync(file, "utf8")) as { entries: { tag: string }[] };
   const index = journal.entries.findIndex(stop);
-  const entry = journal.entries[index];
-  if (!entry) throw new Error("The migration to stop before is missing");
+  if (index < 0) throw new Error("The migration to stop before is missing");
   journal.entries = journal.entries.slice(0, index);
   fs.writeFileSync(file, JSON.stringify(journal));
-  return entry.tag;
 }
 
 beforeAll(async () => {
@@ -166,10 +164,10 @@ describe("migrateWithBackup (real pg_dump)", () => {
   }, SLOW_TEST_MS);
 });
 
-it("upgrades existing jobs and application events with an initialized, replay-safe change log", async () => {
+it("upgrades existing jobs and application events and preserves the log on a second migration run", async () => {
   const database = `${scratch}_changes`;
   const partial = path.join(dir, "drizzle-before-agent-changes");
-  const tag = copyWithJournalBefore(partial, (entry) => entry.tag.endsWith("_agent_changes"));
+  copyWithJournalBefore(partial, (entry) => entry.tag.endsWith("_agent_changes"));
   await admin(`create database "${database}"`);
   const connection = createConnection(urlOf(database), { max: 1 });
   const { db } = connection;
@@ -202,10 +200,7 @@ it("upgrades existing jobs and application events with an initialized, replay-sa
     const initial = [{ keyKind: "job", key: String(job!.id), blocks: (1 << SYNC_BLOCKS.tracking.bit) | (1 << SYNC_BLOCKS.app.bit) }];
     expect(await changes()).toEqual(initial);
 
-    const migration = fs.readFileSync(path.join("drizzle", `${tag}.sql`), "utf8");
-    await db.transaction(async (tx) => {
-      for (const statement of migration.split("--> statement-breakpoint")) await tx.execute(sql.raw(statement));
-    });
+    await runMigrations(options);
     expect(await logIdentity()).toEqual(identity);
     expect(await changes()).toEqual(initial);
 
