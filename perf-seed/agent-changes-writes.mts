@@ -16,8 +16,10 @@ import type { SalaryBenchmarkInput } from "../src/lib/db/repos/salary-benchmarks
 const MODES = ["off", "on"] as const;
 const METRICS = ["ms", "wal_bytes", "change_rows"] as const;
 const TRIGGER_ROW = 1;
+const TRIGGER_BEFORE = 2;
 const TRIGGER_EVENTS = { insert: 4, delete: 8, update: 16 };
 const SEPARATE_INSERT_DELETE = new Set(["applications", "job_traps", "scores"]);
+const BEFORE_TRIGGERS = new Set(["applications.agent_change_delete"]);
 const SCORE_JOBS = 10_000;
 const COLLECTION_POSTINGS = 500;
 const COLLECTION_HEARTBEATS = 5_000;
@@ -68,10 +70,12 @@ type Product = Awaited<ReturnType<typeof loadProduct>>;
 function expectedTriggers(sources: Product["sync"]["SYNC_SOURCES"]) {
   const expected = new Map<string, number>();
   for (const { table, operations } of sources) {
+    const level = table === "scores" ? 0 : TRIGGER_ROW;
     for (const operation of operations) {
       const event = operation === "update" || SEPARATE_INSERT_DELETE.has(table) ? operation : "presence";
       const key = `${table}.agent_change_${event}`;
-      expected.set(key, (expected.get(key) ?? (table === "scores" ? 0 : TRIGGER_ROW)) | TRIGGER_EVENTS[operation]);
+      const timing = BEFORE_TRIGGERS.has(key) ? TRIGGER_BEFORE : 0;
+      expected.set(key, (expected.get(key) ?? 0) | level | timing | TRIGGER_EVENTS[operation]);
     }
   }
   return expected;
