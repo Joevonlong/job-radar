@@ -23,6 +23,7 @@ import { makeTempConfig, type TempConfig } from "../config/helpers";
 import { relistCases } from "../jobs/relist-cases";
 import { addJob, addSource, ago, NOW } from "./dormant-fixture";
 import { addRun, maintenanceOptions, pipelineOptions, posting, relist } from "./relist-fixture";
+import { dropAgentChangeTriggers } from "./schema-probe";
 
 const url = inject("testDatabaseUrl");
 let temp: TempConfig;
@@ -225,6 +226,7 @@ it("reads and writes work before the listing migration, including pipeline merge
   const rollback = new Error("rollback schema probe");
   try {
     await getDb().transaction(async (tx) => {
+      await dropAgentChangeTriggers(tx, "jobs");
       await tx.execute(sql`alter table jobs drop column last_listed_at, drop column relisted_at, drop column relist_count`);
       resetListingCache(); resetDormancyCache();
       expect(await listingReady(tx)).toBe(false);

@@ -26,3 +26,26 @@ refresh, then discovers the table without a restart. `--out OUT_DIR` is required
 The seed has fictional employers, sources and descriptions, normalized location variation, early preference changes,
 subsequent periodic snapshots, lifecycle closure, and populated recent cycle windows. The projection is rebuilt from
 `scores`; there is no import of personal or production data.
+
+## Change-log write overhead
+
+```sh
+node --import tsx perf-seed/agent-changes-writes.mts ADMIN_URL TEMPLATE_DB CODE_ROOT LABEL --out OUT_DIR [--runs N]
+```
+
+Use a 40,000-job `prepare.mts` template migrated to `CODE_ROOT`, with no sessions connected to the template. Use an idle
+disposable PostgreSQL instance and an admin role that can clone databases, alter triggers and run `CHECKPOINT`. The harness
+uses the checkout's shipped config and the seed's DE market. Each trial starts from its own copy, with the change-log
+triggers disabled for `off` or left enabled for `on`. `--runs` defaults to three trials per mode.
+
+The timed writes are the 10,000-job stale-score update and fresh filter results, a fixture ingest of 250 new and 250 changed
+postings plus 5,000 sightings, and a separate 10,000-job heartbeat. The merge and undo each move the same seeded cohort,
+with 500 jobs added to each employer during setup. The forced trap rescan runs the rule layer for every job and rewrites
+findings on a 1% fixture sample. The salary benchmark compares an identical rebuild and a rebuild with changed salary
+figures for one city. It reports changed groups and estimates their read-side reach from matching job keys.
+
+`agent-changes-writes-LABEL.json` records every run and the medians for elapsed time, WAL bytes and change rows, including
+the separate phases of multi-step scenarios. The script prints a summary table and exits with status 1 when any comparison
+shows more than 10% time growth or 20% WAL growth, or when a heartbeat or identical rebuild emits a change row.
+`agent-changes-writes.mts` reports an elapsed-time change of about +13% for `rescore/ten_thousand` against the +10% threshold,
+so a non-zero exit from that result alone is expected given the accepted cost of writing one change row per changed job.

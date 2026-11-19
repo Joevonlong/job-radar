@@ -243,6 +243,8 @@ case "$args" in
   *POSTGRES_DB*) printf jobradar ;;
   *"pg_restore --list"*) [[ "\${STUB_FAIL_LIST:-}" == 1 ]] && exit 1 ;;
   *"pg_restore --no-owner"*) cat > /dev/null; [[ "\${STUB_FAIL_RESTORE:-}" == 1 ]] && { echo "pg_restore: error: boom" >&2; exit 1; } ;;
+  *"to_regclass('public.agent_change_log')"*) if [[ "\${STUB_HAS_AGENT_CHANGES:-}" == 1 ]]; then echo t; else echo f; fi ;;
+  *"select public.agent_changes_reset()"*) [[ "\${STUB_FAIL_SYNC_RESET:-}" != 1 ]] || exit 1 ;;
   *pg_database_size*) echo 1000 ;;
   *"df -Pk"*) echo "\${STUB_FREE_KB:-99999999}" ;;
   *"datname = 'jobradar'"*) echo 1 ;;
@@ -270,6 +272,7 @@ exit 0
     calls().flatMap((line) => {
       if (/create database "jobradar_restore_/.test(line)) return ["create-temp"];
       if (/pg_restore --no-owner/.test(line)) return ["restore"];
+      if (/select public\.agent_changes_reset\(\)/.test(line)) return ["reset-sync"];
       if (/compose stop web runner/.test(line)) return ["stop-services"];
       if (/compose start web runner/.test(line)) return ["start-services"];
       if (/^systemctl --user stop/.test(line)) return ["stop-ai-worker"];
@@ -359,6 +362,19 @@ exit 0
     expect(noYes.status).toBe(1);
     expect(noYes.stderr).not.toContain("undoing");
     expect(steps()).toEqual(["create-temp", "restore"]); // the check copy is kept on purpose
+  });
+
+  it("resets the restored database's agent change log before stopping services or renaming databases", () => {
+    const r = run(["--target", "jobradar", "--yes"], { STUB_HAS_AGENT_CHANGES: "1" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(steps().slice(0, 4)).toEqual(["create-temp", "restore", "reset-sync", "stop-services"]);
+    expect(calls().find((line) => line.includes("select public.agent_changes_reset()"))).toMatch(/-d jobradar_restore_\d+ /);
+  });
+
+  it("leaves the main database in service when resetting the restored log fails", () => {
+    const r = run(["--target", "jobradar", "--yes"], { STUB_HAS_AGENT_CHANGES: "1", STUB_FAIL_SYNC_RESET: "1" });
+    expect(r.status).toBe(1);
+    expect(steps()).toEqual(["create-temp", "restore", "reset-sync", "drop-temp"]);
   });
 
   it("a backup that does not look like Job Radar keeps the checked copy for inspection instead of dropping it", () => {

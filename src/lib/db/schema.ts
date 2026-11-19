@@ -22,6 +22,8 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
+import type { SyncKeyKind } from "./sync-sources";
+
 /**
  * Database schema v1.
  *
@@ -43,6 +45,10 @@ const tsvector = customType<{ data: string }>({
     return "tsvector";
   },
 });
+
+const xid8 = customType<{ data: string }>({ dataType: () => "xid8" });
+const oid = customType<{ data: number }>({ dataType: () => "oid" });
+const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
 
 // ---------------------------------------------------------------- enums
 
@@ -1422,6 +1428,33 @@ export const agentCalls = pgTable("agent_calls", {
   index("agent_calls_called_at_idx").on(t.calledAt),
   check("agent_calls_outcome_check", sql`${t.outcome} in ('ok', 'not_permitted', 'invalid_input', 'over_budget', 'error')`),
   check("agent_calls_error_category_check", sql`(${t.outcome} = 'error' and ${t.errorCategory} is not null) or (${t.outcome} <> 'error' and ${t.errorCategory} is null)`),
+]);
+
+/** An append-only index of changed fields. The keys outlive the rows they refer to. */
+export const agentChanges = pgTable("agent_changes", {
+  seq: bigint("seq", { mode: "bigint" }).primaryKey().generatedAlwaysAsIdentity(),
+  tx: xid8("tx").notNull().default(sql`pg_current_xact_id()`),
+  at: timestamptz("at").notNull().defaultNow(),
+  keyKind: text("key_kind").$type<SyncKeyKind>().notNull(),
+  key: text("key").notNull(),
+  blocks: integer("blocks").notNull(),
+  removed: integer("removed").notNull().default(0),
+}, (t) => [index("agent_changes_tx_seq_idx").on(t.tx, t.seq)]);
+
+/** The singleton also serializes resets and pruning. The pruning position is a nullable (tx, seq) pair. */
+export const agentChangeLog = pgTable("agent_change_log", {
+  singleton: boolean("singleton").primaryKey().default(true),
+  logId: uuid("log_id").notNull(),
+  cursorKey: bytea("cursor_key").notNull(),
+  keyId: uuid("key_id").notNull(),
+  systemIdentifier: bigint("system_identifier", { mode: "bigint" }).notNull(),
+  databaseOid: oid("database_oid").notNull(),
+  prunedThroughTx: xid8("pruned_through_tx"),
+  prunedThroughSeq: bigint("pruned_through_seq", { mode: "bigint" }),
+}, (t) => [
+  check("agent_change_log_singleton_check", sql`${t.singleton}`),
+  check("agent_change_log_cursor_key_length_check", sql`octet_length(${t.cursorKey}) = 32`),
+  check("agent_change_log_pruned_through_check", sql`(${t.prunedThroughTx} is null) = (${t.prunedThroughSeq} is null)`),
 ]);
 
 /** Local restoration data; audit retention cascades here, including private before-values. */

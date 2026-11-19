@@ -95,6 +95,7 @@ live:     19 tables, 5702 rows (it may have moved on since the backup was taken)
 ```
 
 - 表的数量应该相同；行数应该略少于线上库（备份之后线上又有新数据）。某张表在 `live` 一栏是 `-`，说明线上库还没有这张表（比如备份来自更新的版本）。`restored` 一栏是 `-` 则相反：这张表比备份更新（备份来自旧版本），备份时它还不存在，runner 启动时迁移会把它建出来。
+- 备份含 agent 变更日志时，`restore.sh` 会在统计行数后、切换数据库前自动重置日志。通过 `--target` 恢复到指定库也会重置。
 - 临时库默认保留，方便你检查：`docker compose exec db psql -U jobradar -d <临时库名>`（脚本最后会打印完整命令和删除命令）。看完删除：
 
 ```bash
@@ -177,7 +178,8 @@ tar -xzf data/backups/<名字>.config.tgz -C .
 ```
 
    （新机器上，上一步加 `--with-config` 可以一步做完，但它会把已有的 `data/config` 改名。）没有 `.config.tgz` 就只能从默认值开始，设置和画像要重新填。`.env` 和 `.auth/` 也要自己重建（它们从不进备份）。
-5. 启动全部服务：`docker compose up -d --build`。runner 启动时会自动执行迁移（dump 里带了迁移记录，已经是最新的就什么都不做）。
+5. 如果用物理副本恢复了数据库，在启动其他服务或重新连接 MCP 客户端前，对恢复出的库运行 `pnpm mcp:sync-reset --yes`。如果连接信息与 `.env` 不同，把 `DATABASE_URL` 指向恢复出的库。如果副本的版本还没有变更日志，先运行 `pnpm db:migrate`。
+6. 启动全部服务：`docker compose up -d --build`。runner 启动时会自动执行迁移（dump 里带了迁移记录，已经是最新的就什么都不做）。
 
 ## 6. 注意事项
 
@@ -187,6 +189,8 @@ tar -xzf data/backups/<名字>.config.tgz -C .
   - 用 `pnpm config:check` 找出原因（缺 `node_modules` 时先 `pnpm install`）。
 
 - **版本**：dump 由 PostgreSQL 17 生成，只能恢复到 17 或更新的服务器。升级 Postgres 大版本前先手动备份，并同步升级 runner 镜像里的 `POSTGRES_CLIENT_VERSION`（`tests/dockerfile.test.ts` 会在两者不一致时报错）。
+- **数据库物理副本**会保留集群和数据库标识，因此 Job Radar 无法检测数据卷复制、`pg_basebackup` 或文件系统快照。让 MCP 客户端重新连接前，先在副本上运行 `pnpm mcp:sync-reset --yes`。
+- **数据库身份权限。** 如果 PostgreSQL 的权限配置撤销了对 `pg_control_system()` 的执行权限，MCP 同步会报 `sync_unavailable`。
 - **永远不要 `docker compose down -v`**：`-v` 会删除数据库卷。
 - **`.env` 和 `.auth/` 不在任何备份里**：`.env` 存着你的密钥和数据库密码，`.auth/` 是 LinkedIn 登录。请自己留一份（值放进密码管理器）。配置和画像在每份 dump 旁边的 `.config.tgz` 里；`config/` 里的出厂默认值随仓库提供。
 - **同一块盘**：备份和数据库在同一块盘上，只能防误操作，防不了坏盘。请定期把 `data/backups/` 拷到别处。

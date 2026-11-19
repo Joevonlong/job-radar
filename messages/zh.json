@@ -6563,6 +6563,10 @@
       "listActive": "生效中",
       "unknownCompany": "（已不存在）"
     },
+    "mcpSyncReset": {
+      "confirm": "这个命令会清空所配置数据库中的 agent 变更日志，并更换日志身份和游标密钥。确认后请运行 pnpm mcp:sync-reset --yes。",
+      "failed": "无法重置 agent 变更日志。请检查数据库连接、迁移状态和权限。"
+    },
     "agentToken": {
       "usage": "用法：pnpm agent:token create --name 名称 --permissions 列表 [--expires YYYY-MM-DD] | list | revoke 名称或前缀",
       "nameInvalid": "--name 要给一个 1 到 {max} 个字符的名称，不能含控制字符或 token 内容。",

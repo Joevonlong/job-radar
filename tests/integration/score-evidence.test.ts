@@ -21,6 +21,7 @@ import { REASON_EVIDENCE_VERSION } from "@/lib/scoring/evidence";
 import { quietLogger } from "../cycle/helpers";
 import { shippedPipeline } from "../pipeline/helpers";
 import { aiConfig, answer, examplePreferences, exampleMe } from "../scoring/helpers";
+import { dropAgentChangeTriggers, type SchemaProbeTransaction } from "./schema-probe";
 
 /** Reason sources end to end: the answer, the stored `scores.reason_evidence`, the detail query, and the database before the migration. */
 const url = inject("testDatabaseUrl");
@@ -56,7 +57,7 @@ function fakeAi(config: AiConfig): Fake {
 }
 
 const profile = (): ScoringProfile => ({ me: exampleMe(), preferences: examplePreferences(), meYaml: stringify(exampleMe()), preferencesYaml: stringify(examplePreferences()) });
-const deps = (fake: Fake, config: AiConfig): ScoringDeps => ({ db: getDb(), router: fake.router, config, logger: quietLogger, now: () => NOW, loadProfile: async () => profile(), loadBonusCap: () => 15 });
+const deps = (fake: Fake, config: AiConfig, db = getDb()): ScoringDeps => ({ db, router: fake.router, config, logger: quietLogger, now: () => NOW, loadProfile: async () => profile(), loadBonusCap: () => 15 });
 const currentSnapshot = () => currentPreferencesSnapshotId(getDb(), profile());
 
 let counter = 0;
@@ -71,8 +72,8 @@ async function addJob(title: string, description: string | null = JD, german = "
   return job!.id;
 }
 
-async function latest(jobId: number) {
-  const [row] = await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, jobId)).orderBy(desc(schema.scores.id));
+async function latest(jobId: number, db = getDb()) {
+  const [row] = await db.select().from(schema.scores).where(eq(schema.scores.jobId, jobId)).orderBy(desc(schema.scores.id));
   if (!row) throw new Error(`job ${jobId} has no score row`);
   return row;
 }
@@ -269,52 +270,56 @@ describe("the detail page", () => {
 });
 
 describe("before and after the migration", () => {
-  const dropColumn = () => getDb().execute(sql`alter table scores drop column if exists reason_evidence`);
-  const migrate = () => getDb().execute(sql.raw(fs.readFileSync(MIGRATION, "utf8").replaceAll("--> statement-breakpoint", "")));
+  const rollback = new Error("rollback schema probe");
+  const dropColumn = async (tx: SchemaProbeTransaction) => {
+    await dropAgentChangeTriggers(tx, "scores");
+    await tx.execute(sql`alter table scores drop column reason_evidence`);
+    resetReasonEvidenceColumnCache();
+  };
+  const migrate = (tx: SchemaProbeTransaction) => tx.execute(sql.raw(fs.readFileSync(MIGRATION, "utf8").replaceAll("--> statement-breakpoint", "")));
 
   it("the migration adds a nullable column and leaves existing scores as they were", async () => {
     const id = await addJob("Existing");
     const off = withEvidence(false);
     await runScoring(deps(fakeAi(off), off), { limit: 5 });
-    await dropColumn();
-    resetReasonEvidenceColumnCache();
-    try {
-      const [before] = await getDb().execute<Record<string, unknown>>(sql`select * from scores where job_id = ${id}`);
-      await migrate();
-      const [after] = await getDb().execute<Record<string, unknown>>(sql`select * from scores where job_id = ${id}`);
+    await expect(getDb().transaction(async (tx) => {
+      await dropColumn(tx);
+      const [before] = await tx.execute<Record<string, unknown>>(sql`select * from scores where job_id = ${id}`);
+      await migrate(tx);
+      const [after] = await tx.execute<Record<string, unknown>>(sql`select * from scores where job_id = ${id}`);
       expect(after).toEqual({ ...before, reason_evidence: null });
-      const [column] = await getDb().execute<{ is_nullable: string; data_type: string }>(sql`
+      const [column] = await tx.execute<{ is_nullable: string; data_type: string }>(sql`
         select is_nullable, data_type from information_schema.columns where table_name = 'scores' and column_name = 'reason_evidence'`);
       expect(column).toEqual({ is_nullable: "YES", data_type: "jsonb" });
-    } finally {
-      await getDb().execute(sql`alter table scores add column if not exists reason_evidence jsonb`);
-      resetReasonEvidenceColumnCache();
-    }
+      throw rollback;
+    })).rejects.toBe(rollback);
   });
 
   it("an ai-worker running before the migration still scores and the detail page still loads, without sources", async () => {
     const id = await addJob("Early worker");
-    await dropColumn();
-    resetReasonEvidenceColumnCache();
-    try {
-      const config = withEvidence(true);
-      const fake = fakeAi(config);
-      fake.replies.set("Early worker", sourced());
-      const result = await runScoring(deps(fake, config), { limit: 5 });
-      expect(result).toMatchObject({ scored: 1, failed: 0 });
-      const [row] = await getDb().execute<{ score: number; fit_reasons: string[] }>(sql`select score, fit_reasons from scores where job_id = ${id} and score is not null`);
-      expect(row?.fit_reasons).toEqual(["要求 5 年以上 Python，你有 6 年", "检索方向与你的 RAG 经验相符"]);
-      const detail = await getJobDetail(getDb(), id);
-      expect(detail?.score).toMatchObject({ score: 80, reasonEvidence: null });
-    } finally {
-      await getDb().execute(sql`alter table scores add column if not exists reason_evidence jsonb`);
-    }
-    // once migrated, the next score stores its sources (the probe does not cache a missing column)
-    await scoreTransaction(getDb(), (tx) => markScoresStaleExcept(tx, 987654321));
     const config = withEvidence(true);
     const fake = fakeAi(config);
     fake.replies.set("Early worker", sourced());
-    await rescoreStale(deps(fake, config));
-    expect((await latest(id)).reasonEvidence).toMatchObject({ fit: [{ basis: "jd" }, { basis: "inferred" }] });
+    try {
+      await expect(scoreTransaction(getDb(), async (tx) => {
+        await dropColumn(tx);
+        const scoringDeps = deps(fake, config, tx);
+        const result = await runScoring(scoringDeps, { limit: 5 });
+        expect(result).toMatchObject({ scored: 1, failed: 0 });
+        const [row] = await tx.execute<{ score: number; fit_reasons: string[] }>(sql`select score, fit_reasons from scores where job_id = ${id} and score is not null`);
+        expect(row?.fit_reasons).toEqual(["要求 5 年以上 Python，你有 6 年", "检索方向与你的 RAG 经验相符"]);
+        const detail = await getJobDetail(tx, id);
+        expect(detail?.score).toMatchObject({ score: 80, reasonEvidence: null });
+
+        // once migrated, the next score stores its sources (the probe does not cache a missing column)
+        await migrate(tx);
+        await markScoresStaleExcept(tx, 987654321);
+        await rescoreStale(scoringDeps);
+        expect((await latest(id, tx)).reasonEvidence).toMatchObject({ fit: [{ basis: "jd" }, { basis: "inferred" }] });
+        throw rollback;
+      })).rejects.toBe(rollback);
+    } finally {
+      resetReasonEvidenceColumnCache();
+    }
   });
 });

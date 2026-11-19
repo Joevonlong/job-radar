@@ -10,6 +10,7 @@ import { runMigrations } from "@/lib/db/migrate";
 import { seedDatabase } from "@/lib/db/seed";
 import type { JobSalary } from "@/lib/domain/types";
 import { asSalary } from "../helpers/salary";
+import { dropAgentChangeTriggers } from "./schema-probe";
 
 const url = inject("testDatabaseUrl");
 const TZ = "Europe/Berlin";
@@ -129,6 +130,7 @@ describe("listRecentCycleKpis: the numbers behind the summary blocks of Today", 
     const { c1, c2 } = await build();
     const rollback = new Error("deliberate rollback");
     await expect(getDb().transaction(async (tx) => {
+      await dropAgentChangeTriggers(tx, "jobs");
       await tx.execute(sql`alter table jobs drop column dormant_at, drop column possibly_closed_at`);
       const series = await listRecentCycleKpis(tx, { limit: 7, qualifiedMinRank: PUSH_LINE });
       expect(series.map((point) => point.cycleId)).toEqual([c1.id, c2.id]);

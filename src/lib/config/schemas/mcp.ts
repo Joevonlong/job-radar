@@ -81,6 +81,9 @@ export const mcpSchema = z.strictObject({
      */
     write_timeout_ms: z.number().int().min(100).max(10_000).default(2000),
   }).default({ retention_days: 90, connect_timeout_seconds: 2, statement_timeout_ms: 1500, lock_timeout_ms: 200, write_timeout_ms: 2000 }),
+  sync: z.strictObject({
+    retention_days: z.number().int().min(1).max(365).default(30),
+  }).prefault({}),
   limits: z
     .strictObject({
       /** Most results per list or usage dimension, including expanded runs, activity spans and events; truncation is marked. */

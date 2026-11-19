@@ -28,6 +28,8 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 | MCP agent token：名称、权限、token 的 SHA-256 哈希和显示前缀、到期时间、创建、最后使用和吊销时间；从不存 token 本身（`pnpm agent:token create` 只输出一次） | 数据库表 `agent_tokens` | 直到你删除数据库；吊销的 token 保留这一行，审计行仍能对应到它 |
 | MCP 调用元数据：调用方、传输方式、capability、可选目标 id、结果或错误类别、条数和耗时；从不存参数、返回内容或消息文字 | 数据库表 `agent_calls` | `mcp.yaml: audit.retention_days`（默认 90 天），由 runner 清理；旧备份可能保留已删的行。见 [MCP 调用审计](mcp.zh.md#调用审计) |
 | Agent 写入的旧值、新值指纹、目标和调用方键；旧值只保留在本机，撤销输出不回显 | 数据库表 `agent_undo` | 随 `agent_calls` 的保留期级联清理；旧备份可能继续保留 |
+| MCP 同步变更元数据，仅记录哪些岗位、申请、收藏和备注区块发生变化以及发生时间 | 数据库表 `agent_changes` | 按 `config/mcp.yaml` 中的 `sync.retention_days`（默认 30 天）由 runner 每天清理。恢复数据库或运行 `pnpm mcp:sync-reset --yes` 时清空变更记录。旧备份可能保留已删除的记录。 |
+| MCP 同步日志标识、游标签名密钥和清理位置 | 数据库表 `agent_change_log` | 恢复数据库或运行 `pnpm mcp:sync-reset --yes` 时更换标识和密钥，并清空清理位置 |
 | 数据库备份 | `data/backups/` | 自动：14 份日备、8 份周备；手动备份不会被清理。已删除的记录在旧备份里还会留着，直到这些备份被删掉 |
 | 给 resume-kit 的 JD 导出 | `data/exports/jd/` | 直到你删除 |
 | 日志 | 容器日志（轮转）、`data/logs/`（轮转）、macOS 上的 `~/Library/Logs/job-radar/` | 轮转 |
