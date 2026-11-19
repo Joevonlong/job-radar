@@ -426,8 +426,8 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 
 ### 识别错误和恢复同步
 
-错误响应的 `isError` 为 `true`，`content` 只有一条 `text`，文字会本地化。响应没有 `structuredContent` 或独立错误码。
-同步错误的前缀在各语言中一致，可按字面匹配。`resync_required` 后括号内是原因。
+错误响应的 `isError` 为 `true`，`content` 只有一条本地化的 `text`，省略 `structuredContent` 和独立错误码。
+下表中的同步错误可按字面匹配到第一个英文冒号（含冒号）。这些前缀在英文和中文中一致。`resync_required` 的前缀包含括号内的原因。
 
 | 中文原文 | 调用方的处理 |
 |---|---|
@@ -436,11 +436,14 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 | `resync_required (log_reset): 变更日志已重置。请去掉游标重新开始。` | 丢弃游标，重新开始快照。 |
 | `resync_required (scope_changed): 同步工具、字段块、权限或数据格式已变化。请去掉游标重新开始。` | 丢弃游标，按当前范围重新开始快照。 |
 | `sync_unavailable: 无法校验变更日志身份。` | 等数据库身份可以校验后重试。 |
-| `参数校验失败：limit 必须介于 1 和 {max} 之间。` | 将 `limit` 设在当前 `sync.max_batch` 允许的范围内。 |
-| `参数校验失败：字段块 {block} 需要 {permission} 权限。` | 选择连接有权读取的块。 |
+| `Input validation error: limit 必须介于 1 和 {max} 之间。` | 将 `limit` 设在当前 `sync.max_batch` 允许的范围内。 |
+| `Input validation error: 字段块 {block} 需要 {permission} 权限。` | 选择连接有权读取的块。 |
 
-参数形状错误或块名未知时，SDK 使用英文前缀 `Input validation error:`。游标类型错误时，SDK 的校验文字中还包含
-`invalid_cursor:`。上面两条参数错误中的 `{max}`、`{block}` 和 `{permission}` 会换成实际值。
+参数形状错误、块名未知或申请同步的字段块列表为空时，SDK 使用同样的 `Input validation error:` 前缀。
+游标类型错误时，SDK 的校验文字中还包含 `invalid_cursor:`。上面两条参数错误中的 `{max}`、`{block}` 和 `{permission}` 会换成实际值。
+
+把格式有效的游标中的密钥 ID 字节改成无法识别的 ID 时，服务端无法用该 ID 验证游标，会返回 `resync_required (log_reset)`。
+其他篡改会返回 `invalid_cursor`。两种情况都应丢弃游标，重新开始快照。
 
 如果同步报 `sync_unavailable`，检查 runner 是否已完成迁移并校验日志身份。受限数据库角色需要变更日志表的 `SELECT`
 权限和 `pg_catalog.pg_control_system()` 的 `EXECUTE` 权限。如果函数权限已被撤销，数据库管理员可以运行

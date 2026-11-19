@@ -151,18 +151,23 @@ describe("caller-specific output blocks", () => {
 });
 
 describe("tools/list", () => {
-  it.each([
+  const syncInputCases = [
     { tool: "list_job_changes", restrictedBlock: "match", permission: "match:read", otherToolBlock: "app" },
     { tool: "list_application_changes", restrictedBlock: "fav.notes", permission: "notes:read", otherToolBlock: "job" },
-  ])("$tool advertises the live limit and rejects disallowed inputs before reading the database", async ({ tool, restrictedBlock, permission, otherToolBlock }) => {
-    const ctx = context();
+  ].flatMap((input) => (["en", "zh"] as const).map((locale) => ({ ...input, locale })));
+
+  it.each(syncInputCases)("$tool advertises the live limit and validates inputs in $locale before reading the database", async ({
+    tool, restrictedBlock, permission, otherToolBlock, locale,
+  }) => {
+    const text = mcpTranslator(locale);
+    const ctx = { ...context(), text };
     ctx.readSettings = () => mcpSchema.parse({ enabled: true, sync: { max_batch: 2 } });
     const client = await connect(ctx);
     const listed = (await client.listTools()).tools.find(({ name }) => name === tool);
     expect(listed?.inputSchema.properties).toMatchObject({ limit: { default: 2, minimum: 1, maximum: 2 } });
     for (const [args, message] of [
-      [{ limit: 3 }, "Input validation error: limit must be between 1 and 2."],
-      [{ blocks: [restrictedBlock] }, `Input validation error: Block ${restrictedBlock} requires ${permission}.`],
+      [{ limit: 3 }, text("sync.errors.limit", { max: 2 })],
+      [{ blocks: [restrictedBlock] }, text("sync.errors.block", { block: restrictedBlock, permission })],
       [{ blocks: [otherToolBlock] }, "Input validation error:"],
       [{ cursor: 42 }, "invalid_cursor:"],
     ] as const) {
@@ -170,7 +175,9 @@ describe("tools/list", () => {
       expect(result.isError).toBe(true);
       expect(result.structuredContent).toBeUndefined();
       expect(result.content).toHaveLength(1);
-      expect(textOf(result)).toContain(message);
+      const error = textOf(result);
+      expect(error).toMatch(/^Input validation error:/);
+      expect(error).toContain(message);
     }
   });
 

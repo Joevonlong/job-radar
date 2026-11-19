@@ -7411,8 +7411,8 @@
         "logReset": "resync_required (log_reset): 变更日志已重置。请去掉游标重新开始。",
         "scopeChanged": "resync_required (scope_changed): 同步工具、字段块、权限或数据格式已变化。请去掉游标重新开始。",
         "unavailable": "sync_unavailable: 无法校验变更日志身份。",
-        "limit": "参数校验失败：limit 必须介于 1 和 {max} 之间。",
-        "block": "参数校验失败：字段块 {block} 需要 {permission} 权限。",
+        "limit": "Input validation error: limit 必须介于 1 和 {max} 之间。",
+        "block": "Input validation error: 字段块 {block} 需要 {permission} 权限。",
         "emptyBlocks": "请至少选择一个申请或收藏字段块。"
       }
     },

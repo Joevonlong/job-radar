@@ -488,9 +488,9 @@ the change log untouched. MCP call audit and HTTP token last-use bookkeeping sti
 
 ### Read errors and recover
 
-Errors have `isError: true` and one `content` entry of type `text`. The text is localized and there is no
-`structuredContent` or separate error code. Match the literal prefix, which stays the same across languages for sync
-errors. Parentheses in `resync_required` contain the reason.
+Errors have `isError: true` and one localized `content` entry of type `text`. The response omits `structuredContent`
+and a separate error code. For the sync errors below, match the literal prefix through the first colon. Those prefixes
+are identical in English and Chinese. The `resync_required` prefix includes the reason in parentheses.
 
 | Exact English text | Caller action |
 |---|---|
@@ -502,9 +502,13 @@ errors. Parentheses in `resync_required` contain the reason.
 | `Input validation error: limit must be between 1 and {max}.` | Send a `limit` within the current `sync.max_batch`. |
 | `Input validation error: Block {block} requires {permission}.` | Choose a block your connection may read. |
 
-The SDK also uses the prefix `Input validation error:` for invalid parameter shapes and unknown block names. A cursor
-type error from the SDK contains `invalid_cursor:` inside that validation text. For the two input messages above,
-`{max}`, `{block}` and `{permission}` are replaced with the applicable value.
+The SDK uses the same `Input validation error:` prefix for invalid parameter shapes, unknown block names and empty
+application block lists. A cursor type error from the SDK contains `invalid_cursor:` in the validation detail. For the
+two input messages above, `{max}`, `{block}` and `{permission}` are replaced with the applicable value.
+
+Changing the key ID bytes of a well-formed cursor to an unrecognized ID returns `resync_required (log_reset)` because
+the server cannot authenticate the cursor under that ID. Other tampering returns `invalid_cursor`. In either case,
+drop the cursor and start a fresh snapshot.
 
 If sync reports `sync_unavailable`, check that the runner has completed migrations and verified the log identity. A
 restricted database role needs `SELECT` on the change log tables and `EXECUTE` on `pg_catalog.pg_control_system()`.
