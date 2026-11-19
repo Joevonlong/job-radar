@@ -101,6 +101,10 @@ audit:
   # Longest a call waits for its audit row (100-10000), queueing included; also the longest shutdown waits for the last rows
   write_timeout_ms: 2000
 
+sync:
+  # Days a change row is kept (1-365); the runner prunes older changes once a day
+  retention_days: 30
+
 # Live daily action budgets use the calendar day in schedule.yaml's time zone; joined requests and cache hits are refunded.
 budgets:
   # Daily caps per caller (stdio and each token separately); 0 forbids agents from triggering that action

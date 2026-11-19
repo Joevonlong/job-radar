@@ -5,6 +5,7 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { loadDatabaseEnv } from "@/lib/env";
 
 import { createConnection } from "./client";
+import { resetAgentChangesIfNeeded } from "./repos/agent-changes";
 
 /** The folder with the SQL files and `meta/_journal.json`: the given path (`MIGRATIONS_DIR`), else `drizzle`, relative to the working directory. */
 export function resolveMigrationsFolder(configured?: string): string {
@@ -29,6 +30,7 @@ export async function runMigrations(options: { url?: string; migrationsFolder?: 
     await connection.sql`select set_config('job_radar.current_scores_backfill_lock_timeout_ms', ${String(lockTimeoutMs)}, false),
       set_config('job_radar.current_scores_backfill_statement_timeout_ms', ${String(statementTimeoutMs)}, false)`;
     await migrate(connection.db, { migrationsFolder: folder });
+    if (await resetAgentChangesIfNeeded(connection.db)) console.log("agent change log reset after migration");
   } finally {
     await connection.sql.end({ timeout: 5 });
   }

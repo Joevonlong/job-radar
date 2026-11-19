@@ -17,6 +17,8 @@ import { deleteExpiredStoryDrafts } from "@/lib/db/repos/story-drafts";
 import { failOrphanedCycles, getDbNow, type CycleKind } from "@/lib/db/repos/cycles";
 import { deliveryPayloadBytes, deliveryTablesReady, pruneDeliveryItems } from "@/lib/db/repos/deliveries";
 import { createDeliveryPruner } from "./delivery-prune";
+import { pruneAgentChanges } from "@/lib/db/repos/agent-changes";
+import { createAgentChangesPruner } from "./agent-changes-prune";
 import { pruneAgentCalls } from "@/lib/db/repos/agent-calls";
 import { liveMcpSettings } from "@/lib/agent-access/authorize";
 import { pruneAgentCallsOnce } from "./agent-calls-prune";
@@ -246,6 +248,9 @@ async function main(): Promise<number> {
       try { span.note("info", "pruned", { items: deleted }); }
       finally { span.finish("ok"); }
     },
+  });
+  const agentChangesPruner = createAgentChangesPruner({
+    now: Date.now, loadConfig: liveMcpSettings, prune: (retentionDays) => pruneAgentChanges(db, retentionDays), log,
   });
   const startCycle = (kind: CycleKind, options: RunCycleOptions = {}): void => {
     log(`starting ${kind} cycle`);
@@ -492,6 +497,7 @@ async function main(): Promise<number> {
     writeHeartbeat: () => writeHeartbeat(db, PROCESS_NAME),
     pruneHeartbeats: async () => {
       void deliveryPruner.tick().catch(() => log("delivery prune failed"));
+      void agentChangesPruner.tick().catch(() => log("agent change log prune failed"));
       if (Date.now() - lastPruneAt >= PRUNE_EVERY_MS) {
         const pruned = await pruneHeartbeats(db, new Date(Date.now() - retentionMs));
         lastPruneAt = Date.now();

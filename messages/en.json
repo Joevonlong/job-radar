@@ -6563,6 +6563,10 @@
       "listActive": "in force",
       "unknownCompany": "(no longer exists)"
     },
+    "mcpSyncReset": {
+      "confirm": "This clears the agent change log and rotates its identity and cursor key in the configured database. Run pnpm mcp:sync-reset --yes to proceed.",
+      "failed": "The agent change log could not be reset. Check the database connection, migrations, and permissions."
+    },
     "agentToken": {
       "usage": "Usage: pnpm agent:token create --name NAME --permissions LIST [--expires YYYY-MM-DD] | list | revoke NAME_OR_PREFIX",
       "nameInvalid": "--name needs a name of 1 to {max} characters, without control characters or token values.",

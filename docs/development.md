@@ -141,8 +141,8 @@ test <file>` behaves the same. `--project <name>` also runs that project's depen
 whole parallel suite first in full mode). Use `E2E_PART=chain` for the serial chain; `--no-deps` removes its serial
 ordering. `--grep` on its own does not narrow the dependencies (every project before a matching
 one runs in full): name the file as well. The named files are read from the command line unless `E2E_SPEC_FILTERS` is set in the
-environment (a JSON list of filters, used to hand them to the workers): an exported value overrides the command line. The integration tests need `pg_dump` / `pg_restore` of the server's major version (17): set `PG_DUMP_PATH` /
-`PG_RESTORE_PATH`, or use `scripts/ops/pg-docker.sh` symlinked as `pg_dump` and `pg_restore` (what CI does).
+environment (a JSON list of filters, used to hand them to the workers): an exported value overrides the command line. The integration tests need `pg_dump` / `pg_restore` of the server's major version (17). Set `PG_DUMP_PATH` and
+`PG_RESTORE_PATH`, or use `scripts/ops/pg-docker.sh` symlinked as `pg_dump` and `pg_restore` (what CI does). The restore tests also look for `psql` next to the configured `pg_restore` or on `PATH`.
 
 e2e specs import `test` and `expect` from `e2e/fixtures.ts` (lint enforces it): a reload or navigation there waits for
 Server Actions still in flight, so a test can reload right after a click that saves. See "Projects of the main suite"

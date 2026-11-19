@@ -17,13 +17,14 @@ afterEach(() => {
 });
 
 describe("mcp.yaml schema", () => {
-  it("defaults to off, the read tools on, the writer tools off, 20 results, 12000 JD characters and the daily agent budgets", () => {
+  it("defaults to off with read permissions, output limits, retention and daily agent budgets", () => {
     expect(mcpSchema.parse({})).toEqual({
       http: mcpSchema.parse({ http: {} }).http,
       enabled: false,
       permissions: ["jobs:read", "tracking:read"],
       stdio: { permissions: ["jobs:read", "tracking:read"] },
       audit: { retention_days: 90, connect_timeout_seconds: 2, statement_timeout_ms: 1500, lock_timeout_ms: 200, write_timeout_ms: 2000 },
+      sync: { retention_days: 30 },
       limits: { max_results: 20, max_description_chars: 12_000, max_raw_chars: 20_000 },
       budgets: {
         per_caller: {
@@ -42,6 +43,12 @@ describe("mcp.yaml schema", () => {
   });
   it("defaults missing audit keys without a configuration migration", () => {
     expect(mcpSchema.parse({ audit: { retention_days: 7 } }).audit).toEqual({ retention_days: 7, connect_timeout_seconds: 2, statement_timeout_ms: 1500, lock_timeout_ms: 200, write_timeout_ms: 2000 });
+  });
+  it("defaults missing sync retention and accepts both ends of its range", () => {
+    expect(mcpSchema.parse({ sync: {} }).sync.retention_days).toBe(30);
+    for (const retention_days of [1, 365]) {
+      expect(mcpSchema.parse({ sync: { retention_days } }).sync.retention_days).toBe(retention_days);
+    }
   });
   it.each(["permissions", "stdio"])("reports an unknown permission at its array path in %s", (key) => {
     const result = mcpSchema.safeParse(key === "permissions" ? { permissions: ["unknown:read"] } : { stdio: { permissions: ["unknown:read"] } });
@@ -64,6 +71,10 @@ describe("mcp.yaml schema", () => {
     ["zero retention", { audit: { retention_days: 0 } }],
     ["excessive retention", { audit: { retention_days: 3651 } }],
     ["fractional retention", { audit: { retention_days: 1.5 } }],
+    ["zero sync retention", { sync: { retention_days: 0 } }],
+    ["excessive sync retention", { sync: { retention_days: 366 } }],
+    ["fractional sync retention", { sync: { retention_days: 1.5 } }],
+    ["string sync retention", { sync: { retention_days: "30" } }],
     ["zero connect timeout", { audit: { connect_timeout_seconds: 0 } }],
     ["excessive connect timeout", { audit: { connect_timeout_seconds: 31 } }],
     ["zero statement timeout", { audit: { statement_timeout_ms: 0 } }],

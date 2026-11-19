@@ -8,6 +8,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "v
 
 import { closeDb, countTableRows, createConnection, enqueueAlert, getDb, listPendingAlerts } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
+import { checkAgentChangeIdentity, readAgentChangeLogIdentity } from "@/lib/db/repos/agent-changes";
+import { agentChanges } from "@/lib/db/schema";
 import { BackupError, listBackups, runBackup, type RunBackupOptions } from "@/lib/ops/backup";
 import { createBackupScheduler } from "@/lib/ops/backup-job";
 import { createLogger } from "@/lib/channels/logger";
@@ -24,12 +26,16 @@ import { document } from "../career/document-fixtures";
 import { imagePng, imageJpeg } from "../career/engine/helpers/images";
 
 const url = inject("testDatabaseUrl");
+const mainName = new URL(url).pathname.slice(1);
+const backfill = { lockTimeoutMs: 3000, statementTimeoutMs: 60_000 };
 // pg_dump through `docker exec` can be slow when other stacks share the machine.
 const SLOW_TEST_MS = 90_000;
 
 let tools: PgTools | null = null;
 let dir = "";
-const restoredName = `${new URL(url).pathname.slice(1)}_restored`;
+const restoredName = `${mainName}_restored`;
+const oldName = `${mainName}_old_schema`;
+const oldRestoredName = `${mainName}_restored_old`;
 
 function adminUrl(): string {
   const admin = new URL(url);
@@ -45,7 +51,7 @@ function urlOf(database: string): string {
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
+  await runMigrations({ currentScoresBackfill: backfill });
   tools = await resolvePgTools(url);
   // CI provides the client tools and sets REQUIRE_PG_TOOLS, so the real dump/restore tests cannot pass by skipping.
   if (tools === null && process.env.REQUIRE_PG_TOOLS) throw new Error("REQUIRE_PG_TOOLS is set but no usable pg_dump / pg_restore was found");
@@ -71,7 +77,9 @@ afterAll(async () => {
   await closeDb();
   const admin = postgres(adminUrl(), { max: 1, onnotice: () => {} });
   try {
-    await admin.unsafe(`drop database if exists "${restoredName}" with (force)`);
+    for (const name of [restoredName, oldName, oldRestoredName]) {
+      await admin.unsafe(`drop database if exists "${name}" with (force)`);
+    }
   } finally {
     await admin.end({ timeout: 2 });
   }
@@ -90,6 +98,66 @@ function options(overrides: Partial<RunBackupOptions> = {}): RunBackupOptions {
     pgRestore: tools.restore,
     ...overrides,
   };
+}
+
+function shellCommand(parts: string[]): string {
+  return parts.map((part) => `'${part.replaceAll("'", "'\\''")}'`).join(" ");
+}
+
+/** Run the restore script with the Compose transport replaced by the test server's real PostgreSQL clients. */
+function restoreBackup(tools: PgTools, dump: string, target: string) {
+  const checkout = path.join(dir, "restore-project");
+  const bin = path.join(checkout, "bin");
+  fs.mkdirSync(path.join(checkout, "scripts/ops/lib"), { recursive: true });
+  fs.mkdirSync(bin, { recursive: true });
+  for (const file of ["restore.sh", "lib/config.sh", "lib/existing-install.sh", "lib/timezone.sh", "lib/ai-worker.sh"]) {
+    fs.copyFileSync(path.join("scripts/ops", file), path.join(checkout, "scripts/ops", file));
+  }
+
+  const restoreExecutable = tools.restore[0]!;
+  const pgRestore = restoreExecutable.includes(path.sep)
+    ? [path.resolve(restoreExecutable), ...tools.restore.slice(1)] : tools.restore;
+  const psqlSibling = pgRestore[0]!.includes(path.sep) ? path.join(path.dirname(pgRestore[0]!), "psql") : null;
+  const psql = tools.mode === "docker" ? [...pgRestore.slice(0, -1), "psql"]
+    : [psqlSibling && fs.existsSync(psqlSibling) ? psqlSibling : "psql"];
+  fs.writeFileSync(path.join(bin, "docker"), `#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  "compose ps --status running --services") echo db; exit 0 ;;
+  "compose exec -T db "*) shift 4 ;;
+  *) echo "unexpected compose command" >&2; exit 1 ;;
+esac
+export PATH="$RESTORE_TEST_PATH"
+case "$1" in
+  sh)
+    case "$3" in
+      *POSTGRES_USER*) printf %s "$RESTORE_TEST_USER" ;;
+      *POSTGRES_DB*) printf %s "$RESTORE_TEST_DATABASE" ;;
+      *) exit 1 ;;
+    esac ;;
+  psql) shift; exec ${shellCommand(psql)} -h "$RESTORE_TEST_HOST" -p "$RESTORE_TEST_PORT" "$@" ;;
+  pg_restore) shift; exec ${shellCommand(pgRestore)} -h "$RESTORE_TEST_HOST" -p "$RESTORE_TEST_PORT" "$@" ;;
+  *) exit 1 ;;
+esac
+`, { mode: 0o755 });
+
+  const address = new URL(tools.urlFor(url));
+  const toolPath = process.env.PATH ?? "";
+  return spawnSync("bash", [path.join(checkout, "scripts/ops/restore.sh"), dump, "--target", target], {
+    cwd: checkout,
+    encoding: "utf8",
+    timeout: 60_000,
+    env: {
+      ...process.env,
+      PATH: `${bin}${path.delimiter}${toolPath}`,
+      RESTORE_TEST_PATH: toolPath,
+      RESTORE_TEST_HOST: address.hostname,
+      RESTORE_TEST_PORT: address.port || "5432",
+      RESTORE_TEST_USER: decodeURIComponent(address.username),
+      RESTORE_TEST_DATABASE: mainName,
+      PGPASSWORD: decodeURIComponent(address.password),
+    },
+  });
 }
 
 describe("scheduled backup and restore (real pg_dump)", () => {
@@ -135,54 +203,79 @@ describe("scheduled backup and restore (real pg_dump)", () => {
     }
   }, SLOW_TEST_MS);
 
-  it("dumps the database, and restoring into a temporary database gives the same tables and row counts", async (ctx) => {
+  it("restores the backed-up rows and resets the change log in a named target", async (ctx) => {
     if (tools === null) return ctx.skip();
+    const original = await readAgentChangeLogIdentity(getDb());
+    expect(original).not.toBeNull();
+    await getDb().insert(agentChanges).values({ keyKind: "job", key: "backed-up-change", blocks: 1 });
     const result = await runBackup(options({ now: () => new Date("2026-10-07T01:30:00Z") }));
     expect(result.file).toBe("jobradar-20261007-033000.dump");
     expect(result.bytes).toBeGreaterThan(100);
 
-    const admin = postgres(adminUrl(), { max: 1, onnotice: () => {} });
-    try {
-      await admin.unsafe(`create database "${restoredName}"`);
-    } finally {
-      await admin.end({ timeout: 2 });
-    }
-
-    const restoreUrl = new URL(tools.urlFor(urlOf(restoredName)));
-    const restoreArgs = [
-      "--no-owner",
-      "--no-acl",
-      "--exit-on-error",
-      "--host",
-      restoreUrl.hostname,
-      "--port",
-      restoreUrl.port,
-      "--username",
-      decodeURIComponent(restoreUrl.username),
-      "--no-password",
-      "--dbname",
-      restoredName,
-    ];
-    const [command, ...leading] = tools.restore;
-    const restored = spawnSync(command as string, [...leading, ...restoreArgs], {
-      input: fs.readFileSync(result.path),
-      env: { ...process.env, PGPASSWORD: decodeURIComponent(restoreUrl.password) },
-      encoding: "utf8",
-      timeout: 60_000,
-    });
-    expect(restored.status, restored.stderr).toBe(0);
+    const restored = restoreBackup(tools, result.path, restoredName);
+    expect(restored.status, restored.stderr + restored.stdout).toBe(0);
 
     const target = createConnection(urlOf(restoredName), { max: 1 });
     try {
       const source = await countTableRows(getDb());
       const copy = await countTableRows(target.db);
-      expect(copy).toEqual(source);
+      expect(copy).toEqual(source.map((table) => table.table === "public.agent_changes" ? { ...table, rows: 0 } : table));
       expect(source.length).toBeGreaterThanOrEqual(19);
       expect(source.find((t) => t.table === "public.runner_heartbeats")?.rows).toBe(500);
       expect(source.find((t) => t.table === "public.cycles")?.rows).toBe(2);
+      expect(source.find((t) => t.table === "public.agent_changes")?.rows).toBe(1);
+
+      const checked = await checkAgentChangeIdentity(target.db);
+      expect(checked.status).toBe("match");
+      const identity = await readAgentChangeLogIdentity(target.db);
+      expect(identity?.systemIdentifier).toBe(original?.systemIdentifier);
+      expect(identity?.databaseOid).not.toBe(original?.databaseOid);
+      expect(identity?.logId).not.toBe(original?.logId);
+      expect(await readAgentChangeLogIdentity(getDb())).toEqual(original);
 
       const [row] = await target.sql<{ title: string }[]>`select payload_json->>'title' as title from notifications where kind = 'digest'`;
       expect(row?.title).toBe("Müller & Söhne – Entwickler (m/w/d) 🚀");
+    } finally {
+      await target.sql.end({ timeout: 2 });
+    }
+  }, SLOW_TEST_MS);
+
+  it("restores a backup from before the change log migration", async (ctx) => {
+    if (tools === null) return ctx.skip();
+    const migrationsFolder = path.join(dir, "drizzle-before-sync");
+    fs.cpSync("drizzle", migrationsFolder, { recursive: true });
+    const journalFile = path.join(migrationsFolder, "meta/_journal.json");
+    const journal = JSON.parse(fs.readFileSync(journalFile, "utf8")) as { entries: { tag: string }[] };
+    const migrationIndex = journal.entries.findIndex(({ tag }) => tag.endsWith("_agent_changes"));
+    expect(migrationIndex).toBeGreaterThan(0);
+    journal.entries = journal.entries.slice(0, migrationIndex);
+    fs.writeFileSync(journalFile, JSON.stringify(journal));
+
+    const admin = postgres(adminUrl(), { max: 1, onnotice: () => {} });
+    try {
+      await admin.unsafe(`create database "${oldName}"`);
+    } finally {
+      await admin.end({ timeout: 2 });
+    }
+    const oldUrl = urlOf(oldName);
+    await runMigrations({ url: oldUrl, migrationsFolder, currentScoresBackfill: backfill });
+    const source = createConnection(oldUrl, { max: 1 });
+    try {
+      await source.sql`insert into runner_heartbeats (process, at) values ('old-backup', now())`;
+    } finally {
+      await source.sql.end({ timeout: 2 });
+    }
+    const backup = await runBackup(options({ directory: path.join(dir, "legacy-backup"), databaseUrl: tools.urlFor(oldUrl) }));
+
+    const restored = restoreBackup(tools, backup.path, oldRestoredName);
+    expect(restored.status, restored.stderr + restored.stdout).toBe(0);
+    const target = createConnection(urlOf(oldRestoredName), { max: 1 });
+    try {
+      const [row] = await target.sql`
+        select to_regclass('public.agent_change_log') is null as no_log,
+          to_regprocedure('public.agent_changes_reset()') is null as no_reset,
+          (select count(*)::int from runner_heartbeats where process = 'old-backup') as heartbeats`;
+      expect(row).toMatchObject({ no_log: true, no_reset: true, heartbeats: 1 });
     } finally {
       await target.sql.end({ timeout: 2 });
     }

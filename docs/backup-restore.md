@@ -99,6 +99,7 @@ live:     19 tables, 5702 rows (it may have moved on since the backup was taken)
 ```
 
 - The number of tables should match; row counts should be slightly lower than the live database (new data arrived after the backup). If a table shows `-` in the `live` column, the live database does not have that table yet (for example the backup came from a newer version). A `-` in the `restored` column is the opposite: the table is newer than the backup (the backup came from an older version), so it did not exist when the backup was taken; the migrations create it when the runner starts.
+- When a backup includes the agent change log, `restore.sh` automatically resets it after counting the rows and before any database swap, including for a named `--target`.
 - The temporary database is kept by default so you can inspect it: `docker compose exec db psql -U jobradar -d <temporary database name>` (the script prints the full command and the delete command at the end). Delete it when you are done:
 
 ```bash
@@ -181,7 +182,8 @@ tar -xzf data/backups/<name>.config.tgz -C .
 ```
 
    (On a fresh machine `--with-config` in the previous step does the same in one go, but it renames a `data/config` that is already there.) Without a `.config.tgz` you start with the defaults and have to enter your settings and profile again. Also recreate `.env` and `.auth/` yourself (they are never backed up).
-5. Start all services: `docker compose up -d --build`. The runner runs migrations automatically on start (the dump contains the migration records; if already up to date, nothing happens).
+5. If you recovered a physical database copy, run `pnpm mcp:sync-reset --yes` against the recovered database before starting the other services or reconnecting MCP clients. Set `DATABASE_URL` to the recovered database if it uses a different connection than the one in `.env`. If the copy predates the change log, run `pnpm db:migrate` first.
+6. Start all services: `docker compose up -d --build`. The runner runs migrations automatically on start (the dump contains the migration records; if already up to date, nothing happens).
 
 ## 6. Notes
 
@@ -197,6 +199,8 @@ tar -xzf data/backups/<name>.config.tgz -C .
   - Fix the cause with `pnpm config:check` (and `pnpm install` when `node_modules` is missing).
 
 - **Version**: dumps are produced by PostgreSQL 17 and can only be restored to a 17 or newer server. Before upgrading Postgres across a major version take a manual backup first, and upgrade `POSTGRES_CLIENT_VERSION` in the runner image to match (`tests/dockerfile.test.ts` fails if the two disagree).
+- **Physical database copies** preserve the cluster and database identifiers, so Job Radar cannot detect a copied data volume, `pg_basebackup`, or filesystem snapshot. Run `pnpm mcp:sync-reset --yes` on the copy before reconnecting MCP clients.
+- **Database identity permissions.** A restrictive PostgreSQL setup that revokes access to `pg_control_system()` will make MCP sync report `sync_unavailable`.
 - **Never `docker compose down -v`**: `-v` deletes the database volume.
 - **`.env` and `.auth/` are in no backup**: `.env` holds your secrets and the database password, `.auth/` the LinkedIn login. Keep your own copy (a password manager for the values). Your configuration and profile are in the `.config.tgz` next to each dump; the shipped defaults in `config/` come with the repository.
 - **Same disk**: the backups and the database are on the same disk, so they protect against mistakes, not against a failing disk. Copy `data/backups/` somewhere else on a schedule.

@@ -396,6 +396,14 @@ LC_ALL=C join -t $'\t' -a1 -a2 -e '-' -o 0,1.2,2.2 \
 printf '%s\n' "$restored" | awk -F'\t' '{ n += 1; rows += $2 } END { printf "restored: %d tables, %d rows\n", n, rows }'
 printf '%s\n' "$live" | awk -F'\t' '{ n += 1; rows += $2 } END { printf "live:     %d tables, %d rows (it may have moved on since the backup was taken)\n", n, rows }'
 
+reset_available="$(dbx psql -v ON_ERROR_STOP=1 -X -At -U "$pg_user" -d "$restore_into" -c "
+  select to_regclass('public.agent_change_log') is not null
+    and to_regclass('public.agent_changes') is not null
+    and to_regprocedure('public.agent_changes_reset()') is not null")"
+if [[ "$reset_available" == "t" ]]; then
+  dbx psql -v ON_ERROR_STOP=1 -X -q -U "$pg_user" -d "$restore_into" -c 'select public.agent_changes_reset()' > /dev/null
+fi
+
 if [[ -f "$config_archive" ]]; then
   echo "== the config and profile of this backup: $config_archive"
   if [[ "$with_config" != 1 ]]; then

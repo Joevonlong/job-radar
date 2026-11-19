@@ -44,7 +44,9 @@ BEGIN
   DELETE FROM public.agent_changes;
 END;
 $$;--> statement-breakpoint
-SELECT public.agent_changes_reset() WHERE NOT EXISTS (SELECT FROM public.agent_change_log);--> statement-breakpoint
+SELECT public.agent_changes_reset()
+WHERE pg_catalog.has_function_privilege('pg_catalog.pg_control_system()', 'EXECUTE')
+  AND NOT EXISTS (SELECT FROM public.agent_change_log);--> statement-breakpoint
 
 -- Block masks follow src/lib/db/sync-sources.ts. Job blocks in bit order are job, translation, breakdown,
 -- salary, company, ghost, lifecycle, match, tracking and notes (1 through 512), followed by app (1024),
