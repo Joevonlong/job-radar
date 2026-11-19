@@ -301,50 +301,71 @@ CREATE TRIGGER agent_change_update AFTER UPDATE ON job_ghost FOR EACH ROW WHEN (
   OLD.dismissed_codes IS DISTINCT FROM NEW.dismissed_codes
 ) EXECUTE FUNCTION public.agent_changes_job_child('32');--> statement-breakpoint
 
-CREATE OR REPLACE FUNCTION public.agent_changes_scores_update() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-  change_blocks integer;
+CREATE OR REPLACE FUNCTION public.agent_changes_scores_insert() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  change_blocks := CASE WHEN OLD.job_id IS DISTINCT FROM NEW.job_id OR OLD.id IS DISTINCT FROM NEW.id OR
-    OLD.score IS DISTINCT FROM NEW.score OR OLD.stale IS DISTINCT FROM NEW.stale OR
-    OLD.german_level IS DISTINCT FROM NEW.german_level OR OLD.filter_result IS DISTINCT FROM NEW.filter_result OR
-    OLD.created_at IS DISTINCT FROM NEW.created_at THEN 1 | 128 ELSE 0 END |
-    CASE WHEN OLD.rank_value IS DISTINCT FROM NEW.rank_value THEN 1 ELSE 0 END |
-    CASE WHEN OLD.ai_score IS DISTINCT FROM NEW.ai_score OR OLD.german_penalty IS DISTINCT FROM NEW.german_penalty OR
-    OLD.filter_reasons IS DISTINCT FROM NEW.filter_reasons OR OLD.fit_reasons IS DISTINCT FROM NEW.fit_reasons OR
-    OLD.gaps IS DISTINCT FROM NEW.gaps OR OLD.reason_evidence IS DISTINCT FROM NEW.reason_evidence OR
-    OLD.summaries IS DISTINCT FROM NEW.summaries OR OLD.summary_zh IS DISTINCT FROM NEW.summary_zh OR
-    OLD.summary_en IS DISTINCT FROM NEW.summary_en OR OLD.output_lang IS DISTINCT FROM NEW.output_lang OR
-    OLD.scored_at IS DISTINCT FROM NEW.scored_at THEN 128 ELSE 0 END;
-  PERFORM public.agent_changes_append('job', OLD.job_id::text, NEW.job_id::text, change_blocks);
+  INSERT INTO public.agent_changes (key_kind, key, blocks)
+  SELECT 'job', job_id::text, 129 FROM new_scores GROUP BY job_id;
+  RETURN NULL;
+END;
+$$;--> statement-breakpoint
+
+CREATE OR REPLACE FUNCTION public.agent_changes_scores_delete() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO public.agent_changes (key_kind, key, blocks)
+  SELECT 'job', old_score.job_id::text, 129
+  FROM old_scores AS old_score
+  WHERE EXISTS (SELECT FROM public.jobs WHERE id = old_score.job_id)
+  GROUP BY old_score.job_id;
+  RETURN NULL;
+END;
+$$;--> statement-breakpoint
+
+CREATE OR REPLACE FUNCTION public.agent_changes_scores_update() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  WITH score_updates AS (
+    SELECT old_score.job_id AS old_job_id, new_score.job_id AS new_job_id,
+      CASE WHEN ROW(old_score.id, old_score.job_id, old_score.stale, old_score.score,
+        old_score.german_level, old_score.filter_result, old_score.created_at) IS DISTINCT FROM
+        ROW(new_score.id, new_score.job_id, new_score.stale, new_score.score,
+        new_score.german_level, new_score.filter_result, new_score.created_at)
+      THEN 1 | 128 ELSE
+        CASE WHEN old_score.rank_value IS DISTINCT FROM new_score.rank_value THEN 1 ELSE 0 END |
+        CASE WHEN ROW(old_score.ai_score, old_score.german_penalty, old_score.filter_reasons,
+          old_score.fit_reasons, old_score.gaps, old_score.reason_evidence, old_score.summaries,
+          old_score.summary_zh, old_score.summary_en, old_score.output_lang, old_score.scored_at) IS DISTINCT FROM
+          ROW(new_score.ai_score, new_score.german_penalty, new_score.filter_reasons,
+          new_score.fit_reasons, new_score.gaps, new_score.reason_evidence, new_score.summaries,
+          new_score.summary_zh, new_score.summary_en, new_score.output_lang, new_score.scored_at)
+        THEN 128 ELSE 0 END
+      END AS blocks
+    FROM old_scores AS old_score
+    FULL OUTER JOIN new_scores AS new_score ON old_score.id = new_score.id
+  ), affected_jobs AS (
+    SELECT new_job_id AS job_id, blocks FROM score_updates WHERE new_job_id IS NOT NULL
+    UNION ALL
+    SELECT old_job_id, blocks FROM score_updates WHERE old_job_id IS NOT NULL AND old_job_id IS DISTINCT FROM new_job_id
+  )
+  INSERT INTO public.agent_changes (key_kind, key, blocks)
+  SELECT 'job', job_id::text, bit_or(blocks)
+  FROM affected_jobs
+  WHERE blocks <> 0
+  GROUP BY job_id;
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
 DROP TRIGGER IF EXISTS agent_change_presence ON scores;--> statement-breakpoint
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON scores
-  FOR EACH ROW EXECUTE FUNCTION public.agent_changes_job_child('129');--> statement-breakpoint
+DROP TRIGGER IF EXISTS agent_change_insert ON scores;--> statement-breakpoint
+CREATE TRIGGER agent_change_insert AFTER INSERT ON scores
+  REFERENCING NEW TABLE AS new_scores FOR EACH STATEMENT
+  EXECUTE FUNCTION public.agent_changes_scores_insert();--> statement-breakpoint
+DROP TRIGGER IF EXISTS agent_change_delete ON scores;--> statement-breakpoint
+CREATE TRIGGER agent_change_delete AFTER DELETE ON scores
+  REFERENCING OLD TABLE AS old_scores FOR EACH STATEMENT
+  EXECUTE FUNCTION public.agent_changes_scores_delete();--> statement-breakpoint
 DROP TRIGGER IF EXISTS agent_change_update ON scores;--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON scores FOR EACH ROW WHEN (
-  OLD.job_id IS DISTINCT FROM NEW.job_id OR
-  OLD.id IS DISTINCT FROM NEW.id OR
-  OLD.score IS DISTINCT FROM NEW.score OR
-  OLD.stale IS DISTINCT FROM NEW.stale OR
-  OLD.german_level IS DISTINCT FROM NEW.german_level OR
-  OLD.filter_result IS DISTINCT FROM NEW.filter_result OR
-  OLD.created_at IS DISTINCT FROM NEW.created_at OR
-  OLD.rank_value IS DISTINCT FROM NEW.rank_value OR
-  OLD.ai_score IS DISTINCT FROM NEW.ai_score OR
-  OLD.german_penalty IS DISTINCT FROM NEW.german_penalty OR
-  OLD.filter_reasons IS DISTINCT FROM NEW.filter_reasons OR
-  OLD.fit_reasons IS DISTINCT FROM NEW.fit_reasons OR
-  OLD.gaps IS DISTINCT FROM NEW.gaps OR
-  OLD.reason_evidence IS DISTINCT FROM NEW.reason_evidence OR
-  OLD.summaries IS DISTINCT FROM NEW.summaries OR
-  OLD.summary_zh IS DISTINCT FROM NEW.summary_zh OR
-  OLD.summary_en IS DISTINCT FROM NEW.summary_en OR
-  OLD.output_lang IS DISTINCT FROM NEW.output_lang OR
-  OLD.scored_at IS DISTINCT FROM NEW.scored_at
-) EXECUTE FUNCTION public.agent_changes_scores_update();--> statement-breakpoint
+CREATE TRIGGER agent_change_update AFTER UPDATE ON scores
+  REFERENCING OLD TABLE AS old_scores NEW TABLE AS new_scores FOR EACH STATEMENT
+  EXECUTE FUNCTION public.agent_changes_scores_update();--> statement-breakpoint
 
 DROP TRIGGER IF EXISTS agent_change_presence ON job_current_scores;--> statement-breakpoint
 CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_current_scores

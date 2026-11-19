@@ -296,29 +296,46 @@ it.each(tables)("%s records isolated changes to each exported column", async (ta
   });
 });
 
-it("keeps the installed row trigger operations and UPDATE predicates in sync with the matrix", async () => {
-  const triggers = await connection.db.execute<{ table: string; type: number; enabled: string; predicate: string | null }>(sql`
+it("keeps the installed trigger operations and UPDATE column checks in sync with the matrix", async () => {
+  const triggers = await connection.db.execute<{
+    table: string; type: number; enabled: string; predicate: string | null;
+    old_table: string | null; new_table: string | null; function_body: string | null;
+  }>(sql`
     select c.relname as "table", t.tgtype::int as type, t.tgenabled as enabled,
-      case when t.tgqual is not null then pg_get_triggerdef(t.oid, true) end as predicate
+      t.tgoldtable as old_table, t.tgnewtable as new_table,
+      case when t.tgqual is not null then pg_get_triggerdef(t.oid, true) end as predicate,
+      case when (t.tgtype::int & 1) = 0 then pg_get_functiondef(t.tgfoid) end as function_body
     from pg_trigger t join pg_class c on c.oid = t.tgrelid
     where not t.tgisinternal and starts_with(t.tgname, 'agent_change_')`);
   expect(new Set(triggers.map((trigger) => trigger.table))).toEqual(new Set(SYNC_SOURCES.map((source) => source.table)));
+  const statementTables = new Set(triggers.filter(({ type }) => (type & 1) === 0).map(({ table }) => table));
+  expect(statementTables).toEqual(new Set(["scores"]));
   const flags = { insert: 4, delete: 8, update: 16 } satisfies Record<SyncOperation, number>;
   for (const table of tables) {
     const onTable = triggers.filter((trigger) => trigger.table === table);
     const sources = SYNC_SOURCES.filter((source) => source.table === table);
     const operations = new Set(sources.flatMap((source) => source.operations));
+    const statement = statementTables.has(table);
+    if (statement) expect(onTable).toHaveLength(operations.size);
     for (const [operation, flag] of Object.entries(flags)) {
       const matches = onTable.filter(({ type }) => type & flag);
       expect(matches, `${table} ${operation}`).toHaveLength(operations.has(operation as SyncOperation) ? 1 : 0);
-      for (const { type, enabled } of matches) {
-        expect(type & 1).toBe(1);
+      for (const { type, enabled, old_table, new_table } of matches) {
         expect(enabled).toBe("O");
+        if (statement) {
+          expect(type).toBe(flag);
+          expect(old_table !== null).toBe(operation !== "insert");
+          expect(new_table !== null).toBe(operation !== "delete");
+        } else {
+          expect(type & 1).toBe(1);
+        }
       }
     }
-    const predicate = onTable.find(({ type }) => type & flags.update)?.predicate;
-    expect(predicate).toMatch(/is distinct from/i);
-    const actual = new Set(Array.from(predicate!.matchAll(/\b(?:old|new)\."?([a-z_][a-z_0-9]*)"?/gi), ([, column]) => column));
+    const update = onTable.find(({ type }) => type & flags.update);
+    const comparison = statement ? update?.function_body : update?.predicate;
+    expect(comparison, table).toMatch(/is distinct from/i);
+    const columnReference = statement ? /\b(?:old_score|new_score)\."?([a-z_][a-z_0-9]*)"?/gi : /\b(?:old|new)\."?([a-z_][a-z_0-9]*)"?/gi;
+    const actual = new Set(Array.from(comparison!.matchAll(columnReference), ([, column]) => column));
     expect(actual, table).toEqual(new Set(sources.filter((source) => source.operations.includes("update")).flatMap((source) => source.columns)));
   }
 });

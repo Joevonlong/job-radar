@@ -15,9 +15,9 @@ import type { SalaryBenchmarkInput } from "../src/lib/db/repos/salary-benchmarks
 
 const MODES = ["off", "on"] as const;
 const METRICS = ["ms", "wal_bytes", "change_rows"] as const;
+const TRIGGER_ROW = 1;
 const TRIGGER_EVENTS = { insert: 4, delete: 8, update: 16 };
-const TRIGGER_EVENT_MASK = TRIGGER_EVENTS.insert | TRIGGER_EVENTS.delete | TRIGGER_EVENTS.update;
-const SEPARATE_INSERT_DELETE = new Set(["applications", "job_traps"]);
+const SEPARATE_INSERT_DELETE = new Set(["applications", "job_traps", "scores"]);
 const SCORE_JOBS = 10_000;
 const COLLECTION_POSTINGS = 500;
 const COLLECTION_HEARTBEATS = 5_000;
@@ -64,25 +64,29 @@ async function loadProduct(root: string) {
 
 type Product = Awaited<ReturnType<typeof loadProduct>>;
 
-/** The catalog may combine INSERT and DELETE in one trigger. Two tables have separate triggers for those events. */
+/** The catalog may combine INSERT and DELETE in one trigger. */
 function expectedTriggers(sources: Product["sync"]["SYNC_SOURCES"]) {
   const expected = new Map<string, number>();
   for (const { table, operations } of sources) {
     for (const operation of operations) {
       const event = operation === "update" || SEPARATE_INSERT_DELETE.has(table) ? operation : "presence";
       const key = `${table}.agent_change_${event}`;
-      expected.set(key, (expected.get(key) ?? 0) | TRIGGER_EVENTS[operation]);
+      expected.set(key, (expected.get(key) ?? (table === "scores" ? 0 : TRIGGER_ROW)) | TRIGGER_EVENTS[operation]);
     }
   }
   return expected;
 }
 
+/** PostgreSQL still captures transition rows for disabled triggers. Off trials drop those triggers from the copy. */
 async function readAgentTriggers(sql: Sql, sources: Product["sync"]["SYNC_SOURCES"]) {
   const expected = expectedTriggers(sources);
-  const triggers = await sql<{ schema: string; function_name: string; key: string; type: number; enabled: string; disable: string }[]>`
+  const triggers = await sql<{ schema: string; function_name: string; key: string; type: number; enabled: string; turn_off: string }[]>`
     select n.nspname as schema, p.proname as function_name, c.relname || '.' || t.tgname as key,
       t.tgtype::int as type, t.tgenabled::text as enabled,
-      format('alter table %I.%I disable trigger %I', n.nspname, c.relname, t.tgname) as disable
+      case when t.tgoldtable is not null or t.tgnewtable is not null
+        then format('drop trigger %I on %I.%I', t.tgname, n.nspname, c.relname)
+        else format('alter table %I.%I disable trigger %I', n.nspname, c.relname, t.tgname)
+      end as turn_off
     from pg_trigger t join pg_class c on c.oid = t.tgrelid
     join pg_namespace n on n.oid = c.relnamespace join pg_proc p on p.oid = t.tgfoid
     where not t.tgisinternal
@@ -91,7 +95,7 @@ async function readAgentTriggers(sql: Sql, sources: Product["sync"]["SYNC_SOURCE
   if (triggers.length !== expected.size) throw new Error(`Expected ${expected.size} agent-change triggers, found ${triggers.length}. Check the template migrations.`);
   for (const trigger of triggers) {
     if (trigger.schema !== "public" || !trigger.function_name.startsWith("agent_changes_") || trigger.enabled !== "O" ||
-        (trigger.type & 1) !== 1 || expected.get(trigger.key) !== (trigger.type & TRIGGER_EVENT_MASK)) {
+        expected.get(trigger.key) !== trigger.type) {
       throw new Error(`Unexpected agent-change trigger ${trigger.schema}.${trigger.key}`);
     }
     expected.delete(trigger.key);
@@ -330,7 +334,7 @@ async function runTrial(admin: Sql, url: URL, template: string, product: Product
       const triggers = await readAgentTriggers(connection.sql, product.sync.SYNC_SOURCES);
       const phases = await prepare(connection);
       if (mode === "off") {
-        for (const trigger of triggers) await connection.sql.unsafe(trigger.disable);
+        for (const trigger of triggers) await connection.sql.unsafe(trigger.turn_off);
       }
       const samples: Trial["phases"] = {};
       const totals: Metrics = { ms: 0, wal_bytes: 0, change_rows: 0 };
