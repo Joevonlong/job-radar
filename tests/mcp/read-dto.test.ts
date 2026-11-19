@@ -45,7 +45,7 @@ describe("read DTO allow-lists", () => {
     }
   });
   it("rejects additional and oversized parameters for every new tool", () => {
-    const ctx = { text: mcpTranslator("en") };
+    const ctx = { text: mcpTranslator("en"), now: () => new Date("2026-11-18T16:30:00Z"), timezone: () => "UTC" };
     for (const [name] of Object.entries(schemas)) {
       const capability = CAPABILITIES.find((entry) => entry.id === name)!;
       const args = name === "get_company" ? { company_id: 1 } : name === "get_application" ? { job_id: 1 } : {};

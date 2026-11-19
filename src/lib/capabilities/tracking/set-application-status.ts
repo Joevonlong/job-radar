@@ -12,12 +12,12 @@ import { researchNotices, trackingWriteAccess, trackingWriteAvailability, writeF
 
 export const trackingJobId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 
-export async function writeApplicationStatus(ctx: McpContext, input: { job_id: number; status?: typeof APPLICATION_STATUSES[number] }) {
+export async function writeApplicationStatus(ctx: McpContext, input: { job_id: number; status?: typeof APPLICATION_STATUSES[number]; applied_at?: Date; reference?: string }) {
   const access = trackingWriteAccess(ctx);
   try {
     const result = await writeWithUndo(ctx.tracking!.writeDb!, { access, registry: applicationUndoKinds, kind: "application_status", target: { type: "job", id: input.job_id } }, async (tx) => {
       const change = input.status === undefined
-        ? await markApplied(tx, { jobId: input.job_id }, access.caller)
+        ? await markApplied(tx, { jobId: input.job_id, appliedAt: input.applied_at, reference: input.reference }, access.caller)
         : await changeApplicationStatus(tx, { jobId: input.job_id, status: input.status }, access.caller);
       if (!change.ok) throw new ToolFailure(change.error, ctx.text(change.error === "not_allowed" ? "errors.markAppliedNotAllowed" : "errors.trackingNotFound"));
       return change;

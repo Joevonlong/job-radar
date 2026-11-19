@@ -307,6 +307,8 @@ function Timeline({ card }: { card: BoardCard }) {
     moved: (from, to) => te("moved", { from, to }),
     stayed: (to) => te("stayed", { to }),
     note: (text) => te("note", { text }),
+    occurredAt: (date) => te("occurredAt", { date }),
+    reference: (reference) => te("reference", { reference }),
     generic: (kind) => te("generic", { kind }),
   });
   return (

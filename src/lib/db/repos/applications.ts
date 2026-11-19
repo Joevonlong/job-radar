@@ -36,6 +36,17 @@ export async function listApplicationEvents(db: Db, applicationId: number, limit
     .limit(limit);
 }
 
+/** Latest entry into applied by write order, even when that event falls outside the displayed history. */
+export async function getLatestAppliedAt(db: Executor, applicationId: number): Promise<Date | null> {
+  const [event] = await db
+    .select({ at: applicationEvents.at, occurredAt: applicationEvents.occurredAt })
+    .from(applicationEvents)
+    .where(and(eq(applicationEvents.applicationId, applicationId), eq(applicationEvents.toStatus, "applied")))
+    .orderBy(desc(applicationEvents.at), desc(applicationEvents.id))
+    .limit(1);
+  return event?.occurredAt ?? event?.at ?? null;
+}
+
 /** Application status per job (jobs without an application are absent from the map). */
 export async function getApplicationStatuses(db: Db, jobIds: readonly number[]): Promise<Map<number, ApplicationStatus>> {
   if (jobIds.length === 0) return new Map();
@@ -57,7 +68,12 @@ export interface StatusChange {
   rejected?: true;
 }
 
-export interface SetStatusOptions {
+interface ApplicationEventDetails {
+  occurredAt?: Date;
+  reference?: string;
+}
+
+export interface SetStatusOptions extends ApplicationEventDetails {
   /** Only move from these statuses (`new` stands for "no application yet"). A button press must not undo "applied". */
   allowFrom?: readonly ApplicationStatus[];
 }
@@ -69,17 +85,19 @@ export interface SetStatusOptions {
  */
 async function createApplication(
   tx: Executor,
-  input: { jobId: number; status: ApplicationStatus; notes?: string | null; note?: string | null },
+  input: { jobId: number; status: ApplicationStatus; notes?: string | null; note?: string | null } & ApplicationEventDetails,
 ): Promise<Application | null> {
   if (await getApplicationByJobId(tx, input.jobId)) return null;
   await lockApplicationCreation(tx, input.jobId);
   const [row] = await tx
     .insert(applications)
-    .values({ jobId: input.jobId, status: input.status, notesMd: input.notes ?? null })
+    .values({ jobId: input.jobId, status: input.status, statusChangedAt: input.occurredAt, notesMd: input.notes ?? null })
     .onConflictDoNothing({ target: applications.jobId })
     .returning();
   if (!row) return null;
-  await tx.insert(applicationEvents).values({ applicationId: row.id, fromStatus: null, toStatus: row.status, note: input.note ?? null });
+  await tx.insert(applicationEvents).values({
+    applicationId: row.id, fromStatus: null, toStatus: row.status, note: input.note ?? null, occurredAt: input.occurredAt, reference: input.reference,
+  });
   if ((PIPELINE_STATUSES as readonly ApplicationStatus[]).includes(input.status)) await wakeDormantJob(tx, input.jobId);
   return row;
 }
@@ -96,7 +114,7 @@ export async function setApplicationStatus(
   note?: string | null,
   options: SetStatusOptions = {},
 ): Promise<StatusChange> {
-  const { allowFrom } = options;
+  const { allowFrom, occurredAt, reference } = options;
   return db.transaction(async (tx) => {
     // an `allowFrom` that excludes `new` must not create the row, so check before the insert
     if (allowFrom && !allowFrom.includes("new")) {
@@ -105,7 +123,7 @@ export async function setApplicationStatus(
         return { previous: current?.status ?? null, status, changed: false, applicationId: current?.id ?? 0, rejected: true };
       }
     }
-    const created = await createApplication(tx, { jobId, status, note });
+    const created = await createApplication(tx, { jobId, status, note, occurredAt, reference });
     if (created) return { previous: null, status, changed: true, applicationId: created.id };
 
     const [existing] = await tx.select().from(applications).where(eq(applications.jobId, jobId)).for("update").limit(1);
@@ -116,9 +134,9 @@ export async function setApplicationStatus(
       return { previous: existing.status, status, changed: false, applicationId: existing.id, rejected: true };
     }
 
-    await tx.update(applications).set({ status, statusChangedAt: sql`now()` }).where(eq(applications.id, existing.id));
+    await tx.update(applications).set({ status, statusChangedAt: occurredAt ?? sql`now()` }).where(eq(applications.id, existing.id));
     if ((PIPELINE_STATUSES as readonly ApplicationStatus[]).includes(status)) await wakeDormantJob(tx, jobId);
-    await tx.insert(applicationEvents).values({ applicationId: existing.id, fromStatus: existing.status, toStatus: status, note: note ?? null });
+    await tx.insert(applicationEvents).values({ applicationId: existing.id, fromStatus: existing.status, toStatus: status, note: note ?? null, occurredAt, reference });
     return { previous: existing.status, status, changed: true, applicationId: existing.id };
   });
 }
@@ -159,8 +177,7 @@ export async function revertApplicationStatus(db: Executor, jobId: number, input
       }
       if (latest && latest.fromStatus === restoreTo && latest.toStatus === movedTo) {
         await tx.delete(applicationEvents).where(eq(applicationEvents.id, latest.id));
-        // the clock of the status it returns to started when the event before this one was written
-        const since = before && before.toStatus === restoreTo ? before.at : app.createdAt;
+        const since = before && before.toStatus === restoreTo ? before.occurredAt ?? before.at : app.createdAt;
         await tx.update(applications).set({ status: restoreTo, statusChangedAt: since }).where(eq(applications.id, app.id));
         if ((PIPELINE_STATUSES as readonly ApplicationStatus[]).includes(restoreTo)) await wakeDormantJob(tx, jobId);
         return { status: restoreTo, reverted: true, changed: true };

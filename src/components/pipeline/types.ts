@@ -11,6 +11,8 @@ export interface BoardEvent {
   from: ApplicationStatus | null;
   to: ApplicationStatus;
   note: string | null;
+  occurredAt: string | null;
+  reference: string | null;
 }
 
 export type CardDate = { iso: string; label: string; full: string } | { pending: true };

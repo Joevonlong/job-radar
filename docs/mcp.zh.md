@@ -23,7 +23,7 @@ Job Radar 可以回答你自己配置的 MCP 客户端（如 Claude Desktop、Cl
 | 分数与排名 | 本机路径（定制简历文件） |
 | 薪酬 / 福利信号及其 JD 引用和位置 | 邮件正文、主题、发件人、引用和邮件标识符 |
 | 经 AI 陷阱清洗的 JD（见下文） | `.env` 和 `.auth/` 里的值、密钥、通知、原始运行载荷、运行记录、配置文件原文 |
-| 你的申请：状态、最近一次变更时间、在该状态停留的天数、下一步及日期、面试轮数、状态历史 | |
+| 你的申请：状态、记录的状态起始时间、在该状态停留的天数、下一步及日期、面试轮数、状态历史 | |
 | 授予 `actions:run` 后：请求 id、状态、时间戳、队列位置、执行器在线状态、安全的结果计数和错误码、采集进度及每日额度元数据 | |
 
 有效 `career:read` 加上 `career.yaml: enabled` 可读取去标识职业档案和文档；有效 `replies:read` 加上 `replies.yaml: enabled` 可读取回信分类及关联申请元数据。两个权限默认都关闭。
@@ -322,7 +322,7 @@ HTTP 工具审计行带 `caller: token`、token id 和 `transport: http`，不�
 | `get_application_context` | **默认关闭。** 写一个岗位答案所需的全部材料（`job_id`）：岗位事实、清洗后的 JD、拆解要点、公司背景和契合要点、问题、每题选中的材料和已保存的版本（最新的在前，每题最多 `max_results` 个）。 |
 | `save_application_answer` | **默认关闭。** 新增一个答案版本（`job_id`、`question_id`、`text`，可选 `sentences`）。 |
 | `set_application_status` | `tracking:write`：将 `job_id` 设为 `status`，需要时创建申请。允许网页状态选择器中的全部状态。 |
-| `mark_applied` | `tracking:write`：将 `job_id` 标为已投递，仅允许从新建、感兴趣、准备中或归档出发；已经投递则不变，更后面的阶段拒绝。 |
+| `mark_applied` | `tracking:write`：将 `job_id` 标为已投递，可选 `applied_at` 和 `reference`。仅允许从新建、感兴趣、准备中或归档出发。已经投递则不变，更后面的阶段拒绝。 |
 | `set_next_action` | `tracking:write`：设置已有申请的 `job_id`、`next_action`、`next_action_date`（`YYYY-MM-DD` 或空值）。 |
 | `set_interview_rounds` | `tracking:write`：设置已有申请的 `job_id` 和 `rounds`，输入上限与网页一致。 |
 | `undo_change` | `tracking:write`：用 `audit_id` 撤销当前调用方自己的修改，规则见下文。 |
@@ -344,6 +344,11 @@ HTTP 工具审计行带 `caller: token`、token id 和 `transport: http`，不�
 | `match` | `match:read` | 自动：摘要、AI 分数、德语扣分、评分时间、过期标记、匹配理由 / 差距引用、过滤原因、硬性筛选与签证证据、技能 / 德语 / 薪资检查；没有评分时为 null |
 | `tracking` | `tracking:read` | 自动（默认权限也包含）：申请状态 / 历史 / 下一步 / 日期 / 轮数、收藏时间、已读标记、关闭动作 / 链接检查结果和过滤覆盖；不含备注 |
 | `notes` | `notes:read` | 自动：清洗后的申请备注、事件备注和收藏备注；事件备注只在 `tracking:read` 同时有效时带 `from` / `to` 状态，否则只有正文和时间；不含关闭备注 |
+
+`get_application` 和 `get_job` 的 `tracking.application.history[]` 按写入时间 `at` 从新到旧排列。
+每条事件带有 `occurred_at` 和 `reference`，未填写的字段为 `null`。回执编号经过文本清洗。
+`tracking.application.applied_at` 取最新一条转为 `applied` 的事件的 `occurred_at`，
+缺省时取该事件的 `at`。从未进入 `applied` 则为 `null`。
 
 JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查询内容，以及 `match` 块里 AI 写的摘要、匹配理由和差距一起扣留，并给出与 JD 一致的原因（此时 `match` 的 `available` 为 false，分数、过滤结果和三项检查照常给出）；未存储的研究或查询仍为 null。JD 引用沿用陷阱标记，职位拆解条目、匹配理由或差距的引用被标记替换时，其正文 / 名称也使用同一标记。所有文字（包括摘要、理由和备注）都经过清洗。含 AI 指令的来源链接变成 null。返回衍生内容时，在第三方提示之后追加说明；扣留多个块也只追加一条扣留提示。
 
@@ -409,6 +414,13 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 四个工具调用网页使用的同一组服务。成功回执仅含 `audit_id`、`job_id`、`field`、`undoable`、`research` 和提示，不回显新旧文字。
 空白下一步文字会清除文字；空值或空日期字符串会清除日期。状态变化保留备注、追加事件，并按网页规则唤醒休眠岗位。
 本版本不提供备注、收藏、已看、关闭、过滤覆盖或回信的写工具。
+
+`mark_applied` 的可选参数 `applied_at` 接受 ISO 日期（`YYYY-MM-DD`）或包含秒和 UTC 偏移（`Z` 或数字偏移）的
+ISO 日期时间，例如 `2026-11-12T09:30:00+01:00`。日期取 `schedule.yaml` 时区当天的起始时刻。
+解析后的时间须介于 `1970-01-01T00:00:00Z` 和当前时刻之间（含两端）。日期 `1970-01-01` 在 UTC 时区有效，
+在当天起始时刻的 UTC 偏移为正的时区则会早于下限。可选参数 `reference` 去掉首尾空白后须有 1 到 200 个字符。
+参数不合法时（包括回执编号内含空字符）返回输入校验错误。状态计时 `status_changed_at` 优先取 `applied_at`，缺省时取写入时间。
+事件的 `at` 始终记录写入时间。
 
 `undo_change` 接收写入的 `audit_id`，要求同一调用方且仍有原数据区的写权限。服务锁定并计算当前字段指纹，
 与写入后的指纹不同时返回冲突，不还原；其他字段保持不变。状态指纹还包括状态时间和最新事件，避免“改走再改回”掩盖后续历史。

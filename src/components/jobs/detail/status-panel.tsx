@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 
 import { saveApplicationNotesAction as rawSaveApplicationNotesAction, setApplicationStatusAction as rawSetApplicationStatusAction } from "@/app/jobs/[id]/actions";
+import { eventDetailsLines } from "@/components/pipeline/timeline-lines";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +27,8 @@ export interface HistoryEntry {
   from: ApplicationStatus | null;
   to: ApplicationStatus;
   note: string | null;
+  occurredAt: string | null;
+  reference: string | null;
 }
 
 /**
@@ -190,9 +193,17 @@ interface StatusPanelProps {
 export function StatusPanel({ jobId, status, notes, history, firstSeen }: StatusPanelProps) {
   const t = useTranslations("dashboard.detail.status");
   const tStatus = useTranslations("dashboard.status");
+  const tEvent = useTranslations("pipeline.event");
+  const detailLabels = {
+    occurredAt: (date: string) => tEvent("occurredAt", { date }),
+    reference: (reference: string) => tEvent("reference", { reference }),
+  };
   // newest first, like a terminal log: status changes in amber, the first sighting dim
   const lines: TermLine[] = [
-    ...history.map((entry): TermLine => ({ prefix: entry.when, tone: "amber", text: `${entry.from ? `${tStatus(entry.from)} → ` : "→ "}${tStatus(entry.to)}${entry.note ? ` · ${entry.note}` : ""}` })),
+    ...history.flatMap((entry): TermLine[] => [
+      { prefix: entry.when, tone: "amber", text: `${entry.from ? `${tStatus(entry.from)} → ` : "→ "}${tStatus(entry.to)}${entry.note ? ` · ${entry.note}` : ""}` },
+      ...eventDetailsLines(entry, detailLabels),
+    ]),
     ...(firstSeen ? [{ prefix: firstSeen, tone: "dim", text: t("firstSeen") } satisfies TermLine] : []),
   ];
 

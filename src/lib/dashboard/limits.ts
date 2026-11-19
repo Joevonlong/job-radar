@@ -7,6 +7,12 @@ export const NEXT_ACTION_MAX_CHARS = 200;
 /** Most interview rounds the pipeline board's counter goes up to. */
 export const INTERVIEW_ROUNDS_MAX = 20;
 
+/** Longest reference stored with an application event. */
+export const APPLIED_REFERENCE_MAX = 200;
+
+/** Earliest application instant accepted from a caller. */
+export const APPLIED_AT_MIN = "1970-01-01T00:00:00Z";
+
 /** A signal quote longer than this is shortened on the detail page until "expand" is clicked (about two lines). */
 export const QUOTE_CLAMP_CHARS = 110;
 

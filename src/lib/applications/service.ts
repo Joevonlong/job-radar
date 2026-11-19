@@ -26,9 +26,9 @@ export async function changeApplicationStatus(db: Executor, input: { jobId: numb
   return changedStatus(db, input.jobId, await setApplicationStatus(db, input.jobId, input.status), caller);
 }
 
-export async function markApplied(db: Executor, input: { jobId: number }, caller: AgentCaller | undefined): Promise<ApplicationStatusResult> {
+export async function markApplied(db: Executor, input: { jobId: number; appliedAt?: Date; reference?: string }, caller: AgentCaller | undefined): Promise<ApplicationStatusResult> {
   if (!(await jobExists(db, input.jobId))) return { ok: false, error: "not_found" };
-  const change = await setApplicationStatus(db, input.jobId, "applied", null, { allowFrom: MARK_APPLIED_FROM });
+  const change = await setApplicationStatus(db, input.jobId, "applied", null, { allowFrom: MARK_APPLIED_FROM, occurredAt: input.appliedAt, reference: input.reference });
   return changedStatus(db, input.jobId, change, caller);
 }
 

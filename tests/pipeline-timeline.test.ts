@@ -12,10 +12,13 @@ const labels: TimelineLabels = {
   moved: (from, to) => `${from} -> ${to}`,
   stayed: (to) => `still ${to}`,
   note: (text) => `note: ${text}`,
+  occurredAt: (date) => `Applied on ${date}`,
+  reference: (reference) => `Reference ${reference}`,
   generic: (kind) => `event (${kind})`,
 };
 
-const event = (id: number, from: BoardEvent["from"], to: BoardEvent["to"], note: string | null = null): BoardEvent => ({ id, when: "Oct 8", from, to, note });
+const event = (id: number, from: BoardEvent["from"], to: BoardEvent["to"], note: string | null = null): BoardEvent =>
+  ({ id, when: "Oct 8", from, to, note, occurredAt: null, reference: null });
 
 describe("timelineLines", () => {
   it("says what happened on every line, oldest first, the newest amber", () => {
@@ -29,10 +32,24 @@ describe("timelineLines", () => {
     expect(eventKindOf(event(1, null, "new"))).toBe("created");
     expect(eventKindOf(event(1, "new", "applied"))).toBe("moved");
     expect(eventKindOf(event(1, "applied", "applied"))).toBe("stayed");
-    const broken = { id: 9, when: "Oct 8", from: null, to: undefined as unknown as BoardEvent["to"], note: "  " };
+    const broken = { ...event(9, null, "new", "  "), to: undefined as unknown as BoardEvent["to"] };
     const lines = timelineLines([broken, event(2, "applied", "applied", "x")], labels);
     expect(lines.map((l) => l.text)).toEqual(["still [applied]", "note: x", "event (unknown)"]);
     for (const line of lines) expect(line.text.trim()).not.toBe("");
+  });
+
+  it.each([
+    { occurredAt: "Oct 1", reference: null, detail: "Applied on Oct 1" },
+    { occurredAt: null, reference: "receipt-17", detail: "Reference receipt-17" },
+    { occurredAt: "Oct 1", reference: "receipt-17", detail: "Applied on Oct 1 · Reference receipt-17" },
+  ])("adds one dim detail line for $detail without moving the event", ({ occurredAt, reference, detail }) => {
+    const applied = { ...event(2, "interested", "applied", "Sent CV"), occurredAt, reference };
+    expect(timelineLines([applied, event(1, null, "interested")], labels)).toEqual([
+      { prefix: "Oct 8", text: "created [interested]", tone: "ink" },
+      { prefix: "Oct 8", text: "[interested] -> [applied]", tone: "amber" },
+      { text: detail, tone: "dim", wrap: true },
+      { text: "note: Sent CV", tone: "dim" },
+    ]);
   });
 
   it("has no lines for no events", () => {

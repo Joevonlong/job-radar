@@ -67,7 +67,7 @@ function card(id: number, company: string, status: ApplicationStatus, over: Part
     nextActionDateLabel: null,
     notes: "",
     interviewRounds: 0,
-    events: [{ id: id * 10, when: "Oct 7, 2026, 12:00", from: null, to: status, note: null }],
+    events: [{ id: id * 10, when: "Oct 7, 2026, 12:00", from: null, to: status, note: null, occurredAt: null, reference: null }],
     ...over,
   };
 }

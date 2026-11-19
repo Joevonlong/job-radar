@@ -19,10 +19,11 @@ export async function toBoardCards(
   const { now, timezone, thresholds } = options;
   const [items, format] = await Promise.all([toListItems(entries.map((e) => e.job), { now, timezone, ...(options.visa === undefined ? {} : { visa: options.visa }) }), getFormatter()]);
 
+  const absolute = (date: Date) => format.dateTime(date, { dateStyle: "medium", timeStyle: "short", timeZone: timezone });
   const cardDate = (date: Date): CardDate => ({
     iso: date.toISOString(),
     label: formatEventDate(format, date, now, timezone),
-    full: format.dateTime(date, { dateStyle: "medium", timeStyle: "short", timeZone: timezone }),
+    full: absolute(date),
   });
   return entries.map((entry, index) => {
     const { application } = entry;
@@ -47,10 +48,12 @@ export async function toBoardCards(
       pendingReplies: options.pendingReplies?.get(application.jobId) ?? 0,
       events: entry.events.map((event) => ({
         id: event.id,
-        when: format.dateTime(event.at, { dateStyle: "medium", timeStyle: "short", timeZone: timezone }),
+        when: absolute(event.at),
         from: event.fromStatus,
         to: event.toStatus,
         note: event.note,
+        occurredAt: event.occurredAt ? absolute(event.occurredAt) : null,
+        reference: event.reference,
       })),
     };
   });

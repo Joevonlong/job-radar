@@ -166,8 +166,10 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const applyTarget = pickApplyTarget(job.sources, loadTargetPlaces());
   const applyUrl = applyTarget ? safeHttpUrl(postingLink(applyTarget)) : null;
   const status = effectiveStatus(job.application?.status ?? null);
-  // when it was marked applied: the newest `→ applied` event (events come newest first), else the status clock; a string, it crosses to client components
-  const appliedAt = status === "applied" ? (job.applicationEvents.find((e) => e.toStatus === "applied")?.at ?? job.application?.statusChangedAt ?? null) : null;
+  const appliedEvent = job.applicationEvents.find((event) => event.toStatus === "applied");
+  const appliedAt = status === "applied"
+    ? appliedEvent?.occurredAt ?? appliedEvent?.at ?? job.application?.statusChangedAt ?? null
+    : null;
   const appliedOn = appliedAt ? format.dateTime(appliedAt, { month: "short", day: "numeric", timeZone: timezone }) : null;
   // AI texts carry their own language; the ones not in the interface language get a tag, never a translation
   const outputLang = job.score?.outputLang ?? null;
@@ -188,6 +190,8 @@ export default async function JobDetailPage({ params }: { params: Params }) {
     from: e.fromStatus,
     to: e.toStatus,
     note: e.note,
+    occurredAt: e.occurredAt ? absolute(e.occurredAt) : null,
+    reference: e.reference,
   }));
 
   // ---- v3: score card, salary card, checks (thresholds and scales come from the config files)
