@@ -18,6 +18,7 @@ import type { Executor } from "@/lib/db/executor";
 import { quietLogger } from "../cycle/helpers";
 import { pipelineWith } from "../pipeline/helpers";
 import { addJob, addSource, ago, dormancy, marker, NOW } from "./dormant-fixture";
+import { dropAgentChangeTriggers } from "./schema-probe";
 
 beforeAll(() => { process.env.DATABASE_URL = inject("testDatabaseUrl"); resetDormancyCache(); });
 afterAll(closeDb);
@@ -205,6 +206,7 @@ it("keeps reads, user writes and runner writes working before both columns exist
   resetDormancyCache();
   try {
     await expect(getDb().transaction(async (tx) => {
+      await dropAgentChangeTriggers(tx, "jobs");
       await tx.execute(sql`alter table jobs drop column dormant_at, drop column possibly_closed_at`);
       expect(await dormancyReady(tx)).toBe(false);
       expect((await listJobs(tx, { filters: {}, sort: "rank", page: 1, pageSize: 50, timezone: "UTC" })).total).toBe(6);

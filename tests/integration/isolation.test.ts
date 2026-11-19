@@ -12,7 +12,9 @@ describe("integration database isolation", () => {
     await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
     const sql = postgres(url, { max: 1, onnotice: () => {} });
     try {
-      const tables = await sql<{ table_name: string }[]>`select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'`;
+      const tables = await sql<{ table_name: string }[]>`
+        select table_name from information_schema.tables
+        where table_schema = 'public' and table_type = 'BASE TABLE' and table_name <> 'agent_change_log'`;
       expect(tables.length).toBeGreaterThan(20);
       const filled: string[] = [];
       for (const { table_name } of tables) {
@@ -20,6 +22,7 @@ describe("integration database isolation", () => {
         if (row && row.n > 0) filled.push(`${table_name}=${row.n}`);
       }
       expect(filled).toEqual([]);
+      expect(await sql`select 1 from public.agent_change_log`).toHaveLength(1);
     } finally {
       await sql.end({ timeout: 5 });
     }
