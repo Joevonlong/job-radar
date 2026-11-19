@@ -4,6 +4,7 @@ All notable changes to Job Radar are documented here. The format follows [Keep a
 and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+- **Sync applications and favorites through MCP.** `list_application_changes` offers a snapshot and incremental changes with `tracking:read`. `notes:read` also enables application, event and favorite notes. Clients can reconcile both sync feeds by generation. See [Incremental sync](docs/mcp.md#incremental-sync).
 - **Sync jobs through MCP.** `list_job_changes` pages through the full job catalog, then returns changes and removals by job ID. `mcp.yaml` sets the default and maximum page size with `sync.max_batch` (default 50). Existing files need no migration. Remove `max_batch` from user overrides before rolling back to a version that predates it.
 - **Reset the agent change log after a database restore.** `restore.sh` resets it automatically. After recovering a physical database copy, run `pnpm mcp:sync-reset --yes`. The runner prunes the log daily using `mcp.yaml`'s `sync.retention_days` (default 30 days). Existing config files need no migration. Remove the `sync` block from any user override before rolling back to a version that predates it. See [Backup and restore](docs/backup-restore.md).
 - **Record past applications through MCP.** `mark_applied` accepts the actual application date or time and a receipt reference, both visible in application history. Pipeline cards and job details also show the reported application date.

@@ -361,6 +361,7 @@ URL; restrict that role only if it can still perform the web's required operatio
 |---|---|
 | `search_jobs` | Ranked job cards, filtered like the jobs list: `query` (title, company name/aliases, city/location and country), `search_in` (`summary` by default; `all` adds the original JD and current translations), `country` (1–20 two-letter exact codes, case-insensitive, OR), `city`, `workplace`, `min_rank`, `min_annual_salary` (in the market's base currency), `since` / `until` (first seen, `YYYY-MM-DD`), `application_status` (needs `tracking:read`; without it a call that sets it is refused as `not_permitted`), `sort` (`relevance`, `rank`, `posted`, `first_seen`; default `relevance` with a query, `rank` without one), `scope` (`current` by default, `archive`, `all`), `unseen_only` and `favorites_only` (both need `tracking:read`; without it a call that sets either to `true` is refused as `not_permitted`), `visa` (`offered`, `not_denied`), `ghost` (`only`, `hide`), `limit`. Hard-filtered jobs stay hidden in every scope; current scope also hides closed and dormant jobs. Visa and ghost filters apply only when their web filters are available. No JD text. |
 | `get_job` | One job (`job_id`) in detail: everything above plus seniority, language, the signals with their quotes, the number of AI traps found, your application and the closure reason (both only with `tracking:read`), and the cleaned JD. |
+| `list_job_changes` | `jobs:read` gives a full job snapshot, then incremental changes and removals. See [Incremental sync](#incremental-sync). |
 | `get_job_raw` | **Off by default; `raw:read` only.** `job_id`: source channel id, URL, fetch time (ISO), parse status/error and raw JSON payload string for each source, newest fetch first (raw id descending breaks ties). No source payloads returns an empty list; unknown job returns `not_found`. |
 | `list_applications` | `tracking:read`: applications, best rank first; `status`, `stale_only`, `limit`. Stale uses `notify.yaml: reminders.interested_days` / `applied_days`, longest waiting first. Effective `notes:read` adds each item’s `notes.application_notes`; without it the existing field set stays unchanged. |
 | `get_profile` | **Off by default; `profile:read`.** Selected profile sections and their web form `baseHash`. |
@@ -373,6 +374,7 @@ URL; restrict that role only if it can still perform the web's required operatio
 | `get_insights` | `jobs:read`: page statistics for `range` days (must be in `insights.yaml: ranges_days`; omitted uses the configured default), optional `limit`. Includes daily/source counts, salary and score histograms, signals and conversion counts. `profile:read` adds cities and configured signal categories. `tracking:read` adds application/funnel totals; `match:read` adds filter-reason counts. Personal salary floor and page navigation links are excluded. |
 | `get_application` | `tracking:read`: application by `job_id`, with status, dates, next action, rounds, history, favorite/seen state, closure and filter override. `notes:read` adds application and event notes. Optional `limit` caps history and event notes; no closure note or résumé path. |
 | `list_favorites` | `tracking:read`: all starred jobs, including closed, filtered and ignored ones. `sort`: `starred` (default, newest first) or `rank`; optional `limit`. `notes:read` adds each item’s `notes.favorite_note`. |
+| `list_application_changes` | `tracking:read` gives a snapshot of applications and favorites, then incremental changes and removals. See [Incremental sync](#incremental-sync). |
 | `get_application_context` | **Off by default.** Everything to write one job's answers (`job_id`): job facts, the cleaned JD, breakdown points, the company background and fit note, the questions, the material chosen for each and the saved versions (newest first, at most `max_results` per question). |
 | `save_application_answer` | **Off by default.** Adds one answer version (`job_id`, `question_id`, `text`, optional `sentences`). |
 | `set_application_status` | `tracking:write`: sets `job_id` to `status`, creating its application if needed. All web-selectable statuses are allowed. |
@@ -417,6 +419,100 @@ List answers report `total`, `returned` and `truncated`. In `get_company` these 
 Job titles, company names, aliases, domains, locations, source labels and links are cleaned independently of trap scans. `list_applications` keeps these fields and its existing response without notes permission. In `get_company`, only research text requires a current, readable, enabled trap scan for the posting that produced the research. If that check fails, research text is null and its availability/reason explains why; company facts, cleaned source links and job cards remain available. These tools return no raw payloads and require no `raw:read`.
 
 Saved views in `get_today` require `profile:read`, whether explicit or default. Without it, no default view is applied or returned; an explicit saved view is refused as `not_permitted` (`view: "all"` remains available). With permission, an omitted view uses the default only when no toggle was supplied. A resolved view containing an application-status filter also requires `tracking:read`; otherwise the entire call is refused as `not_permitted` before querying jobs. `get_insights` omits `cities` and `signals.categories` without `profile:read`, since these rows include configured target cities and interest names, including zero-match categories. Other job-derived statistics remain available. For the same reason `list_companies` and `get_company` leave out `watched` and `blacklisted` without `profile:read`: they come from your watched companies and your company blacklist. The default permissions do not include `profile:read`, so by default these two fields are absent.
+
+## Incremental sync
+
+`list_job_changes` starts with all jobs, including archived and hard-filtered jobs. `list_application_changes` starts
+with all current applications and favorites. Both tools work over stdio and HTTP with their effective read permission.
+
+Both accept optional `cursor`, `limit` and `blocks`. Edit `sync` in `mcp.yaml` (Settings → Advanced or
+`data/config/mcp.yaml`). `sync.max_batch` is both the default `limit` and the maximum page size (50 by default,
+integer 1–200). `sync.retention_days` sets how many days of change rows the runner retains (30 by default,
+integer 1–365). The runner prunes the log daily.
+
+- `list_job_changes` always includes the base `job` block. Its application fields (`application_status`,
+  `closed_reason` and `application`) appear only when `tracking` is selected and granted. Omit `blocks` for the
+  default `get_job` blocks at your permissions. The block table above lists the optional blocks.
+- `list_application_changes` accepts `app` and `fav` for the base application and favorite fields, and `app.notes`
+  and `fav.notes` with `notes:read`. Omit `blocks` for `app` and `fav` plus the notes blocks when granted, matching
+  the defaults of `get_application` and `list_favorites`. A returned item carries its base fields, including in the
+  snapshot. Select `app` and `fav` to follow later changes to both sets of base fields.
+
+An unknown block causes an input validation error. For a new snapshot, every selected block must be within your effective
+permissions. A cursor binds the selected blocks and relevant grants. In the changes phase, a log row must affect at least
+one selected, granted block to count toward a result, `has_more`, `held_back` or `changed_at`. For instance, a notes edit
+is invisible to a caller that excludes the relevant notes block or lacks `notes:read`.
+
+### Keep a copy up to date
+
+Successful replies include `items`, `next_cursor`, `generation`, `phase`, `snapshot_complete`, `has_more`, `held_back`
+and `notices` in `structuredContent`. Job items have `job_id`, `removed`, `changed_at` and a `job` payload with the
+`get_job` blocks. Tracking items add `kind` (`application` or `favorite`) and carry the matching `application` or
+`favorite` payload. Those payloads use the same fields as `get_application` or a single `list_favorites` item, with
+notices reported on the page. The sync `limit` controls how many entities fit on a page. Nested lists in tracking
+items use `limits.max_results`.
+
+1. **Start a snapshot.** Omit `cursor` or pass `null`. The response has `phase: "snapshot"`, a new `generation` and
+   `null` for `held_back` and each item's `changed_at`. Store the `generation` and tag each record you upsert with it.
+   Call the same tool with `next_cursor` and the same block selection until the response has `snapshot_complete: true`.
+2. **Reconcile generations.** Apply the final snapshot page, then delete records for this feed whose generation
+   differs from the one you just stored. This clears records whose removal no longer appears in the log.
+3. **Follow changes.** Use the last `next_cursor` to enter `phase: "changes"`. Continue paging while `has_more` is true,
+   then poll again later. Save each successful `next_cursor` after applying its page, including when the page is
+   empty. Tag updated records with the same `generation`. Cursors work across MCP process restarts against the same
+   change log.
+
+Delivery is at least once. Each item describes the entity's current state, so several writes can lead to one item and
+the same item can appear on later pages. Upsert jobs by `job_id` and tracking records by `(job_id, kind)`. If `removed`
+is `true`, the payload is `null`. Delete that key from your copy. In the changes phase, `changed_at` is the latest
+timestamp from the selected change rows consumed for that item. Third-party text uses the same cleaning, notices and JD
+availability rules as the regular readers. The sync tools expose no raw posting payloads.
+
+A long local write transaction can pause delivery while it holds an older transaction ID. `held_back` counts committed
+change rows visible to this feed that must wait for the older transaction to finish. Poll with `next_cursor` again once
+that happens. To find a blocking transaction, check the oldest `backend_xid` in `pg_stat_activity`. Empty polls leave
+the change log untouched. MCP call audit and HTTP token last-use bookkeeping still happen as for other calls.
+
+### Changes outside the feed
+
+- **Heartbeat updates.** `jobs.last_seen_at`, `jobs.last_listed_at`, `jobs.link_checked_at`, the check timestamp in
+  `jobs.link_check_json`, `job_ghost.checked_at`, `job_visa.checked_at` and `job_current_scores.refreshed_at` are not
+  logged when only the heartbeat changed. Exported timestamps reflect what the tool reads when it returns an item.
+- **Configuration changes.** Profile skills, German level, salary floor, deal-breakers, visa needs, trap-rule fingerprint,
+  role families, trusted sources, `channels.family` and benchmark currency can change what the tool reads without a log
+  entry. Start a fresh snapshot periodically to pick up those changes.
+- **Clock-derived values.** Time passing creates no change row. The `company` and `salary.lookup` blocks give `expires_at`
+  in place of `expired`. The `salary` block omits `company_figures` because those figures use a moving time window.
+  Application items give `status_changed_at` for calculating time in status and omit `days_in_status`.
+
+### Read errors and recover
+
+Errors have `isError: true` and one `content` entry of type `text`. The text is localized and there is no
+`structuredContent` or separate error code. Match the literal prefix, which stays the same across languages for sync
+errors. Parentheses in `resync_required` contain the reason.
+
+| Exact English text | Caller action |
+|---|---|
+| `invalid_cursor: The sync cursor is malformed or could not be authenticated. Start again without a cursor.` | Drop the cursor and start a fresh snapshot. |
+| `resync_required (pruned): The change log no longer covers this cursor. Start again without a cursor.` | Drop the cursor and start a fresh snapshot. |
+| `resync_required (log_reset): The change log was reset. Start again without a cursor.` | Drop the cursor and start a fresh snapshot. |
+| `resync_required (scope_changed): The sync tool, blocks, permissions, or data format changed. Start again without a cursor.` | Drop the cursor and start a fresh snapshot under the current scope. |
+| `sync_unavailable: The change log identity could not be verified.` | Retry after the database identity can be verified. |
+| `Input validation error: limit must be between 1 and {max}.` | Send a `limit` within the current `sync.max_batch`. |
+| `Input validation error: Block {block} requires {permission}.` | Choose a block your connection may read. |
+
+The SDK also uses the prefix `Input validation error:` for invalid parameter shapes and unknown block names. A cursor
+type error from the SDK contains `invalid_cursor:` inside that validation text. For the two input messages above,
+`{max}`, `{block}` and `{permission}` are replaced with the applicable value.
+
+If sync reports `sync_unavailable`, check that the runner has completed migrations and verified the log identity. A
+restricted database role needs `SELECT` on the change log tables and `EXECUTE` on `pg_catalog.pg_control_system()`.
+If that function's access was revoked, a database administrator can restore it for the read role with
+`GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO job_radar_ro`.
+The owner can run `pnpm mcp:sync-reset --yes` against the intended database to clear the log and rotate its identity and
+cursor key. `scripts/ops/restore.sh` resets the log on restored databases. A physical copy (data volume, `pg_basebackup`
+or filesystem snapshot) preserves the identifiers, so run the reset on the copy before reconnecting clients. See
+[Backup and restore](backup-restore.md).
 
 ## Raw-posting permission (`raw:read`)
 

@@ -307,6 +307,7 @@ HTTP 工具审计行带 `caller: token`、token id 和 `transport: http`，不�
 |---|---|
 | `search_jobs` | 按排名返回岗位卡片，过滤方式和岗位列表一样：`query`（标题、公司名与别名、城市/地点和国家）、`search_in`（默认 `summary`；`all` 加搜原始 JD 和有效译文）、`country`（1–20 个两字母国家代码，不区分大小写、精确匹配，OR）、`city`、`workplace`、`min_rank`、`min_annual_salary`（市场基准货币）、`since` / `until`（首次发现日期，`YYYY-MM-DD`）、`application_status`（需要 `tracking:read`；没有时，设置它的调用按 `not_permitted` 拒绝）、`sort`（`relevance`、`rank`、`posted`、`first_seen`；有 query 默认 relevance，无 query 默认 rank）、`limit`。始终隐藏硬过滤排除的岗位；默认范围还隐藏关闭和休眠岗位，范围等新增参数见下文。不含 JD 正文。 |
 | `get_job` | 一个岗位（`job_id`）的详情：上面所有字段，加上资历、语言、带引用的信号、发现的 AI 陷阱数量、你的申请和关闭原因（这两项只在有 `tracking:read` 时给出），以及清洗后的 JD。 |
+| `list_job_changes` | `jobs:read` 提供完整岗位快照，随后返回变更和移除。见[增量同步](#增量同步)。 |
 | `get_job_raw` | **默认关闭，仅需 `raw:read`。** 参数 `job_id`：返回各来源的渠道 id、URL、ISO 抓取时间、解析状态/错误和原始 JSON 载荷字符串，按抓取时间倒序，同时间按原始记录 id 倒序。没有来源载荷时返回空列表；未知岗位返回 `not_found`。 |
 | `list_applications` | 你的申请，排名高的在前；`status` 过滤；`stale_only: true` 只列超过每日提醒阈值（`notify.yaml: reminders.interested_days` / `applied_days`）还没动静的，等得最久的在前。有效 `notes:read` 增加每项的 `notes.application_notes`；没有它时原字段集合不变。 |
 | `get_profile` | **默认关闭；`profile:read`。** 所选画像部分及网页表单的 `baseHash`。 |
@@ -319,6 +320,7 @@ HTTP 工具审计行带 `caller: token`、token id 和 `transport: http`，不�
 | `get_insights` | `jobs:read`：`range` 为 `insights.yaml: ranges_days` 提供的天数，省略用配置默认值；可选 `limit`。包含每日、来源、薪资和分数直方图、信号及转化统计。`profile:read` 增加城市和配置的信号类别。`tracking:read` 增加申请与漏斗汇总，`match:read` 增加过滤原因统计。不含个人薪资底线数值和页面跳转链接。 |
 | `get_application` | `tracking:read`：按 `job_id` 读取申请状态、日期、下一步、轮数、历史、收藏和已读、关闭与过滤覆盖。`notes:read` 增加申请和事件备注。可选 `limit` 限制历史和事件备注；不给关闭备注或简历路径。 |
 | `list_favorites` | `tracking:read`：全部收藏岗位，含已关闭、被过滤和忽略的岗位。`sort` 为默认的 `starred`（最新优先）或 `rank`，可传 `limit`；`notes:read` 增加每项的 `notes.favorite_note`。 |
+| `list_application_changes` | `tracking:read` 提供申请和收藏的快照，随后返回变更和移除。见[增量同步](#增量同步)。 |
 | `get_application_context` | **默认关闭。** 写一个岗位答案所需的全部材料（`job_id`）：岗位事实、清洗后的 JD、拆解要点、公司背景和契合要点、问题、每题选中的材料和已保存的版本（最新的在前，每题最多 `max_results` 个）。 |
 | `save_application_answer` | **默认关闭。** 新增一个答案版本（`job_id`、`question_id`、`text`，可选 `sentences`）。 |
 | `set_application_status` | `tracking:write`：将 `job_id` 设为 `status`，需要时创建申请。允许网页状态选择器中的全部状态。 |
@@ -365,6 +367,86 @@ JD 未通过安全检查时，翻译、职位拆解、公司研究、薪资查�
 职位名、公司名、别名、域名、地点、来源标签和链接独立清理，不依赖陷阱扫描。`list_applications` 在没有备注权限时保持这些字段和原有回答。`get_company` 仅对研究文本检查生成该研究的岗位是否有当前、可读且启用的陷阱扫描；检查失败时研究文字为 null，并说明不可用原因，公司事实、经过清理的来源链接和岗位卡片仍正常提供。这些工具不返回原始载荷，不依赖 `raw:read`。
 
 `get_today` 的显式和默认保存视图都要求 `profile:read`。没有该权限时不应用也不返回默认视图；显式保存视图以 `not_permitted` 拒绝（`view: "all"` 仍可用）。有权限时，仅在未传任何开关且省略 view 时采用默认视图。解析出的视图若含申请状态筛选，还必须有 `tracking:read`；否则在查询岗位前以 `not_permitted` 拒绝整次调用。`get_insights` 的 `cities` 和 `signals.categories` 包含配置的目标城市、兴趣名称及零匹配类别，没有 `profile:read` 时省略这两块，其余岗位统计仍可提供。同样的原因，没有 `profile:read` 时 `list_companies` 和 `get_company` 不给 `watched` 和 `blacklisted`：它们来自你的关注公司和公司黑名单。默认权限不含 `profile:read`，所以默认没有这两个字段。
+
+## 增量同步
+
+`list_job_changes` 从全部岗位开始，包括历史岗位和被硬条件筛掉的岗位。`list_application_changes` 从当前全部申请和收藏开始。
+两个工具都可通过 stdio 和 HTTP 调用，需要各自的有效读权限。
+
+两个工具都接受可选参数 `cursor`、`limit` 和 `blocks`。在 `mcp.yaml` 中编辑 `sync`（设置 → 高级，或
+`data/config/mcp.yaml`）。`sync.max_batch` 同时是 `limit` 的默认值和每页上限（默认 50，整数范围 1–200）。
+`sync.retention_days` 指定变更行保留天数（默认 30，整数范围 1–365），runner 每天清理一次。
+
+- `list_job_changes` 始终包含基础 `job` 块。其中的申请字段（`application_status`、`closed_reason` 和 `application`）
+  仅在选中且有权读取 `tracking` 时提供。省略 `blocks` 时，使用 `get_job` 在当前权限下的默认块。可选块见上面的字段块表。
+- `list_application_changes` 的 `app` 和 `fav` 分别对应申请和收藏的基础字段。`app.notes` 和 `fav.notes` 需要 `notes:read`。
+  省略 `blocks` 时，使用 `app` 和 `fav`，并在有权限时加入两个备注块，与 `get_application` 和 `list_favorites` 的默认输出一致。
+  每个返回项都带有自己的基础字段，快照也一样。要跟进两类基础字段的后续变化，请选中 `app` 和 `fav`。
+
+未知的块会触发参数校验错误。开始新快照时，所选块必须在有效权限内。游标绑定所选块及相关权限。
+在变更阶段，一行日志必须影响至少一个已选且有权读取的块，才会计入返回项、`has_more`、`held_back` 或 `changed_at`。
+例如，调用方没选对应的备注块或没有 `notes:read` 时，备注变更不可见。
+
+### 更新本地副本
+
+成功响应的 `structuredContent` 包含 `items`、`next_cursor`、`generation`、`phase`、`snapshot_complete`、
+`has_more`、`held_back` 和 `notices`。岗位项包含 `job_id`、`removed`、`changed_at` 和装有 `get_job` 字段块的 `job` 内容。
+申请和收藏项还带 `kind`（`application` 或 `favorite`），内容分别放在 `application` 或 `favorite` 内，
+与 `get_application` 或 `list_favorites` 的单项字段一致，提示文字放在整页的 `notices` 里。
+同步的 `limit` 控制每页实体数量。申请和收藏项里的嵌套列表受 `limits.max_results` 限制。
+
+1. **开始快照。** 省略 `cursor` 或传 `null`。响应的 `phase` 是 `"snapshot"`，带有新的 `generation`，
+   `held_back` 和各项的 `changed_at` 都为 `null`。保存 `generation`，给写入或更新的记录标上这一代。
+   用 `next_cursor` 和同一组字段块继续调用同一个工具，直到收到 `snapshot_complete: true`。
+2. **代际对账。** 先写入快照最后一页，再删除本同步流中属于其他代的记录。这样能清掉移除记录已从日志清理的旧数据。
+3. **跟进变更。** 用最后的 `next_cursor` 进入 `phase: "changes"`。`has_more` 为 `true` 时继续翻页，
+   读完后隔一段时间再轮询。处理完每页后保存 `next_cursor`，空页也一样，并给之后更新的记录标上同一个 `generation`。
+   只要连接同一变更日志，MCP 进程重启后也能继续使用游标。
+
+变更至少送达一次。每项描述读取时的当前状态，多次写入可能合为一项，同一项也可能在后续页重复出现。
+按 `job_id` 写入或更新岗位，按 `(job_id, kind)` 写入或更新申请和收藏。`removed` 为 `true` 时内容为 `null`，
+请按该键从副本删除记录。在变更阶段，`changed_at` 是本页消费的、与所选块相交且影响这一项的变更行的最新时间。
+第三方文字、提示及 JD 可用性沿用普通读工具的规则。同步工具不返回原始招聘载荷。
+
+本机长写事务持有较早的事务号时，变更交付会暂停。`held_back` 统计已经提交、在此同步流可见、但还需等较早事务结束的行数。
+事务结束后用 `next_cursor` 继续轮询。可在 `pg_stat_activity` 中查看最老的 `backend_xid` 来定位阻塞事务。
+空轮询不会写入变更日志。MCP 调用审计和 HTTP token 最后使用时间照常记录。
+
+### 不进入变更日志的变化
+
+- **心跳更新。** 单独更新 `jobs.last_seen_at`、`jobs.last_listed_at`、`jobs.link_checked_at`、`jobs.link_check_json`
+  中的检查时间、`job_ghost.checked_at`、`job_visa.checked_at` 或 `job_current_scores.refreshed_at` 时不记变更。
+  有导出的时间戳仍以返回该项时读到的值为准。
+- **配置变化。** 画像技能、德语水平、薪资底线、硬性筛选条件、签证需求、陷阱规则指纹、职位族、可信来源、
+  `channels.family` 和基准币种可以改变读取结果，但不产生变更行。定期重新开始一次快照可以同步这些变化。
+- **按时钟推算的值。** 时间流逝不产生变更行。`company` 和 `salary.lookup` 用 `expires_at` 表示到期时间，
+  省略 `expired`。`salary.company_figures` 按移动时间窗口计算，同步项省略它。申请项给出 `status_changed_at`，
+  供客户端计算停留时间，省略 `days_in_status`。
+
+### 识别错误和恢复同步
+
+错误响应的 `isError` 为 `true`，`content` 只有一条 `text`，文字会本地化。响应没有 `structuredContent` 或独立错误码。
+同步错误的前缀在各语言中一致，可按字面匹配。`resync_required` 后括号内是原因。
+
+| 中文原文 | 调用方的处理 |
+|---|---|
+| `invalid_cursor: 同步游标格式有误或未通过验证。请去掉游标重新开始。` | 丢弃游标，重新开始快照。 |
+| `resync_required (pruned): 变更日志已清理到游标之后。请去掉游标重新开始。` | 丢弃游标，重新开始快照。 |
+| `resync_required (log_reset): 变更日志已重置。请去掉游标重新开始。` | 丢弃游标，重新开始快照。 |
+| `resync_required (scope_changed): 同步工具、字段块、权限或数据格式已变化。请去掉游标重新开始。` | 丢弃游标，按当前范围重新开始快照。 |
+| `sync_unavailable: 无法校验变更日志身份。` | 等数据库身份可以校验后重试。 |
+| `参数校验失败：limit 必须介于 1 和 {max} 之间。` | 将 `limit` 设在当前 `sync.max_batch` 允许的范围内。 |
+| `参数校验失败：字段块 {block} 需要 {permission} 权限。` | 选择连接有权读取的块。 |
+
+参数形状错误或块名未知时，SDK 使用英文前缀 `Input validation error:`。游标类型错误时，SDK 的校验文字中还包含
+`invalid_cursor:`。上面两条参数错误中的 `{max}`、`{block}` 和 `{permission}` 会换成实际值。
+
+如果同步报 `sync_unavailable`，检查 runner 是否已完成迁移并校验日志身份。受限数据库角色需要变更日志表的 `SELECT`
+权限和 `pg_catalog.pg_control_system()` 的 `EXECUTE` 权限。如果函数权限已被撤销，数据库管理员可以运行
+`GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO job_radar_ro` 为只读角色恢复授权。
+所有者可以对目标库运行 `pnpm mcp:sync-reset --yes`，
+清空日志并更换日志身份和游标密钥。`scripts/ops/restore.sh` 会重置恢复出的库的日志。物理副本（数据卷、`pg_basebackup`
+或文件系统快照）保留原标识，重新连接客户端前请在副本上运行重置。见[备份与还原](backup-restore.zh.md)。
 
 ## 原始招聘数据权限（`raw:read`）
 
