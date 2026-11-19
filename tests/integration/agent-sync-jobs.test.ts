@@ -16,6 +16,7 @@ import { createConnection } from "@/lib/db/client";
 import type { Executor } from "@/lib/db/executor";
 import { createReadOnlyDb, type ReadOnlyDb } from "@/lib/db/read-only-client";
 import { pruneAgentChanges, resetAgentChanges } from "@/lib/db/repos/agent-changes";
+import { revertApplicationStatus } from "@/lib/db/repos/applications";
 import { clearClosureOverride, setClosureOverride } from "@/lib/db/repos/closures";
 import { clearFilterOverride, setFilterOverride } from "@/lib/db/repos/filter-overrides";
 import { markSeen, markUnseen } from "@/lib/db/repos/seen";
@@ -276,6 +277,10 @@ describe("incremental job sync", () => {
     await setClosureOverride(writer.db, job.id, "closed", null, now);
     const closed = await sync(client, { cursor: start.next_cursor });
     expect(closed.items).toMatchObject([{ job_id: job.id, removed: false, job: { job: { status: "closed" } } }]);
+    expect(await revertApplicationStatus(writer.db, job.id, { movedTo: "applied", restoreTo: "new" })).toEqual({
+      status: null, reverted: true, changed: true,
+    });
+    expect(await writer.db.select().from(schema.applicationEvents).where(eq(schema.applicationEvents.applicationId, application!.id))).toEqual([]);
     await writer.db.delete(schema.jobs).where(eq(schema.jobs.id, job.id));
     const removed = await sync(client, { cursor: closed.next_cursor });
     expect(removed.items).toEqual([{ job_id: job.id, removed: true, changed_at: expect.any(String), job: null }]);
