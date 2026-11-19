@@ -15,7 +15,8 @@ import { closeDb, getDb, getFilterResults, listJobs, listMonthSalaryFigures, sav
 import { runMigrations } from "@/lib/db/migrate";
 import { getOrCreateCompany } from "@/lib/db/repos/companies";
 import { insertJob } from "@/lib/db/repos/jobs";
-import { countSalaryLookupRequests, findLatestSalaryLookup, listSalaryBenchmarks, replaceSalaryBenchmarks, resetSalaryTablesCache, salaryBenchmarkHasAiRows } from "@/lib/db/repos";
+import { countSalaryLookupRequests, findLatestSalaryLookup, listSalaryBenchmarks, replaceSalaryBenchmarks, resetSalaryTablesCache, salaryBenchmarkHasAiRows, salaryBenchmarkRefreshedAt } from "@/lib/db/repos";
+import { SYNC_BLOCKS } from "@/lib/db/sync-sources";
 import { refreshSalaryBenchmark } from "@/lib/salary/benchmark";
 import { runSalaryLookup, salaryLookupKey } from "@/lib/salary/lookup";
 import { quantilesOf } from "@/lib/salary/percentile";
@@ -141,6 +142,50 @@ describe("migration", () => {
 });
 
 describe("benchmark", () => {
+  it("only writes changed, added and obsolete groups during a rebuild", async () => {
+    const group = { seniority: "senior", geoLevel: "city" as const, geoKey: "example", currency: "EUR", n: 3, nAi: 0, median: 80000, quantiles: [70000, 90000] };
+    const unchanged = { ...group, roleFamily: "unchanged" };
+    const changed = { ...group, roleFamily: "changed" };
+    const obsolete = { ...group, roleFamily: "obsolete" };
+    const added = { ...group, roleFamily: "added" };
+    const next = new Date(NOW.getTime() + 1000);
+    await replaceSalaryBenchmarks(db(), [unchanged, changed, obsolete], NOW);
+    const before = await listSalaryBenchmarks(db());
+    await db().delete(schema.agentChanges);
+
+    await replaceSalaryBenchmarks(db(), [unchanged, { ...changed, quantiles: [72000, 92000] }, added], next);
+    const { keyKind, key, blocks } = schema.agentChanges;
+    const log = await db().select({ keyKind, key, blocks }).from(schema.agentChanges);
+    expect(log.map((row) => ({ ...row, key: JSON.parse(row.key) })).sort((a, b) => String(a.key).localeCompare(String(b.key)))).toEqual(
+      [added, changed, obsolete].map((row) => ({ keyKind: "benchmark", key: [row.roleFamily, row.seniority, row.geoLevel, row.geoKey, row.currency], blocks: 1 << SYNC_BLOCKS.salary.bit })),
+    );
+    const after = await listSalaryBenchmarks(db());
+    expect(after.map((row) => row.roleFamily)).toEqual(["added", "changed", "unchanged"]);
+    expect(after.find((row) => row.roleFamily === unchanged.roleFamily)).toEqual(before.find((row) => row.roleFamily === unchanged.roleFamily));
+    expect(after.find((row) => row.roleFamily === changed.roleFamily)).toMatchObject({ id: before.find((row) => row.roleFamily === changed.roleFamily)?.id, quantiles: [72000, 92000] });
+    expect(await salaryBenchmarkRefreshedAt(db())).toEqual(next);
+    await db().delete(schema.agentChanges);
+    await replaceSalaryBenchmarks(db(), [unchanged, { ...changed, quantiles: [72000, 92000] }, added], next);
+    expect(await db().select().from(schema.agentChanges)).toEqual([]);
+  });
+
+  it("writes the wildcard once for AI presence flips and skips positive-to-positive counts", async () => {
+    const group = { seniority: "*", geoLevel: "all" as const, geoKey: "*", currency: "EUR", n: 3, nAi: 1, median: 80000, quantiles: [70000, 90000] };
+    const aiGroups = ["engineering", "operations"].map((roleFamily) => ({ ...group, roleFamily }));
+    await replaceSalaryBenchmarks(db(), aiGroups, NOW);
+    expect(await salaryBenchmarkHasAiRows(db())).toBe(true);
+    await db().delete(schema.agentChanges);
+
+    await replaceSalaryBenchmarks(db(), aiGroups.map((row) => ({ ...row, nAi: 2 })), NOW);
+    expect(await db().select().from(schema.agentChanges)).toEqual([]);
+    await replaceSalaryBenchmarks(db(), aiGroups.map((row) => ({ ...row, nAi: 0 })), NOW);
+    expect(await salaryBenchmarkHasAiRows(db())).toBe(false);
+    const { keyKind, key, blocks, removed } = schema.agentChanges;
+    expect(await db().select({ keyKind, key, blocks, removed }).from(schema.agentChanges)).toEqual([
+      { keyKind: "benchmark", key: "*", blocks: 1 << SYNC_BLOCKS.salary.bit, removed: 0 },
+    ]);
+  });
+
   it("is rebuilt from the comparable salaries of the window, by family, seniority and place", async () => {
     await add("Acme", "ML Engineer", [80000, 100000]);
     await add("Bolt", "Senior ML Engineer", [90000, 110000]);

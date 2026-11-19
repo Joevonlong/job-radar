@@ -4,11 +4,14 @@ import os from "node:os";
 import path from "node:path";
 
 import postgres from "postgres";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
-import { createConnection, readAppliedMigrations } from "@/lib/db";
+import { createConnection, readAppliedMigrations, schema } from "@/lib/db";
 import { readJournal } from "@/lib/db/migration-journal";
 import { runMigrations } from "@/lib/db/migrate";
+import { setApplicationStatus } from "@/lib/db/repos/applications";
+import { SYNC_BLOCKS } from "@/lib/db/sync-sources";
 import { migrateWithBackup, takePreMigrateBackup } from "@/lib/ops";
 
 import { resolvePgTools, type PgTools } from "./pg-tools";
@@ -53,6 +56,18 @@ async function appliedCount(database: string): Promise<number> {
   }
 }
 
+function copyWithJournalBefore(destination: string, stop: (entry: { tag: string }, index: number) => boolean): string {
+  fs.cpSync(path.resolve("drizzle"), destination, { recursive: true });
+  const file = path.join(destination, "meta", "_journal.json");
+  const journal = JSON.parse(fs.readFileSync(file, "utf8")) as { entries: { tag: string }[] };
+  const index = journal.entries.findIndex(stop);
+  const entry = journal.entries[index];
+  if (!entry) throw new Error("The migration to stop before is missing");
+  journal.entries = journal.entries.slice(0, index);
+  fs.writeFileSync(file, JSON.stringify(journal));
+  return entry.tag;
+}
+
 beforeAll(async () => {
   tools = await resolvePgTools(url);
   if (tools === null && process.env.REQUIRE_PG_TOOLS) throw new Error("REQUIRE_PG_TOOLS is set but no usable pg_dump / pg_restore was found");
@@ -85,13 +100,8 @@ describe("migrateWithBackup (real pg_dump)", () => {
     if (tools === null) return ctx.skip();
     expect(shipped).toBeGreaterThan(1);
     await admin(`create database "${scratch}"`);
-    // a copy of the migrations folder whose journal stops one entry short
     const partial = path.join(dir, "drizzle-partial");
-    fs.cpSync(path.resolve("drizzle"), partial, { recursive: true });
-    const journalFile = path.join(partial, "meta", "_journal.json");
-    const journal = JSON.parse(fs.readFileSync(journalFile, "utf8")) as { entries: unknown[] };
-    journal.entries = journal.entries.slice(0, -1);
-    fs.writeFileSync(journalFile, JSON.stringify(journal));
+    copyWithJournalBefore(partial, (_entry, index) => index === shipped - 1);
     await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: urlOf(scratch), migrationsFolder: partial });
     expect(await appliedCount(scratch)).toBe(shipped - 1);
 
@@ -155,3 +165,59 @@ describe("migrateWithBackup (real pg_dump)", () => {
     expect(await appliedCount(fresh)).toBe(shipped);
   }, SLOW_TEST_MS);
 });
+
+it("upgrades existing jobs and application events with an initialized, replay-safe change log", async () => {
+  const database = `${scratch}_changes`;
+  const partial = path.join(dir, "drizzle-before-agent-changes");
+  const tag = copyWithJournalBefore(partial, (entry) => entry.tag.endsWith("_agent_changes"));
+  await admin(`create database "${database}"`);
+  const connection = createConnection(urlOf(database), { max: 1 });
+  const { db } = connection;
+  const options = { currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: urlOf(database) };
+  try {
+    await runMigrations({ ...options, migrationsFolder: partial });
+    const [company] = await db.insert(schema.companies).values({ name: "Example Engineering", nameNorm: "example engineering" }).returning();
+    const [job] = await db.insert(schema.jobs).values({ title: "Engineer", titleNorm: "engineer", companyId: company!.id }).returning();
+    const recordedAt = new Date("2026-05-01T08:00:00Z");
+    const { applicationId } = await setApplicationStatus(db, job!.id, "applied", null, { occurredAt: recordedAt, reference: "receipt" });
+
+    await runMigrations(options);
+    const logIdentity = async () => Array.from(await connection.sql`
+      select log_id, key_id, octet_length(cursor_key) as key_bytes,
+        system_identifier = (select system_identifier from pg_control_system()) as cluster_matches,
+        database_oid = (select oid from pg_database where datname = current_database()) as database_matches,
+        pruned_through_tx is null and pruned_through_seq is null as unpruned
+      from agent_change_log`);
+    const identity = await logIdentity();
+    expect(identity).toHaveLength(1);
+    expect(identity[0]).toMatchObject({
+      log_id: expect.any(String), key_id: expect.any(String), key_bytes: 32, cluster_matches: true, database_matches: true, unpruned: true,
+    });
+    expect(await db.select().from(schema.agentChanges)).toEqual([]);
+    const [existing] = await db.update(schema.applicationEvents).set({ reference: "updated receipt" })
+      .where(eq(schema.applicationEvents.applicationId, applicationId)).returning();
+    expect(existing).toMatchObject({ occurredAt: recordedAt, reference: "updated receipt" });
+    const { keyKind, key, blocks } = schema.agentChanges;
+    const changes = () => db.select({ keyKind, key, blocks }).from(schema.agentChanges);
+    const initial = [{ keyKind: "job", key: String(job!.id), blocks: (1 << SYNC_BLOCKS.tracking.bit) | (1 << SYNC_BLOCKS.app.bit) }];
+    expect(await changes()).toEqual(initial);
+
+    const migration = fs.readFileSync(path.join("drizzle", `${tag}.sql`), "utf8");
+    await db.transaction(async (tx) => {
+      for (const statement of migration.split("--> statement-breakpoint")) await tx.execute(sql.raw(statement));
+    });
+    expect(await logIdentity()).toEqual(identity);
+    expect(await changes()).toEqual(initial);
+
+    await connection.sql`update agent_change_log set pruned_through_tx = pg_current_xact_id(), pruned_through_seq = 1`;
+    await connection.sql`select agent_changes_reset()`;
+    expect(await changes()).toEqual([]);
+    const [reset] = await logIdentity();
+    expect(reset).toMatchObject({ key_bytes: 32, cluster_matches: true, database_matches: true, unpruned: true });
+    expect(reset?.log_id).not.toEqual(identity[0]?.log_id);
+    expect(reset?.key_id).not.toEqual(identity[0]?.key_id);
+  } finally {
+    await connection.sql.end({ timeout: 5 });
+    await admin(`drop database if exists "${database}" with (force)`);
+  }
+}, SLOW_TEST_MS);

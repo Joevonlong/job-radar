@@ -90,15 +90,43 @@ export interface SalaryBenchmarkInput {
 /** `runtime_state` key of the last rebuild: a rebuild that found no group leaves the table empty but still counts as done. */
 export const SALARY_BENCHMARK_STATE_KEY = "salary:benchmark";
 
-/** Replace the whole benchmark in one transaction (readers see the old or the new one, never a half). */
+const groupColumns = [salaryBenchmarks.roleFamily, salaryBenchmarks.seniority, salaryBenchmarks.geoLevel, salaryBenchmarks.geoKey, salaryBenchmarks.currency];
+
+function groupKey(row: Pick<SalaryBenchmarkInput, "roleFamily" | "seniority" | "geoKey" | "currency"> & { geoLevel: string }): string {
+  return JSON.stringify([row.roleFamily, row.seniority, row.geoLevel, row.geoKey, row.currency]);
+}
+
+/** The rebuild marker serializes rebuilds. Only new, changed or obsolete groups are written. */
 export async function replaceSalaryBenchmarks(db: Executor, rows: readonly SalaryBenchmarkInput[], at: Date = new Date()): Promise<void> {
   await db.transaction(async (tx) => {
     const value = { refreshedAt: at.toISOString(), groups: rows.length };
     await tx.insert(runtimeState).values({ key: SALARY_BENCHMARK_STATE_KEY, value }).onConflictDoUpdate({ target: runtimeState.key, set: { value, updatedAt: sql`now()` } });
-    await tx.delete(salaryBenchmarks);
-    for (let i = 0; i < rows.length; i += 500) {
-      const chunk = rows.slice(i, i + 500).map((row) => ({ ...row, median: Math.round(row.median * 100) / 100, refreshedAt: at }));
-      if (chunk.length > 0) await tx.insert(salaryBenchmarks).values(chunk);
+
+    const desired = new Map(rows.map((row) => [groupKey(row), { ...row, median: Math.round(row.median * 100) / 100, refreshedAt: at }]));
+    if (desired.size !== rows.length) throw new Error("Duplicate salary benchmark group");
+
+    const existing = new Map((await tx.select().from(salaryBenchmarks)).map((row) => [groupKey(row), row]));
+    const obsolete = Array.from(existing, ([key, row]) => desired.has(key) ? [] : [row.id]).flat();
+    for (let i = 0; i < obsolete.length; i += 500) {
+      await tx.delete(salaryBenchmarks).where(inArray(salaryBenchmarks.id, obsolete.slice(i, i + 500)));
+    }
+
+    const changed = Array.from(desired).filter(([key, row]) => {
+      const previous = existing.get(key);
+      return !previous || previous.n !== row.n || previous.nAi !== row.nAi || previous.median !== row.median ||
+        JSON.stringify(previous.quantiles) !== JSON.stringify(row.quantiles);
+    }).map(([, row]) => row);
+    for (let i = 0; i < changed.length; i += 500) {
+      await tx.insert(salaryBenchmarks).values(changed.slice(i, i + 500)).onConflictDoUpdate({
+        target: groupColumns,
+        set: {
+          n: sql`excluded.n`,
+          nAi: sql`excluded.n_ai`,
+          median: sql`excluded.median`,
+          quantiles: sql`excluded.quantiles`,
+          refreshedAt: at,
+        },
+      });
     }
   });
 }
