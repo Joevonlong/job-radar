@@ -7398,6 +7398,24 @@
     }
   },
   "mcp": {
+    "sync": {
+      "params": {
+        "cursor": "Opaque cursor from the previous sync page. Omit it or pass null to start a new snapshot.",
+        "limit": "Maximum items on the page. Defaults to the configured sync.max_batch.",
+        "blocks": "Job field blocks to sync. The base job block is always included. Omit this to use the default get_job blocks allowed by your permissions.",
+        "applicationBlocks": "Application and favorite blocks to sync. Each notes block includes its base block. Omit this to use app and fav, plus app.notes and fav.notes when you have notes:read."
+      },
+      "errors": {
+        "invalidCursor": "invalid_cursor: The sync cursor is malformed or could not be authenticated. Start again without a cursor.",
+        "pruned": "resync_required (pruned): The change log no longer covers this cursor. Start again without a cursor.",
+        "logReset": "resync_required (log_reset): The change log was reset. Start again without a cursor.",
+        "scopeChanged": "resync_required (scope_changed): The sync tool, blocks, permissions, or data format changed. Start again without a cursor.",
+        "unavailable": "sync_unavailable: The change log identity could not be verified.",
+        "limit": "Input validation error: limit must be between 1 and {max}.",
+        "block": "Input validation error: Block {block} requires {permission}.",
+        "emptyBlocks": "Select at least one application or favorite block."
+      }
+    },
     "serve": {
       "disabled": "The Job Radar MCP server is switched off. Set enabled: true in mcp.yaml (in data/config/, or on Settings → Advanced), then restart your MCP client. See docs/mcp.md.",
       "configError": "mcp.yaml cannot be read: {problem}. Run pnpm config:check to see which setting.",
@@ -7475,6 +7493,14 @@
       "get_job": {
         "title": "Get one job",
         "description": "One job in detail: facts, source links, score and rank, compensation and benefit signals with their JD quotes and positions, the number of AI traps found, your application's status, and the JD text after Job Radar removed text aimed at AI. When the trap check has not run for the job, the JD is withheld. Use include for translations, breakdown, salary context, company research, ghost check and lifecycle. Effective match:read, tracking:read and notes:read automatically add their respective blocks."
+      },
+      "list_job_changes": {
+        "title": "Sync jobs",
+        "description": "Page through all jobs, including archived and filtered-out jobs, then follow changes with next_cursor. Use job_id to update your copy and remove jobs marked removed. Once snapshot_complete is true, delete records from earlier generations."
+      },
+      "list_application_changes": {
+        "title": "Sync applications and favorites",
+        "description": "Page through current applications and favorites, then follow changes with next_cursor. Update your copy by kind and job_id, and delete items marked removed. Once snapshot_complete is true, delete records from earlier generations."
       },
       "list_applications": {
         "title": "List applications",

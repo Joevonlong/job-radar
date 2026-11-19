@@ -1,18 +1,11 @@
 import { z } from "zod";
 
-import type { Permission } from "@/lib/agent-access/permissions";
-import { includeInput, loadBlocks } from "@/lib/capabilities/blocks";
-import { getJobDetail } from "@/lib/db/queries/job-detail";
-import { loadTrapCounts } from "@/lib/db/repos/traps";
-import { cleanDescriptionStrict } from "@/lib/traps/clean";
+import { includeInput } from "@/lib/capabilities/blocks";
 import { getJobBlocks } from "@/lib/mcp/job-blocks";
-import type { JobBlockSource } from "@/lib/mcp/job-blocks/source";
+import { assembleJobBlocks } from "@/lib/mcp/job-blocks/assemble";
 
 import { ToolFailure, type McpContext } from "../context";
-import { getJobOutput, getJobOutputFor, releasedJobDetail, toJobDetailDto, type DescriptionDto, type GetJobOutput } from "../dto";
-import { availableDescription, jdQuoteGuard, quoteGuard, shortFieldCleaner, unavailableDescription } from "../guard";
-import { readTextCleaner } from "../read-guard";
-import { readTraps } from "./shared";
+import { getJobOutputFor, type GetJobOutput } from "../dto";
 
 export function getJobInput(ctx: Pick<McpContext, "text">) {
   return z.strictObject({
@@ -23,42 +16,15 @@ export function getJobInput(ctx: Pick<McpContext, "text">) {
 
 export type GetJobArgs = z.infer<ReturnType<typeof getJobInput>>;
 
-/**
- * One job in detail. The JD is given only after the AI-trap findings were removed (`cleanDescriptionStrict`): when trap detection
- * is off, traps.yaml cannot be read, the job was not scanned under the current rules or its findings cannot be read, the JD is
- * withheld and the result says why, and so are the signal quotes. A quote that overlaps a finding is that finding's marker. With
- * findings, the trap header comes first in the notices. The application, its status and the closure reason are tracking data and are
- * left out without tracking permission.
- */
+/** The JD and derived text are covered by the current trap scan, and tracking fields require tracking permission. */
 export async function getJob(ctx: McpContext, args: GetJobArgs): Promise<GetJobOutput> {
-  const detail = await getJobDetail(ctx.db, args.job_id);
-  if (!detail) throw new ToolFailure("not_found", ctx.text("errors.notFound", { id: args.job_id }));
-
-  const [strict, counts] = await Promise.all([cleanDescriptionStrict(ctx.db, { jobId: detail.id, description: detail.description }, { settings: ctx.traps }), loadTrapCounts(ctx.db, [detail.id])]);
-  const limit = ctx.settings.limits.max_description_chars;
-  const notices: string[] = [];
-  let description: DescriptionDto;
-  if (strict.ok) {
-    description = availableDescription(strict.text, limit);
-    if (strict.removed > 0) notices.push(ctx.text("notice.traps", { count: strict.removed }));
-    if (description.truncated) notices.push(ctx.text("description.truncated", { limit, total: description.total_chars ?? 0 }));
-  } else {
-    description = unavailableDescription(strict.reason, ctx.text("description.unavailable"));
-  }
-  notices.push(ctx.text("notice.thirdParty"));
-
-  const clean = shortFieldCleaner(readTraps(ctx));
-  const guard = jdQuoteGuard(strict, detail.description);
-  const source: JobBlockSource = { detail, strict, clean: readTextCleaner(readTraps(ctx), ctx.text("notice.redacted")), quote: (quote, offset) => {
-    const guarded = guard(quote, offset);
-    return guarded === null ? null : clean(guarded);
-  } };
-  const job = toJobDetailDto(detail, { traps: counts.get(detail.id) ?? null, description, quote: quoteGuard(strict, detail.description) }, clean);
-  if (job.application?.next_action != null) job.application.next_action = source.clean(job.application.next_action);
-  const blocks = await loadBlocks(getJobBlocks, ctx, source, args.include);
-  const derived = getJobOutput.parse({ notices, job, ...blocks });
-  if ((derived.translation?.items.length ?? 0) > 0 || derived.breakdown?.content != null || (derived.company?.fields.length ?? 0) > 0 || derived.salary?.lookup?.available || (derived.match?.fit_reasons.length ?? 0) > 0 || (derived.match?.gaps.length ?? 0) > 0 || Object.keys(derived.match?.summaries ?? {}).length > 0) notices.push(ctx.text("notice.derived"));
-  if ([derived.translation, derived.breakdown, derived.company, derived.salary?.lookup, derived.match].some((block) => block?.available === false && block.reason !== null)) notices.push(ctx.text("notice.derivedWithheld"));
-  const permissions: ReadonlySet<Permission> = ctx.permissions ?? new Set();
-  return getJobOutputFor(permissions).parse({ notices, job: releasedJobDetail(job, permissions), ...blocks });
+  const jobs = await assembleJobBlocks(ctx, [args.job_id], {
+    blocks: getJobBlocks,
+    include: args.include,
+    output: getJobOutputFor(ctx.permissions ?? new Set()),
+    inTransaction: false,
+  });
+  const job = jobs.get(args.job_id);
+  if (!job) throw new ToolFailure("not_found", ctx.text("errors.notFound", { id: args.job_id }));
+  return job;
 }

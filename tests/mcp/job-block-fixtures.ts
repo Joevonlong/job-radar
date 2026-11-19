@@ -48,7 +48,7 @@ export function blockSalary(): SalaryContext {
     group: { level: "family", seniority: null, place: null, n: 10, median: 80000, quantiles: [70000, 75000, 80000] }, position: { value: 50, clamp: null },
     company: { count: 3, median: 80000, minSample: 3, figures: [70000, 80000, 90000] }, links: [], staleAi: false, benchmarkEnabled: true, benchmarkComputed: true,
     lookup: { availability: "enabled", unrestricted: false, providers: [], initialRequest: null, usedToday: 3, maxPerDay: 4, ttlDays: 10,
-      latest: { id: 99, origin: { jobId: 7, title: BLOCK_SENTINEL.profile }, provider: BLOCK_SENTINEL.provider, model: BLOCK_SENTINEL.model, fetchedAt: BLOCK_NOW.toISOString(), expired: true, result: {
+      latest: { id: 99, origin: { jobId: 7, title: BLOCK_SENTINEL.profile }, provider: BLOCK_SENTINEL.provider, model: BLOCK_SENTINEL.model, fetchedAt: BLOCK_NOW.toISOString(), expiresAt: BLOCK_NOW.toISOString(), expired: true, result: {
         query: { company: BLOCK_SENTINEL.email, title: BLOCK_SENTINEL.path, seniority: BLOCK_SENTINEL.secret, city: null, country: null, currency: "EUR" },
         companyLevel: { level: "market", median: 80000, summary: "Stored salary lookup", sources: [0] }, roleBand: band, relatedRoles: [band],
         sources: [{ url: "https://example.invalid/pay", host: "example.invalid", site: "Salary site", title: "Data salaries", excerpt: "Salary excerpt", trusted: true }], confidence: "medium", notes: "Salary notes", dropped: 1, observations: [],

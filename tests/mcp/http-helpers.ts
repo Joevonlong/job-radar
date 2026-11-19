@@ -20,6 +20,7 @@ export function fakeDeps() {
     readDb: vi.fn(() => read), writeDb: vi.fn(() => write), audit: vi.fn(() => audit),
     verify: vi.fn<McpHttpDependencies["verify"]>(async () => ({ ok: true, grant })), markUsed: vi.fn(async () => {}),
     readGrant: vi.fn(() => vi.fn(async () => grant)), writerEnabled: vi.fn(() => false),
+    checkSyncStartup: vi.fn(async () => {}),
     log: vi.fn(), now: () => NOW,
   } satisfies McpHttpDependencies;
 }

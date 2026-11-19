@@ -151,10 +151,51 @@ describe("caller-specific output blocks", () => {
 });
 
 describe("tools/list", () => {
+  const syncInputCases = [
+    { tool: "list_job_changes", restrictedBlock: "match", permission: "match:read", otherToolBlock: "app" },
+    { tool: "list_application_changes", restrictedBlock: "fav.notes", permission: "notes:read", otherToolBlock: "job" },
+  ].flatMap((input) => (["en", "zh"] as const).map((locale) => ({ ...input, locale })));
+
+  it.each(syncInputCases)("$tool advertises the live limit and validates inputs in $locale before reading the database", async ({
+    tool, restrictedBlock, permission, otherToolBlock, locale,
+  }) => {
+    const text = mcpTranslator(locale);
+    const ctx = { ...context(), text };
+    ctx.readSettings = () => mcpSchema.parse({ enabled: true, sync: { max_batch: 2 } });
+    const client = await connect(ctx);
+    const listed = (await client.listTools()).tools.find(({ name }) => name === tool);
+    expect(listed?.inputSchema.properties).toMatchObject({ limit: { default: 2, minimum: 1, maximum: 2 } });
+    for (const [args, message] of [
+      [{ limit: 3 }, text("sync.errors.limit", { max: 2 })],
+      [{ blocks: [restrictedBlock] }, text("sync.errors.block", { block: restrictedBlock, permission })],
+      [{ blocks: [otherToolBlock] }, "Input validation error:"],
+      [{ cursor: 42 }, "invalid_cursor:"],
+    ] as const) {
+      const result = await client.callTool({ name: tool, arguments: args });
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toBeUndefined();
+      expect(result.content).toHaveLength(1);
+      const error = textOf(result);
+      expect(error).toMatch(/^Input validation error:/);
+      expect(error).toContain(message);
+    }
+  });
+
+  it("requires at least one explicit tracking sync block", async () => {
+    const client = await connect(context());
+    const { tools } = await client.listTools();
+    const tracking = tools.find(({ name }) => name === "list_application_changes");
+    expect(tracking?.inputSchema.properties).toMatchObject({ blocks: { minItems: 1 } });
+    const result = await client.callTool({ name: "list_application_changes", arguments: { blocks: [] } });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/^Input validation error:/);
+    expect(textOf(result)).toContain("Select at least one application or favorite block.");
+  });
+
   it("offers the read-only tools with titles, descriptions and schemas", async () => {
     const client = await connect(context());
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites"]);
+    expect(tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_job_changes", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "list_application_changes"]);
     for (const tool of tools) {
       expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
       expect(tool.description?.length).toBeGreaterThan(40);
@@ -205,7 +246,7 @@ describe("tools/list", () => {
 
     it("are offered with their permission and the writer on; only the save tool says it writes, and that it destroys nothing", async () => {
       const tools = await names(withWriter(true));
-      expect(tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context", "save_application_answer"]);
+      expect(tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_job_changes", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "list_application_changes", "get_application_context", "save_application_answer"]);
       expect(tools.find((t) => t.name === "get_application_context")?.annotations).toMatchObject({ readOnlyHint: true });
       expect(tools.find((t) => t.name === "save_application_answer")?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: false });
       const save = tools.find((t) => t.name === "save_application_answer");
@@ -213,8 +254,8 @@ describe("tools/list", () => {
       expect((save?.inputSchema as { additionalProperties?: unknown }).additionalProperties).toBe(false);
     });
     it("are not offered while the writer is off, or without their permission", async () => {
-      expect((await names(withWriter(false))).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites"]);
-      expect((await names({ ...withWriter(true), settings: context().settings, readSettings: context().readSettings })).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites"]);
+      expect((await names(withWriter(false))).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_job_changes", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "list_application_changes"]);
+      expect((await names({ ...withWriter(true), settings: context().settings, readSettings: context().readSettings })).map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_job_changes", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "list_application_changes"]);
     });
     it("a save without a writable connection is refused before anything is read", async () => {
       const client = await connect(withWriter(true, null));
@@ -225,7 +266,7 @@ describe("tools/list", () => {
       const lines: string[] = [];
       const ctx = { ...withWriter(true, null), log: (line: string) => lines.push(line) };
       const client = await connect(ctx);
-      expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "get_application_context"]);
+      expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["search_jobs", "get_job", "list_job_changes", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "list_application_changes", "get_application_context"]);
       const result = await client.callTool({ name: "save_application_answer", arguments: { job_id: 1, question_id: 1, text: "An answer." } });
       expect(result.isError).toBe(true);
       expect(textOf(result)).toBe(ctx.text("errors.writerDisabled"));
@@ -234,7 +275,7 @@ describe("tools/list", () => {
   });
   it("leaves out both jobs tools without jobs:read", async () => {
     const client = await connect(context({ permissions: ["tracking:read"] }));
-    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["list_applications", "get_application", "list_favorites"]);
+    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["list_applications", "get_application", "list_favorites", "list_application_changes"]);
   });
 });
 
@@ -248,7 +289,7 @@ describe("a connection made with an agent token", () => {
 
   it("lists only what the token and the global matrix both allow, regardless of the stdio grant", async () => {
     const client = await connect(tokenContext(["tracking:read", "writer:read"], async () => null));
-    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["list_applications", "get_application", "list_favorites"]);
+    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["list_applications", "get_application", "list_favorites", "list_application_changes"]);
   });
 
   it("refuses a call once the token is no longer valid, before the tool runs", async () => {
@@ -392,7 +433,7 @@ describe("tools come from the registry", () => {
     const ctx = context();
     ctx.readSettings = () => mcpSchema.parse({ enabled: true, limits: { max_results: 4 } });
     const client = await connectCapabilities(ctx, [...CAPABILITIES, fake]);
-    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["search_jobs", "get_job", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "registry_probe"]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["search_jobs", "get_job", "list_job_changes", "list_applications", "get_today", "list_companies", "get_company", "get_insights", "get_application", "list_favorites", "list_application_changes", "registry_probe"]);
     const result = await client.callTool({ name: fake.id, arguments: { value: " hello " } });
     expect(result.isError).not.toBe(true);
     expect(result.structuredContent).toEqual({ notices: [], value: "HELLO", limit: 4 });
@@ -440,8 +481,8 @@ describe("tools come from the registry", () => {
     ctx.writer = { inputs: () => ({ writer: writerSchema.parse({ enabled: true }), me: null, stories: [], storiesUnreadable: false, breakdownEnabled: true }), writeDb: untouchable };
     ctx.features = { careerEnabled: () => true, repliesEnabled: () => true };
     const reference = new McpServer({ name: "reference", version: "1" }, { capabilities: { tools: {} } });
-    for (const { capability: cap, permissions } of await listedCapabilities(CAPABILITIES, ctx)) {
-      reference.registerTool(cap.id, { title: ctx.text(cap.text.title), description: ctx.text(cap.text.description), inputSchema: cap.input(ctx), outputSchema: cap.outputFor?.(permissions) ?? cap.output, annotations: cap.annotations }, async () => ({ content: [], isError: true }));
+    for (const { capability: cap, permissions, settings } of await listedCapabilities(CAPABILITIES, ctx)) {
+      reference.registerTool(cap.id, { title: ctx.text(cap.text.title), description: ctx.text(cap.text.description), inputSchema: cap.input(ctx, settings), outputSchema: cap.outputFor?.(permissions) ?? cap.output, annotations: cap.annotations }, async () => ({ content: [], isError: true }));
     }
     const sdk = await connectServer(reference);
     const client = await connectCapabilities(ctx, CAPABILITIES);
@@ -505,7 +546,7 @@ describe("authorization on every call", () => {
     expect(tracking.isError).toBe(true);
     expect(textOf(tracking)).toBe(ctx.text("errors.notPermitted", { permission: "tracking:read" }));
     expect(lines).toEqual([expect.stringMatching(/^\[mcp\] list_applications fail not_permitted items=0 ms=\d+$/)]);
-    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["search_jobs", "get_job", "get_today", "list_companies", "get_company", "get_insights"]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["search_jobs", "get_job", "list_job_changes", "get_today", "list_companies", "get_company", "get_insights"]);
 
     await client.callTool({ name: "search_jobs", arguments: {} });
     expect(lines.at(-1)).toMatch(/^\[mcp\] search_jobs fail internal items=0 ms=\d+$/);

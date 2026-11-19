@@ -248,29 +248,32 @@ export async function loadGhostLevels(db: Executor, jobIds: readonly number[], t
  * a trusted company reads as "none" (what the check stores for it).
  */
 export async function getGhostOfJob(db: Executor, jobId: number, trustedKeys: readonly string[] = []): Promise<GhostOfJob | null> {
-  if (!(await checkTableReady(db, "job_ghost"))) return null;
+  return (await getGhostDetails(db, [jobId], trustedKeys)).get(jobId) ?? null;
+}
+
+export async function getGhostDetails(db: Executor, jobIds: readonly number[], trustedKeys: readonly string[] = []): Promise<Map<number, GhostOfJob>> {
+  const out = new Map<number, GhostOfJob>();
+  if (jobIds.length === 0 || !(await checkTableReady(db, "job_ghost"))) return out;
   const trusted = trustedJobSql(jobGhost.jobId, trustedKeys);
-  const [row] = await db
+  const rows = await db
     .select({ ghost: jobGhost, trusted: trusted ?? sql<boolean>`false` })
     .from(jobGhost)
-    .where(eq(jobGhost.jobId, jobId))
-    .limit(1)
-    .then((rows) => rows.map((r) => ({ ...r.ghost, trusted: r.trusted === true })));
-  if (!row) return null;
-  if (row.trusted) return { level: "none", score: 0, reasons: [], checkedAt: row.checkedAt, dismissedAt: null, dismissedCodes: null, dismissed: false };
-  const level = parseLevel(row.level);
-  if (level === null) return null;
-  const reasons = parseReasons(row.evidence);
-  const dismissedCodes = row.dismissedAt === null ? null : parseCodes(row.dismissedCodes ?? []);
-  return {
-    level,
-    score: Number(row.score),
-    reasons,
-    checkedAt: row.checkedAt,
-    dismissedAt: row.dismissedAt,
-    dismissedCodes,
-    dismissed: level !== "none" && isDismissActive(dismissedCodes, reasons),
-  };
+    .where(inArray(jobGhost.jobId, [...jobIds]));
+  for (const { ghost: row, trusted } of rows) {
+    if (trusted === true) {
+      out.set(row.jobId, { level: "none", score: 0, reasons: [], checkedAt: row.checkedAt, dismissedAt: null, dismissedCodes: null, dismissed: false });
+      continue;
+    }
+    const level = parseLevel(row.level);
+    if (level === null) continue;
+    const reasons = parseReasons(row.evidence);
+    const dismissedCodes = row.dismissedAt === null ? null : parseCodes(row.dismissedCodes ?? []);
+    out.set(row.jobId, {
+      level, score: Number(row.score), reasons, checkedAt: row.checkedAt, dismissedAt: row.dismissedAt, dismissedCodes,
+      dismissed: level !== "none" && isDismissActive(dismissedCodes, reasons),
+    });
+  }
+  return out;
 }
 
 /**

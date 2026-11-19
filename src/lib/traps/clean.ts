@@ -8,7 +8,7 @@ import type { ChannelLogger } from "@/lib/channels/types";
 import { loadConfig } from "@/lib/config";
 import type { TrapsConfig } from "@/lib/config/schemas/traps";
 import type { Executor } from "@/lib/db/executor";
-import { loadTrapSpanRows, trapScanIsCurrent } from "@/lib/db/repos/traps";
+import { currentTrapScanJobIds, loadTrapSpanRows, trapScanIsCurrent } from "@/lib/db/repos/traps";
 
 import { jdForAi, resolveSpans } from "./ai-input";
 import { rulesFingerprint } from "./fingerprint";
@@ -117,9 +117,39 @@ export async function cleanDescriptionStrict(db: Executor, job: JobText, options
   } catch {
     return { ok: false, reason: "findings_unreadable" };
   }
+  return strictResult(job, spans, settings);
+}
+
+function strictResult(job: JobText, spans: TrapSpan[], settings: TrapsConfig): StrictCleanResult {
   const markers = { hidden: settings.ai_input.hidden_marker, instruction: settings.ai_input.instruction_marker };
   if (job.description === null) return { ok: true, text: null, removed: 0, spans: [], markers };
   return { ok: true, text: jdForAi(job.description, spans, markers), removed: spans.length, spans, markers };
+}
+
+/** A sync page uses a savepoint so an unreadable findings query withholds the text without aborting the outer read snapshot. */
+export async function cleanDescriptionsStrict(db: Executor, jobs: readonly JobText[], options: {
+  settings: () => TrapsConfig; inTransaction: boolean;
+}): Promise<Map<number, StrictCleanResult>> {
+  const withheld = (reason: StrictCleanFailure) => new Map(jobs.map(({ jobId }) => [jobId, { ok: false, reason } as const]));
+  let settings: TrapsConfig;
+  try {
+    settings = options.settings();
+  } catch {
+    return withheld("settings_unreadable");
+  }
+  if (!settings.enabled) return withheld("traps_disabled");
+  const read = async (executor: Executor): Promise<Map<number, StrictCleanResult>> => {
+    const current = await currentTrapScanJobIds(executor, jobs.map(({ jobId }) => jobId), rulesFingerprint(settings));
+    const spans = await loadTrapSpanRows(executor, jobs.filter((job) => current.has(job.jobId) && job.description).map(({ jobId }) => jobId));
+    return new Map(jobs.map((job) => [job.jobId, current.has(job.jobId)
+      ? strictResult(job, job.description ? resolveSpans(job.description, spans.get(job.jobId) ?? []) : [], settings)
+      : { ok: false, reason: "not_scanned" }]));
+  };
+  try {
+    return options.inTransaction ? await db.transaction(read) : await read(db);
+  } catch {
+    return withheld("findings_unreadable");
+  }
 }
 
 /** The trap spans of one JD; unlike `loadTrapSpans` a read error is thrown, not swallowed. */

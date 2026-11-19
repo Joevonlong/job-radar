@@ -15,7 +15,7 @@ export async function loadMatch(_ctx: McpContext, source: JobBlockSource): Promi
   const { detail, clean } = source;
   const score = detail.score;
   if (score === null) return null;
-  const settings = jobBlockSettings();
+  const settings = source.settings ?? jobBlockSettings();
   const aliases = buildSkillAliasMap(settings.skillAliases());
   const { skillMatches: skills, german, floor } = detailChecks(detail, { profileSkills: settings.skills(), aliases, germanLabel: settings.germanLabel(), salaryFloor: settings.salaryFloor(), currency: settings.baseCurrency() ?? "" });
   const visaOn = settings.visaEnabled();

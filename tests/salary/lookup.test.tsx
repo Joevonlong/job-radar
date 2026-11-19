@@ -58,7 +58,7 @@ function lookup(over: Partial<SalaryLookupView> = {}): SalaryLookupView {
   };
   return {
     id: 1, origin: { jobId: 7, title: band.title }, provider: "seed", model: "seed",
-    fetchedAt: "2026-01-01T12:00:00.000Z", expired: false,
+    fetchedAt: "2026-01-01T12:00:00.000Z", expiresAt: "2026-02-01T12:00:00.000Z", expired: false,
     result: salaryLookupResultSchema.parse({
       query: { company: "Acme", title: band.title, seniority: "senior", city: "Example City", country: "DE", currency: "EUR" },
       companyLevel: { level: "market", median: 90000, summary: "Fictional salary estimate", sources: [0] },

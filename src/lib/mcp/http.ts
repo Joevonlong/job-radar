@@ -19,7 +19,7 @@ import { readWriterEnabled } from "@/lib/writer/settings";
 import { version } from "../../../package.json";
 import { stderrLine } from "./call-log";
 import { errorCategory, type McpContext } from "./context";
-import { buildServer, defaultContext } from "./server";
+import { buildServer, checkMcpSyncStartup, defaultContext } from "./server";
 
 export interface McpHttpDependencies {
   readSettings: typeof liveMcpSettings;
@@ -32,6 +32,7 @@ export interface McpHttpDependencies {
   readGrant: typeof agentTokenGrantReader;
   writerEnabled: typeof readWriterEnabled;
   createHandler: typeof createMcpHandler;
+  checkSyncStartup?: typeof checkMcpSyncStartup;
   log: (line: string) => void;
   now: () => Date;
 }
@@ -41,7 +42,7 @@ export function realDeps(): McpHttpDependencies {
     readSettings: liveMcpSettings, password: () => readPasswordSetting(process.env),
     readDb: getMcpReadDb, writeDb: getMcpWriteDb, audit: getMcpAuditRecorder,
     verify: verifyAgentToken, markUsed: markAgentTokenUsed, readGrant: agentTokenGrantReader,
-    writerEnabled: readWriterEnabled, createHandler: createMcpHandler, log: stderrLine, now: () => new Date(),
+    writerEnabled: readWriterEnabled, createHandler: createMcpHandler, checkSyncStartup: checkMcpSyncStartup, log: stderrLine, now: () => new Date(),
   };
 }
 
@@ -250,6 +251,7 @@ async function authenticatedResponse(
   });
   context.now = deps.now;
   context.track = slot.track;
+  await deps.checkSyncStartup?.(context);
   const handler = createJsonHandler(deps.createHandler, () => {
     const server = buildServer(context, { version });
     server.server.registerCapabilities({ tools: { listChanged: false } });

@@ -3,14 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/db/repos/application-writer", () => ({ listApplicationQuestions: vi.fn(async () => []), listAnswerVersions: vi.fn(async () => []) }));
 vi.mock("@/lib/db/repos/application-fit-notes", () => ({ getFitNote: vi.fn(async () => null) }));
-vi.mock("@/lib/db/queries/job-detail", () => ({ getJobDetail: vi.fn() }));
+vi.mock("@/lib/db/queries/job-detail", () => ({ getJobDetail: vi.fn(), getJobDetails: vi.fn() }));
 vi.mock("@/lib/db/repos/traps", () => ({ loadTrapCounts: vi.fn() }));
-vi.mock("@/lib/traps/clean", () => ({ cleanDescriptionStrict: vi.fn() }));
+vi.mock("@/lib/traps/clean", () => ({ cleanDescriptionStrict: vi.fn(), cleanDescriptionsStrict: vi.fn() }));
 vi.mock("@/lib/db/repos/translations", () => ({ getTranslation: vi.fn() }));
 vi.mock("@/lib/db/repos/breakdowns", () => ({ getJobBreakdown: vi.fn() }));
 vi.mock("@/lib/db/repos/company-research", () => ({ getCompanyResearchForJob: vi.fn() }));
-vi.mock("@/lib/db/repos/seen", () => ({ isSeen: vi.fn() }));
-vi.mock("@/lib/db/repos/filter-overrides", () => ({ getFilterOverride: vi.fn() }));
+vi.mock("@/lib/db/repos/seen", () => ({ getSeenJobIds: vi.fn() }));
+vi.mock("@/lib/db/repos/filter-overrides", () => ({ getFilterOverrides: vi.fn() }));
 vi.mock("@/lib/salary/view", () => ({ getSalaryContext: vi.fn() }));
 vi.mock("@/lib/mcp/job-blocks/settings", () => ({ jobBlockSettings: vi.fn() }));
 
@@ -19,11 +19,11 @@ import { getApplicationContext } from "@/lib/mcp/tools/application-context";
 import { PERMISSIONS, type Permission } from "@/lib/agent-access/permissions";
 import { BREAKDOWN_PROMPT_VERSION } from "@/lib/ai/prompts/breakdown";
 import type { Db } from "@/lib/db/client";
-import { getJobDetail } from "@/lib/db/queries/job-detail";
+import { getJobDetail, getJobDetails } from "@/lib/db/queries/job-detail";
 import { getJobBreakdown } from "@/lib/db/repos/breakdowns";
 import { getCompanyResearchForJob } from "@/lib/db/repos/company-research";
-import { getFilterOverride } from "@/lib/db/repos/filter-overrides";
-import { isSeen } from "@/lib/db/repos/seen";
+import { getFilterOverrides } from "@/lib/db/repos/filter-overrides";
+import { getSeenJobIds } from "@/lib/db/repos/seen";
 import { getTranslation } from "@/lib/db/repos/translations";
 import { loadTrapCounts } from "@/lib/db/repos/traps";
 import { mcpSchema } from "@/lib/config/schemas/mcp";
@@ -36,7 +36,7 @@ import { loadNotes } from "@/lib/mcp/job-blocks/notes";
 import { mcpTranslator } from "@/lib/mcp/text";
 import { getJob, getJobInput } from "@/lib/mcp/tools/get-job";
 import { getSalaryContext } from "@/lib/salary/view";
-import { cleanDescriptionStrict, type StrictCleanResult } from "@/lib/traps/clean";
+import { cleanDescriptionStrict, cleanDescriptionsStrict, type StrictCleanResult } from "@/lib/traps/clean";
 import { descriptionHash } from "@/lib/translation/hash";
 
 import { trapSettings } from "../traps/helpers";
@@ -63,15 +63,23 @@ function readers(): ReturnType<typeof jobBlockSettings> {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(getJobDetail).mockResolvedValue({ ...blockDetail(), email: S.email, unused: S.secret } as ReturnType<typeof blockDetail>);
+  vi.mocked(getJobDetails).mockImplementation(async (db, ids) => {
+    const rows = await Promise.all(ids.map((id) => getJobDetail(db, id)));
+    return new Map(rows.flatMap((row) => row ? [[row.id, row]] : []));
+  });
   vi.mocked(loadTrapCounts).mockResolvedValue(new Map());
   vi.mocked(cleanDescriptionStrict).mockResolvedValue(goodStrict());
+  vi.mocked(cleanDescriptionsStrict).mockImplementation(async (db, jobs, options) => {
+    const rows = await Promise.all(jobs.map(async (job) => [job.jobId, await cleanDescriptionStrict(db, job, options)] as const));
+    return new Map(rows);
+  });
   vi.mocked(jobBlockSettings).mockReturnValue({ ...readers(), profile: { summary: S.profile } } as ReturnType<typeof jobBlockSettings>);
   vi.mocked(getTranslation).mockImplementation(async (_db, jobId, language) => ({ jobId, lang: language, provider: S.provider, content: "Stored translation\u200b", sourceHash: descriptionHash(blockDetail().description), createdAt: BLOCK_NOW }));
   vi.mocked(getJobBreakdown).mockResolvedValue({ jobId: 7, sourceHash: "hash", promptVersion: BREAKDOWN_PROMPT_VERSION, provider: S.provider, model: S.model, content: blockBreakdown(), analyzedAt: BLOCK_NOW, droppedItems: 0, outputLang: "en" });
   vi.mocked(getCompanyResearchForJob).mockResolvedValue({ id: 1, companyId: 3, fetchedAt: BLOCK_NOW, expiresAt: BLOCK_NOW, expired: true, domainUsed: S.email, provider: S.provider, model: S.model, fields: { summary: { text: "Stored company text", sourceUrl: "https://example.invalid/about" } }, dropped: 0 });
   vi.mocked(getSalaryContext).mockResolvedValue(blockSalary());
-  vi.mocked(isSeen).mockResolvedValue(true);
-  vi.mocked(getFilterOverride).mockResolvedValue("exclude");
+  vi.mocked(getSeenJobIds).mockResolvedValue(new Set([7]));
+  vi.mocked(getFilterOverrides).mockResolvedValue(new Map([[7, "exclude"]]));
 });
 
 describe("get_job field blocks", () => {

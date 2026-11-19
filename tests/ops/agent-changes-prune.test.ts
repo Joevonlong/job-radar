@@ -7,7 +7,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 function fixture() {
   let now = 0;
-  const settings = { sync: { retention_days: 10 } };
+  const settings = { sync: { retention_days: 10, max_batch: 50 } };
   const deps = {
     now: () => now,
     loadConfig: vi.fn(() => settings),

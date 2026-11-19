@@ -102,8 +102,10 @@ audit:
   write_timeout_ms: 2000
 
 sync:
-  # Days a change row is kept (1-365); the runner prunes older changes once a day
+  # Change-log retention in days (1-365). The runner prunes once a day. A cursor behind the pruned log needs a new snapshot.
   retention_days: 30
+  # Default and maximum number of items per page for both MCP sync tools (1-200).
+  max_batch: 50
 
 # Live daily action budgets use the calendar day in schedule.yaml's time zone; joined requests and cache hits are refunded.
 budgets:

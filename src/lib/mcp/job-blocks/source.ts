@@ -3,11 +3,14 @@ import type { CleanText } from "@/lib/mcp/dto/shared";
 import { visibleText } from "@/lib/mcp/guard";
 import type { StrictCleanResult } from "@/lib/traps/clean";
 
+import type { jobBlockSettings } from "./settings";
+
 export interface JobBlockSource {
   detail: JobDetail;
   strict: StrictCleanResult;
   clean: CleanText;
   quote: (quote: string, offset: number | null) => string | null;
+  settings?: ReturnType<typeof jobBlockSettings>;
 }
 
 /**

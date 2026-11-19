@@ -10,16 +10,15 @@ import { readInitialSalaryRequest, salaryLookupProviders, salaryLookupUnrestrict
 import type { Db } from "@/lib/db/client";
 import { countSalaryLookupRequests, findLatestSalaryLookup, findSalaryBenchmarks, getJobForSalaryLookup, listCompanySalaryFigures, salaryBenchmarkHasAiRows, salaryBenchmarkRefreshedAt, salaryTablesReady, type SalaryBenchmarkRow } from "@/lib/db/repos";
 
-import { ANY, normCity } from "./benchmark";
+import { ANY } from "./benchmark";
 import { compileFamilies } from "./families";
+import { salaryGroupCandidates, type GroupLevel } from "./groups";
 import { buildDeepLinks, type DeepLink } from "./links";
 import { salaryLookupKey } from "./lookup";
 import type { SalaryLookupResult } from "./lookup-types";
 import { percentileIn, quantile, type PercentilePosition } from "./percentile";
 
-/** Which group the panel compares with, narrowest first. */
-export const GROUP_LEVELS = ["city", "country", "family_country", "family"] as const;
-export type GroupLevel = (typeof GROUP_LEVELS)[number];
+export { GROUP_LEVELS, type GroupLevel } from "./groups";
 
 export interface BenchmarkGroupView {
   level: GroupLevel;
@@ -39,6 +38,7 @@ export interface SalaryLookupView {
   provider: string | null;
   model: string | null;
   fetchedAt: string;
+  expiresAt: string;
   expired: boolean;
 }
 
@@ -77,17 +77,10 @@ export interface SalaryContext {
 
 /** The narrowest group that exists for a job: city, country (same seniority), then any seniority in the country, then the family. */
 export function pickGroup(rows: readonly SalaryBenchmarkRow[], job: { seniority: string; city: string | null; country: string | null }): { row: SalaryBenchmarkRow; level: GroupLevel } | null {
-  const seniority = job.seniority.toLowerCase();
-  const known = seniority !== "unknown" && seniority !== "";
-  const find = (s: string, geoLevel: string, geoKey: string | null): SalaryBenchmarkRow | undefined =>
-    geoKey === null ? undefined : rows.find((row) => row.seniority === s && row.geoLevel === geoLevel && row.geoKey === geoKey);
-  const steps: Array<[GroupLevel, SalaryBenchmarkRow | undefined]> = [
-    ["city", known ? find(seniority, "city", job.city ? normCity(job.city) : null) : undefined],
-    ["country", known ? find(seniority, "country", job.country?.toUpperCase() ?? null) : undefined],
-    ["family_country", find(ANY, "country", job.country?.toUpperCase() ?? null)],
-    ["family", find(ANY, "all", ANY)],
-  ];
-  for (const [level, row] of steps) if (row) return { row, level };
+  for (const { level, seniority, geoLevel, geoKey } of salaryGroupCandidates(job)) {
+    const row = rows.find((candidate) => candidate.seniority === seniority && candidate.geoLevel === geoLevel && candidate.geoKey === geoKey);
+    if (row) return { row, level };
+  }
   return null;
 }
 
@@ -95,7 +88,7 @@ const quantilesOfRow = (row: SalaryBenchmarkRow): number[] => (Array.isArray(row
 
 export async function getSalaryContext(
   db: Db,
-  input: { jobId: number; figure: number | null; currency: string; salary: SalaryConfig | null; ai: AiConfig | null; locale: string; now?: Date },
+  input: { jobId: number; figure: number | null; currency: string; salary: SalaryConfig | null; ai: AiConfig | null; locale: string; now?: Date; sync?: boolean },
 ): Promise<SalaryContext | null> {
   const now = input.now ?? new Date();
   const job = await getJobForSalaryLookup(db, input.jobId);
@@ -144,19 +137,22 @@ export async function getSalaryContext(
     }
   }
 
-  const since = new Date(now.getTime() - salary.benchmark.window_days * 86_400_000);
-  const companyFigures = input.currency === "" ? [] : await listCompanySalaryFigures(db, { companyId: job.companyId, excludeJobId: job.id, currency: input.currency, since });
-  const sortedCompany = [...companyFigures].sort((a, b) => a - b);
-  const company = { count: sortedCompany.length, median: sortedCompany.length >= salary.benchmark.min_sample ? quantile(sortedCompany, 0.5) : null, minSample: salary.benchmark.min_sample, figures: sortedCompany };
+  let company: SalaryContext["company"] = null;
+  if (!input.sync) {
+    const since = new Date(now.getTime() - salary.benchmark.window_days * 86_400_000);
+    const companyFigures = input.currency === "" ? [] : await listCompanySalaryFigures(db, { companyId: job.companyId, excludeJobId: job.id, currency: input.currency, since });
+    const sortedCompany = [...companyFigures].sort((a, b) => a - b);
+    company = { count: sortedCompany.length, median: sortedCompany.length >= salary.benchmark.min_sample ? quantile(sortedCompany, 0.5) : null, minSample: salary.benchmark.min_sample, figures: sortedCompany };
+  }
 
   const providers = input.ai ? salaryLookupProviders(input.ai) : [];
   const availability: LookupAvailability = !input.ai ? "config_error" : !salary.lookup.enabled ? "disabled" : providers.length === 0 ? "no_web_provider" : "enabled";
   const lookupKey = salaryLookupKey(job, familyId);
   const stored = await findLatestSalaryLookup(db, { lookupKey, promptVersion: SALARY_PROMPT_VERSION });
   const latest: SalaryLookupView | null = stored
-    ? { id: stored.id, origin: stored.origin, result: stored.result, provider: stored.provider, model: stored.model, fetchedAt: stored.fetchedAt.toISOString(), expired: stored.expiresAt <= now }
+    ? { id: stored.id, origin: stored.origin, result: stored.result, provider: stored.provider, model: stored.model, fetchedAt: stored.fetchedAt.toISOString(), expiresAt: stored.expiresAt.toISOString(), expired: stored.expiresAt <= now }
     : null;
-  const initialRequest = availability === "enabled" ? await readInitialSalaryRequest(db, { jobId: job.id, lookupKey, fetchedAt: stored?.fetchedAt ?? null }) : null;
+  const initialRequest = !input.sync && availability === "enabled" ? await readInitialSalaryRequest(db, { jobId: job.id, lookupKey, fetchedAt: stored?.fetchedAt ?? null }) : null;
   return {
     state: "ok",
     currency: input.currency,
@@ -169,14 +165,14 @@ export async function getSalaryContext(
     links: buildDeepLinks(salary.deep_links, { company: job.company, title: job.title, city, country }),
     staleAi,
     benchmarkEnabled: salary.benchmark.enabled,
-    benchmarkComputed: !staleAi && (await salaryBenchmarkRefreshedAt(db)) !== null,
+    benchmarkComputed: !input.sync && !staleAi && (await salaryBenchmarkRefreshedAt(db)) !== null,
     lookup: {
       availability,
       unrestricted: input.ai ? salaryLookupUnrestricted(input.ai) : false,
       providers,
       latest,
       initialRequest,
-      usedToday: availability === "enabled" ? await countSalaryLookupRequests(db, now) : 0,
+      usedToday: !input.sync && availability === "enabled" ? await countSalaryLookupRequests(db, now) : 0,
       maxPerDay: salary.lookup.max_per_day,
       ttlDays: salary.lookup.ttl_days,
     },

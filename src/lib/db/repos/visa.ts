@@ -156,13 +156,20 @@ export interface VisaDetail {
 
 /** One job's result with its quotes, for the detail page; null when the job is not checked yet or the table is not there. */
 export async function getVisaOfJob(db: Executor, jobId: number): Promise<VisaDetail | null> {
-  if (!(await checkTableReady(db, "job_visa"))) return null;
-  const [row] = await db.select().from(jobVisa).where(eq(jobVisa.jobId, jobId)).limit(1);
-  if (!row) return null;
-  const status = parseStatus(row.status);
-  if (status === null) return null;
-  const evidence = parseEvidence(row.evidence);
-  return { status, kind: visaKindOf({ status, evidence }), evidence, checkedAt: row.checkedAt };
+  return (await getVisaDetails(db, [jobId])).get(jobId) ?? null;
+}
+
+export async function getVisaDetails(db: Executor, jobIds: readonly number[]): Promise<Map<number, VisaDetail>> {
+  const out = new Map<number, VisaDetail>();
+  if (jobIds.length === 0 || !(await checkTableReady(db, "job_visa"))) return out;
+  const rows = await db.select().from(jobVisa).where(inArray(jobVisa.jobId, [...jobIds]));
+  for (const row of rows) {
+    const status = parseStatus(row.status);
+    if (status === null) continue;
+    const evidence = parseEvidence(row.evidence);
+    out.set(row.jobId, { status, kind: visaKindOf({ status, evidence }), evidence, checkedAt: row.checkedAt });
+  }
+  return out;
 }
 
 export interface VisaStats {

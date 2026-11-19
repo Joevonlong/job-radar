@@ -1,8 +1,10 @@
-import { eq, sql } from "drizzle-orm";
+import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
 
 import type { Db } from "../client";
 import type { Executor } from "../executor";
-import { agentChangeLog } from "../schema";
+import { agentChangeLog, agentChanges } from "../schema";
+import type { ChangePosition } from "../sync-position";
+import type { SyncKeyKind } from "../sync-sources";
 
 export type AgentChangeLogIdentity = Pick<typeof agentChangeLog.$inferSelect, "logId" | "systemIdentifier" | "databaseOid">;
 
@@ -42,6 +44,85 @@ export async function checkAgentChangeIdentity(db: Executor): Promise<AgentChang
   const { matches, ...identity } = row;
   if (matches === null) return { status: "unavailable", reason: "identity_unreadable" };
   return { status: matches ? "match" : "mismatch", identity };
+}
+
+export interface AgentChangeSnapshot {
+  keyId: string;
+  cursorKey: Buffer;
+  xmin: string;
+  prunedThrough: ChangePosition | null;
+}
+
+export class AgentSyncUnavailable extends Error {}
+
+async function readAgentChangeSnapshot(db: Executor): Promise<AgentChangeSnapshot> {
+  if ((await checkAgentChangeIdentity(db)).status !== "match") throw new AgentSyncUnavailable();
+  const [row] = await db.select({
+    keyId: agentChangeLog.keyId,
+    cursorKey: agentChangeLog.cursorKey,
+    xmin: sql<string>`pg_snapshot_xmin(pg_current_snapshot())::text`,
+    prunedTx: agentChangeLog.prunedThroughTx,
+    prunedSeq: agentChangeLog.prunedThroughSeq,
+  }).from(agentChangeLog).where(eq(agentChangeLog.singleton, true));
+  if (!row) throw new AgentSyncUnavailable();
+  const { keyId, cursorKey, xmin, prunedTx, prunedSeq } = row;
+  return {
+    keyId, cursorKey, xmin,
+    prunedThrough: prunedTx === null || prunedSeq === null ? null : { tx: String(prunedTx), seq: String(prunedSeq) },
+  };
+}
+
+/** Identity, retention, visibility and entity reads must see the same database snapshot. */
+export async function withAgentChangeSnapshot<T>(db: Executor, read: (tx: Executor, state: AgentChangeSnapshot) => Promise<T>): Promise<T> {
+  let logRead = false;
+  try {
+    return await db.transaction(async (tx) => {
+      const snapshot = await readAgentChangeSnapshot(tx);
+      logRead = true;
+      return read(tx, snapshot);
+    }, { isolationLevel: "repeatable read", accessMode: "read only" });
+  } catch (error) {
+    if (!logRead) throw new AgentSyncUnavailable();
+    throw error;
+  }
+}
+
+export interface AgentChangeRow extends ChangePosition {
+  at: Date;
+  keyKind: SyncKeyKind;
+  key: string;
+  blocks: number;
+  removed: number;
+}
+
+const intersectsBlocks = (mask: number) => sql`(${agentChanges.blocks} & ${mask}) <> 0`;
+
+export async function readAgentChangeRows(db: Executor, input: {
+  xmin: string; after: ChangePosition; mask: number; limit: number;
+}): Promise<AgentChangeRow[]> {
+  return db.select({
+    tx: sql<string>`${agentChanges.tx}::text`,
+    seq: sql<string>`${agentChanges.seq}::text`,
+    at: agentChanges.at,
+    keyKind: agentChanges.keyKind,
+    key: agentChanges.key,
+    blocks: agentChanges.blocks,
+    removed: agentChanges.removed,
+  }).from(agentChanges)
+    .where(and(
+      lt(agentChanges.tx, sql`${input.xmin}::xid8`),
+      sql`(${agentChanges.tx}, ${agentChanges.seq}) > (${input.after.tx}::xid8, ${input.after.seq}::bigint)`,
+      intersectsBlocks(input.mask),
+    ))
+    .orderBy(asc(agentChanges.tx), asc(agentChanges.seq))
+    .limit(input.limit);
+}
+
+/** Rows in the snapshot that committed ahead of an older transaction still in flight. */
+export async function countHeldAgentChanges(db: Executor, xmin: string, mask: number): Promise<number> {
+  const [row] = await db.select({ count: sql<string>`count(*)::text` }).from(agentChanges)
+    .where(and(gte(agentChanges.tx, sql`${xmin}::xid8`), intersectsBlocks(mask)));
+  return Number(row?.count ?? 0);
 }
 
 /** The reset's lock also keeps the returned log ID from racing with another reset. */

@@ -15,6 +15,8 @@ import { set_next_action } from "./tracking/set-next-action";
 import { set_interview_rounds } from "./tracking/set-interview-rounds";
 import { get_job } from "./jobs/get-job";
 import { get_job_raw } from "./jobs/get-job-raw";
+import { list_application_changes } from "./sync/list-application-changes";
+import { list_job_changes } from "./sync/list-job-changes";
 import { search_jobs } from "./jobs/search-jobs";
 import { list_applications } from "./tracking/list-applications";
 import type { Capability } from "./types";
@@ -51,6 +53,7 @@ import { get_request_status } from "./actions/get-request-status";
 export const CAPABILITIES: readonly Capability[] = [
   search_jobs,
   get_job,
+  list_job_changes,
   get_job_raw,
   list_applications,
   get_profile,
@@ -63,6 +66,7 @@ export const CAPABILITIES: readonly Capability[] = [
   get_insights,
   get_application,
   list_favorites,
+  list_application_changes,
   get_application_context,
   save_application_answer,
   get_career_profile,
@@ -102,7 +106,7 @@ export async function visibleCapabilities(capabilities: readonly Capability[], c
 export async function listedCapabilities(
   capabilities: readonly Capability[],
   ctx: Pick<McpContext, "readSettings" | "writer" | "tracking" | "actions" | "features" | "grant">,
-): Promise<{ capability: Capability; permissions: ReadonlySet<Permission> }[]> {
+): Promise<{ capability: Capability; permissions: ReadonlySet<Permission>; settings: McpConfig }[]> {
   let read: { settings: McpConfig } | { error: unknown };
   try {
     read = { settings: ctx.readSettings() };
@@ -115,6 +119,6 @@ export async function listedCapabilities(
   };
   return (await Promise.all(capabilities.map(async (capability) => {
     const decision = authorize(capability, once, ctx.grant);
-    return decision.allowed && (await capability.availability?.available(ctx) ?? true) ? [{ capability, permissions: decision.permissions }] : [];
+    return decision.allowed && (await capability.availability?.available(ctx) ?? true) ? [{ capability, permissions: decision.permissions, settings: decision.settings }] : [];
   }))).flat();
 }
