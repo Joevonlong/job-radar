@@ -13,6 +13,7 @@ import type { Permission } from "@/lib/agent-access/permissions";
 import { valueFingerprint, writeWithUndo, type AgentWriteAccess, type UndoKind } from "@/lib/agent-access/write";
 import { applicationUndoKinds } from "@/lib/applications/undo";
 import { CAPABILITIES } from "@/lib/capabilities/registry";
+import { resetConfigCache } from "@/lib/config";
 import { mcpSchema } from "@/lib/config/schemas/mcp";
 import { closeDb, createConnection, getDb, schema } from "@/lib/db";
 import { createReadOnlyDb, type ReadOnlyDb } from "@/lib/db/read-only-client";
@@ -244,7 +245,9 @@ describe("mark_applied through MCP", () => {
 
   beforeAll(() => {
     temp = makeTempConfig({ user: "empty" });
-    fs.writeFileSync(path.join(temp.configDir, "schedule.yaml"), "timezone: Asia/Tokyo\n");
+    const schedule = path.join(temp.configDir, "schedule.yaml");
+    fs.writeFileSync(schedule, fs.readFileSync(path.join(temp.defaultsDir, "schedule.yaml"), "utf8").replace(/^timezone:.*$/m, "timezone: Asia/Tokyo"));
+    resetConfigCache();
   });
   afterEach(async () => { await close?.(); close = undefined; });
   afterAll(() => temp.cleanup());
