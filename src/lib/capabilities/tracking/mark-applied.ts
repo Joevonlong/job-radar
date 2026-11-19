@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { APPLIED_REFERENCE_MAX } from "@/lib/dashboard/limits";
+import { APPLIED_AT_MIN, APPLIED_REFERENCE_MAX } from "@/lib/dashboard/limits";
 import { dayInZone, startOfDayInZone } from "@/lib/insights/range";
 import type { McpContext } from "@/lib/mcp/context";
 import { trackingWriteOutput } from "@/lib/mcp/dto";
@@ -10,23 +10,40 @@ import { trackingJobId, writeApplicationStatus } from "./set-application-status"
 import { trackingWriteAvailability } from "./write-shared";
 
 function appliedAtInput(ctx: Pick<McpContext, "text" | "now" | "timezone">) {
-  return z.union([z.iso.date(), z.iso.datetime({ offset: true })], { error: ctx.text("errors.appliedAtFormat") })
+  const formatError = ctx.text("errors.appliedAtFormat");
+  const rangeError = ctx.text("errors.appliedAtRange", { min: APPLIED_AT_MIN });
+  const futureError = ctx.text("errors.appliedAtFuture");
+  const earliest = new Date(APPLIED_AT_MIN);
+  return z.union([z.iso.date(), z.iso.datetime({ offset: true })], { error: formatError })
     .transform((value, validation) => {
+      const invalid = (message: string) => {
+        validation.addIssue({ code: "custom", message });
+        return z.NEVER;
+      };
       const now = ctx.now();
+      let instant: Date;
       if (value.length === 10) {
+        if (value < APPLIED_AT_MIN.slice(0, 10)) return invalid(rangeError);
+        let timezone: string;
         try {
-          const timezone = ctx.timezone();
-          if (value <= dayInZone(now, timezone)) return startOfDayInZone(value, timezone);
+          timezone = ctx.timezone();
         } catch {
-          validation.addIssue({ code: "custom", message: ctx.text("errors.appliedAtTimezone") });
-          return z.NEVER;
+          return invalid(ctx.text("errors.appliedAtTimezone"));
         }
+        if (value > dayInZone(now, timezone)) return invalid(futureError);
+        try {
+          instant = startOfDayInZone(value, timezone);
+        } catch (error) {
+          if (!(error instanceof RangeError)) throw error;
+          return invalid(formatError);
+        }
+        if (dayInZone(instant, timezone) !== value) return invalid(formatError);
       } else {
-        const instant = new Date(value);
-        if (instant <= now) return instant;
+        instant = new Date(value);
       }
-      validation.addIssue({ code: "custom", message: ctx.text("errors.appliedAtFuture") });
-      return z.NEVER;
+      if (instant < earliest) return invalid(rangeError);
+      if (instant > now) return invalid(futureError);
+      return instant;
     });
 }
 

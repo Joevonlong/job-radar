@@ -27,9 +27,13 @@ describe("server card dates", () => {
     expect(card?.statusDate).toEqual(card?.appliedDate);
     expect(card?.nextActionDateLabel).toBe("Jun 1");
   });
-  it("formats the reported date in the display zone and keeps the event's write time", async () => {
-    const [card] = await toBoardCards([entry("applied", now, new Date("2026-06-01T23:30:00Z"))], options);
-    expect(card?.events[0]).toMatchObject({ when: "Jul 1, 2026, 2:00 PM", occurredAt: "Jun 2, 2026, 1:30 AM" });
+  it("shows the reported date of the first applied event by write time", async () => {
+    const first = entry("applied", new Date("2026-06-30T12:00:00Z"), new Date("2026-06-01T23:30:00Z"));
+    const later = entry("applied", now, new Date("2026-05-01T12:00:00Z"));
+    const laterEvents = later.events.map((event) => ({ ...event, id: 2 }));
+    const [card] = await toBoardCards([{ ...first, events: [...laterEvents, ...first.events] }], options);
+    expect(card?.appliedDate).toEqual({ iso: "2026-06-01T23:30:00.000Z", label: "Jun 2", full: "Jun 2, 2026, 1:30 AM" });
+    expect(card?.events[1]).toMatchObject({ when: "Jun 30, 2026, 2:00 PM", occurredAt: "Jun 2, 2026, 1:30 AM" });
   });
   it("includes a year only when the event and now are in different display years", async () => {
     const [old] = await toBoardCards([entry("applied", new Date("2025-06-01T12:00:00Z"))], options);

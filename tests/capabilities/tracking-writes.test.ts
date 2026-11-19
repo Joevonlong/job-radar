@@ -1,10 +1,11 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { CAPABILITIES, visibleCapabilities } from "@/lib/capabilities/registry";
 import { mark_applied } from "@/lib/capabilities/tracking/mark-applied";
 import { mcpSchema } from "@/lib/config/schemas/mcp";
 import type { Db } from "@/lib/db/client";
+import * as days from "@/lib/insights/range";
 import { defaultContext } from "@/lib/mcp/server";
 import { mcpTranslator } from "@/lib/mcp/text";
 
@@ -44,9 +45,8 @@ describe("tracking write tool boundary", () => {
 
 describe("mark_applied input", () => {
   const now = () => new Date("2026-11-18T16:30:00Z");
-  const timezone = () => "Asia/Tokyo";
   const text = mcpTranslator("en");
-  const input = () => mark_applied.input({ ...context(true, true, true), now, timezone });
+  const input = (zone = "Asia/Tokyo") => mark_applied.input({ ...context(true, true, true), now, timezone: () => zone });
 
   it.each([
     ["2026-11-12", "2026-11-11T15:00:00Z"],
@@ -57,7 +57,7 @@ describe("mark_applied input", () => {
     expect(input().parse({ job_id: 1, applied_at }).applied_at).toEqual(new Date(expected));
   });
 
-  it.each(["2026-11-12T09:30:00", "2026-02-30"])("reports the expected format for %s", (applied_at) => {
+  it.each(["2026-11-12T09:30:00", "2026-11-12T09:30+01:00", "2026-02-30"])("reports the expected format for %s", (applied_at) => {
     expect(input().safeParse({ job_id: 1, applied_at })).toMatchObject({
       success: false, error: { issues: [{ path: ["applied_at"], message: text("errors.appliedAtFormat") }] },
     });
@@ -67,6 +67,39 @@ describe("mark_applied input", () => {
     expect(input().safeParse({ job_id: 1, applied_at })).toMatchObject({
       success: false, error: { issues: [{ path: ["applied_at"], message: text("errors.appliedAtFuture") }] },
     });
+  });
+
+  it.each([
+    ["0000-01-01", "UTC"],
+    ["0000-01-01T00:00:00+01:00", "UTC"],
+    ["1969-12-31", "UTC"],
+    ["1970-01-01", "Asia/Tokyo"],
+    ["1970-01-01T00:59:59.999+01:00", "UTC"],
+  ])("rejects %s in %s when its instant precedes the minimum", (applied_at, zone) => {
+    expect(input(zone).safeParse({ job_id: 1, applied_at })).toMatchObject({
+      success: false, error: { issues: [{ path: ["applied_at"], message: expect.stringContaining("1970-01-01T00:00:00Z") }] },
+    });
+  });
+
+  it.each(["1970-01-01", "1969-12-31T19:00:00-05:00"])("accepts %s at the minimum UTC instant", (applied_at) => {
+    expect(input("UTC").parse({ job_id: 1, applied_at }).applied_at).toEqual(new Date("1970-01-01T00:00:00Z"));
+  });
+
+  it("reports the expected format when the schedule zone skipped the date", () => {
+    expect(input("Pacific/Apia").safeParse({ job_id: 1, applied_at: "2011-12-30" })).toMatchObject({
+      success: false, error: { issues: [{ path: ["applied_at"], message: text("errors.appliedAtFormat") }] },
+    });
+  });
+
+  it("reports a calendar conversion error as a format error", () => {
+    const startOfDay = vi.spyOn(days, "startOfDayInZone").mockImplementationOnce(() => { throw new RangeError("invalid calendar day"); });
+    try {
+      expect(input().safeParse({ job_id: 1, applied_at: "2026-11-12" })).toMatchObject({
+        success: false, error: { issues: [{ path: ["applied_at"], message: text("errors.appliedAtFormat") }] },
+      });
+    } finally {
+      startOfDay.mockRestore();
+    }
   });
 
   it("reports an unreadable schedule zone without exposing the loader error", () => {

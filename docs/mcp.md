@@ -490,11 +490,12 @@ The four tracking tools call the same services as the web. A successful receipt 
 date clears the date. Status changes preserve notes, append events and wake dormant jobs under the web's existing rules.
 Notes, favorites, seen state, closure, filters and replies have no write tools in this release.
 
-`mark_applied` accepts an optional `applied_at` as an ISO date (`YYYY-MM-DD`) or a datetime with `Z` or a numeric
-offset (for example, `2026-11-12T09:30:00+01:00`). A date means midnight in the `schedule.yaml` timezone and can be
-today or earlier in that zone. A datetime can be at or before the current instant. The optional `reference` accepts
-1 to 200 characters after trimming leading and trailing whitespace. Invalid values, including null characters in
-a reference, return an input validation error.
+`mark_applied` accepts an optional `applied_at` as an ISO date (`YYYY-MM-DD`) or an ISO datetime with seconds and
+a UTC offset (`Z` or numeric), such as `2026-11-12T09:30:00+01:00`. A date resolves to the start of that day in the
+`schedule.yaml` timezone. The resolved instant must be between `1970-01-01T00:00:00Z` and now, inclusive. The date
+`1970-01-01` is valid in UTC and falls before the minimum in a timezone with a positive UTC offset at the start
+of that day. The optional `reference` accepts 1 to 200 characters after trimming leading and trailing whitespace.
+Invalid values, including null characters in a reference, return an input validation error.
 The status clock `status_changed_at` uses `applied_at` when supplied and the write time otherwise. The event's `at`
 always records the write time.
 
