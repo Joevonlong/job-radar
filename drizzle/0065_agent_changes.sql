@@ -70,7 +70,7 @@ BEGIN
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON jobs
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON jobs
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_jobs_presence();--> statement-breakpoint
 
 CREATE OR REPLACE FUNCTION public.agent_changes_jobs_update() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -109,7 +109,7 @@ BEGIN
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON jobs FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON jobs FOR EACH ROW WHEN (
   OLD.title IS DISTINCT FROM NEW.title OR
   OLD.company_id IS DISTINCT FROM NEW.company_id OR
   OLD.locations_json IS DISTINCT FROM NEW.locations_json OR
@@ -168,9 +168,9 @@ BEGIN
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_sources
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_sources
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_job_child('4287');--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON job_sources FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON job_sources FOR EACH ROW WHEN (
   OLD.job_id IS DISTINCT FROM NEW.job_id OR
   OLD.id IS DISTINCT FROM NEW.id OR
   OLD.raw_posting_id IS DISTINCT FROM NEW.raw_posting_id OR
@@ -187,15 +187,15 @@ BEGIN
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE OF payload_fingerprint, payload_hash, payload_json ON raw_postings
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE OF payload_fingerprint, payload_hash, payload_json ON raw_postings
   FOR EACH ROW WHEN (
     coalesce(OLD.payload_fingerprint, OLD.payload_hash, md5(OLD.payload_json::text)) IS DISTINCT FROM
       coalesce(NEW.payload_fingerprint, NEW.payload_hash, md5(NEW.payload_json::text))
   ) EXECUTE FUNCTION public.agent_changes_raw_posting();--> statement-breakpoint
 
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON signals
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON signals
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_job_child('1');--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON signals FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON signals FOR EACH ROW WHEN (
   OLD.job_id IS DISTINCT FROM NEW.job_id OR
   OLD.id IS DISTINCT FROM NEW.id OR
   OLD.tier IS DISTINCT FROM NEW.tier OR
@@ -217,9 +217,9 @@ BEGIN
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON trap_scans
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON trap_scans
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_job_child('191');--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON trap_scans FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON trap_scans FOR EACH ROW WHEN (
   OLD.job_id IS DISTINCT FROM NEW.job_id OR
   OLD.description_hash IS DISTINCT FROM NEW.description_hash OR
   OLD.sources_hash IS DISTINCT FROM NEW.sources_hash OR
@@ -237,11 +237,11 @@ BEGIN
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER agent_change_insert AFTER INSERT ON job_traps FOR EACH ROW WHEN (NEW.in_description)
+CREATE OR REPLACE TRIGGER agent_change_insert AFTER INSERT ON job_traps FOR EACH ROW WHEN (NEW.in_description)
   EXECUTE FUNCTION public.agent_changes_job_child('165');--> statement-breakpoint
-CREATE TRIGGER agent_change_delete AFTER DELETE ON job_traps FOR EACH ROW WHEN (OLD.in_description)
+CREATE OR REPLACE TRIGGER agent_change_delete AFTER DELETE ON job_traps FOR EACH ROW WHEN (OLD.in_description)
   EXECUTE FUNCTION public.agent_changes_job_child('165');--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON job_traps FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON job_traps FOR EACH ROW WHEN (
   OLD.in_description IS DISTINCT FROM NEW.in_description OR
   (NEW.in_description AND (
     OLD.job_id IS DISTINCT FROM NEW.job_id OR
@@ -253,9 +253,9 @@ CREATE TRIGGER agent_change_update AFTER UPDATE ON job_traps FOR EACH ROW WHEN (
   ))
 ) EXECUTE FUNCTION public.agent_changes_trap_span();--> statement-breakpoint
 
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON translations
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON translations
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_job_child('2');--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON translations FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON translations FOR EACH ROW WHEN (
   OLD.job_id IS DISTINCT FROM NEW.job_id OR
   OLD.lang IS DISTINCT FROM NEW.lang OR
   OLD.content IS DISTINCT FROM NEW.content OR
@@ -263,18 +263,18 @@ CREATE TRIGGER agent_change_update AFTER UPDATE ON translations FOR EACH ROW WHE
   OLD.created_at IS DISTINCT FROM NEW.created_at
 ) EXECUTE FUNCTION public.agent_changes_job_child('2');--> statement-breakpoint
 
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_breakdowns
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_breakdowns
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_job_child('4');--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON job_breakdowns FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON job_breakdowns FOR EACH ROW WHEN (
   OLD.job_id IS DISTINCT FROM NEW.job_id OR
   OLD.content IS DISTINCT FROM NEW.content OR
   OLD.prompt_version IS DISTINCT FROM NEW.prompt_version OR
   OLD.analyzed_at IS DISTINCT FROM NEW.analyzed_at
 ) EXECUTE FUNCTION public.agent_changes_job_child('4');--> statement-breakpoint
 
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_ghost
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_ghost
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_job_child('32');--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON job_ghost FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON job_ghost FOR EACH ROW WHEN (
   OLD.job_id IS DISTINCT FROM NEW.job_id OR
   OLD.level IS DISTINCT FROM NEW.level OR
   OLD.score IS DISTINCT FROM NEW.score OR
@@ -335,25 +335,25 @@ BEGIN
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER agent_change_insert AFTER INSERT ON scores
+CREATE OR REPLACE TRIGGER agent_change_insert AFTER INSERT ON scores
   REFERENCING NEW TABLE AS new_scores FOR EACH STATEMENT
   EXECUTE FUNCTION public.agent_changes_scores_insert();--> statement-breakpoint
-CREATE TRIGGER agent_change_delete AFTER DELETE ON scores
+CREATE OR REPLACE TRIGGER agent_change_delete AFTER DELETE ON scores
   REFERENCING OLD TABLE AS old_scores FOR EACH STATEMENT
   EXECUTE FUNCTION public.agent_changes_scores_delete();--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON scores
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON scores
   REFERENCING OLD TABLE AS old_scores NEW TABLE AS new_scores FOR EACH STATEMENT
   EXECUTE FUNCTION public.agent_changes_scores_update();--> statement-breakpoint
 
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_current_scores
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_current_scores
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_job_child('4096');--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON job_current_scores FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON job_current_scores FOR EACH ROW WHEN (
   OLD.job_id IS DISTINCT FROM NEW.job_id OR OLD.rank_value IS DISTINCT FROM NEW.rank_value
 ) EXECUTE FUNCTION public.agent_changes_job_child('4096');--> statement-breakpoint
 
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_visa
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_visa
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_job_child('128');--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON job_visa FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON job_visa FOR EACH ROW WHEN (
   OLD.job_id IS DISTINCT FROM NEW.job_id OR OLD.status IS DISTINCT FROM NEW.status OR OLD.evidence IS DISTINCT FROM NEW.evidence
 ) EXECUTE FUNCTION public.agent_changes_job_child('128');--> statement-breakpoint
 
@@ -389,11 +389,11 @@ BEGIN
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER agent_change_insert AFTER INSERT ON applications
+CREATE OR REPLACE TRIGGER agent_change_insert AFTER INSERT ON applications
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_application();--> statement-breakpoint
-CREATE TRIGGER agent_change_delete BEFORE DELETE ON applications
+CREATE OR REPLACE TRIGGER agent_change_delete BEFORE DELETE ON applications
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_application();--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON applications FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON applications FOR EACH ROW WHEN (
   OLD.job_id IS DISTINCT FROM NEW.job_id OR
   OLD.status IS DISTINCT FROM NEW.status OR
   OLD.status_changed_at IS DISTINCT FROM NEW.status_changed_at OR
@@ -440,9 +440,9 @@ BEGIN
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON application_events
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON application_events
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_application_event();--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON application_events FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON application_events FOR EACH ROW WHEN (
   OLD.application_id IS DISTINCT FROM NEW.application_id OR
   OLD.id IS DISTINCT FROM NEW.id OR
   OLD.from_status IS DISTINCT FROM NEW.from_status OR
@@ -478,21 +478,21 @@ BEGIN
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_favorites
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_favorites
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_favorite();--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON job_favorites FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON job_favorites FOR EACH ROW WHEN (
   OLD.job_id IS DISTINCT FROM NEW.job_id OR OLD.created_at IS DISTINCT FROM NEW.created_at OR OLD.note IS DISTINCT FROM NEW.note
 ) EXECUTE FUNCTION public.agent_changes_favorite();--> statement-breakpoint
 
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_seen
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_seen
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_job_child('1280');--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON job_seen FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON job_seen FOR EACH ROW WHEN (
   OLD.job_id IS DISTINCT FROM NEW.job_id
 ) EXECUTE FUNCTION public.agent_changes_job_child('1280');--> statement-breakpoint
 
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_filter_overrides
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_filter_overrides
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_job_child('1280');--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON job_filter_overrides FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON job_filter_overrides FOR EACH ROW WHEN (
   OLD.job_id IS DISTINCT FROM NEW.job_id OR OLD.action IS DISTINCT FROM NEW.action
 ) EXECUTE FUNCTION public.agent_changes_job_child('1280');--> statement-breakpoint
 
@@ -504,9 +504,9 @@ BEGIN
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_closure_overrides
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON job_closure_overrides
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_job_child('5441');--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON job_closure_overrides FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON job_closure_overrides FOR EACH ROW WHEN (
   OLD.job_id IS DISTINCT FROM NEW.job_id OR OLD.action IS DISTINCT FROM NEW.action OR OLD.created_at IS DISTINCT FROM NEW.created_at
 ) EXECUTE FUNCTION public.agent_changes_closure_override();--> statement-breakpoint
 
@@ -518,7 +518,7 @@ BEGIN
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON companies FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON companies FOR EACH ROW WHEN (
   OLD.name IS DISTINCT FROM NEW.name OR OLD.name_norm IS DISTINCT FROM NEW.name_norm
 ) EXECUTE FUNCTION public.agent_changes_company_update();--> statement-breakpoint
 
@@ -530,9 +530,9 @@ BEGIN
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON salary_lookups
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON salary_lookups
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_salary_lookup();--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON salary_lookups FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON salary_lookups FOR EACH ROW WHEN (
   (OLD.status = 'done' OR NEW.status = 'done') AND (
     OLD.lookup_key IS DISTINCT FROM NEW.lookup_key OR
     OLD.id IS DISTINCT FROM NEW.id OR
@@ -573,9 +573,9 @@ BEGIN
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON salary_benchmarks
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON salary_benchmarks
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_benchmark();--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON salary_benchmarks FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON salary_benchmarks FOR EACH ROW WHEN (
   OLD.role_family IS DISTINCT FROM NEW.role_family OR
   OLD.seniority IS DISTINCT FROM NEW.seniority OR
   OLD.geo_level IS DISTINCT FROM NEW.geo_level OR
@@ -595,9 +595,9 @@ BEGIN
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON company_research
+CREATE OR REPLACE TRIGGER agent_change_presence AFTER INSERT OR DELETE ON company_research
   FOR EACH ROW EXECUTE FUNCTION public.agent_changes_company_research();--> statement-breakpoint
-CREATE TRIGGER agent_change_update AFTER UPDATE ON company_research FOR EACH ROW WHEN (
+CREATE OR REPLACE TRIGGER agent_change_update AFTER UPDATE ON company_research FOR EACH ROW WHEN (
   (OLD.status = 'ok' OR NEW.status = 'ok') AND (
     OLD.company_id IS DISTINCT FROM NEW.company_id OR
     OLD.id IS DISTINCT FROM NEW.id OR
