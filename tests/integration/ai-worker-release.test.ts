@@ -233,7 +233,7 @@ describe("the release guard's runtime preconditions (no database)", () => {
     expect(r.urls.some((u) => u.includes("tsx/dist/loader.mjs"))).toBe(true);
   });
 
-  it.each([["22.22.2"], ["23.0.0"]])("a Node %s outside engines.node: exit 1, before tsx's loader is resolved", (version) => {
+  it.each(["26.13.0", "22.23.4", "27.0.0"])("a Node %s outside engines.node: exit 1, before tsx's loader is resolved", (version) => {
     const r = loadTs([runtimeStub], { RUNTIME_STUB: `node=${version}` });
     expect(r.status).toBe(1);
     expect(r.stderr).toContain(`release guard: Node ${version} does not satisfy engines.node`);
@@ -315,19 +315,22 @@ describe("the release guard refuses preloads from outside the release (no databa
   });
 
   it.each([
-    ["--experimental-config-file=<file>", (f: string) => [`--experimental-config-file=${f}`]],
-    ["--experimental_config_file <file> (the underscore spelling)", (f: string) => ["--experimental_config_file", f]],
-    ["--experimental-default-config-file", () => ["--experimental-default-config-file"]],
-    ["--experimental_default_config_file (the underscore spelling)", () => ["--experimental_default_config_file"]],
-  ])("%s on the command line: exit 1 (a Node config file could add preloads the guard cannot see)", (_label, flags) => {
-    // Node reads the config file before anything runs (the default one from the working directory), so run from a
-    // directory that has one; the guard finds the release from its own path
+    [["--config-file", "node.config.json"], "--config-file"],
+    [["--config-file=node.config.json"], "--config-file"],
+    [["--config_file", "node.config.json"], "--config_file"],
+    [["--config_file=node.config.json"], "--config_file"],
+    [["--experimental-config-file=node.config.json"], "--experimental-config-file"],
+    [["--experimental_config_file", "node.config.json"], "--experimental_config_file"],
+    [["--experimental-default-config-file"], "--config-file"],
+    [["--experimental_default_config_file", "node.config.json"], "--experimental_default_config_file"],
+  ] as const)("%j on the command line exits before the application loads", (flags, reportedOption) => {
     const dir = tmpPath("node-config");
     fs.mkdirSync(dir, { recursive: true });
     const config = path.join(dir, "node.config.json");
     fs.writeFileSync(config, "{}\n");
-    const r = spawnSync(process.execPath, ["--import", guard, ...flags(config), "-e", "console.log('loaded')"], { cwd: dir, env: workerEnv(), encoding: "utf8", timeout: 120_000 });
+    const r = spawnSync(process.execPath, ["--import", guard, ...flags, "-e", "console.log('loaded')"], { cwd: dir, env: workerEnv(), encoding: "utf8", timeout: 120_000 });
     expect(r.status).toBe(1);
+    expect(r.stderr).toContain(`release guard: ${reportedOption}`);
     expect(r.stderr).toContain("no Node config file for the ai-worker");
     expect(r.stdout).not.toContain("loaded");
   });
