@@ -19,7 +19,8 @@
 #                  every later step uses that commit, and a step stops when HEAD moved or tracked files changed meanwhile.
 #                  With --ref, the resolved commit must ship an install script that runs the worker from a release
 #                  directory (else see docs/upgrade.md, "Downgrade to a version before release directories")
-#                  and whether it has the config-write step is detected before checkout
+#                  and whether it has the config-write step is detected before checkout. Before switching or merging,
+#                  check the host ai-worker's Node against the target commit (HEAD with --skip-pull), unless --no-ai-worker.
 #   3  install     pnpm install --frozen-lockfile
 #   4  config      reads only, apart from data/ folders and .env: pnpm config:init --env-only (a new install's database
 #                  password), pnpm config:check, compose config (refuse jobspy dependencies added by overrides), and
@@ -268,6 +269,36 @@ require() { # require <message> <hint>
   fi
 }
 
+check_target_node() {
+  [[ "$NO_AI_WORKER" -eq 0 ]] || return 0
+  local commit="$1" node_bin manifest detail rc=0 min
+  local minimum_pattern='; install Node ([0-9]+\.[0-9]+\.[0-9]+) '
+  if ! node_bin="$(command -v node)"; then
+    require "cannot find the ai-worker node on PATH" "Install Node on this host, then run this script again; see docs/upgrade.md"
+    return 0
+  fi
+  if ! manifest="$(mktemp "${TMPDIR:-/tmp}/deploy-package.XXXXXX")"; then
+    require "could not create a temporary file for $commit:package.json" "Check the temporary directory and retry"
+    return 0
+  fi
+  if git -C "$ROOT" show "$commit:package.json" > "$manifest"; then
+    detail="$(NODE_OPTIONS="" "$node_bin" "$APP/$OPS/check-node-engines.mjs" "$manifest" 2>&1)" || rc=$?
+  else
+    detail="git show failed"
+    rc=1
+  fi
+  [[ -z "$manifest" ]] || rm -f -- "$manifest"
+  [[ "$rc" -ne 0 ]] || return 0
+  if [[ "$rc" -eq 2 ]]; then
+    say "cannot check the ai-worker Node requirement of $commit: $detail; continuing"
+  elif [[ "$detail" =~ $minimum_pattern ]]; then
+    min="${BASH_REMATCH[1]}"
+    require "ai-worker node at $node_bin: $detail" "Install Node $min (or a later ${min%%.*}.x) on this host, then run this script again; see docs/upgrade.md"
+  else
+    require "could not check $commit:package.json with $node_bin: $detail" "Check the target package.json and the Node installation, then retry"
+  fi
+}
+
 # Run a state-changing command in its own process group (proc_run), wait for it and everything it started, and stop
 # when a signal came meanwhile (with that signal's exit code) or when it failed.
 proc_step() { # proc_step <failure message> <hint> <command...>
@@ -416,10 +447,20 @@ else
     echo "  \$ git checkout --detach <tag $REF, else branch $REMOTE/$REF>"
     if [[ "$DRY_RUN" -eq 0 ]]; then
       proc_step "git fetch failed" "Check the network and the address of $REMOTE (git remote -v)" git -C "$ROOT" fetch --tags --force "$REMOTE" "+refs/heads/*:refs/remotes/$REMOTE/*"
-      ref_target=""
-      if git -C "$ROOT" rev-parse -q --verify "refs/tags/$REF^{commit}" >/dev/null; then ref_target="refs/tags/$REF"
-      elif git -C "$ROOT" rev-parse -q --verify "refs/remotes/$REMOTE/$REF^{commit}" >/dev/null; then ref_target="refs/remotes/$REMOTE/$REF"
-      else fail_step "$REF is neither a tag nor a branch of $REMOTE" "List the releases with: git tag --list 'v*'"; fi
+    fi
+    ref_target="refs/tags/$REF"
+    if ! commit="$(git -C "$ROOT" rev-parse -q --verify "$ref_target^{commit}")"; then
+      ref_target="refs/remotes/$REMOTE/$REF"
+      commit="$(git -C "$ROOT" rev-parse -q --verify "$ref_target^{commit}")" || commit=""
+    fi
+    if [[ -n "$commit" ]]; then
+      check_target_node "$commit"
+    elif [[ "$DRY_RUN" -eq 0 ]]; then
+      fail_step "$REF is neither a tag nor a branch of $REMOTE" "List the releases with: git tag --list 'v*'"
+    elif [[ "$NO_AI_WORKER" -eq 0 ]]; then
+      say "cannot check the ai-worker Node requirement until $REF is fetched"
+    fi
+    if [[ "$DRY_RUN" -eq 0 ]]; then
       if [[ "$VERIFY" -eq 1 ]]; then
         [[ "$ref_target" == refs/tags/* ]] || fail_step "--verify needs a tag, but $REF is a branch" "Use --ref <tag>, or drop --verify"
         # releases are signed with an SSH key; the maintainer's public key ships as docs/signing-key.pub (allowed_signers format).
@@ -434,14 +475,13 @@ else
       # The resolved commit (never the raw name) must run the worker from a release directory: an older install script
       # would not understand --release (the ai-worker step), and going back before release directories is a manual
       # procedure. Checked before the checkout moves.
-      commit="$(git -C "$ROOT" rev-parse "$ref_target^{commit}")" || fail_step "cannot resolve $REF to a commit" "Read the git error above"
       if ! git -C "$ROOT" show "$commit:scripts/ops/install-ai-worker.sh" 2>/dev/null | grep -qx '# capability: ai-worker-release-dir'; then
         fail_step "$REF ($commit) is a version from before the ai-worker ran from release directories; deploy.sh cannot switch to it (the checkout was not changed)" "Follow docs/upgrade.md#downgrade-pre-release-dir (uninstall the worker first, then check out and deploy the old version by hand)"
       fi
       # This running script survives checkout. Decide before moving HEAD whether the target has the config-write step.
       CONFIG_WRITE_STEP=0
       if git -C "$ROOT" show "$commit:scripts/ops/deploy.sh" 2>/dev/null | grep -x '# capability: config-write-step' >/dev/null; then CONFIG_WRITE_STEP=1; fi
-      proc_step "could not check out $REF" "Resolve the git error above, then run this script again" git -C "$ROOT" checkout --detach "$ref_target"
+      proc_step "could not check out $REF" "Resolve the git error above, then run this script again" git -C "$ROOT" checkout --detach "$commit"
       say "$before -> $(git -C "$ROOT" rev-parse --short HEAD) ($REF)"
     fi
   elif [[ -n "$BRANCH" ]]; then
@@ -449,7 +489,20 @@ else
     echo "  \$ git merge --ff-only $REMOTE/$BRANCH"
     if [[ "$DRY_RUN" -eq 0 ]]; then
       proc_step "git fetch failed" "Check the network and the address of $REMOTE (git remote -v)" git -C "$ROOT" fetch "$REMOTE" "$BRANCH"
-      proc_step "$BRANCH and $REMOTE/$BRANCH have diverged, cannot fast-forward" "The local $BRANCH has commits that are not on the remote: find out why before deploying, do not force-push" git -C "$ROOT" merge --ff-only "$REMOTE/$BRANCH"
+    fi
+    if commit="$(git -C "$ROOT" rev-parse -q --verify "refs/remotes/$REMOTE/$BRANCH^{commit}")"; then
+      if git -C "$ROOT" merge-base --is-ancestor "$commit" HEAD; then
+        check_target_node HEAD
+      else
+        check_target_node "$commit"
+      fi
+    elif [[ "$DRY_RUN" -eq 0 ]]; then
+      fail_step "cannot resolve $REMOTE/$BRANCH to a commit" "Check the remote branch and fetch configuration"
+    elif [[ "$NO_AI_WORKER" -eq 0 ]]; then
+      say "cannot check the ai-worker Node requirement until $REMOTE/$BRANCH is fetched"
+    fi
+    if [[ "$DRY_RUN" -eq 0 ]]; then
+      proc_step "$BRANCH and $REMOTE/$BRANCH have diverged, cannot fast-forward" "The local $BRANCH has commits that are not on the remote: find out why before deploying, do not force-push" git -C "$ROOT" merge --ff-only "$commit"
       say "$before -> $(git -C "$ROOT" rev-parse --short HEAD)"
     fi
   else
@@ -458,6 +511,7 @@ else
 fi
 # From here on "the commit to deploy" is TARGET, never whatever HEAD is at the moment.
 TARGET="$(git -C "$APP" rev-parse HEAD)"
+if [[ "$SKIP_PULL" -eq 1 || ( -z "$REF" && -z "$BRANCH" ) ]]; then check_target_node "$TARGET"; fi
 if [[ -z "$CONFIG_WRITE_STEP" ]]; then
   CONFIG_WRITE_STEP=0
   if git -C "$ROOT" show "$TARGET:scripts/ops/deploy.sh" 2>/dev/null | grep -x '# capability: config-write-step' >/dev/null; then CONFIG_WRITE_STEP=1; fi
@@ -587,7 +641,7 @@ else
   if [[ "$DRY_RUN" -eq 0 ]]; then
     assert_target
     proc_step "could not prepare the release directory of $TARGET (see the prepare-release lines above)" \
-      "Nothing is restarted yet: the services and the ai-worker still run the previous version. Fix the cause (pnpm version: corepack enable; disk space; network for pnpm), then run this script again" \
+      "Nothing is restarted yet: the services and the ai-worker still run the previous version. For a pnpm mismatch, install it: npm install -g pnpm@<version> (use the version reported above). For an install failure, check disk space and network access. Then run this script again" \
       "$OPS/prepare-release.sh" "$TARGET" --root "$APP"
   fi
 fi

@@ -606,11 +606,11 @@ exit 1
 });
 
 describe("scripts/ops/prepare-release.sh: checks and failures", () => {
-  it("a pnpm that does not match packageManager is refused before the install, with the corepack hint", () => {
+  it("refuses a pnpm version mismatch before installing dependencies and prints the pinned npm install command", () => {
     const r = prepare([], { STUB_PNPM_VERSION: "1.2.3" });
     expect(r.status).toBe(1);
     expect(r.stderr).toContain(`pnpm 1.2.3 does not match packageManager pnpm@${STUB_PNPM}`);
-    expect(r.stderr).toContain("corepack enable");
+    expect(r.stderr).toContain(`npm install -g pnpm@${STUB_PNPM}`);
     expect(installs()).toEqual([]);
     expect(entries()).toEqual([]);
   });

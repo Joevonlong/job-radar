@@ -145,6 +145,7 @@ beforeAll(() => {
   // the install stub carries the capability line deploy.sh --ref looks for in the target commit
   write(path.join(work, "scripts/ops/install-ai-worker.sh"), `${STEP_STUB("install-ai-worker.sh", "INSTALL")}# capability: ai-worker-release-dir\n`, 0o755);
   write(path.join(work, "scripts/ops/prepare-release.sh"), STEP_STUB("prepare-release.sh", "PREPARE"), 0o755);
+  fs.copyFileSync(path.join(repoRoot, "scripts/ops/check-node-engines.mjs"), path.join(work, "scripts/ops/check-node-engines.mjs"));
   write(path.join(work, "package.json"), '{"name":"job-radar"}\n');
   write(path.join(work, "compose.yaml"), "services:\n  db: {}\n  web:\n    depends_on:\n      db:\n        condition: service_healthy\n  runner:\n    depends_on:\n      db:\n        condition: service_healthy\n");
   write(path.join(work, "config/schedule.yaml"), "timezone: Europe/Berlin\ndoctor:\n  compose_project: radar-test\n  web_url: http://137.0.0.1:3000\n");
@@ -283,7 +284,7 @@ exit 0
   );
   write(path.join(stubs, "launchctl"), `${LOGGING_STUB("launchctl")}if [[ -n "\${SERVICE_PROBE_HOOK:-}" ]] && grep -q -- ' --holder' "$DEPLOY_TEST_LOG"; then bash -c "$SERVICE_PROBE_HOOK"; fi\n[[ "$1" == print && -e "$HOME/loaded" ]] && { echo "pid = 4242"; exit 0; }\nexit 113\n`, 0o755);
   write(path.join(stubs, "node"), `#!/usr/bin/env bash
-if [[ "\${1:-}" == -e ]]; then NODE_PATH="${repoRoot}/node_modules" exec "${process.execPath}" "$@"; fi
+if [[ "\${1:-}" == -e || "\${1:-}" == */check-node-engines.mjs ]]; then NODE_PATH="${repoRoot}/node_modules" exec "${process.execPath}" "$@"; fi
 echo "node $*" >> "$DEPLOY_TEST_LOG"
 case " $* " in
   *" --lock-holder "*)
@@ -427,7 +428,7 @@ function runSync(command: string, args: string[], env: Record<string, string | u
   const files = runFiles();
   let pid = -1;
   try {
-    // Node 22's sync spawn supports detached (via normalizeSpawnArguments); @types/node omits the option.
+    // Node supports detached synchronous child processes, although @types/node omits the option.
     const options: SpawnSyncOptions & { detached: boolean } = {
       cwd: work,
       env: { ...deployEnv(env), DEPLOY_TEST_GROUPS: files.groupsFile },
@@ -1107,6 +1108,83 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       restore(base);
     }
   });
+  describe("host Node for the target ai-worker", () => {
+    const major = Number(process.versions.node.split(".")[0]);
+    const min = `${major + 1}.0.0`;
+    const incompatible = `>=${min} <${major + 2}`;
+
+    function publishTarget(ref: string, range: string, kind: "tags" | "heads" = "tags"): string {
+      const other = path.join(tmp, ref);
+      git(tmp, "clone", origin, other);
+      write(path.join(other, "package.json"), JSON.stringify({ name: "job-radar", engines: { node: range } }));
+      fs.rmSync(path.join(other, "scripts/ops/check-node-engines.mjs"));
+      git(other, "commit", "-am", "target Node requirement");
+      git(other, "push", "origin", `HEAD:refs/${kind}/${ref}`);
+      return git(other, "rev-parse", "HEAD");
+    }
+
+    it.each(["--ref", "--branch"] as const)("refuses %s before moving HEAD or starting the deploy", (selector) => {
+      const base = head();
+      const ref = `node${selector}`;
+      const branch = selector === "--branch";
+      publishTarget(ref, incompatible, branch ? "heads" : "tags");
+      if (branch) git(work, "checkout", "-q", "-b", ref);
+      try {
+        const r = deploy([selector, ref]);
+        expect(r.status, r.out).toBe(1);
+        expect(r.out).toContain(`ai-worker node at ${path.join(stubs, "node")}`);
+        expect(r.out).toContain(`Node ${process.versions.node} does not satisfy engines.node "${incompatible}"`);
+        expect(r.out).toContain(`Install Node ${min} (or a later ${major + 1}.x) on this host, then run this script again; see docs/upgrade.md`);
+        expect(head()).toBe(base);
+        expect(r.gitCalls.some((call) => / (checkout|merge) /.test(call))).toBe(false);
+        expect(r.calls).toEqual(["docker info"]);
+        expect(fs.existsSync(lockDir)).toBe(false);
+        expect(fs.readdirSync(path.join(tmp, "wait-tmp")).filter((name) => name.startsWith("deploy-package."))).toEqual([]);
+        const plan = deploy(["--dry-run", selector, ref]);
+        expect(plan.out).toContain("a real run would stop here");
+        expect(plan.out).toContain(incompatible);
+        expect(plan.gitCalls.some((call) => / (fetch|checkout|merge) /.test(call))).toBe(false);
+      } finally {
+        restore(base);
+      }
+    });
+
+    it("checks HEAD with --skip-pull and when the dry-run plan skips the pull", () => {
+      const base = head();
+      git(work, "checkout", "-q", "-b", "local-node-check");
+      try {
+        write(path.join(work, "package.json"), JSON.stringify({ engines: { node: incompatible } }));
+        git(work, "commit", "-am", "local Node requirement");
+        const r = deploy(["--skip-pull"]);
+        expect(r.status, r.out).toBe(1);
+        expect(r.out).toContain(incompatible);
+        expect(r.calls).toEqual(["docker info"]);
+        const plan = deploy(["--dry-run"]);
+        expect(plan.out).toContain("pull skipped in this plan");
+        expect(plan.out).toContain(incompatible);
+      } finally {
+        restore(base);
+      }
+    });
+
+    it.each([
+      { ref: "skip-node-check", range: incompatible, flags: ["--no-ai-worker"] },
+      { ref: "legacy-node-range", range: `>=${major + 1} <${major + 2}`, flags: [] },
+    ])("deploys $ref through migration", ({ ref, range, flags }) => {
+      const base = head();
+      const target = publishTarget(ref, range);
+      try {
+        const r = deploy(["--ref", ref, "--settle", "0", ...flags]);
+        expect(r.status, r.out).toBe(0);
+        expect(head()).toBe(target);
+        expect(r.calls).toContain("pnpm migrate:run");
+        expect(r.out.includes("cannot check")).toBe(flags.length === 0);
+      } finally {
+        restore(base);
+      }
+    });
+  });
+
   describe("--ref", () => {
     it.each([false, true])("allows an old target dependency on jobspy, but refuses dependencies added by overrides: override=%s", (override) => {
       const base = head();
@@ -1326,7 +1404,7 @@ describe("scripts/ops/deploy.sh: branch selection", { timeout: TEST_TIMEOUT_MS }
       expect(git(work, "rev-parse", "--abbrev-ref", "HEAD")).toBe(branch);
       expect(r.gitCalls.filter((call) => / (fetch|merge|checkout|switch) /.test(` ${call} `))).toEqual([
         `git -C ${realWork} fetch origin ${branch}`,
-        `git -C ${realWork} merge --ff-only origin/${branch}`,
+        `git -C ${realWork} merge --ff-only ${target}`,
       ]);
     } finally {
       restore(base);
@@ -1380,7 +1458,7 @@ describe("scripts/ops/deploy.sh: branch selection", { timeout: TEST_TIMEOUT_MS }
     const r = deploy([...args, "--branch", "main"]);
     expect(r.status, r.out).toBe(0);
     expect(r.gitCalls).toContain(`git -C ${realWork} fetch origin main`);
-    expect(r.gitCalls).toContain(`git -C ${realWork} merge --ff-only origin/main`);
+    expect(r.gitCalls).toContain(`git -C ${realWork} merge --ff-only ${head()}`);
     const base = head();
     git(work, "checkout", "-q", "-B", "stable");
     try {

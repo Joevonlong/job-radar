@@ -28,9 +28,9 @@ export function parseEnginesRange(range) {
 }
 
 /**
- * @param {string} range engines.node, e.g. ">=22.23.4 <23"
- * @param {string} version a Node version such as "22.23.4" or "v22.23.4"
- * @returns {{ ok: true } | { ok: false, reason: "unsupported-range" | "bad-version" | "out-of-range", message: string }}
+ * @param {string} range engines.node, e.g. ">=26.13.1 <27"
+ * @param {string} version a Node version such as "26.13.1" or "v26.13.1"
+ * @returns {import("./check-node-engines.d.mts").EnginesCheck}
  */
 export function checkNodeEngines(range, version) {
   const parsed = parseEnginesRange(range);
@@ -52,6 +52,7 @@ export function checkNodeEngines(range, version) {
     return {
       ok: false,
       reason: "out-of-range",
+      min: parsed.min,
       message: `Node ${cur.join(".")} does not satisfy engines.node "${range}"; install Node ${parsed.min.join(".")} or later, below ${parsed.belowMajor}`,
     };
   }

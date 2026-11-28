@@ -100,7 +100,7 @@ workflow 级设置：`permissions: contents: read`（任何任务都不能写仓
 
 #### Set up Node.js
 
-`actions/setup-node`，Node 22（`engines` 里的版本），pnpm store 按 `pnpm-lock.yaml` 的哈希缓存。所有用浮动 `22` 的 job 都设了 `check-latest: true`：runner 的 toolcache 可能比 Node 安全版晚一个版本，低于 `engines.node` 的下限。
+`actions/setup-node`，Node 26（`engines` 里的版本），pnpm store 按 `pnpm-lock.yaml` 的哈希缓存。所有用浮动 `26` 的 job 都设了 `check-latest: true`：runner 的 toolcache 可能比 Node 安全版晚一个版本，低于 `engines.node` 的下限。
 
 #### Install dependencies
 
@@ -124,7 +124,7 @@ workflow 级设置：`permissions: contents: read`（任何任务都不能写仓
 
 #### Set up Node.js
 
-`actions/setup-node`，Node 22，pnpm store 缓存。
+`actions/setup-node`，Node 26，pnpm store 缓存。
 
 #### Install dependencies
 
@@ -202,7 +202,7 @@ Vitest 单元测试：`tests/**`（除 `tests/integration/`）下的所有测试
 
 #### Set up Node.js
 
-`actions/setup-node`，Node 22，pnpm store 缓存。
+`actions/setup-node`，Node 26，pnpm store 缓存。
 
 #### Install dependencies
 
@@ -228,7 +228,7 @@ Vitest 单元测试：`tests/**`（除 `tests/integration/`）下的所有测试
 
 #### Set up Node.js
 
-`actions/setup-node`，Node 22，pnpm store 缓存。
+`actions/setup-node`，Node 26，pnpm store 缓存。
 
 #### Install dependencies
 
@@ -244,11 +244,11 @@ Vitest 单元测试：`tests/**`（除 `tests/integration/`）下的所有测试
 
 #### Set up the lowest Node.js of engines.node
 
-再用一次 `actions/setup-node`，这次是 Node 22.23.4，即 `engines.node`（`>=22.23.4 <23`）允许的最低版本。宿主机 ai-worker 的发布目录守卫（`src/ai-worker/release-guard.mjs`）需要 Node 的同步模块 hook，tsx 从 22.22.3 起才走这条路；22.23.4 是带有 2026 年 10 月 Node 安全修复的下限。这是任务的最后几步，之后没有别的步骤用这个 Node。
+用 `actions/setup-node` 切到 `engines.node`（`>=26.13.1 <27`）允许的最低版本 26.13.1。ai-worker 的 release guard 依赖 Node 的同步模块钩子。设定下限时，26.13.1 是最新的 26.x，已验证 tsx loader 能在这个版本上通过守卫加载模块。下一步用同一版本复测。
 
 #### Load a release module with the lowest Node.js
 
-在临时目录的一个 clone 里，用 `scripts/ops/prepare-release.sh --offline` 为当前提交建发布目录（安装依赖那一步之后 pnpm store 里已经有全部包），再像 ai-worker 服务那样，在发布目录里经守卫和 tsx loader 加载其中一个 `.ts` 模块（tsx 从发布目录的 `tsconfig.json` 读路径别名）。退出码不为 0，或者 stderr 里有 `module.register called`（tsx 走了 hook 线程那条路，守卫会拒绝），这一步就失败。上限 5 分钟。本地：切到 Node 22.23.4，在临时目录里执行 workflow 里同样的命令，`--root` 绝不要指向你安装用的 checkout。
+在临时目录的一个 clone 里，用 `scripts/ops/prepare-release.sh --offline` 为当前提交建发布目录（安装依赖那一步之后 pnpm store 里已经有全部包），再像 ai-worker 服务那样，在发布目录里经守卫和 tsx loader 加载其中一个 `.ts` 模块（tsx 从发布目录的 `tsconfig.json` 读路径别名）。退出码不为 0，或者 stderr 里有 `module.register called`（tsx 走了 hook 线程那条路，守卫会拒绝），这一步就失败。上限 5 分钟。本地：切到 Node 26.13.1，在临时目录里执行 workflow 里同样的命令，`--root` 绝不要指向你安装用的 checkout。
 
 ### Job `integration-shuffled`
 
@@ -264,7 +264,7 @@ Vitest 单元测试：`tests/**`（除 `tests/integration/`）下的所有测试
 
 #### Set up Node.js
 
-`actions/setup-node`，Node 22，pnpm store 缓存。
+`actions/setup-node`，Node 26，pnpm store 缓存。
 
 #### Install dependencies
 
@@ -297,7 +297,7 @@ PostgreSQL 17 service、`DATABASE_URL`、必须可用的 pg 工具包装和依�
 
 #### Set up Node.js
 
-`actions/setup-node`，Node 22，pnpm store 缓存。
+`actions/setup-node`，Node 26，pnpm store 缓存。
 
 #### Install dependencies
 
@@ -373,7 +373,7 @@ project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单
 
 #### Set up Node.js
 
-`actions/setup-node`，Node 22，pnpm store 缓存。
+`actions/setup-node`，Node 26，pnpm store 缓存。
 
 #### Install dependencies
 
@@ -473,7 +473,7 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 ### Job `upgrade-transition`
 
-用真 Docker 和每个版本自己的 deploy、install、uninstall 脚本测升级迁移，ai-worker 跑在模拟的 systemd 下（`tests/transition/run.sh`）。`changes` 设了 `transition` 时运行（改到部署相关文件，包括 `tests/transition/`，或工具链的 PR、每次推送到 `main`、手动运行）。矩阵生成 `upgrade-transition (A)` 和 `upgrade-transition (B)`，各用独立 runner；`fail-fast: false` 保证一个失败不会取消另一个。没有 service 容器：脚本的每个 compose 项目自带数据库。每条腿保留 120 分钟任务上限、从启动算起的 65 分钟截止时间和 66 分钟等待上限。准备和启动上限合计 25 分钟，加上 1 分钟报告余量、5 分钟清理（含 240 秒宽限期）、一次 5 分钟上传，保守合计 101 分钟，留出 19 分钟余量。
+用真 Docker 和每个版本自己的 deploy、install、uninstall 脚本测升级迁移，ai-worker 跑在模拟的 systemd 下（`tests/transition/run.sh`）。`changes` 设了 `transition` 时运行（改到部署相关文件，包括 `tests/transition/`，或工具链的 PR、每次推送到 `main`、手动运行）。矩阵生成 `upgrade-transition (A)` 和 `upgrade-transition (B)`，各用独立 runner；`fail-fast: false` 保证一个失败不会取消另一个。没有 service 容器：脚本的每个 compose 项目自带数据库。每条腿保留 120 分钟任务上限、从启动算起的 65 分钟截止时间和 66 分钟等待上限。准备和启动上限合计 35 分钟，加上 1 分钟报告余量、5 分钟清理（含 240 秒宽限期）、一次 5 分钟上传，保守合计 111 分钟，留出 9 分钟余量。
 
 部署步骤若构建输出显示历史提交取 Google Fonts 失败（`internal/font/google`），会重试（最多两次，间隔递增，每次重试都写进日志）；其他失败立即报错。
 
@@ -485,17 +485,23 @@ transition 作业的第一步。有的 runner 根盘只有 72 GB（正常 145 GB
 
 `actions/checkout`，`fetch-depth: 0`：当前固定的 action 会获取所有分支和标签，包括 `v2.0.1`。选中场景 F 时，脚本在第一次调用 Docker 前检查 `refs/tags/v2.0.1^{commit}`；缺少发布标签时停止，并提示运行 `git fetch --tags`。
 
+#### Set up Node.js for historical releases
+
+`actions/setup-node` 先安装最新的 Node 22.x，供历史提交使用。
+
 #### Set up pnpm
 
-`pnpm/action-setup`。
+读取 `v2.0.1` 的 `package.json`，用 npm 将其中固定版本的 pnpm 全局安装到 Node 22 的目录，并把该目录导出为 `JOBRADAR_TRANSITION_NODE22`。
 
 #### Set up Node.js
 
-`actions/setup-node`，Node 22，pnpm store 缓存。
+`actions/setup-node` 再安装最新的 Node 26.x，作为后续步骤的默认版本，并启用 pnpm store 缓存。
 
 #### Install dependencies
 
-`pnpm install --frozen-lockfile`（发布目录从这个 pnpm store 安装依赖）。
+Node 26 不附带 Corepack。用 npm 将 HEAD 的 `packageManager` 指定的 pnpm 全局安装到 Node 26 的目录，导出 `JOBRADAR_TRANSITION_NODE26`，再运行 `pnpm install --frozen-lockfile`。
+
+运行过渡测试时，脚本通过 `git show <目标提交>:package.json` 读取 `engines.node` 和 pnpm 版本，为每次部署、发布目录准备和 worker 切换选择工具链。即使检出目录仍在旧提交，显式指定的新 release 也使用自己的 Node。本地运行前先导出上述两个绝对目录，各自须含有 `bin/node` 和 `bin/pnpm`。找不到匹配版本时，脚本会报告目标提交及所需版本。
 
 #### Start transition scenarios
 
@@ -566,7 +572,7 @@ workflow 里的每个 `uses:` 都固定到完整的 40 位 commit SHA，行尾�
 
 ## 本地跑完整流水线
 
-上面每个任务都只是几条命令。下面是通用做法（有 Docker、Node 22 加 pnpm、Python 3.12 就够），使用一个端口与你真实数据库不同的一次性 PostgreSQL。
+上面每个任务都只是几条命令。下面是通用做法（需要 Docker、Node 26、pnpm 和 Python 3.12，过渡场景还需要上文的 Node 22 安装目录），使用一个端口与你真实数据库不同的一次性 PostgreSQL。
 
 ```bash
 # 一次性数据库（角色可建库，与 CI 的 service 一样）。数据库相关的测试没有默认地址：没设 DATABASE_URL（e2e 也可以设

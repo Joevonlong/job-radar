@@ -11,37 +11,38 @@ import { checkNodeEngines, parseEnginesRange } from "../../scripts/ops/check-nod
 /** scripts/ops/check-node-engines.mjs: the one parser of engines.node (release guard, Dockerfile stages). */
 const repo = path.resolve(import.meta.dirname, "../..");
 const script = path.join(repo, "scripts/ops/check-node-engines.mjs");
-const RANGE = ">=22.22.3 <23";
+const RANGE = ">=26.13.1 <27";
 
 describe("checkNodeEngines", () => {
   it("rejects a version below the minimum", () => {
-    expect(checkNodeEngines(RANGE, "22.22.2")).toMatchObject({ ok: false, reason: "out-of-range" });
-    expect(checkNodeEngines(RANGE, "22.21.9")).toMatchObject({ ok: false, reason: "out-of-range" });
-    expect(checkNodeEngines(RANGE, "21.99.99")).toMatchObject({ ok: false, reason: "out-of-range" });
+    expect(checkNodeEngines(RANGE, "26.13.0")).toMatchObject({ ok: false, reason: "out-of-range" });
+    expect(checkNodeEngines(RANGE, "26.12.9")).toMatchObject({ ok: false, reason: "out-of-range" });
   });
 
   it("accepts the minimum and later versions of the same major", () => {
-    expect(checkNodeEngines(RANGE, "22.22.3")).toEqual({ ok: true });
-    expect(checkNodeEngines(RANGE, "v22.23.1")).toEqual({ ok: true });
-    expect(checkNodeEngines(RANGE, "22.100.0")).toEqual({ ok: true });
+    expect(checkNodeEngines(RANGE, "26.13.1")).toEqual({ ok: true });
+    expect(checkNodeEngines(RANGE, "v26.13.2")).toEqual({ ok: true });
+    expect(checkNodeEngines(RANGE, "26.100.0")).toEqual({ ok: true });
   });
 
   it("rejects the excluded major and later", () => {
-    expect(checkNodeEngines(RANGE, "23.0.0")).toMatchObject({ ok: false, reason: "out-of-range" });
-    expect(checkNodeEngines(RANGE, "24.1.0")).toMatchObject({ ok: false, reason: "out-of-range" });
+    expect(checkNodeEngines(RANGE, "27.0.0")).toMatchObject({ ok: false, reason: "out-of-range" });
+    expect(checkNodeEngines(RANGE, "28.1.0")).toMatchObject({ ok: false, reason: "out-of-range" });
   });
 
-  it("names the required range in the message", () => {
-    const r = checkNodeEngines(RANGE, "22.22.2");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.message).toContain("22.22.3");
+  it("tells a user on an older major which Node to install", () => {
+    expect(checkNodeEngines(RANGE, "22.23.4")).toMatchObject({
+      ok: false,
+      reason: "out-of-range",
+      message: expect.stringContaining("install Node 26.13.1 or later, below 27"),
+    });
   });
 
-  it.each([">=22 <23", "^22.22.3", ">=22.22.3", "22.x", ">=22.22.3 <23.1", ">= 22.22.3 < 23", ""])(
+  it.each([">=26 <27", "^26.13.1", ">=26.13.1", "26.x", ">=26.13.1 <27.1", ">= 26.13.1 < 27", ""])(
     "reports an unsupported range %j instead of guessing",
     (range) => {
       expect(parseEnginesRange(range)).toBeNull();
-      expect(checkNodeEngines(range, "22.22.3")).toMatchObject({ ok: false, reason: "unsupported-range" });
+      expect(checkNodeEngines(range, "26.13.1")).toMatchObject({ ok: false, reason: "unsupported-range" });
     },
   );
 

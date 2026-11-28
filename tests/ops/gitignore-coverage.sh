@@ -3,7 +3,7 @@
 # (`pnpm stack:up`, a plain `docker compose build`): a real docker build lists its context.
 #
 #   tests/ops/gitignore-coverage.sh            needs git and a running Docker; runs in CI (linux-smoke)
-#   NODE_VERSION=22 tests/ops/gitignore-coverage.sh
+#   NODE_VERSION=26 tests/ops/gitignore-coverage.sh
 #
 # Expansion rule, for every entry of .gitignore (comments and blank lines skipped):
 #   - a negation (!...) re-includes files, so it has no sample; it must be in ALLOWLIST below, with its reason;

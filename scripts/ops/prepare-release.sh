@@ -24,7 +24,7 @@
 #      data/releases/ai-worker/ (a worker installed by a newer checkout may run from a release). Anything that cannot
 #      be read or decoded refuses.
 #   2  git archive of <sha> into .tmp-<sha>-<pid>/ next to the releases
-#   3  `pnpm --version` must equal the packageManager of that commit (else: run `corepack enable`)
+#   3  `pnpm --version` must equal the packageManager of that commit (install it with `npm install -g pnpm@<version>`)
 #   4  pnpm install --frozen-lockfile --prod --prefer-offline --ignore-scripts: no lifecycle script runs at all, not even
 #      one that allowBuilds of pnpm-workspace.yaml would allow; a commit without tsx in its dependencies gets the full
 #      install instead
@@ -232,7 +232,7 @@ want="$(sed -n -E 's/^[[:space:]]*"packageManager":[[:space:]]*"pnpm@([0-9]+\.[0
 [[ -n "$want" ]] || die "package.json of $SHA has no packageManager \"pnpm@X.Y.Z\""
 have="$(cd "$tmp" && pnpm --version 2>/dev/null </dev/null)" || have=""
 have="${have//[[:space:]]/}"
-[[ "$have" == "$want" ]] || die "pnpm ${have:-(not found)} does not match packageManager pnpm@$want of $SHA; run corepack enable (or install pnpm $want), then retry"
+[[ "$have" == "$want" ]] || die "pnpm ${have:-(not found)} does not match packageManager pnpm@$want of $SHA; install it: npm install -g pnpm@$want, then retry"
 
 # ---- 4: install ---------------------------------------------------------------------------------------------------------
 store_mode="--prefer-offline"; [[ "$OFFLINE" == 0 ]] || store_mode="--offline"

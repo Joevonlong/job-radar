@@ -25,8 +25,8 @@
 //        --experimental-loader stop the process (no CommonJS preload, no hooks thread). Every --import names a file
 //        whose real path is inside the root: this guard and tsx's loader in production; tests add their own fixtures
 //        from the release. Package names are refused (the service definition uses absolute paths).
-//        --experimental-config-file and --experimental-default-config-file stop it too: a Node config file can add
-//        preloads that appear in neither NODE_OPTIONS nor execArgv.
+//        --config-file, --experimental-config-file and --experimental-default-config-file also stop the worker.
+//        A Node config file can add preloads that appear in neither NODE_OPTIONS nor execArgv.
 //      A preload that comes before this guard has already run when the check happens; the check makes the process
 //      stop before any application code runs.
 //
@@ -189,7 +189,7 @@ for (const token of nodeOptionTokens) {
 // the command line: --import only, each one a file inside the root
 const REFUSED_PRELOADS = new Set(["--require", "-r", "--loader", "--experimental-loader"]);
 // a Node config file can add preloads (nodeOptions.import / require) that show up in neither NODE_OPTIONS nor execArgv
-const REFUSED_CONFIG_FILES = new Set(["--experimental-config-file", "--experimental-default-config-file"]);
+const REFUSED_CONFIG_FILES = new Set(["--config-file", "--experimental-config-file", "--experimental-default-config-file"]);
 const execArgv = process.execArgv;
 for (let i = 0; i < execArgv.length; i++) {
   const name = optionName(execArgv[i]);

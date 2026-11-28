@@ -1,7 +1,7 @@
 #!/bin/sh
 # Starts the MCP server over stdio from any working directory (docs/mcp.md).
-# An MCP client launches its servers from wherever it likes, and corepack picks the pnpm version by
-# the current directory, so go to the project first. stdout carries the protocol: nothing else may print there.
+# An MCP client launches its servers from wherever it likes, and pnpm picks its version from
+# the current directory's packageManager, so go to the project first. stdout carries the protocol: nothing else may print there.
 set -eu
 
 # Follow symlinks so a link such as ~/bin/job-radar-mcp still finds the project.

@@ -224,7 +224,7 @@ services:
       timeout: 3s
       retries: 60
   worker:
-    image: node:22-slim
+    image: node:26-slim
     profiles: ["worker"]
     network_mode: "service:db"
     user: "$(id -u):$(id -g)"

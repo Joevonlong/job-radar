@@ -8,8 +8,8 @@
 #   --scenarios  A, B, F or a comma-separated selection (default A,B,F). C, D and E are no separate choices: they run
 #                inside B, on its project, after B's upgrade to V4 (in the order D, C, E), so `--scenarios B` runs B, C, D and E.
 #
-# Needs: git with tag v2.0.1 and the full history of this checkout, node, pnpm (the store already holds the locked
-# packages of every version: CI runs `pnpm install` first, the rest is fetched), Docker with compose v2. No database: each
+# Needs: git with tag v2.0.1 and full history, Docker with compose v2, and JOBRADAR_TRANSITION_NODE22 /
+# JOBRADAR_TRANSITION_NODE26 pointing to installations with bin/node and the target commit's pnpm in bin/pnpm. Each
 # project runs its own db container on a free port. The artifact directory receives each step's output, the simulator's
 # call log, the worker logs and, on failure, the compose logs.
 #
@@ -108,6 +108,9 @@ for s in ${SCENARIOS//,/ }; do
   esac
 done
 
+# Capture the toolchain roots before the environment scrub removes JOBRADAR_*.
+transition_node22="${JOBRADAR_TRANSITION_NODE22:-}"
+transition_node26="${JOBRADAR_TRANSITION_NODE26:-}"
 # CI runners are throw-away: only there may the harness prune the build cache between hops (read before the env is cleaned)
 CI_RECLAIM_DISK=0
 [[ "${CI:-}" == true && -n "${GITHUB_ACTIONS:-}" ]] && CI_RECLAIM_DISK=1
@@ -121,7 +124,9 @@ say() { printf '\n==> %s\n' "$*"; }
 die() { echo "transition: FAILED: $*" >&2; exit 1; }
 want() { [[ ",$SCENARIOS," == *",$1,"* ]]; }
 
-for tool in git node pnpm docker; do command -v "$tool" >/dev/null 2>&1 || die "$tool is not installed"; done
+# Use the supplied installations to bootstrap the selector even if the caller has no default Node.
+export PATH="$PATH${transition_node26:+:$transition_node26/bin}${transition_node22:+:$transition_node22/bin}"
+for tool in git node docker; do command -v "$tool" >/dev/null 2>&1 || die "$tool is not installed"; done
 if want F; then
   git -C "$REPO" rev-parse --verify "refs/tags/$RELEASE^{commit}" >/dev/null 2>&1 \
     || die "tag $RELEASE is missing: run git fetch --tags (CI needs actions/checkout with fetch-depth: 0)"
@@ -228,7 +233,8 @@ chmod 755 "$root/bin/"* "$root/uname-linux/uname"
 # the docker CLI finds its plugins (compose) and its context through its config directory, which follows HOME
 export DOCKER_CONFIG="${DOCKER_CONFIG:-$HOME/.docker}"
 export HOME="$root/home" XDG_CONFIG_HOME="$root/xdg" XDG_RUNTIME_DIR="$root/run" JOB_RADAR_SERVICE_MANAGER=systemd JOB_RADAR_SIM_DIR="$root/sim"
-export PATH="$root/bin:$SIM_BIN:$PATH"
+transition_base_path="$PATH"
+export PATH="$root/bin:$SIM_BIN:$transition_base_path"
 # every launchctl / systemctl the scripts run must be the simulator's
 [[ "$(command -v launchctl)" == "$SIM_BIN/launchctl" && "$(command -v systemctl)" == "$SIM_BIN/systemctl" ]] \
   || die "launchctl / systemctl do not resolve to the simulator ($(command -v launchctl), $(command -v systemctl))"
@@ -271,6 +277,24 @@ free_port() {
   done
 }
 
+# A checkout uses its commit's toolchain until the next checkout. Explicit release targets can differ from HEAD.
+use_target_node() {
+  local ref="$1" bin
+  bin="$(git -C "$src" show "$ref:package.json" | node "$REPO/tests/transition/node-bin.mjs" "$ref" "$transition_node22" "$transition_node26")" || exit 1
+  export PATH="$root/bin:$SIM_BIN:$bin:$transition_base_path"
+}
+
+with_target_node() (
+  use_target_node "$1"
+  shift
+  "$@"
+)
+
+checkout() {
+  use_target_node "$1"
+  git -C "$DIR" checkout -q --detach "$1"
+}
+
 # ---- one project ---------------------------------------------------------------------------------------------------------
 # project_new <name> <commit>: a clone at <commit> with its own compose project, ports, volume and database password;
 # the user's schedule.yaml turns the scheduled cycles and the catch-up off (no collection runs, so run_ai finds nothing
@@ -280,7 +304,7 @@ project_new() {
   local name="$1" sha="$2" db_port pw
   P="$PREFIX-$name"; DIR="$root/$name"
   git clone -q "$src" "$DIR"
-  git -C "$DIR" checkout -q --detach "$sha"
+  checkout "$sha"
   db_port="$(free_port)"; WEB_PORT="$(free_port)"
   pw="$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 20)" || true
   DB_URL="postgres://jobradar:$pw@127.0.0.1:$db_port/jobradar"
@@ -331,7 +355,6 @@ reclaim_disk() {
   fi
 }
 deploy() { RETRY_FONT_FETCH=1 logged "deploy-$1" "0 2" in_project bash scripts/ops/deploy.sh --skip-pull --no-backup --no-prune --no-drain --settle "${2:-5}" --wait-timeout 600; reclaim_disk; }
-checkout() { git -C "$DIR" checkout -q --detach "$1"; }
 stop_web_runner() { logged stop-web-runner 0 in_project docker compose -p "$P" stop web runner; }
 release_of() { echo "$DIR/data/releases/ai-worker/$1"; }
 
@@ -516,16 +539,16 @@ if want B; then
   check_all "$V0" "$DIR" checkout 0
 
   # B1: V4's tools replace the worker installed from the checkout with a worker that never starts: rolled back
-  logged b1-prepare-broken 0 bash "$REPO/scripts/ops/prepare-release.sh" "$BROKEN" --root "$DIR"
+  logged b1-prepare-broken 0 with_target_node "$BROKEN" bash "$REPO/scripts/ops/prepare-release.sh" "$BROKEN" --root "$DIR"
   old_pid="$(worker_pid)"
-  logged b1-install-broken 1 bash "$REPO/scripts/ops/install-ai-worker.sh" --release "$(release_of "$BROKEN")" --root "$DIR"
+  logged b1-install-broken 1 with_target_node "$BROKEN" bash "$REPO/scripts/ops/install-ai-worker.sh" --release "$(release_of "$BROKEN")" --root "$DIR"
   log_has "rolled back:"; log_has "the previous worker is back"; log_lacks "ROLLBACK FAILED"
   check_all "$V0" "$DIR" checkout 0
   [[ "$WORKER_PID" != "$old_pid" ]] || die "step $STEP: the worker was not restarted"
 
   # B2: and for real: the worker runs from the release of V4 while the checkout is still at V0
-  logged b2-prepare-v4 0 bash "$REPO/scripts/ops/prepare-release.sh" "$V4" --root "$DIR"
-  logged b2-install-v4 0 bash "$REPO/scripts/ops/install-ai-worker.sh" --release "$(release_of "$V4")" --root "$DIR"
+  logged b2-prepare-v4 0 with_target_node "$V4" bash "$REPO/scripts/ops/prepare-release.sh" "$V4" --root "$DIR"
+  logged b2-install-v4 0 with_target_node "$V4" bash "$REPO/scripts/ops/install-ai-worker.sh" --release "$(release_of "$V4")" --root "$DIR"
   check_worker "$(release_of "$V4")" release
   check_run_ai
   check_no_lock
@@ -556,20 +579,20 @@ if want B; then
   check_all "$NEXT" "$(release_of "$NEXT")" release 4
 
   say "C: a release with a broken tsx loader: the switch is rolled back to NEXT"
-  logged c-prepare-loader 0 in_project bash scripts/ops/prepare-release.sh "$LOADER" --root "$DIR"
+  logged c-prepare-loader 0 with_target_node "$LOADER" in_project bash scripts/ops/prepare-release.sh "$LOADER" --root "$DIR"
   loader="$(release_of "$LOADER")/node_modules/tsx/dist/loader.mjs"
   loader="$(cd "$(dirname "$loader")" && pwd -P)/loader.mjs"
   [[ "$loader" == "$(release_of "$LOADER")"/* ]] || die "the loader $loader is not inside the release"
   # unlink and write a new file: the old one may be a hard link into the pnpm store, which must not change
   chmod u+w "$(dirname "$loader")"; rm -f -- "$loader"
   echo 'throw new Error("transition test: broken tsx loader");' > "$loader"; chmod a-w "$(dirname "$loader")"
-  logged c-install-loader 1 in_project bash scripts/ops/install-ai-worker.sh --release "$(release_of "$LOADER")" --root "$DIR"
+  logged c-install-loader 1 with_target_node "$LOADER" in_project bash scripts/ops/install-ai-worker.sh --release "$(release_of "$LOADER")" --root "$DIR"
   log_has "rolled back:"; log_has "the previous worker is back"; log_lacks "ROLLBACK FAILED"
   check_all "$NEXT" "$(release_of "$NEXT")" release 4
 
   say "E: emergency restore of the previous release (V4)"
-  logged e-prepare-prev 0 in_project bash scripts/ops/prepare-release.sh "$V4" --root "$DIR"
-  logged e-install-prev 0 in_project bash scripts/ops/install-ai-worker.sh --release "$(release_of "$V4")" --root "$DIR"
+  logged e-prepare-prev 0 with_target_node "$V4" in_project bash scripts/ops/prepare-release.sh "$V4" --root "$DIR"
+  logged e-install-prev 0 with_target_node "$V4" in_project bash scripts/ops/install-ai-worker.sh --release "$(release_of "$V4")" --root "$DIR"
   check_all "$NEXT" "$(release_of "$V4")" release 4 "ai-worker runs release $(short "$V4"), the checkout is at $(short "$NEXT")"
 
   say "uninstall"

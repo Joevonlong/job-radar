@@ -1,6 +1,6 @@
 # Current display score measurements
 
-Run from the product root with Node 22 and installed dependencies. Every argument is explicit: the PostgreSQL admin URL,
+Run from the product root with Node 26.13.1 or a later 26.x and installed dependencies. Every argument is explicit: the PostgreSQL admin URL,
 throwaway database name (must start with `jobradar_test_scoreperf_`), code root and disposable container. Production port
 5433 is rejected. Use the machine's heavy-task semaphore for the complete run. Supply a test config/profile directory
 with a resolved DE market through `JOB_RADAR_DEFAULTS_DIR`, `JOB_RADAR_CONFIG_DIR`, and `JOB_RADAR_PROFILE_DIR`.
