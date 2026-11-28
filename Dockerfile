@@ -4,7 +4,7 @@
 #   docker build --target web    -t job-radar-web .
 #   docker build --target runner -t job-radar-runner .
 
-ARG NODE_VERSION=22
+ARG NODE_VERSION=26
 # Must equal the @playwright/test version in package.json (tests/dockerfile.test.ts enforces it).
 ARG PLAYWRIGHT_VERSION=1.64.1
 ARG PNPM_VERSION=11.15.1
@@ -22,7 +22,7 @@ ARG PNPM_VERSION
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH \
     CI=true
-# pnpm from npm rather than corepack: no network lookups at build time beyond the pinned install.
+# Install the pinned pnpm version from npm.
 RUN npm install -g pnpm@${PNPM_VERSION} && npm cache clean --force
 WORKDIR /app
 
@@ -70,15 +70,15 @@ USER node
 EXPOSE 3000
 CMD ["node", "server.js"]
 
-# ---- node22: source of a Node 22 binary for the runner ---------------------------------------
-FROM node:${NODE_VERSION}-slim AS node22
+# ---- node-runtime: source of the runner's Node binary ---------------------------------------
+FROM node:${NODE_VERSION}-slim AS node-runtime
 
 # ---- runner: Playwright base image + a single bundled script -----------------------------------
-# The Playwright noble image ships Node 24; copy the Node 22 binary over it so the runner
-# runs the same major version as dev and CI (Node 22).
+# The Playwright noble image brings its own Node (v1.64.1: Node 26.13.0, below engines.node). Copy the
+# binary of the web image over it so the runner runs the same Node release as web, development and CI.
 FROM mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble AS runner
-COPY --from=node22 /usr/local/bin/node /usr/local/bin/node
-# The subscription CLIs. Installed as root before dropping to pwuser; they run under the Node 22
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+# The subscription CLIs. Installed as root before dropping to pwuser; they run under the Node
 # binary above (their shebang is `env node`). Auth is supplied at run time (see compose.yaml): never baked in.
 ARG CLAUDE_CODE_VERSION
 ARG CODEX_VERSION

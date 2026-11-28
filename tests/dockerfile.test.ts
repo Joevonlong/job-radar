@@ -97,7 +97,9 @@ describe("Dockerfile", () => {
 
     it("in the runner, after its Node binary is replaced", () => {
       const runner = stageOf("runner");
-      expect(runner.search(/^RUN node \/tmp\/engines\//m)).toBeGreaterThan(runner.search(/^COPY --from=node22 /m));
+      const copy = runner.search(/^COPY --from=node-runtime \/usr\/local\/bin\/node \/usr\/local\/bin\/node$/m);
+      expect(copy).toBeGreaterThan(-1);
+      expect(runner.search(/^RUN node \/tmp\/engines\//m)).toBeGreaterThan(copy);
     });
 
     it("every final stage (each stage that switches user) runs the check", () => {

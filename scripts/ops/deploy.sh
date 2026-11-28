@@ -587,7 +587,7 @@ else
   if [[ "$DRY_RUN" -eq 0 ]]; then
     assert_target
     proc_step "could not prepare the release directory of $TARGET (see the prepare-release lines above)" \
-      "Nothing is restarted yet: the services and the ai-worker still run the previous version. Fix the cause (pnpm version: corepack enable; disk space; network for pnpm), then run this script again" \
+      "Nothing is restarted yet: the services and the ai-worker still run the previous version. For a pnpm mismatch, install it: npm install -g pnpm@<version> (use the version reported above). For an install failure, check disk space and network access. Then run this script again" \
       "$OPS/prepare-release.sh" "$TARGET" --root "$APP"
   fi
 fi

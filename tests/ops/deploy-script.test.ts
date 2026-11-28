@@ -427,7 +427,7 @@ function runSync(command: string, args: string[], env: Record<string, string | u
   const files = runFiles();
   let pid = -1;
   try {
-    // Node 22's sync spawn supports detached (via normalizeSpawnArguments); @types/node omits the option.
+    // Node supports detached synchronous child processes, although @types/node omits the option.
     const options: SpawnSyncOptions & { detached: boolean } = {
       cwd: work,
       env: { ...deployEnv(env), DEPLOY_TEST_GROUPS: files.groupsFile },

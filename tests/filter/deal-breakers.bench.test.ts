@@ -86,7 +86,7 @@ function jobs(): DealBreakerJob[] {
   });
 }
 
-/** CPU time of this thread (of the process on a Node 22 older than 22.19), without the garbage collector's and compilers' threads. */
+/** Measures CPU time for this thread, falling back to process CPU time when per-thread accounting is unavailable. */
 const node: { threadCpuUsage?: (previous?: NodeJS.CpuUsage) => NodeJS.CpuUsage } = process;
 const cpuUsage = (previous?: NodeJS.CpuUsage): NodeJS.CpuUsage => (node.threadCpuUsage ? node.threadCpuUsage(previous) : process.cpuUsage(previous));
 
