@@ -35,7 +35,9 @@ Job Radar 从一个 git 检出目录运行。发布版本是签名的 git 标签
 
 ### 升级到需要 Node 26 的发布版本
 
-部署前，在宿主机上安装 **Node 26.13.1 或更高的 26.x**。保留原路径上的 Node 22，供旧 ai-worker 在回滚时重新启动。在准备运行部署脚本的终端里切换到 Node 26，再安装**目标版本**的 `package.json` 中 `packageManager` 指定的 pnpm。Node 26 不附带 Corepack。以 nvm 和固定使用 `pnpm@11.15.1` 的目标版本为例：
+部署宿主机 ai-worker 时，`deploy.sh` 会按目标提交的 `engines.node` 检查当前终端 `PATH` 上的 Node。版本不符时，脚本会在切换代码、安装依赖、重启服务或迁移数据库之前停止。只有运行的 `deploy.sh` 已包含这项检查，才能提前拦截升级。
+
+首次升级到 Node 26 时，请先在宿主机上安装 **Node 26.13.1 或更高的 26.x**，再运行 `deploy.sh`。保留原路径上的 Node 22，供旧 ai-worker 在回滚时重新启动。在准备运行部署脚本的终端里切换到 Node 26，再安装**目标版本**的 `package.json` 中 `packageManager` 指定的 pnpm。Node 26 不附带 Corepack。以 nvm 和固定使用 `pnpm@11.15.1` 的目标版本为例：
 
 ```bash
 nvm install 26.13.1

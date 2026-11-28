@@ -48,7 +48,11 @@ its fingerprint is `SHA256:HHRRfExpbUjcK0/pdc5E1qf94ogkREVkt9+1VP58JQc`, also gi
 
 ### Upgrading to a release that needs Node 26
 
-Before deploying, install Node **26.13.1 or a later 26.x** alongside Node 22 on the host. Keep the old binary at its
+When deploying the host ai-worker, `deploy.sh` checks the Node on your shell's `PATH` against the target commit's
+`engines.node`. A version mismatch stops the deploy before the checkout moves, dependencies are installed, services
+restart or the database is migrated. Only a copy of `deploy.sh` that already includes this check can stop the upgrade.
+
+Before running `deploy.sh` for the first upgrade to Node 26, install **26.13.1 or a later 26.x** alongside Node 22 on the host. Keep the old binary at its
 original path so the running ai-worker can restart during a rollback. In the shell that will run the deploy, activate
 Node 26 and install the pnpm version in the **target release's** `package.json` (`packageManager`). Node 26 ships without
 Corepack. For example, with nvm and a target that pins `pnpm@11.15.1`:
