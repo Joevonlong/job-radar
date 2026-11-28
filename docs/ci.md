@@ -148,8 +148,8 @@ the dependency install (cached).
 
 #### Set up Node.js
 
-`actions/setup-node`, Node 22 (the version in `engines`), with the pnpm store cached by the hash of `pnpm-lock.yaml`.
-Every job that uses the floating `22` sets `check-latest: true`: the runner's toolcache can lag a Node security release
+`actions/setup-node`, Node 26 (the version in `engines`), with the pnpm store cached by the hash of `pnpm-lock.yaml`.
+Every job that uses the floating `26` sets `check-latest: true`: the runner's toolcache can lag a Node security release
 behind `engines.node`, and the job would then run an older Node than the floor.
 
 #### Install dependencies
@@ -182,7 +182,7 @@ tests is also in `scripts/validate.sh`.
 
 #### Set up Node.js
 
-`actions/setup-node`, Node 22, pnpm store cache.
+`actions/setup-node`, Node 26, pnpm store cache.
 
 #### Install dependencies
 
@@ -299,7 +299,7 @@ assert values of the shipped defaults).
 
 #### Set up Node.js
 
-`actions/setup-node`, Node 22, pnpm store cache.
+`actions/setup-node`, Node 26, pnpm store cache.
 
 #### Install dependencies
 
@@ -339,7 +339,7 @@ of skipping when the client tools are missing.
 
 #### Set up Node.js
 
-`actions/setup-node`, Node 22, pnpm store cache.
+`actions/setup-node`, Node 26, pnpm store cache.
 
 #### Install dependencies
 
@@ -364,10 +364,9 @@ described in [Running the whole pipeline locally](#running-the-whole-pipeline-lo
 
 #### Set up the lowest Node.js of engines.node
 
-`actions/setup-node` again, now with Node 22.23.4, the lowest version `engines.node` (`>=22.23.4 <23`) allows. The host
-ai-worker's release guard (`src/ai-worker/release-guard.mjs`) needs Node's synchronous module hooks, and tsx only uses
-them from 22.22.3 on; 22.23.4 is the floor that carries the October 2026 Node security fixes. These are the last steps
-of the job, so nothing after them runs with this Node.
+`actions/setup-node` selects 26.13.1, the minimum allowed by `engines.node` (`>=26.13.1 <27`). The ai-worker's
+release guard requires synchronous module hooks. When the floor was set, 26.13.1 was the latest 26.x and the tsx
+loader had been verified with the guard on that version. The next step repeats that check.
 
 #### Load a release module with the lowest Node.js
 
@@ -375,7 +374,7 @@ Builds a release directory of the checked-out commit with `scripts/ops/prepare-r
 temporary directory (the pnpm store already holds every package after the install step), then loads one of its `.ts`
 modules through the release guard and the tsx loader from inside the release directory, as the ai-worker service will (tsx reads the path aliases from the release's `tsconfig.json`). Fails when that exits non-zero or
 when stderr says `module.register called` (tsx would have taken the hooks-thread path, which the guard refuses). Limit 5
-minutes. Locally, with Node 22.23.4 active: the same commands from the workflow, in a temporary directory, never with
+minutes. Locally, with Node 26.13.1 active: the same commands from the workflow, in a temporary directory, never with
 `--root` pointing at your installation's checkout.
 
 ### Job `integration-shuffled`
@@ -394,7 +393,7 @@ and runs alongside the default-order and lowest-Node checks; no test selection o
 
 #### Set up Node.js
 
-`actions/setup-node`, Node 22, pnpm store cache.
+`actions/setup-node`, Node 26, pnpm store cache.
 
 #### Install dependencies
 
@@ -449,7 +448,7 @@ process (`fileParallelism: false`).
 
 #### Set up Node.js
 
-`actions/setup-node`, Node 22, pnpm store cache.
+`actions/setup-node`, Node 26, pnpm store cache.
 
 #### Install dependencies
 
@@ -600,7 +599,7 @@ worker, specs in order, because they walk one install through the wizard.
 
 #### Set up Node.js
 
-`actions/setup-node`, Node 22, pnpm store cache.
+`actions/setup-node`, Node 26, pnpm store cache.
 
 #### Install dependencies
 
@@ -777,9 +776,9 @@ under the systemd simulator (`tests/transition/run.sh`). Runs when `changes` set
 the deploy side, including `tests/transition/`, or toolchain, every push to `main`, manual runs). The matrix creates
 `upgrade-transition (A)` and `upgrade-transition (B)` on separate runners with `fail-fast: false`: one failure does not cancel the other.
 No service container: each compose project of the script runs its own database. Each leg keeps the 120-minute job limit,
-65-minute launch-time deadline and 66-minute wait cap. Setup and launch caps total 25 minutes; allowing 1 minute for
-reporting, 5 minutes for cleanup (including its 240-second grace), and one 5-minute upload gives a conservative
-101-minute budget per leg, leaving 19 minutes before the job limit.
+65-minute launch-time deadline and 66-minute wait cap. Setup and launch caps total 35 minutes. With 1 minute for
+reporting, 5 minutes for cleanup (including its 240-second grace), and one 5-minute upload, each leg has a
+111-minute budget and 9 minutes to spare.
 
 A deploy step of a historical commit is run again (at most twice, with a growing pause, each retry logged) when its build output shows a failed Google Fonts fetch (`internal/font/google`); any other failure fails at once.
 
@@ -793,17 +792,28 @@ First step of the transition job. Some runners come with a 72 GB root disk inste
 When scenario F is selected, the script checks `refs/tags/v2.0.1^{commit}` before its first Docker call and stops with a message to run
 `git fetch --tags` if the release tag is missing.
 
+#### Set up Node.js for historical releases
+
+`actions/setup-node` installs the latest Node 22.x for the historical commits.
+
 #### Set up pnpm
 
-`pnpm/action-setup`.
+Reads the pnpm pin from the `package.json` at `v2.0.1`, installs it globally with npm under Node 22, and exports that
+installation's root as `JOBRADAR_TRANSITION_NODE22`.
 
 #### Set up Node.js
 
-`actions/setup-node`, Node 22, pnpm store cache.
+`actions/setup-node` installs the latest Node 26.x last, making it the default for subsequent steps, and enables the pnpm store cache.
 
 #### Install dependencies
 
-`pnpm install --frozen-lockfile` (fills the pnpm store the release directories install from).
+Node 26 ships without Corepack. The step uses npm to install the pnpm pinned by HEAD's `packageManager` globally
+under Node 26, exports its root as `JOBRADAR_TRANSITION_NODE26`, and runs `pnpm install --frozen-lockfile`.
+
+For each deploy, release preparation or worker switch, the harness reads `engines.node` and the pnpm pin with
+`git show <target>:package.json`. An explicit release target gets its own toolchain even while the checkout is on
+an older commit. For a local run, export both absolute installation roots, each containing `bin/node` and `bin/pnpm`.
+If neither matches, the harness reports the target and the versions it requires.
 
 #### Start transition scenarios
 
@@ -948,8 +958,8 @@ Docker for gitleaks and an untracked local patterns file that CI does not have.
 
 ## Running the whole pipeline locally
 
-Every job above is a few commands. This is the generic recipe (Docker, Node 22 with pnpm, Python 3.12 are enough); it uses a
-throwaway PostgreSQL on a port that is not your real database's.
+The commands below use Docker, Node 26 with pnpm, Python 3.12 and a throwaway PostgreSQL on a separate port.
+The transition scenarios also need the Node 22 installation described above.
 
 ```bash
 # a throwaway database (the role may create databases, like the CI service). The database tests have no default

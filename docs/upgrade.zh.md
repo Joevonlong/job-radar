@@ -33,6 +33,28 @@ Job Radar 从一个 git 检出目录运行。发布版本是签名的 git 标签
 
 **从没有 config-write 步骤的版本升级：** 先运行 `git pull`（或 `git fetch --tags && git checkout --detach <标签>`），再运行新版本的 `scripts/ops/deploy.sh --skip-pull`。旧的 `deploy.sh` 自己拉取或切换时，运行的仍是旧脚本，它不认识这个目标，会在自己的第 4 步写配置，不经过第 11 步的闸门；如果已经这样跑过，再用 `--skip-pull` 运行一次新脚本。
 
+### 升级到需要 Node 26 的发布版本
+
+部署前，在宿主机上安装 **Node 26.13.1 或更高的 26.x**。保留原路径上的 Node 22，供旧 ai-worker 在回滚时重新启动。在准备运行部署脚本的终端里切换到 Node 26，再安装**目标版本**的 `package.json` 中 `packageManager` 指定的 pnpm。Node 26 不附带 Corepack。以 nvm 和固定使用 `pnpm@11.15.1` 的目标版本为例：
+
+```bash
+nvm install 26.13.1
+nvm use 26.13.1
+npm install -g pnpm@11.15.1
+node --version
+pnpm --version
+```
+
+launchd 或 systemd 的服务定义记录了 `node` 的绝对路径。切换终端里的 Node 后，安装器会在部署切换服务时，把这个终端选中的新路径写入服务定义。
+
+如果宿主机仍使用 Node 22，新版本的 doctor 会在启动时提示当前版本和需要安装的 Node 26 版本。安装器也会在停止旧 worker 前检查版本；预检失败会显示 `not changed:`，旧 worker 继续运行。如果新服务启动时用了不兼容的 Node，release guard 会在日志中提示要安装的版本。macOS 查看 `~/Library/Logs/job-radar/ai-worker.launchd.log`，Linux 运行 `journalctl --user -u job-radar-ai-worker.service`。安装器会恢复备份的服务定义，用原来的 Node 重启旧 worker，确认它持有实例锁且已写入新心跳后显示 `rolled back:`。
+
+**回退到需要 Node 22 的旧版本时：**
+
+1. 先在 Node 26 下完成需要当前版本执行的回滚准备，见[回滚](#回滚)。
+2. 用 `git show <旧标签>:package.json` 查看 `engines.node` 和 `packageManager`。在部署终端切回满足要求的 Node 22.x（使用 nvm 时依次运行 `nvm install 22`、`nvm use 22`），再运行 `npm install -g pnpm@<版本>` 安装旧标签指定的 pnpm，并核对两者的版本。
+3. 部署旧标签，运行该版本的 `pnpm run doctor`。如果目标版本尚未引入发布目录，按[手工降级步骤](#downgrade-pre-release-dir)操作。
+
 ### 部署脚本做了什么
 
 按顺序执行，遇到第一个失败的步骤就停下：

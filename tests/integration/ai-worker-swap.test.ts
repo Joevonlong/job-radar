@@ -1,10 +1,13 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from "vitest";
 
+import { createConnection } from "../../src/lib/db/client";
+import { dbNow, workerEvidence } from "../../src/lib/db/repos/ai-worker-evidence";
 import { FakeInstall } from "../helpers/fake-release";
 import { createIsolatedDb, type IsolatedDb } from "../helpers/isolated-db";
 import { selectedSwapManagers } from "../helpers/swap-managers";
@@ -181,6 +184,50 @@ describe.each(managers)("install-ai-worker.sh switch (%s)", (manager) => {
     expect(fs.existsSync(stale)).toBe(true); // 13: no clean-up after a failure
     expect(fs.readFileSync(def(), "utf8")).toContain(r1);
     expect(fx.tmpLeft()).toEqual([]);
+  }, SLOW);
+
+  it("restores the old Node path and a fresh heartbeat when the new release guard refuses to start", async () => {
+    fx = new FakeInstall(manager);
+    const oldBin = path.join(fx.tmp, "node-22", "bin");
+    fs.mkdirSync(oldBin, { recursive: true });
+    const oldNode = path.join(oldBin, "node");
+    fs.symlinkSync(process.execPath, path.join(oldBin, "runtime"));
+    fs.writeFileSync(oldNode, [
+      "#!/bin/sh",
+      'case "$1" in -v|--version) echo v22.23.4; exit 0 ;; esac',
+      'echo "$$" >> "${0%/*}/pids"',
+      'exec "${0%/*}/runtime" "$@"',
+      "",
+    ].join("\n"), { mode: 0o755 });
+    const oldRelease = fx.release();
+    const first = install(oldRelease, { PATH: `${oldBin}:${fx.env().PATH}` });
+    expect(first.status, first.stderr).toBe(0);
+    const oldPid = fx.servicePid();
+    const saved = fs.readFileSync(def());
+    expect(saved.includes(oldNode)).toBe(true);
+
+    const next = fx.release({ checkNode: { engines: ">=26.13.1 <27" } });
+    const guard = "src/ai-worker/release-guard.mjs";
+    // Preflight uses the installer's Node. Only the candidate service sees the simulated older runtime.
+    fs.writeFileSync(path.join(next, guard), 'Object.defineProperty(process.versions, "node", { value: "22.23.4" });\n' + fs.readFileSync(path.join(repoRoot, guard), "utf8"));
+    const conn = createConnection(iso.url);
+    try {
+      const since = await dbNow(conn.sql);
+      const result = install(next);
+      expect(result.status, result.stderr).toBe(1);
+      expect(result.stderr).toContain("rolled back:");
+      const log = manager === "launchd" ? path.join(fx.home, "Library/Logs/job-radar/ai-worker.launchd.log") : path.join(fx.simDir, `${target()}.journal`);
+      expect(fs.readFileSync(log, "utf8")).toContain('release guard: Node 22.23.4 does not satisfy engines.node ">=26.13.1 <27"; install Node 26.13.1');
+      expect(fs.readFileSync(def()).equals(saved)).toBe(true);
+      const pid = fx.servicePid();
+      expect(pid).toBeGreaterThan(0);
+      expect(pid).not.toBe(oldPid);
+      expect(fs.readFileSync(path.join(oldBin, "pids"), "utf8").split("\n")).toContain(String(pid));
+      expect(fx.starts().at(-1)).toMatchObject({ pid, release: shaOf(oldRelease) });
+      expect(await workerEvidence(conn, { pid, host: os.hostname(), since })).toEqual({ status: "found", reason: "lock-and-heartbeat" });
+    } finally {
+      await conn.sql.end();
+    }
   }, SLOW);
 
   it.each([["no-lock"], ["no-heartbeat"]] as const)("cases 3/4: the new worker is alive but %s: rolled back", (mode) => {

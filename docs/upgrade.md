@@ -46,6 +46,40 @@ its fingerprint is `SHA256:HHRRfExpbUjcK0/pdc5E1qf94ogkREVkt9+1VP58JQc`, also gi
 
 **Upgrading from a version without the config-write step:** run `git pull` (or `git fetch --tags && git checkout --detach <tag>`), then the new `scripts/ops/deploy.sh --skip-pull`. An older `deploy.sh` that pulls or switches by itself keeps running as the old script, does not recognize this target, and writes the config in its own step 4 without the gate of step 11; if that already happened, run the new script with `--skip-pull`.
 
+### Upgrading to a release that needs Node 26
+
+Before deploying, install Node **26.13.1 or a later 26.x** alongside Node 22 on the host. Keep the old binary at its
+original path so the running ai-worker can restart during a rollback. In the shell that will run the deploy, activate
+Node 26 and install the pnpm version in the **target release's** `package.json` (`packageManager`). Node 26 ships without
+Corepack. For example, with nvm and a target that pins `pnpm@11.15.1`:
+
+```bash
+nvm install 26.13.1
+nvm use 26.13.1
+npm install -g pnpm@11.15.1
+node --version
+pnpm --version
+```
+
+The launchd or systemd definition records the absolute path to `node`. Switching the shell version prepares the next
+deploy. When the installer switches the service, it records the path selected in that shell.
+
+On Node 22, the new release's doctor startup check reports the installed version and the required Node 26 version.
+The installer checks the version before stopping the old worker and reports `not changed:` if it fails that check.
+If the new service starts with an incompatible binary, its release guard logs which Node to install. See
+`~/Library/Logs/job-radar/ai-worker.launchd.log` on macOS or `journalctl --user -u job-radar-ai-worker.service` on Linux.
+The installer restores the saved definition, restarts the old worker with its recorded Node, and reports `rolled back:`
+once it confirms the worker's lock and fresh heartbeat.
+
+**To deploy an older release that needs Node 22:**
+
+1. Complete any rollback preparations that use the current release while Node 26 is active. See [Roll back](#roll-back).
+2. Check `engines.node` and `packageManager` with `git show <older-tag>:package.json`. Switch the deployment shell
+   back to a matching Node 22.x (with nvm, `nvm install 22` then `nvm use 22`). Install that tag's pnpm with
+   `npm install -g pnpm@<version>` and verify both versions.
+3. Deploy the older tag and run its `pnpm run doctor`. For a tag from before release directories, follow the
+   [manual downgrade steps](#downgrade-pre-release-dir).
+
 ### What the deploy script does
 
 In order, and it stops at the first failing step:
