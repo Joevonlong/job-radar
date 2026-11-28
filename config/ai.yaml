@@ -60,7 +60,7 @@ providers:
     daily_request_cap: 200
     # Must be codex or a path ending in /codex (claude_cli: claude): the ai-worker never starts another program.
     command: codex
-    # model: unset = the CLI's built-in default model (gpt-6.1-sol in 0.162.0). Calls pass --ignore-user-config,
+    # model: unset = the CLI's built-in default model (gpt-6.2-sol in 0.172.0). Calls pass --ignore-user-config,
     # so the model chosen in ~/.codex/config.toml has no effect; the model actually used is recorded in ai_usage.
     # Reasoning effort. low is enough for scoring, signals and translation, and much faster; can be overridden per task, e.g. { translate: low }.
     reasoning_effort: low

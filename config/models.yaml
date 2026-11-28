@@ -58,10 +58,22 @@ providers:
   codex-cli:
     label: Codex CLI
     models:
+      - id: gpt-6.2-sol
+        label: GPT-6.2 Sol
+        # codex-cli 0.172.0 uses this model when -m is not passed (checked when this default was set)
+        cli_default: true
+        reasoning_efforts: [low, medium, high, xhigh, max, ultra]
+        equivalent_price: { input_per_mtok: 2, output_per_mtok: 10, cached_input_per_mtok: 0.1, source: "OpenAI API pricing, standard tier (prompts up to 272K), developers.openai.com/api/docs/pricing, checked 2026-11-28" }
+      - id: gpt-6.2-astra
+        label: GPT-6.2 Astra
+        reasoning_efforts: [low, medium, high, xhigh, max, ultra]
+        equivalent_price: { input_per_mtok: 8, output_per_mtok: 40, cached_input_per_mtok: 0.4, source: "OpenAI API pricing, standard tier (prompts up to 272K), developers.openai.com/api/docs/pricing, checked 2026-11-28" }
+      - id: gpt-6.1-terra
+        label: GPT-6.1 Terra
+        reasoning_efforts: [low, medium, high, xhigh, max, ultra]
+        equivalent_price: { input_per_mtok: 1, output_per_mtok: 5, cached_input_per_mtok: 0.05, source: "OpenAI API pricing, standard tier (prompts up to 272K), developers.openai.com/api/docs/pricing, checked 2026-11-28" }
       - id: gpt-6.1-sol
         label: GPT-6.1 Sol
-        # codex-cli 0.162.0 uses this model when -m is not passed (checked when this default was set)
-        cli_default: true
         equivalent_price: { input_per_mtok: 2, output_per_mtok: 10, cached_input_per_mtok: 0.1, cache_write_per_mtok: 2.5, source: "OpenAI API pricing, standard tier (prompts up to 272K), openai.com / developers.openai.com, checked 2026-10-09" }
       - id: gpt-6-astra
         label: GPT-6 Astra
@@ -101,11 +113,17 @@ providers:
         label: Claude Haiku 4.5
         notes: "Retires 2026-10-15 at the earliest"
         price: { input_per_mtok: 1, output_per_mtok: 5 }
-  # Price source: developers.openai.com/api/docs/pricing (standard tier, prompts up to 272K), checked 2026-11-01
+  # Price source: developers.openai.com/api/docs/pricing (standard tier, prompts up to 272K), checked 2026-11-28
   openai:
     label: OpenAI API
     docs_url: https://developers.openai.com/api/docs/pricing
     models:
+      - id: gpt-6.2-sol
+        label: GPT-6.2 Sol
+        price: { input_per_mtok: 2, output_per_mtok: 10, cached_input_per_mtok: 0.1 }
+      - id: gpt-6.2-astra
+        label: GPT-6.2 Astra
+        price: { input_per_mtok: 8, output_per_mtok: 40, cached_input_per_mtok: 0.4 }
       - id: gpt-6-luna
         label: GPT-6 Luna
         price: { input_per_mtok: 0.1, output_per_mtok: 0.5, cached_input_per_mtok: 0.01 }
@@ -141,6 +159,9 @@ providers:
       - id: google/gemini-3.8-flash
         label: Gemini 3.8 Flash
         price: { input_per_mtok: 0.825, output_per_mtok: 4.125, cached_input_per_mtok: 0.0825, cache_write_per_mtok: 0.0417 }
+      - id: openai/gpt-6.2-sol
+        label: GPT-6.2 Sol
+        price: { input_per_mtok: 2, output_per_mtok: 10, cached_input_per_mtok: 0.1 }
       - id: openai/gpt-6.1-sol
         label: GPT-6.1 Sol
         price: { input_per_mtok: 2, output_per_mtok: 10, cached_input_per_mtok: 0.1, cache_write_per_mtok: 2.5 }
