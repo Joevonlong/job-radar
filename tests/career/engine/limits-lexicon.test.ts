@@ -173,7 +173,7 @@ test("alias list order preserves reported forms in hits and coverage", () => {
 });
 
 test.each([
-  { list: "asksStart", entries: ["(?<x>a)", "(?<x>b)"], entry: "(?<x>b)" },
+  { list: "asksStart", entries: ["a)|(?<x>b", "(?<x>c)"], entry: "(?<x>c)" },
   { list: "filler", entries: ["[~"], entry: "[~" },
 ] as const)("invalid composed fragments retain original $list entries", ({ list, entries, entry }) => {
   const lexicon = structuredClone(LEXICON);
